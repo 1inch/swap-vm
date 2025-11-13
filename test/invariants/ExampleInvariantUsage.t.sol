@@ -44,29 +44,69 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
 
     address public maker;
     uint256 public makerPK = 0x1234;
+    address public taker;
 
     constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
+        taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), "SwapVM", "1.0.0");
 
         tokenA = new MockToken("Token A", "TKA");
         tokenB = new MockToken("Token B", "TKB");
 
-        // Setup tokens and approvals
+        // Setup tokens and approvals for maker
         tokenA.mint(maker, 1000e18);
         tokenB.mint(maker, 1000e18);
         vm.prank(maker);
         tokenA.approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
+
+        // Setup approvals for taker (test contract)
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.approve(address(swapVM), type(uint256).max);
+    }
+
+    /**
+     * @notice Implementation of _executeSwap for real swap execution
+     * @dev This handles token minting and actual swap execution
+     * @dev For assertAdditivityInvariant, this always uses exactIn mode where amount is the input amount
+     */
+    function _executeSwap(
+        SwapVM _swapVM,
+        ISwapVM.Order memory order,
+        address tokenIn,
+        address tokenOut,
+        uint256 amount,
+        bytes memory takerData
+    ) internal override returns (uint256 amountOut) {
+        // Note: assertAdditivityInvariant always passes input amounts for exactIn swaps
+        // The takerData should already be configured for exactIn
+
+        // Mint the input tokens
+        MockToken(tokenIn).mint(taker, amount);
+
+        // Execute the swap
+        (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
+            order,
+            tokenIn,
+            tokenOut,
+            amount,
+            takerData
+        );
+
+        // Verify the swap consumed the expected input amount
+        require(actualIn == amount, "Unexpected input amount consumed");
+
+        return actualOut;
     }
 
     /**
      * Example 1: Test a simple limit order maintains all invariants
      */
-    function test_LimitOrderInvariants() public view {
+    function test_LimitOrderInvariants() public {
         // Build limit order program
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -98,7 +138,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     /**
      * Example 2: Test an AMM with fees maintains invariants
      */
-    function test_AMMWithFeesInvariants() public view {
+    function test_AMMWithFeesInvariants() public {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
@@ -124,10 +164,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = createInvariantConfig(testAmounts, 2);
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // Skip additivity - AMMs have price impact, so larger trades get worse rates
-        config.skipAdditivity = true;
-        // Skip spot price test - small amounts can round to zero in AMMs
-        config.skipSpotPrice = true;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -141,7 +177,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     /**
      * Example 3: Test progressive fees with custom configuration
      */
-    function test_ProgressiveFeeInvariants() public view {
+    function test_ProgressiveFeeInvariants() public {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
@@ -165,10 +201,8 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         // Add custom taker data - exactOut needs high threshold to allow trades
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // Skip additivity - AMMs with progressive fees have even more price impact
+        // Skip additivity test - progressive fees violate additivity by design
         config.skipAdditivity = true;
-        // Skip spot price test - small amounts can round to zero in AMMs
-        config.skipSpotPrice = true;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -182,7 +216,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     /**
      * Example 4: Test specific invariants individually
      */
-    function test_SpecificInvariants() public view {
+    function test_SpecificInvariants() public {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
@@ -231,7 +265,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     /**
      * Example 5: Skip certain invariants for special cases
      */
-    function test_SkipCertainInvariants() public view {
+    function test_SkipCertainInvariants() public {
         // Create a flat-rate order (no price impact)
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
