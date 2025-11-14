@@ -86,13 +86,7 @@ abstract contract SwapVM is EIP712 {
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
 
-        uint256 balanceIn;
-        uint256 balanceOut;
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
-        if (order.traits.useAquaInsteadOfSignature()) {
-            (balanceIn, balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
-        }
-
         bool isExactIn = takerTraits.isExactIn();
         Context memory ctx = Context({
             vm: VM({
@@ -111,12 +105,17 @@ abstract contract SwapVM is EIP712 {
                 isExactIn: isExactIn
             }),
             swap: SwapRegisters({
-                balanceIn: balanceIn,
-                balanceOut: balanceOut,
+                balanceIn: 0,
+                balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
                 amountOut: isExactIn ? 0 : amount
             })
         });
+
+        if (order.traits.useAquaInsteadOfSignature()) {
+            (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
+        }
+
         (amountIn, amountOut) = ctx.runLoop();
         order.traits.validate(tokenIn, tokenOut, amountIn);
         takerTraits.validate(takerData, amount, amountIn, amountOut);
@@ -130,20 +129,9 @@ abstract contract SwapVM is EIP712 {
         bytes calldata takerTraitsAndData
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
+        _reentrancyGuards[orderHash].lock();
 
-        uint256 balanceIn;
-        uint256 balanceOut;
-        uint256 originalAquaBalanceIn;
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
-        if (order.traits.useAquaInsteadOfSignature()) {
-            _reentrancyGuards[orderHash].lock();
-            (balanceIn, balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
-            originalAquaBalanceIn = balanceIn;
-        } else {
-            bytes calldata signature = takerTraits.signature(takerData);
-            require(order.maker.recoverOrIsValidSignature(orderHash, signature), BadSignature(order.maker, orderHash, signature));
-        }
-
         bool isExactIn = takerTraits.isExactIn();
         Context memory ctx = Context({
             vm: VM({
@@ -162,12 +150,21 @@ abstract contract SwapVM is EIP712 {
                 isExactIn: isExactIn
             }),
             swap: SwapRegisters({
-                balanceIn: balanceIn,
-                balanceOut: balanceOut,
+                balanceIn: 0,
+                balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
                 amountOut: isExactIn ? 0 : amount
             })
         });
+
+        if (order.traits.useAquaInsteadOfSignature()) {
+            (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
+        } else {
+            bytes calldata signature = takerTraits.signature(takerData);
+            require(order.maker.recoverOrIsValidSignature(orderHash, signature), BadSignature(order.maker, orderHash, signature));
+        }
+
+        uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
         (amountIn, amountOut) = ctx.runLoop();
         order.traits.validate(tokenIn, tokenOut, amountIn);
         takerTraits.validate(takerData, amount, amountIn, amountOut);
@@ -180,10 +177,7 @@ abstract contract SwapVM is EIP712 {
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
         }
 
-        if (order.traits.useAquaInsteadOfSignature()) {
-            _reentrancyGuards[orderHash].unlock();
-        }
-
+        _reentrancyGuards[orderHash].unlock();
         emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
     }
 
