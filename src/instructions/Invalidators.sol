@@ -29,11 +29,9 @@ contract Invalidators {
     error InvalidatorsBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
 
     error InvalidatorsTokenInExceeded(uint256 prefilled, uint256 amountIn, uint256 balanceIn);
-    error InvalidatorsTokenInMismatch(address tokenIn, uint80 tail);
     error InvalidateTokenInExpectsAmountInToBeComputed();
 
     error InvalidatorTokenOutExceeded(uint256 prefilled, uint256 amountOut, uint256 balanceOut);
-    error InvalidatorTokenOutMismatch(address tokenOut, uint80 tail);
     error InvalidateTokenOutExpectsAmountOutToBeComputed();
 
     mapping(address maker =>

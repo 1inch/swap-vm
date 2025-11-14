@@ -230,7 +230,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (uint256 swapAmountIn,,) = swapVM.swap(order, tokenA, tokenB, amountOut, swapExactOut);
 
         assertEq(swapAmountIn, quoteAmountIn, "Quoted amountIn should match swapped amountIn");
-        assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(address(tokenB)))), "All tokenB liquidity should be bought out");
+        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
     }
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForTokenA() public {
@@ -311,14 +311,14 @@ contract ConcentrateTest is Test, OpcodesDebug {
         // Buy all tokenA
         vm.prank(taker);
         swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenA))), "All tokenA liquidity should be bought out");
+        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
         // Buy all tokenB
-        uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB)));
+        uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB))), "All tokenB liquidity should be bought out");
+        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change for tokenA
@@ -356,14 +356,14 @@ contract ConcentrateTest is Test, OpcodesDebug {
         // Buy all tokenA
         vm.prank(taker);
         swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenA))), "All tokenA liquidity should be bought out");
+        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
         // Buy all tokenB
-        uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB)));
+        uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB))), "All tokenB liquidity should be bought out");
+        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change for tokenA
@@ -404,20 +404,20 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 postAmountOutB;
         for (uint256 i = 0; i < 100; i++) {
             // Buy all tokenA
-            uint256 balanceTokenA = swapVM.balances(swapVM.hash(order), uint80(uint160(tokenA)));
+            uint256 balanceTokenA = swapVM.balances(swapVM.hash(order), address(tokenA));
             if (i == 0) {
                 balanceTokenA = setup.balanceA; // First iteration doesn't have balances in the state yet
             }
             vm.prank(taker);
             swapVM.swap(order, tokenB, tokenA, balanceTokenA, swapExactOut);
-            assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenA))), "All tokenA liquidity should be bought out");
+            assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
             (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
             // Buy all tokenB
-            uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB)));
+            uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
             vm.prank(taker);
             swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-            assertEq(0, swapVM.balances(swapVM.hash(order), uint80(uint160(tokenB))), "All tokenB liquidity should be bought out");
+            assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
             (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
         }
 
@@ -455,8 +455,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
         bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
 
         // Buy all tokenB liquidity
-        bytes memory tokenTails = abi.encodePacked(uint160(uint80(uint160(tokenA))) << 80 | uint80(uint160(tokenB)));
-        vm.expectRevert(abi.encodeWithSelector(Balances.DynamicBalancesLoadingRequiresSettingBothBalances.selector, address(malToken), tokenB, tokenTails));
+        bytes memory tokenAddresses = abi.encodePacked(tokenA, tokenB);
+        vm.expectRevert(abi.encodeWithSelector(Balances.DynamicBalancesLoadingRequiresSettingBothBalances.selector, address(malToken), tokenB, tokenAddresses));
         swapVM.swap(order, address(malToken), tokenB, setup.balanceB, swapExactOut);
     }
 

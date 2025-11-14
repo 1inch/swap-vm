@@ -21,7 +21,7 @@ library ControlsArgsBuilder {
     }
 
     function buildJumpIfToken(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint80(uint160(address(token))), nextPC);
+        return abi.encodePacked(token, nextPC);
     }
 
     function buildDeadline(uint40 deadline) internal pure returns (bytes memory) {
@@ -70,23 +70,23 @@ contract Controls {
     }
 
     /// @dev Jumps if tokenIn is the specified token
-    /// @param args.tokenTail | 10 bytes
-    /// @param args.nextPC    | 2 bytes
+    /// @param args.token  | 20 bytes
+    /// @param args.nextPC | 2 bytes
     function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
-        uint80 tokenTail = uint80(bytes10(args.slice(0, 10, ControlsMissingTokenArg.selector)));
-        if (tokenTail == uint80(uint160(ctx.query.tokenIn))) {
-            uint256 nextPC = uint16(bytes2(args.slice(10, 12, JumpMissingNextPCArg.selector)));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        if (token == ctx.query.tokenIn) {
+            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
             ctx.setNextPC(nextPC);
         }
     }
 
     /// @dev Jumps if tokenOut is the specified token
-    /// @param args.tokenTail | 10 bytes
-    /// @param args.nextPC    | 2 bytes
+    /// @param args.token  | 20 bytes
+    /// @param args.nextPC | 2 bytes
     function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
-        uint80 tokenTail = uint80(bytes10(args.slice(0, 10, ControlsMissingTokenArg.selector)));
-        if (tokenTail == uint80(uint160(ctx.query.tokenOut))) {
-            uint256 nextPC = uint16(bytes2(args.slice(10, 12, JumpMissingNextPCArg.selector)));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        if (token == ctx.query.tokenOut) {
+            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
             ctx.setNextPC(nextPC);
         }
     }
