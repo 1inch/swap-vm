@@ -12,7 +12,6 @@ import { Invalidators } from "../instructions/Invalidators.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
 import { DutchAuction } from "../instructions/DutchAuction.sol";
-import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
@@ -26,7 +25,6 @@ contract LimitOpcodes is
     MinRate,
     DutchAuction,
     BaseFeeAdjuster,
-    OraclePriceAdjuster,
     TWAPSwap,
     Fee,
     Extruction
