@@ -31,6 +31,38 @@ contract Extruction {
     /// @param args.target         | 20 bytes
     /// @param args.extructionArgs | N bytes
     function _extruction(Context memory ctx, bytes calldata args) internal {
+        if (ctx.vm.isStaticContext) {
+            _exctructionStatic(ctx, args);
+        } else {
+            _exctructionNonStatic(ctx, args);
+        }
+    }
+
+    function _exctructionStatic(Context memory ctx, bytes calldata args) internal view {
+        address target = address(uint160(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector))));
+        uint256 choppedLength;
+        (bool success, bytes memory data) = target.staticcall(
+            abi.encodeWithSelector(
+                IExtruction.extruction.selector,
+                ctx.vm.isStaticContext,
+                ctx.vm.nextPC,
+                ctx.query,
+                ctx.swap,
+                args.slice(20),
+                ctx.takerArgs()
+            )
+        );
+        if (!success) {
+            assembly {
+                revert(add(data, 32), mload(data))
+            }
+        }
+        (ctx.vm.nextPC, choppedLength, ) = abi.decode(data, (uint256, uint256, SwapRegisters));
+        bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength);
+        require(chopped.length == choppedLength, ExtructionChoppedExceededLength(chopped, choppedLength)); // Revert if not enough data
+    }
+
+    function _exctructionNonStatic(Context memory ctx, bytes calldata args) internal {
         address target = address(uint160(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector))));
         uint256 choppedLength;
         (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
