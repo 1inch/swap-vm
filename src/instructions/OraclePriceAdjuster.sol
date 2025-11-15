@@ -46,7 +46,7 @@ library OraclePriceAdjusterArgsBuilder {
         maxPriceDecay = uint64(bytes8(args.slice(0, 8, OraclePriceAdjusterMissingMaxPriceDecayArg.selector)));
         maxStaleness = uint16(bytes2(args.slice(8, 10, OraclePriceAdjusterMissingMaxStalenessArg.selector)));
         oracleDecimals = uint8(bytes1(args.slice(10, 11, OraclePriceAdjusterMissingOracleDecimalsArg.selector)));
-        oracleAddress = address(uint160(bytes20(args.slice(11, 31, OraclePriceAdjusterMissingOracleAddressArg.selector))));
+        oracleAddress = address(bytes20(args.slice(11, 31, OraclePriceAdjusterMissingOracleAddressArg.selector)));
     }
 }
 

@@ -31,7 +31,7 @@ contract Extruction {
     /// @param args.target         | 20 bytes
     /// @param args.extructionArgs | N bytes
     function _extruction(Context memory ctx, bytes calldata args) internal {
-        address target = address(uint160(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector))));
+        address target = address(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector)));
         uint256 choppedLength;
         (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
             ctx.vm.isStaticContext,
