@@ -12,7 +12,6 @@ import { Invalidators } from "../instructions/Invalidators.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
 import { DutchAuction } from "../instructions/DutchAuction.sol";
-import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
@@ -26,7 +25,6 @@ contract LimitOpcodes is
     MinRate,
     DutchAuction,
     BaseFeeAdjuster,
-    OraclePriceAdjuster,
     TWAPSwap,
     Fee,
     Extruction
@@ -36,7 +34,7 @@ contract LimitOpcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[39] memory instructions = [
+        function(Context memory, bytes calldata) internal[38] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -72,8 +70,6 @@ contract LimitOpcodes is
             // DutchAuction - auction mechanism with limit order and time decay (specific trading type)
             DutchAuction._dutchAuctionBalanceIn1D,
             DutchAuction._dutchAuctionBalanceOut1D,
-            // OraclePriceAdjuster - oracle-based price adjustment (dynamic pricing)
-            OraclePriceAdjuster._oraclePriceAdjuster1D,
             // BaseFeeAdjuster - gas-based price adjustment (dynamic pricing)
             BaseFeeAdjuster._baseFeeAdjuster1D,
             // TWAPSwap - TWAP trading (complex trading strategy)
