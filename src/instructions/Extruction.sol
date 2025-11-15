@@ -18,8 +18,10 @@ interface IExtruction {
         uint256 choppedLength,
         SwapRegisters memory updatedSwap
     );
+}
 
-    function extructionView(
+interface IStaticExtruction {
+    function extruction(
         bool isStaticContext,
         uint256 nextPC,
         SwapQuery calldata query,
@@ -48,7 +50,7 @@ contract Extruction {
         uint256 choppedLength;
 
         if (ctx.vm.isStaticContext) {
-            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extructionView(
+            (ctx.vm.nextPC, choppedLength, ctx.swap) = IStaticExtruction(target).extruction(
                 ctx.vm.isStaticContext,
                 ctx.vm.nextPC,
                 ctx.query,
