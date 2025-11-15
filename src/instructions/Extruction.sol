@@ -39,7 +39,6 @@ contract Extruction {
 
     error ExtructionMissingTargetArg();
     error ExtructionChoppedExceededLength(bytes chopped, uint256 requested);
-    error ExtructionCallFailed();
 
     /// @dev Calls an external contract to perform custom logic, potentially modifying the swap state
     /// @param args.target         | 20 bytes
