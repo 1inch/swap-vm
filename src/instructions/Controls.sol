@@ -125,6 +125,6 @@ contract Controls {
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
         // balance * 1e18 / totalSupply >= minShareE18
-        require(balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThatRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
+        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThatRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
     }
 }
