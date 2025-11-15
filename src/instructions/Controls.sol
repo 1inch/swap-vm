@@ -21,7 +21,7 @@ library ControlsArgsBuilder {
     }
 
     function buildJumpIfToken(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint80(uint160(address(token))), nextPC);
+        return abi.encodePacked(token, nextPC);
     }
 
     function buildDeadline(uint40 deadline) internal pure returns (bytes memory) {
@@ -70,23 +70,23 @@ contract Controls {
     }
 
     /// @dev Jumps if tokenIn is the specified token
-    /// @param args.tokenTail | 10 bytes
-    /// @param args.nextPC    | 2 bytes
+    /// @param args.token  | 20 bytes
+    /// @param args.nextPC | 2 bytes
     function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
-        uint80 tokenTail = uint80(bytes10(args.slice(0, 10, ControlsMissingTokenArg.selector)));
-        if (tokenTail == uint80(uint160(ctx.query.tokenIn))) {
-            uint256 nextPC = uint16(bytes2(args.slice(10, 12, JumpMissingNextPCArg.selector)));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        if (token == ctx.query.tokenIn) {
+            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
             ctx.setNextPC(nextPC);
         }
     }
 
     /// @dev Jumps if tokenOut is the specified token
-    /// @param args.tokenTail | 10 bytes
-    /// @param args.nextPC    | 2 bytes
+    /// @param args.token  | 20 bytes
+    /// @param args.nextPC | 2 bytes
     function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
-        uint80 tokenTail = uint80(bytes10(args.slice(0, 10, ControlsMissingTokenArg.selector)));
-        if (tokenTail == uint80(uint160(ctx.query.tokenOut))) {
-            uint256 nextPC = uint16(bytes2(args.slice(10, 12, JumpMissingNextPCArg.selector)));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        if (token == ctx.query.tokenOut) {
+            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
             ctx.setNextPC(nextPC);
         }
     }
@@ -101,7 +101,7 @@ contract Controls {
     /// @dev Checks if the taker holds any amount of the specified token (NFTs are natively supported)
     /// @param args.token | 20 bytes
     function _onlyTakerTokenBalanceNonZero(Context memory ctx, bytes calldata args) internal view {
-        address token = address(uint160(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector))));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
     }
@@ -110,7 +110,7 @@ contract Controls {
     /// @param args.token     | 20 bytes
     /// @param args.minAmount | 32 bytes
     function _onlyTakerTokenBalanceGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(uint160(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector))));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 minAmount = uint256(bytes32(args.slice(20, 52, ControlsMissingMinAmountArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance >= minAmount, TakerTokenBalanceIsLessThatRequired(ctx.query.taker, token, balance, minAmount));
@@ -120,7 +120,7 @@ contract Controls {
     /// @param args.token       | 20 bytes
     /// @param args.minShareE18 | 8 bytes
     function _onlyTakerTokenSupplyShareGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(uint160(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector))));
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 minShareE18 = uint64(bytes8(args.slice(20, 28, ControlsMissingMinShareArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
