@@ -18,6 +18,19 @@ interface IExtruction {
         uint256 choppedLength,
         SwapRegisters memory updatedSwap
     );
+
+    function extructionView(
+        bool isStaticContext,
+        uint256 nextPC,
+        SwapQuery calldata query,
+        SwapRegisters calldata swap,
+        bytes calldata args,
+        bytes calldata takerData
+    ) external view returns (
+        uint256 updatedNextPC,
+        uint256 choppedLength,
+        SwapRegisters memory updatedSwap
+    );
 }
 
 contract Extruction {
@@ -33,14 +46,26 @@ contract Extruction {
     function _extruction(Context memory ctx, bytes calldata args) internal {
         address target = address(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector)));
         uint256 choppedLength;
-        (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
-            ctx.vm.isStaticContext,
-            ctx.vm.nextPC,
-            ctx.query,
-            ctx.swap,
-            args.slice(20),
-            ctx.takerArgs()
-        );
+
+        if (ctx.vm.isStaticContext) {
+            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extructionView(
+                ctx.vm.isStaticContext,
+                ctx.vm.nextPC,
+                ctx.query,
+                ctx.swap,
+                args.slice(20),
+                ctx.takerArgs()
+            );
+        } else {
+            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
+                ctx.vm.isStaticContext,
+                ctx.vm.nextPC,
+                ctx.query,
+                ctx.swap,
+                args.slice(20),
+                ctx.takerArgs()
+            );
+        }
         bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength);
         require(chopped.length == choppedLength, ExtructionChoppedExceededLength(chopped, choppedLength)); // Revert if not enough data
     }
