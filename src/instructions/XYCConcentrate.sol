@@ -72,13 +72,13 @@ library XYCConcentrateArgsBuilder {
         return abi.encodePacked(deltaLt, deltaGt);
     }
 
-    function parseXD(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata deltas) {
+    function parseXD(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) {
         unchecked {
             tokensCount = uint16(bytes2(args.slice(0, 2, ConcentrateParsingMissingTokensCount.selector)));
             uint256 balancesOffset = 2 + 20 * tokensCount;
             uint256 subargsOffset = balancesOffset + 32 * tokensCount;
 
-            tokenAddresses = args.slice(2, balancesOffset, ConcentrateParsingMissingTokenAddresses.selector);
+            tokens = args.slice(2, balancesOffset, ConcentrateParsingMissingTokenAddresses.selector);
             deltas = args.slice(balancesOffset, subargsOffset, ConcentrateParsingMissingDeltas.selector);
         }
     }
@@ -113,14 +113,14 @@ contract XYCConcentrate {
     }
 
     /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokenAddresses[]  | 20 bytes * args.tokensCount
+    /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount
     function _xycConcentrateGrowPriceRangeXD(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokenAddresses.slice(i * 20)));
+            address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
 
             if (ctx.query.tokenIn == token) {
@@ -132,14 +132,14 @@ contract XYCConcentrate {
     }
 
     /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokenAddresses[]  | 20 bytes * args.tokensCount
+    /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount
     function _xycConcentrateGrowLiquidityXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokenAddresses.slice(i * 20)));
+            address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
 
             if (ctx.query.tokenIn == token) {

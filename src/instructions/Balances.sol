@@ -13,7 +13,7 @@ library BalancesArgsBuilder {
 
     error BalancesArgsBuilderArraysLengthMismatch(uint256 tokensLength, uint256 balancesLength);
     error BalancesParsingMissingTokensCount();
-    error BalancesParsingMissingTokenAddresses();
+    error BalancesParsingMissingTokens();
     error BalancesParsingMissingInitialBalances();
 
     function build(address[] memory tokens, uint256[] memory balances) internal pure returns (bytes memory) {
@@ -25,13 +25,13 @@ library BalancesArgsBuilder {
         return abi.encodePacked(packed, balances);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata initialBalances) {
+    function parse(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) {
         unchecked {
             tokensCount = uint16(bytes2(args.slice(0, 2, BalancesParsingMissingTokensCount.selector)));
             uint256 balancesOffset = 2 + 20 * tokensCount;
             uint256 subargsOffset = balancesOffset + 32 * tokensCount;
 
-            tokenAddresses = args.slice(2, balancesOffset, BalancesParsingMissingTokenAddresses.selector);
+            tokens = args.slice(2, balancesOffset, BalancesParsingMissingTokens.selector);
             initialBalances = args.slice(balancesOffset, subargsOffset, BalancesParsingMissingInitialBalances.selector);
         }
     }
@@ -44,26 +44,26 @@ contract Balances {
     error SetBalancesExpectZeroBalances(uint256 balanceIn, uint256 balanceOut);
     error SetBalancesExpectsSettingBothBalances(uint256 balanceIn, uint256 balanceOut);
 
-    error StaticBalancesRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokenAddresses);
-    error DynamicBalancesLoadingRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokenAddresses);
+    error StaticBalancesRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
+    error DynamicBalancesLoadingRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
     error DyncamicBalancesRequiresSwapAmountsToBeComputed(uint256 amountIn, uint256 amountOut);
-    error DynamicBalancesInitRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokenAddresses);
+    error DynamicBalancesInitRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
 
     mapping(bytes32 orderHash =>
         mapping(address token => uint256)) public balances;
 
     /// @dev Sets ctx.swap.balanceIn/Out from provided initial balances
     /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokenAddresses[]  | 20 bytes * args.tokensCount
+    /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount
     function _staticBalancesXD(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.balanceIn == 0 && ctx.swap.balanceOut == 0, SetBalancesExpectZeroBalances(ctx.swap.balanceIn, ctx.swap.balanceOut));
 
-        (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
         bool foundTokenIn = false;
         bool foundTokenOut = false;
         for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokenAddresses.slice(i * 20)));
+            address token = address(bytes20(tokens.slice(i * 20)));
             uint256 initialBalance = uint256(bytes32(initialBalances.slice(i * 32)));
             if (token == ctx.query.tokenIn) {
                 ctx.swap.balanceIn = initialBalance;
@@ -74,18 +74,18 @@ contract Balances {
             }
         }
 
-        require(foundTokenIn && foundTokenOut, StaticBalancesRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokenAddresses));
+        require(foundTokenIn && foundTokenOut, StaticBalancesRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
     }
 
     /// @dev Load or init ctx.swap.balanceIn/Out from provided initial balances,
     ///      then execute sub-instruction and apply swap amounts to stored balances
     /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokenAddresses[]  | 20 bytes * args.tokensCount
+    /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount
     function _dynamicBalancesXD(Context memory ctx, bytes calldata args) internal {
-        (uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
-        if (!_loadBalances(ctx, tokensCount, tokenAddresses)) {
-            _initBalances(ctx, tokensCount, tokenAddresses, initialBalances);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
+        if (!_loadBalances(ctx, tokensCount, tokens)) {
+            _initBalances(ctx, tokensCount, tokens, initialBalances);
         }
 
         (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
@@ -96,12 +96,12 @@ contract Balances {
         }
     }
 
-    function _loadBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokenAddresses) private view returns (bool hasNonZeroBalances) {
+    function _loadBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokens) private view returns (bool hasNonZeroBalances) {
         hasNonZeroBalances = false;
         bool foundTokenIn = false;
         bool foundTokenOut = false;
         for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokenAddresses.slice(i * 20)));
+            address token = address(bytes20(tokens.slice(i * 20)));
             uint256 balance = balances[ctx.query.orderHash][token];
             hasNonZeroBalances = hasNonZeroBalances || (balance != 0);
 
@@ -118,14 +118,14 @@ contract Balances {
                 return hasNonZeroBalances;
             }
         }
-        require(foundTokenIn && foundTokenOut, DynamicBalancesLoadingRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokenAddresses));
+        require(foundTokenIn && foundTokenOut, DynamicBalancesLoadingRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
     }
 
-    function _initBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokenAddresses, bytes calldata initialBalances) private {
+    function _initBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) private {
         bool foundTokenIn = false;
         bool foundTokenOut = false;
         for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokenAddresses.slice(i * 20)));
+            address token = address(bytes20(tokens.slice(i * 20)));
             uint256 initialBalance = uint256(bytes32(initialBalances.slice(i * 32)));
             if (!ctx.vm.isStaticContext) {
                 balances[ctx.query.orderHash][token] = initialBalance;
@@ -140,6 +140,6 @@ contract Balances {
             }
         }
 
-        require(foundTokenIn && foundTokenOut, DynamicBalancesInitRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokenAddresses));
+        require(foundTokenIn && foundTokenOut, DynamicBalancesInitRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
     }
 }
