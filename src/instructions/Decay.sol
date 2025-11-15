@@ -87,8 +87,8 @@ contract Decay {
         (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
 
         if (!ctx.vm.isStaticContext) {
-            _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].addOffset(swapAmountIn, period);
-            _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].addOffset(swapAmountOut, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(swapAmountIn, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(swapAmountOut, period);
         }
     }
 }

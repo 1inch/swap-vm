@@ -216,7 +216,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     /**
      * Example 4: Test specific invariants individually
      */
-    function test_SpecificInvariants() public {
+    function test_SpecificInvariants() public view {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
