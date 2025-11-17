@@ -23,7 +23,7 @@ REGOP_ENV_PK:=$(PREFIX)_PRIVATE_KEY
 RPC_URL=$(shell echo "$${!REGOP_ENV_RPC_URL}" | tr -d '"')
 PRIVATE_KEY=$(shell echo "$${!REGOP_ENV_PK}" | tr -d '"')
 
-COMPILER_VERSION:=$(shell cat foundry.toml | grep 'solc_version =' | head -1 | awk -F'"' '{print $$2}')
+COMPILER_VERSION:=$(shell grep 'solc_version' foundry.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
 deploy-swap-vm:
 	@$(MAKE) FILE_DEPLOY_NAME=SwapVMRouter validate-swap-vm-router deploy-swap-vm-router-impl save-deployments
@@ -60,6 +60,7 @@ verify-swap-vm-router-impl:
 	        echo "Deployment file $$DEPLOYMENT_FILE does not exist! Deploy first."; \
 	        exit 1; \
 	    fi; \
+        echo "Compiler version: $${COMPILER_VERSION}"; \
 	    CONTRACT_ADDRESS=$$($(MAKE) contract-address DEPLOYMENT_FILE=$$DEPLOYMENT_FILE); \
 	    echo "Verifying $${FILE_DEPLOY_NAME} at $$CONTRACT_ADDRESS on $(OPS_NETWORK)..."; \
 	    echo "Constructor args: aqua=$(OPS_AQUA_ADDRESS), name=$(OPS_SWAP_VM_ROUTER_NAME), version=$(OPS_SWAP_VM_ROUTER_VERSION)"; \
