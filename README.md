@@ -8,7 +8,6 @@
 [![License](https://img.shields.io/badge/License-Degensoft--SwapVM--1.1-orange)](LICENSE)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.30-blue)](https://docs.soliditylang.org/en/v0.8.30/)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg)](https://book.getfoundry.sh/)
-[![Whitepaper](https://img.shields.io/badge/Whitepaper-Dev%20Preview-informational)](whitepaper/swapvm-dev-preview.md)
 
 **A virtual machine for programmable token swaps.** Execute complex trading strategies from bytecode programs without deploying contracts.
 
