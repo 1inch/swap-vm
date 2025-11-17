@@ -23,7 +23,7 @@ REGOP_ENV_PK:=$(PREFIX)_PRIVATE_KEY
 RPC_URL=$(shell echo "$${!REGOP_ENV_RPC_URL}" | tr -d '"')
 PRIVATE_KEY=$(shell echo "$${!REGOP_ENV_PK}" | tr -d '"')
 
-COMPILER_VERSION:=$(shell cat foundry.toml | grep 'solc_version =' | head -1 | awk -F'"' '{print $$2}')
+COMPILER_VERSION:=$(shell cat foundry.toml | grep 'solc-version =' | head -1 | awk -F'"' '{print $$2}')
 
 deploy-swap-vm:
 	@$(MAKE) FILE_DEPLOY_NAME=SwapVMRouter validate-swap-vm-router deploy-swap-vm-router-impl save-deployments
