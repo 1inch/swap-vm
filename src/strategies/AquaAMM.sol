@@ -26,7 +26,7 @@ contract AquaAMM is OpcodesDebug {
 
     function buildProgram(
         address maker,
-        uint32 expiration,
+        uint40 expiration,
         address token0,
         address token1,
         uint16 feeBpsIn,
@@ -47,6 +47,7 @@ contract AquaAMM is OpcodesDebug {
             (protocolFeeBpsIn > 0) ? program.build(_aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBpsIn, feeReceiver)) : bytes(""),
             program.build(_xycSwapXD),
             program.build(_printContext),
+            program.build(_deadline, ControlsArgsBuilder.buildDeadline(expiration)),
             (salt > 0) ? program.build(_salt, ControlsArgsBuilder.buildSalt(salt)) : bytes("")
         );
 
@@ -55,7 +56,6 @@ contract AquaAMM is OpcodesDebug {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
-            expiration: expiration,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,

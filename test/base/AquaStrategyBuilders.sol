@@ -119,7 +119,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
-            expiration: 0,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,

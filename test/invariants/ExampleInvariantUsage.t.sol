@@ -306,7 +306,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
-            expiration: uint32(block.timestamp + 1 days),
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,

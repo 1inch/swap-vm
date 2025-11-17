@@ -145,7 +145,6 @@ contract SwapVMTest is Test, OpcodesDebug {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
-            expiration: 0,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,

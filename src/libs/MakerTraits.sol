@@ -57,7 +57,6 @@ library MakerTraitsLib {
     struct Args {
         address maker;
         address receiver;
-        uint32 expiration;
         bool shouldUnwrapWeth;
         bool useAquaInsteadOfSignature;
         bool allowZeroAmountIn;

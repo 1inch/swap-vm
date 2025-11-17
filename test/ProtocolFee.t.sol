@@ -110,7 +110,6 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
-            expiration: 0,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,

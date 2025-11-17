@@ -94,7 +94,6 @@ contract SwapVMTest is Test, OpcodesDebug {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
-            expiration: 0, //  (0 = no expiration)
             receiver: address(0), // (0 = maker)
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
@@ -297,7 +296,6 @@ contract SwapVMTest is Test, OpcodesDebug {
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
-            expiration: 0,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
