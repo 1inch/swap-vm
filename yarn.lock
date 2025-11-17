@@ -5,14 +5,14 @@ __metadata:
   version: 8
   cacheKey: 10c0
 
-"@1inch/aqua@github:1inch/aqua#0.0.4":
-  version: 0.0.4
-  resolution: "@1inch/aqua@https://github.com/1inch/aqua.git#commit=aa37cce6414e24067099154e1a531206e72306d7"
+"@1inch/aqua@github:1inch/aqua#0.0.6":
+  version: 0.0.6
+  resolution: "@1inch/aqua@https://github.com/1inch/aqua.git#commit=bc9f7345f9386aa983cb19689651ede21b20eef8"
   dependencies:
     "@1inch/solidity-utils": "npm:6.8.0"
     "@openzeppelin/contracts": "npm:5.4.0"
     forge-std: "github:foundry-rs/forge-std#v1.11.0"
-  checksum: 10c0/9e573bdd0f625336dd32757b6ed2652a4c90f2dbde0c9e6551af69d2bbe45201dae50cbdcc36357c363eb52bdb43f67a74f7464d1c63ca76f0bd99ad6dd77b0c
+  checksum: 10c0/57ced616288e9c50c5110381def0c275441eb4c1c3999f77811a29cb536a2b27b5c851431c7fade5b7cee35e140a7d6e1e9b965fb587dddc718614587019d863
   languageName: node
   linkType: hard
 
@@ -42,7 +42,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@1inch/swap-vm@workspace:."
   dependencies:
-    "@1inch/aqua": "github:1inch/aqua#0.0.4"
+    "@1inch/aqua": "github:1inch/aqua#0.0.6"
     "@1inch/solidity-utils": "npm:6.8.0"
     "@openzeppelin/contracts": "npm:5.4.0"
     forge-std: "github:foundry-rs/forge-std#v1.11.0"
