@@ -1,35 +1,3 @@
-Aqua Reference Source License — Audit Permitted Use
-
-ARSL-1.0-A (c) 2025 Degensoft Ltd ("Licensor")
-
-SPDX: LicenseRef-Degensoft-ARSL-1.0-Audit
-
-1. Definitions
-“Licensed Source” = human-readable Aqua/SwapVM source published by Licensor under this License.
-“Permitted Reference” = viewing/reading/internal discussion for understanding, security review, compliance, and interoperability analysis.
-“Approved Auditor” = an individual/entity that (a) has Licensor’s written authorization (including via signed MSA/SOW or audit key), and (b) agrees to this License.
-
-2. Reference-Only Grant (general public)
-Licensor grants a worldwide, non-exclusive, royalty-free license to view the Licensed Source solely for Permitted Reference. You may not compile, execute, modify, create derivatives, redistribute, use in production, or train ML models on the Licensed Source. All rights not expressly granted are reserved.
-
-3. Audit Use Grant (Approved Auditors only)
-For the limited purpose of performing an authorized security/compliance audit of Aqua/SwapVM, Approved Auditors may copy, compile, execute, instrument, fuzz, and analyze the Licensed Source solely in non-production environments and only to prepare findings for Licensor. No redistribution or deployment to mainnet/production. No use beyond the audit scope. Access to secrets/keys/test data must follow least-privilege and secure handling.
-
-4. Patent Reservation; Testing Safe Harbor
-No patent license is granted or implied by this License. Licensor reserves all patent rights.
-Solely for Section 3 activities, Licensor provides a narrow covenant not to sue Approved Auditors for patent infringement arising from their authorized audit testing; this covenant terminates automatically upon breach or use outside Section 3.
-
-5. Confidentiality & Coordinated Disclosure (Approved Auditors)
-Non-public code, artifacts, and vulnerabilities are Licensor Confidential Information. Approved Auditors must protect them using industry-standard safeguards; share only with bound personnel/contractors who need to know. Coordinated disclosure: report vulnerabilities privately; allow a remediation window of 90 days (or as mutually agreed) before any public disclosure. De-identified results may be published after the window, provided no source is disclosed.
-
-6. Notices; Trademarks
-You must retain copyright, license, and notice headers. No rights to use Licensor trademarks or certification marks (including AQUA, Powered by Aqua, Certified Aqua-Compatible) are granted.
-
-7. Termination
-This License terminates automatically upon breach. Upon termination or audit completion (for Approved Auditors), cease all use and destroy or return copies and artifacts. Sections 4–9 survive.
-
-8. Disclaimer; Limitation of Liability
-LICENSED SOURCE IS PROVIDED “AS IS” AND “AS AVAILABLE,” WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR WILL NOT BE LIABLE FOR ANY INDIRECT, SPECIAL, INCIDENTAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, GOODWILL, OR DATA, ARISING OUT OF OR RELATING TO THIS LICENSE OR THE LICENSED SOURCE, EVEN IF ADVISED OF THE POSSIBILITY. IF A LIMITATION OF LIABILITY MUST APPLY, LICENSOR’S TOTAL LIABILITY SHALL NOT EXCEED THE AMOUNTS (IF ANY) YOU PAID DIRECTLY TO LICENSOR FOR THE LICENSED SOURCE. NOTHING IN THIS LICENSE EXCLUDES LIABILITY THAT CANNOT BE LIMITED UNDER APPLICABLE LAW.
-
-9. General; Assignment
-You may not assign without Licensor’s written consent; any attempt is void; Licensor may assign. Severability: unenforceable terms are modified to the minimum necessary; the rest remains effective. Governing law & arbitration: New York law (no conflict rules); disputes resolved by ICDR/AAA arbitration, seat New York, English, one arbitrator (three if claim > USD 1,000,000). Injunctive relief: either party may seek temporary/injunctive relief (incl. trademarks, confidentiality, security) in any court without waiving arbitration. IP carve-out: Licensor may bring/defend patent, trademark, or copyright claims in U.S. federal courts (incl. SDNY, NDCA, D. Del.). Versioning: Licensor may publish new versions; the repository states the applicable version.
+SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+See /LICENSES/SwapVM-1.1.txt for the full license text.
+Copyright © 2025 Degensoft Ltd. All rights reserved.

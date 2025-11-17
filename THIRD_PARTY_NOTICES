@@ -1,0 +1,41 @@
+THIRD PARTY NOTICES
+
+This project incorporates material from the projects listed below:
+
+================================================================================
+
+Component: forge-std
+Repo: https://github.com/foundry-rs/forge-std
+Version: v1.11.0
+License: Apache-2.0 OR MIT
+Copyright: © Contributors to Forge Standard Library
+License: /LICENSES/Apache-2.0-Forge-Std.txt and /LICENSES/MIT-Forge-Std.txt
+
+================================================================================
+
+Component: @openzeppelin/contracts
+Repo: https://github.com/OpenZeppelin/openzeppelin-contracts
+Version: v5.4.0
+License: MIT
+Copyright: © OpenZeppelin
+License: /LICENSES/MIT-OpenZeppelin.txt
+
+================================================================================
+
+Component: @1inch/solidity-utils
+Repo: https://github.com/1inch/solidity-utils
+Version: v6.8.0
+License: MIT
+Copyright: © 2019, 1inch
+License: /LICENSES/MIT-1inch.txt
+
+================================================================================
+
+Component: @1inch/aqua
+Repo: https://github.com/1inch/aqua
+Version: 0.0.4
+License: LicenseRef-Degensoft-Aqua-Source-1.1
+Copyright: © 2025 Degensoft Ltd
+License: /LICENSES/Aqua-Source-1.1.txt
+
+================================================================================

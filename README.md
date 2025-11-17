@@ -5,7 +5,7 @@
 [![Coverage](https://img.shields.io/badge/Coverage-50.46%25-yellow)](https://github.com/1inch/swap-vm)
 [![Tests](https://img.shields.io/github/actions/workflow/status/1inch/swap-vm/ci.yml?branch=main&label=tests)](https://github.com/1inch/swap-vm/actions)
 [![npm](https://img.shields.io/npm/v/@1inch/swap-vm.svg)](https://www.npmjs.com/package/@1inch/swap-vm)
-[![License](https://img.shields.io/badge/License-Degensoft--ARSL-orange)](LICENSE)
+[![License](https://img.shields.io/badge/License-Degensoft--SwapVM--1.1-orange)](LICENSE)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.30-blue)](https://docs.soliditylang.org/en/v0.8.30/)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg)](https://book.getfoundry.sh/)
 [![Whitepaper](https://img.shields.io/badge/Whitepaper-Dev%20Preview-informational)](whitepaper/swapvm-dev-preview.md)
@@ -1285,4 +1285,11 @@ SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
 
 ## 📄 License
 
-LicenseRef-Degensoft-ARSL-1.0-Audit
+This project is licensed under the **LicenseRef-Degensoft-SwapVM-1.1**
+
+See the [LICENSE](LICENSE) file for details.
+See the [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) file for information about third-party software, libraries, and dependencies used in this project.
+
+**Contact for licensing inquiries:**
+- 📧 license@degensoft.com 
+- 📧 legal@degensoft.com
