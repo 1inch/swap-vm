@@ -43,7 +43,7 @@ contract SwapVMAquaTest is AquaSwapVMTest {
             taker: taker,
             tokenA: tokenA,
             tokenB: tokenB,
-            zeroForOne: false,  // Swap tokenB for tokenA (zeroForOne=false means B->A)
+            zeroForOne: false,  // Swap tokenB (token1) for tokenA (token0); zeroForOne=false means token1->token0
             isExactIn: true
         });
 
