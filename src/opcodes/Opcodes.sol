@@ -21,6 +21,7 @@ import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
+import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
 contract Opcodes is
     Controls,
@@ -35,14 +36,15 @@ contract Opcodes is
     BaseFeeAdjuster,
     TWAPSwap,
     Fee,
-    Extruction
+    Extruction,
+    PeggedSwap
 {
     constructor(address aqua) Fee(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[43] memory instructions = [
+        function(Context memory, bytes calldata) internal[44] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -98,7 +100,8 @@ contract Opcodes is
             Fee._progressiveFeeInXD,
             Fee._progressiveFeeOutXD,
             Fee._protocolFeeAmountOutXD,
-            Fee._aquaProtocolFeeAmountOutXD
+            Fee._aquaProtocolFeeAmountOutXD,
+            PeggedSwap._peggedSwapGrowPriceRange2D
         ];
 
         // Efficiently turning static memory array into dynamic memory array
