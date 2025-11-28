@@ -12,7 +12,7 @@ import { FormatLib } from "./utils/FormatLib.sol";
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
@@ -28,14 +28,6 @@ import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol"
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
-// Simple mock token for testing
-contract MockToken is ERC20 {
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
 
 contract ConcentrateTest is Test, OpcodesDebug {
     using SafeCast for uint256;
@@ -79,26 +71,26 @@ contract ConcentrateTest is Test, OpcodesDebug {
         swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
-        tokenA = address(new MockToken("Token A", "TKA"));
-        tokenB = address(new MockToken("Token B", "TKB"));
+        tokenA = address(new TokenMock("Token A", "TKA"));
+        tokenB = address(new TokenMock("Token B", "TKB"));
 
         // Setup initial balances
-        MockToken(tokenA).mint(maker, 1_000_000_000e18);
-        MockToken(tokenB).mint(maker, 1_000_000_000e18);
-        MockToken(tokenA).mint(taker, 1_000_000_000e18);
-        MockToken(tokenB).mint(taker, 1_000_000_000e18);
+        TokenMock(tokenA).mint(maker, 1_000_000_000e18);
+        TokenMock(tokenB).mint(maker, 1_000_000_000e18);
+        TokenMock(tokenA).mint(taker, 1_000_000_000e18);
+        TokenMock(tokenB).mint(taker, 1_000_000_000e18);
 
         // Approve SwapVM to spend tokens by maker
         vm.prank(maker);
-        MockToken(tokenA).approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
-        MockToken(tokenB).approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
 
         // Approve SwapVM to spend tokens by taker
         vm.prank(taker);
-        MockToken(tokenA).approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         vm.prank(taker);
-        MockToken(tokenB).approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
     }
 
     struct MakerSetup {
@@ -450,7 +442,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         vm.startPrank(taker);
-        MockToken malToken = new MockToken("Malicious token", "MTK");
+        TokenMock malToken = new TokenMock("Malicious token", "MTK");
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));

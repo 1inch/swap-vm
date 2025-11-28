@@ -49,6 +49,7 @@ abstract contract CoreInvariants is Test {
      * @param tokenOut Output token address
      * @param amount Amount to swap
      * @param takerData Taker traits and data
+     * @return amountIn The amount of input tokens consumed
      * @return amountOut The amount of output tokens received
      */
     function _executeSwap(
@@ -58,7 +59,7 @@ abstract contract CoreInvariants is Test {
         address tokenOut,
         uint256 amount,
         bytes memory takerData
-    ) internal virtual returns (uint256 amountOut);
+    ) internal virtual returns (uint256 amountIn, uint256 amountOut);
 
     // Configuration for invariant testing
     struct InvariantConfig {
@@ -67,6 +68,7 @@ abstract contract CoreInvariants is Test {
         bool skipAdditivity;             // Skip additivity check (for non-AMM orders)
         bool skipMonotonicity;           // Skip monotonicity check (for flat rate orders)
         bool skipSpotPrice;              // Skip spot price check (for complex fee structures)
+        bool skipSymmetry;               // Skip symmetry check (for complex fee structures)
         bytes exactInTakerData;          // Custom taker data for exactIn
         bytes exactOutTakerData;         // Custom taker data for exactOut
     }
@@ -104,17 +106,19 @@ abstract contract CoreInvariants is Test {
         InvariantConfig memory config
     ) internal {
         // Test each invariant
-        for (uint256 i = 0; i < config.testAmounts.length; i++) {
-            assertSymmetryInvariant(
-                swapVM,
-                order,
-                tokenIn,
-                tokenOut,
-                config.testAmounts[i],
-                config.symmetryTolerance,
-                config.exactInTakerData,
-                config.exactOutTakerData
-            );
+        if (!config.skipSymmetry) {
+            for (uint256 i = 0; i < config.testAmounts.length; i++) {
+                assertSymmetryInvariant(
+                    swapVM,
+                    order,
+                    tokenIn,
+                    tokenOut,
+                    config.testAmounts[i],
+                    config.symmetryTolerance,
+                    config.exactInTakerData,
+                    config.exactOutTakerData
+                );
+            }
         }
 
         assertQuoteSwapConsistencyInvariant(
@@ -124,6 +128,15 @@ abstract contract CoreInvariants is Test {
             tokenOut,
             config.testAmounts[0],
             config.exactInTakerData
+        );
+
+        assertQuoteSwapConsistencyInvariant(
+            swapVM,
+            order,
+            tokenIn,
+            tokenOut,
+            config.testAmounts[0],
+            config.exactOutTakerData
         );
 
         if (!config.skipMonotonicity) {
@@ -232,7 +245,7 @@ abstract contract CoreInvariants is Test {
         uint256 snapshot = vm.snapshot();
 
         // Execute single swap of A+B
-        uint256 singleOut = _executeSwap(
+        (, uint256 singleOut) = _executeSwap(
             swapVM, order, tokenIn, tokenOut, amountA + amountB, takerData
         );
 
@@ -240,12 +253,12 @@ abstract contract CoreInvariants is Test {
         vm.revertTo(snapshot);
 
         // Execute swap A
-        uint256 outA = _executeSwap(
+        (, uint256 outA) = _executeSwap(
             swapVM, order, tokenIn, tokenOut, amountA, takerData
         );
 
         // Execute swap B (note: state has changed after swap A)
-        uint256 outB = _executeSwap(
+        (, uint256 outB) = _executeSwap(
             swapVM, order, tokenIn, tokenOut, amountB, takerData
         );
 
@@ -282,9 +295,8 @@ abstract contract CoreInvariants is Test {
         address tokenOut,
         uint256 amount,
         bytes memory takerData
-    ) internal view {
-        // This would need actual token setup and execution
-        // For now, we just verify quote works without reverting
+    ) internal {
+        // First get the quote
         (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
             order, tokenIn, tokenOut, amount, takerData
         );
@@ -292,8 +304,15 @@ abstract contract CoreInvariants is Test {
         assertGt(quotedIn, 0, "Quote returned zero input");
         assertGt(quotedOut, 0, "Quote returned zero output");
 
-        // Actual swap execution would require token minting/approval
-        // which should be done in the concrete test implementation
+        // Execute the swap with the same amount that was passed to quote
+        // For exactIn: amount is the input amount
+        // For exactOut: amount is the desired output amount
+        // The _executeSwap implementation must handle minting correctly
+        (uint256 swapIn, uint256 swapOut) = _executeSwap(swapVM, order, tokenIn, tokenOut, amount, takerData);
+
+        // Verify both input and output match the quote
+        assertEq(swapIn, quotedIn, "Swap input does not match quote input");
+        assertEq(swapOut, quotedOut, "Swap output does not match quote output");
     }
 
     /**
@@ -480,6 +499,7 @@ abstract contract CoreInvariants is Test {
             skipAdditivity: false,
             skipMonotonicity: false,
             skipSpotPrice: false,
+            skipSymmetry: false,
             exactInTakerData: "",
             exactOutTakerData: ""
         });
@@ -498,6 +518,7 @@ abstract contract CoreInvariants is Test {
             skipAdditivity: false,
             skipMonotonicity: false,
             skipSpotPrice: false,
+            skipSymmetry: false,
             exactInTakerData: "",
             exactOutTakerData: ""
         });

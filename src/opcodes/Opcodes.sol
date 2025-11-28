@@ -42,7 +42,7 @@ contract Opcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[43] memory instructions = [
+        function(Context memory, bytes calldata) internal[45] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -75,6 +75,8 @@ contract Opcodes is
             // XYCConcentrate - liquidity concentration (common AMM feature)
             XYCConcentrate._xycConcentrateGrowLiquidityXD,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
+            XYCConcentrate._xycConcentrateGrowPriceRangeXD,
+            XYCConcentrate._xycConcentrateGrowPriceRange2D,
             // Decay - Decay AMM (specific AMM)
             Decay._decayXD,
             // LimitSwap - limit orders (specific trading type)
