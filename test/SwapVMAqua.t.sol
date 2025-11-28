@@ -9,6 +9,7 @@ import { ISwapVM } from "../src/SwapVM.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
+import { MockTakerFirstTransfer } from "./mocks/MockTakerFirstTransfer.sol";
 
 contract SwapVMAquaTest is AquaSwapVMTest {
     using ProgramBuilder for Program;
@@ -62,6 +63,9 @@ contract SwapVMAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_XYC_SwapWithFirstTransferFromTaker() public {
+        // Create MockTakerFirstTransfer instance
+        MockTakerFirstTransfer takerFirstTransfer = new MockTakerFirstTransfer(aqua, swapVM, address(this));
+
         // Setup using the unified structure
         MakerSetup memory setup = _makerSetup();
 
@@ -70,16 +74,19 @@ contract SwapVMAquaTest is AquaSwapVMTest {
 
         SwapProgram memory swapProgram = SwapProgram({
             amount: 50e18,
-            taker: taker,
+            taker: takerFirstTransfer,
             tokenA: tokenA,
             tokenB: tokenB,
             zeroForOne: false,  // Swap tokenB for tokenA
             isExactIn: true
         });
 
-        // Mint tokens to taker (tokenB) and maker (tokenA)
+        // Mint tokens to takerFirstTransfer (tokenB)
         mintTokenInToTaker(swapProgram);
-        mintTokenOutToMaker(swapProgram, setup.balanceA);
+        // Mint tokens to takerFirstTransfer (tokenA) - needed for the preTransferInCallback
+        // We need to mint exactly the amount that will be transferred to maker (20e18)
+        uint256 expectedAmountOut = (50e18 * 100e18) / (200e18 + 50e18); // = 20e18
+        tokenA.mint(address(takerFirstTransfer), expectedAmountOut);
 
         // Create custom taker data with isFirstTransferFromTaker = true
         bytes memory customTakerData = TakerTraitsLib.build(TakerTraitsLib.Args({
@@ -116,12 +123,13 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         );
 
         // Verify results - XYC formula: amountOut = (amountIn * reserveOut) / (reserveIn + amountIn)
-        uint256 expectedAmountOut = (50e18 * 100e18) / (200e18 + 50e18); // = 20e18
         assertEq(amountOut, expectedAmountOut, "Unexpected amountOut with isFirstTransferFromTaker");
         assertEq(amountIn, 50e18, "Unexpected amountIn with isFirstTransferFromTaker");
 
         // Verify final balances
-        (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(taker);
+        // The taker first transfers tokenA to maker in preTransferInCallback, then receives it back from the swap
+        // So final balance should be: initial (expectedAmountOut) - sent to maker (expectedAmountOut) + received from swap (expectedAmountOut) = expectedAmountOut
+        (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(takerFirstTransfer);
         assertEq(takerBalanceA, expectedAmountOut, "Taker should have received tokenA");
         assertEq(takerBalanceB, 0, "Taker should have 0 tokenB remaining");
     }
