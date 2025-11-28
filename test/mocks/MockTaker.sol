@@ -56,7 +56,7 @@ contract MockTaker is ITakerCallbacks {
         uint256 /* amountOut */,
         bytes32 orderHash,
         bytes calldata /* takerData */
-    ) external onlySwapVM {
+    ) public virtual onlySwapVM {
         ERC20(tokenIn).approve(address(AQUA), amountIn);
         AQUA.push(maker, address(SWAPVM), orderHash, tokenIn, amountIn);
     }
@@ -70,7 +70,7 @@ contract MockTaker is ITakerCallbacks {
         uint256 /* amountOut */,
         bytes32 /* orderHash */,
         bytes calldata /* takerData */
-    ) external onlySwapVM {
+    ) public virtual onlySwapVM {
         // Custom exchange rate validation can be implemented here
     }
 }
