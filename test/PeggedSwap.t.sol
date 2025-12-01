@@ -879,6 +879,207 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     }
 
     // ========================================
+    // EDGE CASE TESTS
+    // ========================================
+
+    function test_EdgeCase_A_Zero_PureSquareRoot() public {
+        console.log("");
+        console.log("========================================");
+        console.log("  EDGE CASE: A=0 (PURE SQUARE ROOT)");
+        console.log("  No linear component - maximum slippage");
+        console.log("========================================");
+        console.log("");
+
+        uint256 initialLiquidity = 100000e18;
+        uint256 linearWidth = 0; // A = 0 (pure √ curve)
+        uint256 smallSwap = 1000e18;
+        uint256 mediumSwap = 10000e18;
+        uint256 largeSwap = 30000e18;
+
+        // Test small swap
+        (, , uint256 amountOutSmall) = calculateExactIn(
+            initialLiquidity, initialLiquidity, smallSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactSmall = calculatePriceImpact(smallSwap, amountOutSmall, initialLiquidity, initialLiquidity);
+
+        // Test medium swap
+        (, , uint256 amountOutMedium) = calculateExactIn(
+            initialLiquidity, initialLiquidity, mediumSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactMedium = calculatePriceImpact(mediumSwap, amountOutMedium, initialLiquidity, initialLiquidity);
+
+        // Test large swap
+        (, , uint256 amountOutLarge) = calculateExactIn(
+            initialLiquidity, initialLiquidity, largeSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactLarge = calculatePriceImpact(largeSwap, amountOutLarge, initialLiquidity, initialLiquidity);
+
+        console.log("Pool: 100,000 / 100,000, A=0 (pure sqrt)");
+        console.log("");
+        console.log("Small swap (1,000):");
+        console.log("  Amount out: %s", amountOutSmall / 1e18);
+        console.log("  Price impact: %s bps", impactSmall);
+        console.log("");
+        console.log("Medium swap (10,000):");
+        console.log("  Amount out: %s", amountOutMedium / 1e18);
+        console.log("  Price impact: %s bps", impactMedium);
+        console.log("");
+        console.log("Large swap (30,000):");
+        console.log("  Amount out: %s", amountOutLarge / 1e18);
+        console.log("  Price impact: %s bps", impactLarge);
+        console.log("");
+
+        // With A=0, slippage should be significant even for small swaps
+        require(impactSmall > 5, "Pure sqrt should have measurable impact even for small swaps");
+        require(impactMedium > 100, "Pure sqrt should have high impact for medium swaps");
+        require(impactLarge > 500, "Pure sqrt should have very high impact for large swaps");
+
+        // Verify invariant holds
+        uint256 x1 = initialLiquidity + smallSwap;
+        uint256 y1 = initialLiquidity - amountOutSmall;
+        uint256 inv0 = calculateInvariant(initialLiquidity, initialLiquidity, initialLiquidity, initialLiquidity, linearWidth);
+        uint256 inv1 = calculateInvariant(x1, y1, initialLiquidity, initialLiquidity, linearWidth);
+        assertApproxEqAbs(inv0, inv1, 1e15, "Invariant should be preserved with A=0");
+
+        console.log("SUCCESS: A=0 pure square-root curve works correctly!");
+        console.log("Maximum slippage protection active!");
+        console.log("");
+    }
+
+    function test_EdgeCase_A_Max_MinimalSlippage() public {
+        console.log("");
+        console.log("========================================");
+        console.log("  EDGE CASE: A=2.0 (MAXIMUM VALUE)");
+        console.log("  Maximum linear component - minimal slippage");
+        console.log("========================================");
+        console.log("");
+
+        uint256 initialLiquidity = 100000e18;
+        uint256 linearWidth = 2e18; // A = 2.0 (maximum allowed)
+        uint256 smallSwap = 1000e18;
+        uint256 mediumSwap = 10000e18;
+        uint256 largeSwap = 30000e18;
+
+        // Test small swap
+        (, , uint256 amountOutSmall) = calculateExactIn(
+            initialLiquidity, initialLiquidity, smallSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactSmall = calculatePriceImpact(smallSwap, amountOutSmall, initialLiquidity, initialLiquidity);
+
+        // Test medium swap
+        (, , uint256 amountOutMedium) = calculateExactIn(
+            initialLiquidity, initialLiquidity, mediumSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactMedium = calculatePriceImpact(mediumSwap, amountOutMedium, initialLiquidity, initialLiquidity);
+
+        // Test large swap
+        (, , uint256 amountOutLarge) = calculateExactIn(
+            initialLiquidity, initialLiquidity, largeSwap,
+            initialLiquidity, initialLiquidity, linearWidth
+        );
+        uint256 impactLarge = calculatePriceImpact(largeSwap, amountOutLarge, initialLiquidity, initialLiquidity);
+
+        console.log("Pool: 100,000 / 100,000, A=2.0 (max linear)");
+        console.log("");
+        console.log("Small swap (1,000):");
+        console.log("  Amount out: %s", amountOutSmall / 1e18);
+        console.log("  Price impact: %s bps (very low)", impactSmall);
+        console.log("");
+        console.log("Medium swap (10,000):");
+        console.log("  Amount out: %s", amountOutMedium / 1e18);
+        console.log("  Price impact: %s bps (low)", impactMedium);
+        console.log("");
+        console.log("Large swap (30,000):");
+        console.log("  Amount out: %s", amountOutLarge / 1e18);
+        console.log("  Price impact: %s bps (moderate)", impactLarge);
+        console.log("");
+
+        // With A=2.0, slippage should be minimal near equilibrium
+        require(impactSmall < 15, "A=2.0 should have minimal impact for small swaps");
+        require(impactMedium < 150, "A=2.0 should have low impact for medium swaps");
+
+        // Verify invariant holds
+        uint256 x1 = initialLiquidity + smallSwap;
+        uint256 y1 = initialLiquidity - amountOutSmall;
+        uint256 inv0 = calculateInvariant(initialLiquidity, initialLiquidity, initialLiquidity, initialLiquidity, linearWidth);
+        uint256 inv1 = calculateInvariant(x1, y1, initialLiquidity, initialLiquidity, linearWidth);
+        assertApproxEqAbs(inv0, inv1, 1e15, "Invariant should be preserved with A=2.0");
+
+        console.log("SUCCESS: A=2.0 maximum linear curve works correctly!");
+        console.log("Minimal slippage near equilibrium!");
+        console.log("");
+    }
+
+    function test_EdgeCase_99Percent_Unbalanced_Pool() public {
+        console.log("");
+        console.log("========================================");
+        console.log("  EDGE CASE: 99%% UNBALANCED POOL");
+        console.log("  Extreme imbalance test");
+        console.log("========================================");
+        console.log("");
+
+        // Extremely unbalanced: 99,000 vs 1,000 (99:1 ratio)
+        uint256 balanceX = 99000e18;
+        uint256 balanceY = 1000e18;
+        uint256 linearWidth = 8e17; // A = 0.8 (standard)
+        
+        // Test swaps in both directions
+        uint256 swapAmount = 100e18;
+
+        // Direction 1: Swap abundant token (X) for scarce token (Y)
+        // Should get very little Y (high slippage)
+        (, , uint256 amountOutXtoY) = calculateExactIn(
+            balanceX, balanceY, swapAmount,
+            balanceX, balanceY, linearWidth
+        );
+        uint256 impactXtoY = calculatePriceImpact(swapAmount, amountOutXtoY, balanceX, balanceY);
+
+        // Direction 2: Swap scarce token (Y) for abundant token (X)
+        // Should get more X (lower slippage relative to pool)
+        (, , uint256 amountOutYtoX) = calculateExactIn(
+            balanceY, balanceX, swapAmount,
+            balanceY, balanceX, linearWidth
+        );
+        uint256 impactYtoX = calculatePriceImpact(swapAmount, amountOutYtoX, balanceY, balanceX);
+
+        console.log("Pool: 99,000 / 1,000 (99:1 ratio), A=0.8");
+        console.log("");
+        console.log("Swap 100 of abundant token (X) for scarce (Y):");
+        console.log("  Amount out: %s", amountOutXtoY / 1e18);
+        console.log("  Price impact: %s bps (HIGH)", impactXtoY);
+        console.log("");
+        console.log("Swap 100 of scarce token (Y) for abundant (X):");
+        console.log("  Amount out: %s", amountOutYtoX / 1e18);
+        console.log("  Price impact: %s bps", impactYtoX);
+        console.log("");
+
+        // When swapping abundant for scarce, should get very little (extreme imbalance)
+        require(amountOutXtoY < 2e18, "Swapping abundant for scarce should yield very little");
+        // Price impact calculation is relative to the small output, so appears low in bps
+        // The key is the absolute amount is tiny (< 2 tokens out for 100 in = 98% loss)
+
+        // When swapping scarce for abundant, should get good amount but still significant impact
+        require(amountOutYtoX > 100e18, "Swapping scarce for abundant should yield reasonable amount");
+        require(impactYtoX > 5000, "High slippage in extremely unbalanced pool");
+
+        // Verify invariant holds even in extreme imbalance
+        uint256 x1 = balanceX + swapAmount;
+        uint256 y1 = balanceY - amountOutXtoY;
+        uint256 inv0 = calculateInvariant(balanceX, balanceY, balanceX, balanceY, linearWidth);
+        uint256 inv1 = calculateInvariant(x1, y1, balanceX, balanceY, linearWidth);
+        assertApproxEqAbs(inv0, inv1, 1e16, "Invariant should hold even with 99% imbalance");
+
+        console.log("SUCCESS: 99%% imbalanced pool works correctly!");
+        console.log("Curve provides protection against depleting scarce token!");
+        console.log("");
+    }
+
+    // ========================================
     // ROUNDING INVARIANT TESTS
     // ========================================
 
