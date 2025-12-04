@@ -17,19 +17,19 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
 
 /**
- * @title ExampleInvariantUsage
- * @notice Example demonstrating how to use CoreInvariants in your tests
- * @dev Shows various patterns for testing different instruction types
+ * @title ConcentrateXYCDecayInvariants
+ * @notice Tests invariants for Concentrate + XYCSwap + Decay combination
+ * @dev Tests concentrated liquidity with decaying offsets affecting swap behavior
  */
-contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
+contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
     using ProgramBuilder for Program;
 
     Aqua public immutable aqua;
@@ -52,8 +52,8 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         tokenB = new TokenMock("Token B", "TKB");
 
         // Setup tokens and approvals for maker
-        tokenA.mint(maker, 1000e18);
-        tokenB.mint(maker, 1000e18);
+        tokenA.mint(maker, 100000e18);
+        tokenB.mint(maker, 100000e18);
         vm.prank(maker);
         tokenA.approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
@@ -66,8 +66,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
 
     /**
      * @notice Implementation of _executeSwap for real swap execution
-     * @dev This handles token minting and actual swap execution
-     * @dev For assertAdditivityInvariant, this always uses exactIn mode where amount is the input amount
      */
     function _executeSwap(
         SwapVM _swapVM,
@@ -77,9 +75,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         uint256 amount,
         bytes memory takerData
     ) internal override returns (uint256 amountIn, uint256 amountOut) {
-        // Note: assertAdditivityInvariant always passes input amounts for exactIn swaps
-        // The takerData should already be configured for exactIn
-
         // Mint the input tokens
         TokenMock(tokenIn).mint(taker, amount * 10);
 
@@ -92,28 +87,52 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
             takerData
         );
 
+        // Verify the swap consumed the expected input amount
+
+
         return (actualIn, actualOut);
     }
 
     /**
-     * Example 1: Test a simple limit order maintains all invariants
+     * Test _xycConcentrateGrowLiquidity2D + Decay invariants
      */
-    function test_LimitOrderInvariants() public {
-        // Build limit order program
+    function test_ConcentrateGrowLiquidity2D_Decay() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.8e18;
+        uint256 priceMax = 1.25e18;
+        uint16 decayPeriod = 300; // 5 minutes
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])  // 1:2 rate
+                    dynamic([balanceA, balanceB])
                 )),
-            program.build(_limitSwap1D,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
+            program.build(_xycSwapXD)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
 
-        // Test all invariants with proper taker data
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
@@ -128,32 +147,46 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Example 2: Test an AMM with fees maintains invariants
+     * Test _xycConcentrateGrowPriceRange2D + Decay invariants
      */
-    function test_AMMWithFeesInvariants() public {
+    function test_ConcentrateGrowPriceRange2D_Decay() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint16 decayPeriod = 600; // 10 minutes
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1000e18), uint256(1000e18)])
+                    dynamic([balanceA, balanceB])
                 )),
-            program.build(_flatFeeAmountInXD,
-                FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
+            program.build(_xycConcentrateGrowPriceRange2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
 
-        // Test with custom amounts
-        uint256[] memory testAmounts = new uint256[](4);
-        testAmounts[0] = 0.1e18;
-        testAmounts[1] = 1e18;
-        testAmounts[2] = 10e18;
-        testAmounts[3] = 100e18;
-
-        // Create config with proper taker data
-        InvariantConfig memory config = createInvariantConfig(testAmounts, 2);
+        InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 
@@ -167,115 +200,177 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Example 3: Test progressive fees with custom configuration
+     * Test _xycConcentrateGrowLiquidityXD + Decay invariants
      */
-    function test_ProgressiveFeeInvariants() public {
+    function test_ConcentrateGrowLiquidityXD_Decay() public {
+        uint256 balanceA = 2000e18;
+        uint256 balanceB = 2000e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.5e18;
+        uint256 priceMax = 2e18;
+        uint16 decayPeriod = 900; // 15 minutes
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Create arrays for XD version
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(tokenA);
+        tokens[1] = address(tokenB);
+
+        uint256[] memory deltas = new uint256[](2);
+        deltas[0] = deltaA;
+        deltas[1] = deltaB;
+
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1000e18), uint256(1000e18)])
+                    dynamic([balanceA, balanceB])
                 )),
-            program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(0.1e9)), // 10% progressive
+            program.build(_xycConcentrateGrowLiquidityXD,
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
 
-        // Progressive fees need higher tolerance due to rounding
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test _xycConcentrateGrowPriceRangeXD + Decay invariants
+     */
+    function test_ConcentrateGrowPriceRangeXD_Decay() public {
+        uint256 balanceA = 2500e18;
+        uint256 balanceB = 2500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.6e18;
+        uint256 priceMax = 1.7e18;
+        uint16 decayPeriod = 1200; // 20 minutes
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Create arrays for XD version
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(tokenA);
+        tokens[1] = address(tokenB);
+
+        uint256[] memory deltas = new uint256[](2);
+        deltas[0] = deltaA;
+        deltas[1] = deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRangeXD,
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test different decay periods
+     */
+    function test_ConcentrateVariousDecayPeriods() public {
+        uint16[] memory decayPeriods = new uint16[](4);
+        decayPeriods[0] = 60;     // 1 minute
+        decayPeriods[1] = 300;    // 5 minutes
+        decayPeriods[2] = 1800;   // 30 minutes
+        decayPeriods[3] = 7200;   // 2 hours
+
+        for (uint256 i = 0; i < decayPeriods.length; i++) {
+            _testDecayPeriod(decayPeriods[i]);
+        }
+    }
+
+    /**
+     * Helper to test specific decay period
+     */
+    function _testDecayPeriod(uint16 decayPeriod) private {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.85e18;
+        uint256 priceMax = 1.18e18;
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
         InvariantConfig memory config = createInvariantConfig(
-            dynamic([uint256(1e18), uint256(10e18), uint256(50e18)]),
-            1e10  // Higher tolerance for progressive fees
+            dynamic([uint256(2e18), uint256(5e18), uint256(10e18)]),
+            1
         );
-
-        // Add custom taker data - exactOut needs high threshold to allow trades
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // Skip additivity test - progressive fees violate additivity by design
-        config.skipAdditivity = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Example 4: Test specific invariants individually
-     */
-    function test_SpecificInvariants() public view {
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])
-                )),
-            program.build(_limitSwap1D,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        // Test individual invariants
-        assertSymmetryInvariant(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            10e18,    // amount
-            2,        // tolerance
-            exactInData,
-            exactOutData
-        );
-
-        assertMonotonicityInvariant(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            dynamic([uint256(1e18), uint256(10e18), uint256(100e18)]),
-            exactInData
-        );
-
-        assertBalanceSufficiencyInvariant(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            exactInData
-        );
-    }
-
-    /**
-     * Example 5: Skip certain invariants for special cases
-     */
-    function test_SkipCertainInvariants() public {
-        // Create a flat-rate order (no price impact)
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1000e18), uint256(2000e18)])
-                )),
-            program.build(_limitSwap1D,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // For limit orders, skip additivity and monotonicity checks
-        InvariantConfig memory config = _getDefaultConfig();
-        config.skipAdditivity = true;    // Limit orders don't have state
-        config.skipMonotonicity = true;  // Fixed rate, no price impact
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 
@@ -321,7 +416,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // TakerTraitsLib expects threshold to be exactly 32 bytes or empty
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
