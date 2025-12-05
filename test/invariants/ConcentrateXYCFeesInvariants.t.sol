@@ -320,6 +320,128 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
+     * Test Concentrate + XYC with depletion fee on input (basic, uses GrowPriceRange)
+     * Depletion fee works with GrowPriceRange concentration mode
+     */
+    function test_ConcentrateXYCDepletionFeeIn() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Reference balance = VIRTUAL output reserve (actual + delta)
+        uint256 referenceBalance = balanceB + deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRange2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_depletionFeeAmountInXD,
+                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // DepletionFee maintains both additivity and symmetry
+        config.skipSymmetry = false;
+        config.skipAdditivity = false;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Concentrate + XYC with depletion fee on output (basic, uses GrowPriceRange)
+     * Depletion fee works with GrowPriceRange concentration mode
+     */
+    function test_ConcentrateXYCDepletionFeeOut() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Reference balance = VIRTUAL output reserve (actual + delta)
+        uint256 referenceBalance = balanceB + deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRange2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_depletionFeeAmountOutXD,
+                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // DepletionFee maintains both additivity and symmetry
+        config.skipSymmetry = false;
+        config.skipAdditivity = false;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
      * Test Concentrate + XYC with protocol fee
      */
     function test_ConcentrateXYCProtocolFee() public {
@@ -666,6 +788,145 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
+     * Test Concentrate + XYC with depletion fee on input (GrowPriceRange)
+     * Mirrors test_ConcentrateXYCProgressiveFeeIn_GrowPriceRange but with additivity+symmetry
+     */
+    function test_ConcentrateXYCDepletionFeeIn_GrowPriceRange() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Reference balance = VIRTUAL output reserve (actual + delta)
+        uint256 referenceBalance = balanceB + deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRange2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_depletionFeeAmountInXD,
+                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // DepletionFee maintains both additivity and symmetry
+        config.skipSymmetry = false;
+        config.skipAdditivity = false;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Concentrate + XYC with depletion fee on output (GrowPriceRange)
+     * Mirrors test_ConcentrateXYCProgressiveFeeOut_GrowPriceRange but with additivity+symmetry
+     *
+     * Mathematical basis:
+     * - fee = baseFee × amountOut × (1 + penalty × startingDepletion)
+     * - where startingDepletion = (refBalance - currentBalance) / refBalance
+     * - penalty is amplified by refBalance/currentBalance for concentrated liquidity
+     *
+     * ADDITIVITY MECHANISM:
+     * - Single swap starts from depletion=0 → no penalty
+     * - Split swaps: first gets no penalty, second starts from non-zero depletion
+     * - The amplified penalty overcharges splits to offset AMM's state-dependent advantage
+     *
+     * SYMMETRY: Same formula used for exactIn and exactOut via binary search solver.
+     *
+     * KEY: referenceBalance (Y₀) is the INITIAL virtual output reserve.
+     *      For concentrated liquidity, use balanceOut + delta.
+     */
+    function test_ConcentrateXYCDepletionFeeOut_GrowPriceRange() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Reference balance = VIRTUAL output reserve (actual + delta)
+        // This is the Y₀ that stays fixed across all swaps
+        uint256 referenceBalance = balanceB + deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        // Order: balances → concentrate → fee → swap
+        // Fee uses fixed referenceBalance from args, not current balance
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRange2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB
+                )),
+            program.build(_depletionFeeAmountOutXD,
+                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // Test both additivity and symmetry
+        config.skipSymmetry = false;
+        config.skipAdditivity = false;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
      * Test Concentrate + XYC with protocol fee (GrowPriceRange)
      */
     function test_ConcentrateXYCProtocolFee_GrowPriceRange() public {
@@ -897,6 +1158,71 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         config.skipAdditivity = true;
         // TODO: need to research behavior
         config.skipSymmetry = true;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Concentrate + XYC with depletion fee on output (GrowPriceRangeXD)
+     * Depletion fee works with GrowPriceRange concentration mode
+     */
+    function test_ConcentrateXYCDepletionFeeOut_GrowPriceRangeXD() public {
+        uint256 balanceA = 1500e18;
+        uint256 balanceB = 1500e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.7e18;
+        uint256 priceMax = 1.4e18;
+        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+
+        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        // Reference balance = VIRTUAL output reserve (actual + delta)
+        uint256 referenceBalance = balanceB + deltaB;
+
+        // Create arrays for XD version
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(tokenA);
+        tokens[1] = address(tokenB);
+
+        uint256[] memory deltas = new uint256[](2);
+        deltas[0] = deltaA;
+        deltas[1] = deltaB;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowPriceRangeXD,
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+            program.build(_depletionFeeAmountOutXD,
+                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // DepletionFee maintains both additivity and symmetry
+        config.skipSymmetry = false;
+        config.skipAdditivity = false;
 
         assertAllInvariantsWithConfig(
             swapVM,
