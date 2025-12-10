@@ -122,12 +122,12 @@ library PeggedSwapMath {
         unchecked {
             // We compute: y = sqrt(x) * 1e9 (since sqrt(1e18) = 1e9)
             // This maintains 1e18 scale: if x = n * 1e18, then y = sqrt(n) * 1e18
-            
+
             // Step 1: Find good initial estimate using bit-shifts (OpenZeppelin method)
             // This finds the smallest power of 2 greater than sqrt(x)
             uint256 xn = 1;
             uint256 aa = x;
-            
+
             if (aa >= (1 << 128)) {
                 aa >>= 128;
                 xn <<= 64;
@@ -155,10 +155,10 @@ library PeggedSwapMath {
             if (aa >= (1 << 2)) {
                 xn <<= 1;
             }
-            
+
             // Refine estimate to middle of interval (reduces error by half)
             xn = (3 * xn) >> 1;
-            
+
             // Step 2: Newton iterations (exactly 6 for guaranteed convergence)
             // Each iteration: xn = (xn + x / xn) / 2
             // Converges quadratically: error after 6 iterations < 1
@@ -168,10 +168,10 @@ library PeggedSwapMath {
             xn = (xn + x / xn) >> 1;
             xn = (xn + x / xn) >> 1;
             xn = (xn + x / xn) >> 1;
-            
+
             // Step 3: Final correction (ensure we have floor(sqrt(x)))
             y = xn - (xn > x / xn ? 1 : 0);
-            
+
             // Step 4: Scale to 1e18 (multiply by 1e9 since sqrt(1e18) = 1e9)
             y = y * 1e9;
         }

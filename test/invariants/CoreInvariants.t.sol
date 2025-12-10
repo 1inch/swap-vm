@@ -121,6 +121,17 @@ abstract contract CoreInvariants is Test {
             }
         }
 
+        if (!config.skipSpotPrice) {
+            assertRoundingFavorsMakerInvariant(
+                swapVM,
+                order,
+                tokenIn,
+                tokenOut,
+                config.exactInTakerData,
+                config.exactOutTakerData
+            );
+        }
+
         assertQuoteSwapConsistencyInvariant(
             swapVM,
             order,
@@ -159,17 +170,6 @@ abstract contract CoreInvariants is Test {
                 config.testAmounts[0],
                 config.testAmounts[0] * 2,
                 config.exactInTakerData
-            );
-        }
-
-        if (!config.skipSpotPrice) {
-            assertRoundingFavorsMakerInvariant(
-                swapVM,
-                order,
-                tokenIn,
-                tokenOut,
-                config.exactInTakerData,
-                config.exactOutTakerData
             );
         }
 
