@@ -103,15 +103,23 @@ contract XYCConcentrate {
     error ConcentrateShouldBeUsedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error ConcentrateExpectedSwapAmountComputationAfterRunLoop(uint256 amountIn, uint256 amountOut);
 
-    mapping(bytes32 orderHash => uint256) public deltaScales;
+    /// @dev Packed storage: upper 128 bits = initialL (L0), lower 128 bits = currentL
+    mapping(bytes32 orderHash => uint256) public scaleData;
 
-    function deltaScale(bytes32 orderHash) public view returns (uint256) {
-        uint256 scale = deltaScales[orderHash];
-        return scale == 0 ? ONE : scale;
+    function initialL(bytes32 orderHash) public view returns (uint256) {
+        return scaleData[orderHash] >> 128;
+    }
+
+    function currentL(bytes32 orderHash) public view returns (uint256) {
+        return uint128(scaleData[orderHash]);
     }
 
     function concentratedBalance(bytes32 orderHash, uint256 balance, uint256 delta) public view returns (uint256) {
-        return balance + delta * deltaScale(orderHash) / ONE;
+        uint256 data = scaleData[orderHash];
+        if (data == 0) return balance + delta;  // first swap - no scaling yet
+        uint256 L0 = data >> 128;
+        uint256 L = uint128(data);
+        return balance + delta * L / L0;
     }
 
     /// @param args.tokensCount       | 2 bytes
@@ -182,9 +190,20 @@ contract XYCConcentrate {
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, ConcentrateExpectedSwapAmountComputationAfterRunLoop(ctx.swap.amountIn, ctx.swap.amountOut));
 
         if (!ctx.vm.isStaticContext) {
-            uint256 inv = ctx.swap.balanceIn * ctx.swap.balanceOut;
+            // Current invariant (before swap amounts applied)
+            uint256 oldInv = ctx.swap.balanceIn * ctx.swap.balanceOut;
+
+            // New invariant (after swap)
             uint256 newInv = (ctx.swap.balanceIn + ctx.swap.amountIn) * (ctx.swap.balanceOut - ctx.swap.amountOut);
-            deltaScales[ctx.query.orderHash] = deltaScale(ctx.query.orderHash) * newInv / inv;
+
+            uint256 data = scaleData[ctx.query.orderHash];
+            uint256 L0 = data == 0 ? Math.sqrt(oldInv) : data >> 128;
+
+            // Store newL directly (no division needed - better precision)
+            uint256 newL = Math.sqrt(newInv);
+
+            // Pack: initialL (L0) in upper 128 bits, currentL in lower 128 bits
+            scaleData[ctx.query.orderHash] = (L0 << 128) | newL;
         }
     }
 }
