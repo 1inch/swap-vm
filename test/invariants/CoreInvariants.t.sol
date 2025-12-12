@@ -160,6 +160,16 @@ abstract contract CoreInvariants is Test {
                 config.testAmounts[0] * 2,
                 config.exactInTakerData
             );
+
+            assertAdditivityInvariant(
+                swapVM,
+                order,
+                tokenIn,
+                tokenOut,
+                config.testAmounts[0],
+                config.testAmounts[0] * 2,
+                config.exactOutTakerData
+            );
         }
 
         if (!config.skipSpotPrice) {
@@ -252,6 +262,8 @@ abstract contract CoreInvariants is Test {
         // Restore state to before the swap
         vm.revertTo(snapshot);
 
+        snapshot = vm.snapshot();
+
         // Execute swap A
         (, uint256 outA) = _executeSwap(
             swapVM, order, tokenIn, tokenOut, amountA, takerData
@@ -262,9 +274,12 @@ abstract contract CoreInvariants is Test {
             swapVM, order, tokenIn, tokenOut, amountB, takerData
         );
 
+        vm.revertTo(snapshot);
+
         uint256 splitTotal = outA + outB;
 
         // Single swap should be at least as good as split swaps
+        console.log("Additivity check: singleOut =", singleOut, ", splitTotal =", splitTotal);
         assertGe(
             singleOut,
             splitTotal,
@@ -304,11 +319,17 @@ abstract contract CoreInvariants is Test {
         assertGt(quotedIn, 0, "Quote returned zero input");
         assertGt(quotedOut, 0, "Quote returned zero output");
 
+        // Save the current state
+        uint256 snapshot = vm.snapshot();
+
         // Execute the swap with the same amount that was passed to quote
         // For exactIn: amount is the input amount
         // For exactOut: amount is the desired output amount
         // The _executeSwap implementation must handle minting correctly
         (uint256 swapIn, uint256 swapOut) = _executeSwap(swapVM, order, tokenIn, tokenOut, amount, takerData);
+
+        // Restore state to before the swap
+        vm.revertTo(snapshot);
 
         // Verify both input and output match the quote
         assertEq(swapIn, quotedIn, "Swap input does not match quote input");

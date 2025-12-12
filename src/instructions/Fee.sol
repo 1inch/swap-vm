@@ -132,11 +132,45 @@ contract Fee {
         }
     }
 
+    // текущие проблемы:
+    // 1) Нарушается аддитивность при использовании физов на выходе - т.е. если бить своп на части. Причина возникает из-за того что
+    // физы берутся из amountOut и курс для следующего свопа становится ЛУЧШЕ чем если бы не было физов
+    // Решение 1: эквивалентная формула рассчета feeInBips = f(feeOutBps) (инструкция feeOutAsInXYCXD) - НЕ СРАБОТАЛО,
+    // так как f() - есть функция свопа и тогда feeInBips - фактически ведет себя как прогрессивные физы
+    // Решение 2: Отказаться от физов на выходе и всегда брать физы на входе - ТАК КАК ФИЗЫ НА ВХОДЕ НЕ НАРУШАЮТ АДДИТИВНОСТЬ
+    // Решение 3: перевод SwapVM на механизм без реинвестирования физов - т.е. физы всегда пишутся в сторедж и не реинвестируются в балансы мейкера,
+    // но сделать так чтобы часть инструкций позволяли реинвестировать физы с помощью явной инструкции. В регистрах появляется учет физов отдельно от балансов мейкера:
+    // новые поля uint256 ctx.swap.feeInCollected; uint256 ctx.swap.feeOutCollected; uint256 ctx.swap.feeIn; uint256 ctx.swap.feeOut;
+    // ----------------------
+    // 2) Пресижн лосс при компенсации расползания диапазона цен - т.е. если свопить в пуле с концентрированной ликвидностью
+    // Решение 1: уменьшение погрешности за счет АБСОЛЮТНЫХ scale в 10 раз от текущего варианта
+    // Решение 2: аккаунтинг физов в отдельном сторедже что дает возможность математически корректно реинвестировать физы (не нарущая соотношение dx/X = dy/Y = dL/L)
+    // Решение 3: перевод SwapVM на механизм без реинвестирования физов - т.е. физы всегда пишутся в сторедж и не реинвестируются в балансы мейкера,
+    // но сделать так чтобы часть инструкций позволяли реинвестировать физы с помощью явной инструкции. В регистрах появляется учет физов отдельно от балансов мейкера:
+    // новые поля uint256 ctx.swap.feeInCollected; uint256 ctx.swap.feeOutCollected; uint256 ctx.swap.feeIn; uint256 ctx.swap.feeOut;
+    // ----------------------
+    // 3) протокольные физы нарушают аккаунтинг мейкера - т.е. физы берутся из amountOut, но баланс мейкера уменьшается на полную сумму amountOut
+    // Решение найдено: нужно ставить инструкцию protocolFeeAmountOutXD ДО dynamicBalancesXD
+    // ----------------------
+    // 4) Проблема с прогрессивными физами - аддитивность (?)
+    // Решение 1: изменить подход
+    // Решение 2: использовать дикей в блоке или от времени
+    // Решение 3: отказаться от них
+
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _protocolFeeAmountOutXD(Context memory ctx, bytes calldata args) internal {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountOut = _feeAmountOut(ctx, feeBps);
+        // 1) Требуется решить: здесь таже проблема с аддитивностью, но все еще хуже
+        // 2) Решено !!!: из выходного amountOut при exactIn вычитаются физы и дальше отправляются протоколу
+        // но проблема в том, что дальше в _dynamicBalances
+        // balances[ctx.query.orderHash][ctx.query.tokenOut] -= swapAmountOut;
+        // значение balances для tokenOut будет уменьшено на величину amountOut из которой
+        // вычли физы - как будто бы данные физы осели у мейкера - но так быть не должно,
+        // поскольку физически физы уже отправились протоколу
+        // в итоге нарушается аккаунтинг
+        // это справедливо только для exactIn, для excactOut - все верно
 
         if (!ctx.vm.isStaticContext) {
             IERC20(ctx.query.tokenOut).safeTransferFrom(ctx.query.maker, to, feeAmountOut);
@@ -163,32 +197,101 @@ contract Fee {
             // Decrease amountIn by fee only during swap-instruction
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
-            ctx.swap.amountIn -= feeAmountIn;
-            ctx.runLoop();
-            ctx.swap.amountIn = takerDefinedAmountIn;
+            ctx.swap.amountIn -= feeAmountIn; // amountIn -> уменьшаем на физы
+            ctx.runLoop(); // amountOut -> по уменьшенному amountIn
+            ctx.swap.amountIn = takerDefinedAmountIn; // восстанавливаем amountIn
+            // курс для следующего свопа будет:
+            // (balanceOut - amountOut) / (balanceIn + amountIn) <= (balanceOut - amountOut) / (balanceIn + amountIn - feeAmountIn)
+            // TODO: что хуже чем было бы без физов - поэтому аддитивность не нарушается !!!
         } else {
             // Increase amountIn by fee after swap-instruction
             ctx.runLoop();
             feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
             ctx.swap.amountIn += feeAmountIn;
+            // TODO: курс для следующего свопа будет хуже чем было бы без физов - поэтому аддитивность не нарушается !!!
+            // (balanceOut - amountOut) / (balanceIn + amountIn + feeAmountIn) <= (balanceOut - amountOut) / (balanceIn + amountIn)
         }
     }
 
     function _feeAmountOut(Context memory ctx, uint256 feeBps) internal returns (uint256 feeAmountOut) {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, FeeShouldBeAppliedBeforeSwapAmountsComputation());
 
+        // что здесь по сути происходит - поскольку физы "реинвестируются" в балансы мейкера на выходном токене
+        // курс для следующего свопа будет в туже сторону ЛУЧШЕ для следующего свопа - отсюда нарушается аддитивность
         if (ctx.query.isExactIn) {
             // Decrease amountOut by fee after passing to swap-instruction
-            ctx.runLoop();
+            ctx.runLoop(); // amountIn -> amountOut
+
             feeAmountOut = ctx.swap.amountOut * feeBps / BPS;
-            ctx.swap.amountOut -= feeAmountOut;
+            // здесь мы честно берем физы в tokenOut
+            ctx.swap.amountOut -= feeAmountOut; // amountOut -> уменьшаем на физы
+            // курс для следующего свопа будет:
+            // (balanceOut - amountOut + feeAmountOut) / (balanceIn + amountIn) >= (balanceOut - amountOut) / (balanceIn + amountIn)
+            // TODO: что лучше чем было бы без физов !!!
         } else {
             // Increase amountOut by fee only during swap-instruction
+            // причем здесь на самом деле мы берем фактически физы в tokenIn:
+            // мы искуственно повышаем amountOut что приводит к тому что повышается tokenIn и по факту все равно возьмем
+            // физами в tokenIn (тем токеном с которым пришел taker), просто величина физов соответствует как буд-то бы взяли
+            // заданное количество в tokenOut
             uint256 takerDefinedAmountOut = ctx.swap.amountOut;
             feeAmountOut = ctx.swap.amountOut * feeBps / (BPS - feeBps);
             ctx.swap.amountOut += feeAmountOut;
             ctx.runLoop();
+
             ctx.swap.amountOut = takerDefinedAmountOut;
+            // TODO: что курс для следующего свопа будет лучше чем было бы без физов
+            // (balanceOut - amountOut) / (balanceIn + amountIn) >= (balanceOut - amountOut - feeAmountOut) / (balanceIn + amountIn)
+        }
+    }
+
+    /// @notice Fee on output converted to equivalent fee on input for XYC formula
+    /// @dev This preserves additivity by taking fee from input instead of output
+    /// @dev Works for both regular XYC and concentrated liquidity (same formula with virtual balances)
+    /// @dev Formula derivation: For taker to receive same amountOut with feeIn as with feeOut:
+    ///      (y * dx) / (x + dx) * (1 - λ) = (y * dx * (1 - μ)) / (x + dx * (1 - μ))
+    ///      Solving for μ: μ = λ * (x + dx) / (x + dx * λ)
+    /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%, expressed as feeOut percentage)
+    function _feeOutAsInXYCXD(Context memory ctx, bytes calldata args) internal {
+        uint256 feeOutBps = FeeArgsBuilder.parseFlatFee(args);
+        _feeOutAsInXYC(ctx, feeOutBps);
+    }
+
+    /// @notice Internal implementation of feeOut→feeIn conversion for XYC formula
+    /// @param ctx The swap context
+    /// @param feeOutBps The fee percentage expressed as output fee (what would be taken from output)
+    function _feeOutAsInXYC(Context memory ctx, uint256 feeOutBps) internal returns (uint256 feeAmountIn) {
+        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, FeeShouldBeAppliedBeforeSwapAmountsComputation());
+
+        if (ctx.query.isExactIn) {
+            // Convert feeOut to equivalent feeIn for XYC (exactIn case)
+            // Derivation: For taker to receive same amountOut with feeIn as with feeOut:
+            //   (y * dx) / (x + dx) * (1 - λ) = (y * dx * (1 - μ)) / (x + dx * (1 - μ))
+            // Solving for μ: μ = λ * (x + dx) / (x + dx * λ)
+            // тоже нарушает аддитивность поскольку зависит от amountIn - это значит что если бить сумму,
+            // то тогда процент физов зависит от входа - чем больше вход, тем больше физов в процентах соберем
+            uint256 feeInBps = feeOutBps * (ctx.swap.balanceIn + ctx.swap.amountIn) * BPS
+                / ((ctx.swap.balanceIn * BPS) + (ctx.swap.amountIn * feeOutBps));
+
+            uint256 takerDefinedAmountIn = ctx.swap.amountIn;
+            feeAmountIn = ctx.swap.amountIn * feeInBps / BPS;
+            ctx.swap.amountIn -= feeAmountIn;
+            ctx.runLoop();
+            ctx.swap.amountIn = takerDefinedAmountIn;
+        } else {
+            // For exactOut: first compute swap with original amountOut, then add fee to amountIn
+            // Derivation: feeAmount = amountIn_raw * λ * y / ((1-λ)*y - dy)
+            // Which equals: amountIn_raw * μ / (BPS - μ) where μ = λ * y / (y - dy)
+            ctx.runLoop();
+
+            // Convert feeOut to equivalent feeIn for XYC (exactOut case)
+            // μ = λ * y / (y - dy)
+            uint256 feeInBps = feeOutBps * ctx.swap.balanceOut
+                / (ctx.swap.balanceOut - ctx.swap.amountOut);
+
+            // Add fee to amountIn: feeAmount = amountIn * μ / (BPS - μ)
+            feeAmountIn = Math.ceilDiv(ctx.swap.amountIn * feeInBps, BPS - feeInBps);
+            ctx.swap.amountIn += feeAmountIn;
         }
     }
 }
