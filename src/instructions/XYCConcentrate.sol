@@ -119,7 +119,7 @@ contract XYCConcentrate {
         if (data == 0) return balance + delta;  // first swap - no scaling yet
         uint256 L0 = data >> 128;
         uint256 L = uint128(data);
-        return balance + Math.mulDiv(delta, L, L0);  // full 512-bit precision
+        return balance + delta * L / L0;
     }
 
     /// @param args.tokensCount       | 2 bytes
