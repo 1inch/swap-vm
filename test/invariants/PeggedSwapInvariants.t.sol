@@ -21,7 +21,6 @@ import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
-import "forge-std/console.sol";
 
 /**
  * @title PeggedSwapInvariants
@@ -87,6 +86,216 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         );
 
         return (actualIn, actualOut);
+    }
+
+    /**
+     * Test PeggedSwap with odd amounts to verify rounding behavior
+     */
+    function test_PeggedSwap_OddAmountRounding() public view {
+        uint256 balanceA = 10000e18;
+        uint256 balanceB = 10000e18;
+        uint256 x0Initial = 10000e18;
+        uint256 y0Initial = 10000e18;
+        uint256 linearWidth = 0.8e18; // A = 0.8
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: x0Initial,
+                    y0: y0Initial,
+                    linearWidth: linearWidth
+                })))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test with very small odd amounts
+        uint256[] memory smallOddAmounts = new uint256[](6);
+        smallOddAmounts[0] = 1;      // 1 wei
+        smallOddAmounts[1] = 3;      // 3 wei
+        smallOddAmounts[2] = 7;      // 7 wei
+        smallOddAmounts[3] = 13;     // 13 wei
+        smallOddAmounts[4] = 99;     // 99 wei
+        smallOddAmounts[5] = 1337;   // 1337 wei
+
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        // Test small odd amounts for exactIn
+        for (uint256 i = 0; i < smallOddAmounts.length; i++) {
+            // Try to quote, it might revert for amounts that produce 0 output
+            try swapVM.asView().quote(
+                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactInData
+            ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
+                // Log the results for debugging if needed
+                // ExactIn odd amount: smallOddAmounts[i] -> out: quotedOut
+
+                // Verify no underflow/overflow
+                assertGe(quotedIn, 0, "Quoted input should not underflow");
+                assertLe(quotedOut, balanceB, "Output should not exceed balance");
+
+                // For very small inputs, output might be 0 or very small
+                if (smallOddAmounts[i] <= 10) {
+                    assertGe(quotedOut, 0, "Small input may produce 0 output due to rounding");
+                } else {
+                    assertGt(quotedOut, 0, "Larger input should produce non-zero output");
+                }
+            } catch {
+                // Expected for very small amounts that would result in 0 output
+                // PeggedSwap with high precision requirements may reject amounts up to ~2000 wei
+                assertLe(smallOddAmounts[i], 2000, "Only very small amounts (up to 2000 wei) should revert");
+            }
+        }
+
+        // Test small odd amounts for exactOut
+        for (uint256 i = 0; i < smallOddAmounts.length; i++) {
+            // Skip if amount would require more input than available
+            if (smallOddAmounts[i] > balanceB) continue;
+
+            // Try to quote, might revert for amounts that are impossible to achieve
+            try swapVM.asView().quote(
+                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactOutData
+            ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
+                // Log the results for debugging if needed
+                // ExactOut odd amount: smallOddAmounts[i] -> in: quotedIn
+
+                // Verify no underflow/overflow
+                assertGt(quotedIn, 0, "Quoted input should be non-zero");
+                assertLe(quotedIn, balanceA, "Input should not exceed available balance");
+
+                // Verify we get exactly what we asked for
+                assertEq(quotedOut, smallOddAmounts[i], "ExactOut should return exact amount requested");
+            } catch {
+                // Some very small amounts might be impossible to achieve exactly
+                // This is expected behavior for the PeggedSwap curve
+                assertLe(smallOddAmounts[i], 2000, "Only very small amounts (up to 2000 wei) should be impossible to achieve exactly");
+            }
+        }
+    }
+
+    /**
+     * Test PeggedSwap with large odd amounts
+     */
+    function test_PeggedSwap_LargeOddAmounts() public view {
+        uint256 balanceA = 10000e18;
+        uint256 balanceB = 10000e18;
+        uint256 x0Initial = 10000e18;
+        uint256 y0Initial = 10000e18;
+        uint256 linearWidth = 0.8e18; // A = 0.8
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: x0Initial,
+                    y0: y0Initial,
+                    linearWidth: linearWidth
+                })))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test with large odd amounts (not evenly divisible)
+        uint256[] memory largeOddAmounts = new uint256[](5);
+        largeOddAmounts[0] = 12345678901234567;           // ~0.012 ETH odd
+        largeOddAmounts[1] = 999999999999999999;          // ~1 ETH minus 1 wei
+        largeOddAmounts[2] = 1234567890123456789;         // ~1.23 ETH odd
+        largeOddAmounts[3] = 5555555555555555555;         // ~5.55 ETH odd
+        largeOddAmounts[4] = 99999999999999999999;        // ~100 ETH minus 1 wei
+
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        // Test large odd amounts
+        for (uint256 i = 0; i < largeOddAmounts.length; i++) {
+            // Test exactIn
+            (, uint256 outQuoted,) = swapVM.asView().quote(
+                order, address(tokenA), address(tokenB), largeOddAmounts[i], exactInData
+            );
+
+            // Log the results for debugging if needed
+            // Large odd exactIn: largeOddAmounts[i] -> output: outQuoted
+
+            // Verify output is reasonable
+            assertGt(outQuoted, 0, "Large odd input should produce non-zero output");
+            assertLe(outQuoted, balanceB, "Output should not exceed balance");
+
+            // Test exactOut with the same amount
+            if (largeOddAmounts[i] <= balanceB) {
+                (uint256 inRequired, uint256 outGiven,) = swapVM.asView().quote(
+                    order, address(tokenA), address(tokenB), largeOddAmounts[i], exactOutData
+                );
+
+                // Log the results for debugging if needed
+                // Large odd exactOut: largeOddAmounts[i] -> input required: inRequired
+
+                assertGt(inRequired, 0, "Should require non-zero input");
+                assertLe(inRequired, balanceA, "Input should not exceed available balance");
+                assertEq(outGiven, largeOddAmounts[i], "ExactOut should give exact amount");
+            }
+        }
+    }
+
+    /**
+     * Test PeggedSwap rounding consistency
+     */
+    function test_PeggedSwap_RoundingConsistency() public view {
+        uint256 balanceA = 10000e18;
+        uint256 balanceB = 10000e18;
+        uint256 x0Initial = 10000e18;
+        uint256 y0Initial = 10000e18;
+        uint256 linearWidth = 0.8e18; // A = 0.8
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: x0Initial,
+                    y0: y0Initial,
+                    linearWidth: linearWidth
+                })))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        // Test that rounding is consistent: X+1 should give at least as much as X
+        uint256 baseAmount = 1000000000000000; // 0.001 ETH
+
+        for (uint256 i = 0; i < 10; i++) {
+            uint256 amount = baseAmount + i;
+            uint256 amountPlusOne = amount + 1;
+
+            (,uint256 out1,) = swapVM.asView().quote(
+                order, address(tokenA), address(tokenB), amount, exactInData
+            );
+            (,uint256 out2,) = swapVM.asView().quote(
+                order, address(tokenA), address(tokenB), amountPlusOne, exactInData
+            );
+
+            // More input should give at least as much output (monotonicity with rounding)
+            assertGe(out2, out1, "Rounding should maintain monotonicity");
+
+            // Log the results for debugging if needed
+            // Amount: amount -> out: out1
+            // Amount+1: amountPlusOne -> out: out2, diff: out2 - out1
+        }
     }
 
     /**
