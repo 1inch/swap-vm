@@ -16,10 +16,9 @@ import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 
-import { TestConstants } from "./TestConstants.sol";
 import { AquaStrategyBuilders } from "./AquaStrategyBuilders.sol";
 
-contract AquaSwapVMTest is TestConstants, AquaStrategyBuilders {
+contract AquaSwapVMTest is AquaStrategyBuilders {
     struct SwapProgram {
         uint256 amount;
         MockTaker taker;
