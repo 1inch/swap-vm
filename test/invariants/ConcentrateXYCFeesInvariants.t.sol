@@ -329,7 +329,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 currentPrice = 1e18;
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
-        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+        uint32 minFeeBps = 0.002e9; // 0.2% min fee
+        uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
         (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
@@ -339,11 +340,12 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             priceMax
         );
 
-        // Reference balance = VIRTUAL output reserve (actual + delta)
-        uint256 referenceBalance = balanceB + deltaB;
+        // Reference balances = VIRTUAL reserves (actual + delta)
+        uint256 referenceBalanceIn = balanceA + deltaA;
+        uint256 referenceBalanceOut = balanceB + deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
-        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track imbalance from virtual balances
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -358,7 +360,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     deltaB
                 )),
             program.build(_depletionFeeAmountInXD,
-                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+                FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut)),
             program.build(_xycSwapXD)
         );
 
@@ -390,7 +392,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 currentPrice = 1e18;
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
-        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+        uint32 minFeeBps = 0.002e9; // 0.2% min fee
+        uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
         (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
@@ -400,11 +403,12 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             priceMax
         );
 
-        // Reference balance = VIRTUAL output reserve (actual + delta)
-        uint256 referenceBalance = balanceB + deltaB;
+        // Reference balances = VIRTUAL reserves (actual + delta)
+        uint256 referenceBalanceIn = balanceA + deltaA;
+        uint256 referenceBalanceOut = balanceB + deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
-        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track imbalance from virtual balances
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -419,7 +423,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     deltaB
                 )),
             program.build(_depletionFeeAmountOutXD,
-                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+                FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut)),
             program.build(_xycSwapXD)
         );
 
@@ -797,7 +801,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 currentPrice = 1e18;
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
-        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+        uint32 minFeeBps = 0.002e9; // 0.2% min fee
+        uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
         (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
@@ -807,11 +812,12 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             priceMax
         );
 
-        // Reference balance = VIRTUAL output reserve (actual + delta)
-        uint256 referenceBalance = balanceB + deltaB;
+        // Reference balances = VIRTUAL reserves (actual + delta)
+        uint256 referenceBalanceIn = balanceA + deltaA;
+        uint256 referenceBalanceOut = balanceB + deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
-        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track imbalance from virtual balances
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -826,7 +832,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     deltaB
                 )),
             program.build(_depletionFeeAmountInXD,
-                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+                FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut)),
             program.build(_xycSwapXD)
         );
 
@@ -853,19 +859,19 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * Mirrors test_ConcentrateXYCProgressiveFeeOut_GrowPriceRange but with additivity+symmetry
      *
      * Mathematical basis:
-     * - fee = baseFee × amountOut × (1 + penalty × startingDepletion)
-     * - where startingDepletion = (refBalance - currentBalance) / refBalance
-     * - penalty is amplified by refBalance/currentBalance for concentrated liquidity
+     * - fee is based on ratio deviation from initial state
+     * - fee increases when moving away from initial ratio (depletion)
+     * - fee decreases when moving toward initial ratio (restoration)
      *
      * ADDITIVITY MECHANISM:
-     * - Single swap starts from depletion=0 → no penalty
-     * - Split swaps: first gets no penalty, second starts from non-zero depletion
-     * - The amplified penalty overcharges splits to offset AMM's state-dependent advantage
+     * - Fee based on relative imbalance ensures splits are penalized correctly
+     * - Single swap at initial ratio: just base fee
+     * - Split swaps: second starts from different ratio, gets adjusted fee
      *
-     * SYMMETRY: Same formula used for exactIn and exactOut via binary search solver.
+     * SYMMETRY: Same formula used for exactIn and exactOut via analytical solver.
      *
-     * KEY: referenceBalance (Y₀) is the INITIAL virtual output reserve.
-     *      For concentrated liquidity, use balanceOut + delta.
+     * KEY: referenceBalanceIn (X₀) and referenceBalanceOut (Y₀) are INITIAL virtual reserves.
+     *      For concentrated liquidity, use balance + delta for each token.
      */
     function test_ConcentrateXYCDepletionFeeOut_GrowPriceRange() public {
         uint256 balanceA = 1500e18;
@@ -873,7 +879,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 currentPrice = 1e18;
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
-        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+        uint32 minFeeBps = 0.002e9; // 0.2% min fee
+        uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
         (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
@@ -883,13 +890,14 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             priceMax
         );
 
-        // Reference balance = VIRTUAL output reserve (actual + delta)
-        // This is the Y₀ that stays fixed across all swaps
-        uint256 referenceBalance = balanceB + deltaB;
+        // Reference balances = VIRTUAL reserves (actual + delta)
+        // These define the initial ratio that the fee tries to maintain
+        uint256 referenceBalanceIn = balanceA + deltaA;
+        uint256 referenceBalanceOut = balanceB + deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         // Order: balances → concentrate → fee → swap
-        // Fee uses fixed referenceBalance from args, not current balance
+        // Fee uses fixed reference balances from args to measure imbalance
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -904,7 +912,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     deltaB
                 )),
             program.build(_depletionFeeAmountOutXD,
-                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+                FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut)),
             program.build(_xycSwapXD)
         );
 
@@ -1178,7 +1186,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 currentPrice = 1e18;
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
-        uint32 feeBps = 0.005e9; // 0.5% fee for small swaps
+        uint32 minFeeBps = 0.002e9; // 0.2% min fee
+        uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
         (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
@@ -1188,8 +1197,9 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             priceMax
         );
 
-        // Reference balance = VIRTUAL output reserve (actual + delta)
-        uint256 referenceBalance = balanceB + deltaB;
+        // Reference balances = VIRTUAL reserves (actual + delta)
+        uint256 referenceBalanceIn = balanceA + deltaA;
+        uint256 referenceBalanceOut = balanceB + deltaB;
 
         // Create arrays for XD version
         address[] memory tokens = new address[](2);
@@ -1201,7 +1211,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         deltas[1] = deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
-        // IMPORTANT: Concentrate BEFORE fee - fee needs to track depletion from virtual balance
+        // IMPORTANT: Concentrate BEFORE fee - fee needs to track imbalance from virtual balances
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -1211,7 +1221,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(_xycConcentrateGrowPriceRangeXD,
                 XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
             program.build(_depletionFeeAmountOutXD,
-                FeeArgsBuilder.buildDepletionFee(feeBps, referenceBalance)),
+                FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut)),
             program.build(_xycSwapXD)
         );
 

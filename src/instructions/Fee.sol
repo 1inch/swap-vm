@@ -38,21 +38,32 @@ library FeeArgsBuilder {
         return abi.encodePacked(feeBps);
     }
 
-    error DepletionFeeMissingFeeBPS();
-    error DepletionFeeMissingReferenceBalance();
+    error DepletionFeeMissingMinFeeBPS();
+    error DepletionFeeMissingMaxFeeBPS();
+    error DepletionFeeMissingReferenceBalanceIn();
+    error DepletionFeeMissingReferenceBalanceOut();
+    error DepletionFeeMinExceedsMax(uint32 minFeeBps, uint32 maxFeeBps);
 
-    /// @notice Build args for depletion-based fee (enforces additivity for concentrated liquidity)
-    /// @param feeBps Base fee rate for small swaps (1e9 = 100%)
-    /// @param referenceBalance Initial output reserve (Y₀) - typically virtual balance after concentration
-    /// @dev The fee increases as pool gets depleted, penalizing split swaps
-    function buildDepletionFee(uint32 feeBps, uint256 referenceBalance) internal pure returns (bytes memory) {
-        require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
-        return abi.encodePacked(feeBps, referenceBalance);
+    /// @notice Build args for depletion-based fee (enforces additivity and symmetry)
+    /// @param minFeeBps Minimum fee rate (1e9 = 100%) - floor for restoring swaps
+    /// @param maxFeeBps Maximum fee rate (1e9 = 100%) - cap for depleting swaps
+    /// @param referenceBalanceIn Initial input reserve (X₀) - defines the initial ratio
+    /// @param referenceBalanceOut Initial output reserve (Y₀) - defines the initial ratio
+    /// @dev The fee increases when swaps move the pool away from initial ratio (depletion)
+    /// @dev The fee decreases when swaps move the pool toward initial ratio (restoration)
+    /// @dev Fee is clamped between minFeeBps and maxFeeBps
+    function buildDepletionFee(uint32 minFeeBps, uint32 maxFeeBps, uint256 referenceBalanceIn, uint256 referenceBalanceOut) internal pure returns (bytes memory) {
+        require(minFeeBps <= BPS, FeeBpsOutOfRange(minFeeBps));
+        require(maxFeeBps <= BPS, FeeBpsOutOfRange(maxFeeBps));
+        require(minFeeBps <= maxFeeBps, DepletionFeeMinExceedsMax(minFeeBps, maxFeeBps));
+        return abi.encodePacked(minFeeBps, maxFeeBps, referenceBalanceIn, referenceBalanceOut);
     }
 
-    function parseDepletionFee(bytes calldata args) internal pure returns (uint32 feeBps, uint256 referenceBalance) {
-        feeBps = uint32(bytes4(args.slice(0, 4, DepletionFeeMissingFeeBPS.selector)));
-        referenceBalance = uint256(bytes32(args.slice(4, 36, DepletionFeeMissingReferenceBalance.selector)));
+    function parseDepletionFee(bytes calldata args) internal pure returns (uint32 minFeeBps, uint32 maxFeeBps, uint256 referenceBalanceIn, uint256 referenceBalanceOut) {
+        minFeeBps = uint32(bytes4(args.slice(0, 4, DepletionFeeMissingMinFeeBPS.selector)));
+        maxFeeBps = uint32(bytes4(args.slice(4, 8, DepletionFeeMissingMaxFeeBPS.selector)));
+        referenceBalanceIn = uint256(bytes32(args.slice(8, 40, DepletionFeeMissingReferenceBalanceIn.selector)));
+        referenceBalanceOut = uint256(bytes32(args.slice(40, 72, DepletionFeeMissingReferenceBalanceOut.selector)));
     }
 
     function parseFlatFee(bytes calldata args) internal pure returns (uint32 feeBps) {
@@ -149,62 +160,98 @@ contract Fee {
         }
     }
 
-    /// @notice Depletion fee on input - overcharges splits to compensate for AMM advantage
-    /// @dev fee = baseFee × amountIn × (1 + penalty × startingDepletion)
-    /// @dev where startingDepletion = (refBalance - currentBalanceOut) / refBalance
+    /// @notice Depletion fee on input - adjusts fee based on pool imbalance direction
+    /// @dev Fee increases when swap moves pool away from initial ratio (depletion)
+    /// @dev Fee decreases when swap moves pool toward initial ratio (restoration)
+    /// @dev Fee is clamped between minFeeBps and maxFeeBps
     /// @dev
-    /// @dev ADDITIVITY MECHANISM:
-    /// @dev   Same as output version but fee is charged on input side.
-    /// @dev   Tracks OUTPUT depletion since that drives AMM state changes.
+    /// @dev RATIO-BASED MECHANISM:
+    /// @dev   Initial ratio r₀ = refBalanceIn / refBalanceOut
+    /// @dev   Current ratio r = balanceIn / balanceOut
+    /// @dev   A swap buying tokenOut increases ratio (adds tokenIn, removes tokenOut)
+    /// @dev   If r < r₀: swap restores balance → reduced fee (clamped to minFeeBps)
+    /// @dev   If r > r₀: swap depletes further → increased fee (clamped to maxFeeBps)
     /// @dev
-    /// @param args.feeBps | 4 bytes (base fee rate in bps, 1e9 = 100%)
-    /// @param args.referenceBalance | 32 bytes (Y₀ - initial virtual output reserve)
+    /// @param args.minFeeBps | 4 bytes (minimum fee rate in bps, 1e9 = 100%)
+    /// @param args.maxFeeBps | 4 bytes (maximum fee rate in bps, 1e9 = 100%)
+    /// @param args.referenceBalanceIn | 32 bytes (X₀ - initial virtual input reserve)
+    /// @param args.referenceBalanceOut | 32 bytes (Y₀ - initial virtual output reserve)
     function _depletionFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
-        (uint256 feeBps, uint256 refBalance) = FeeArgsBuilder.parseDepletionFee(args);
+        (uint256 minFeeBps, uint256 maxFeeBps, uint256 refBalanceIn, uint256 refBalanceOut) = FeeArgsBuilder.parseDepletionFee(args);
 
         if (ctx.query.isExactIn) {
             // Fee charged on input, reduce what goes to AMM
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
-            uint256 currentBalance = ctx.swap.balanceOut; // Track OUTPUT depletion
-            uint256 feeAmount = _computeSuperlinearFee(ctx.swap.amountIn, currentBalance, refBalance, feeBps);
+            uint256 feeAmount = _computeImbalanceFee(
+                ctx.swap.amountIn,
+                ctx.swap.balanceIn,
+                ctx.swap.balanceOut,
+                refBalanceIn,
+                refBalanceOut,
+                minFeeBps,
+                maxFeeBps
+            );
             ctx.swap.amountIn -= feeAmount;
             ctx.runLoop();
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             ctx.runLoop();
             // AMM computed net input needed, add fee to get gross input
-            uint256 currentBalance = ctx.swap.balanceOut; // Pre-swap output balance
-            ctx.swap.amountIn = _solveGrossForSuperlinearFeeIn(ctx.swap.amountIn, currentBalance, refBalance, feeBps);
+            ctx.swap.amountIn = _solveGrossForImbalanceFeeIn(
+                ctx.swap.amountIn,
+                ctx.swap.balanceIn,
+                ctx.swap.balanceOut,
+                refBalanceIn,
+                refBalanceOut,
+                minFeeBps,
+                maxFeeBps
+            );
         }
     }
 
-    /// @notice Depletion fee on output - overcharges splits to compensate for AMM advantage
-    /// @dev fee = baseFee × amountOut × (1 + penalty × startingDepletion)
-    /// @dev where startingDepletion = (refBalance - currentBalance) / refBalance
+    /// @notice Depletion fee on output - adjusts fee based on pool imbalance direction
+    /// @dev Fee increases when swap moves pool away from initial ratio (depletion)
+    /// @dev Fee decreases when swap moves pool toward initial ratio (restoration)
+    /// @dev Fee is clamped between minFeeBps and maxFeeBps
     /// @dev
-    /// @dev ADDITIVITY MECHANISM:
-    /// @dev   Single swap starts from depletion=0, so penalty=0.
-    /// @dev   Split swaps: first gets no penalty, second starts from non-zero depletion.
-    /// @dev   The amplified penalty overcharges splits to offset the AMM's state-dependent advantage.
+    /// @dev RATIO-BASED MECHANISM:
+    /// @dev   Initial ratio r₀ = refBalanceIn / refBalanceOut
+    /// @dev   Current ratio r = balanceIn / balanceOut
+    /// @dev   A swap buying tokenOut increases ratio (adds tokenIn, removes tokenOut)
+    /// @dev   If r < r₀: swap restores balance → reduced fee (clamped to minFeeBps)
+    /// @dev   If r > r₀: swap depletes further → increased fee (clamped to maxFeeBps)
     /// @dev
-    /// @dev   For concentrated liquidity: penalty is amplified by refBalance/currentBalance ratio
-    /// @dev   to handle the high virtual reserves from concentration.
-    /// @dev
-    /// @param args.feeBps | 4 bytes (base fee rate in bps, 1e9 = 100%)
-    /// @param args.referenceBalance | 32 bytes (Y₀ - initial virtual output reserve)
+    /// @param args.minFeeBps | 4 bytes (minimum fee rate in bps, 1e9 = 100%)
+    /// @param args.maxFeeBps | 4 bytes (maximum fee rate in bps, 1e9 = 100%)
+    /// @param args.referenceBalanceIn | 32 bytes (X₀ - initial virtual input reserve)
+    /// @param args.referenceBalanceOut | 32 bytes (Y₀ - initial virtual output reserve)
     function _depletionFeeAmountOutXD(Context memory ctx, bytes calldata args) internal {
-        (uint256 feeBps, uint256 refBalance) = FeeArgsBuilder.parseDepletionFee(args);
+        (uint256 minFeeBps, uint256 maxFeeBps, uint256 refBalanceIn, uint256 refBalanceOut) = FeeArgsBuilder.parseDepletionFee(args);
 
         if (ctx.query.isExactIn) {
             ctx.runLoop();
 
-            uint256 currentBalance = ctx.swap.balanceOut;
-            uint256 feeAmount = _computeSuperlinearFee(ctx.swap.amountOut, currentBalance, refBalance, feeBps);
+            uint256 feeAmount = _computeImbalanceFee(
+                ctx.swap.amountOut,
+                ctx.swap.balanceIn,
+                ctx.swap.balanceOut,
+                refBalanceIn,
+                refBalanceOut,
+                minFeeBps,
+                maxFeeBps
+            );
             ctx.swap.amountOut -= feeAmount;
         } else {
             uint256 takerDefinedAmountOut = ctx.swap.amountOut;
-            uint256 currentBalance = ctx.swap.balanceOut;
-            ctx.swap.amountOut = _solveGrossForSuperlinearFee(takerDefinedAmountOut, currentBalance, refBalance, feeBps);
+            ctx.swap.amountOut = _solveGrossForImbalanceFee(
+                takerDefinedAmountOut,
+                ctx.swap.balanceIn,
+                ctx.swap.balanceOut,
+                refBalanceIn,
+                refBalanceOut,
+                minFeeBps,
+                maxFeeBps
+            );
             ctx.runLoop();
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
@@ -239,15 +286,19 @@ contract Fee {
 
         if (ctx.query.isExactIn) {
             // Decrease amountIn by fee only during swap-instruction
+            // Fee rounds UP to favor maker (less goes to AMM = less output for taker)
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
-            feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
+            feeAmountIn = Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS);
+            // Clamp fee to not exceed input (prevents underflow)
+            if (feeAmountIn > ctx.swap.amountIn) feeAmountIn = ctx.swap.amountIn;
             ctx.swap.amountIn -= feeAmountIn;
             ctx.runLoop();
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
+            // Fee rounds UP to favor maker (taker pays more)
             ctx.runLoop();
-            feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
+            feeAmountIn = Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS - feeBps);
             ctx.swap.amountIn += feeAmountIn;
         }
     }
@@ -257,124 +308,156 @@ contract Fee {
 
         if (ctx.query.isExactIn) {
             // Decrease amountOut by fee after passing to swap-instruction
+            // Fee rounds UP to favor maker (taker receives less)
             ctx.runLoop();
-            feeAmountOut = ctx.swap.amountOut * feeBps / BPS;
+            feeAmountOut = Math.ceilDiv(ctx.swap.amountOut * feeBps, BPS);
+            // Clamp fee to not exceed output (prevents underflow)
+            if (feeAmountOut > ctx.swap.amountOut) feeAmountOut = ctx.swap.amountOut;
             ctx.swap.amountOut -= feeAmountOut;
         } else {
             // Increase amountOut by fee only during swap-instruction
+            // Fee rounds UP to favor maker (AMM produces more = needs more input from taker)
             uint256 takerDefinedAmountOut = ctx.swap.amountOut;
-            feeAmountOut = ctx.swap.amountOut * feeBps / (BPS - feeBps);
+            feeAmountOut = Math.ceilDiv(ctx.swap.amountOut * feeBps, BPS - feeBps);
             ctx.swap.amountOut += feeAmountOut;
             ctx.runLoop();
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
     }
 
-    /// @dev Compute superlinear fee with strong depletion penalty
-    /// @dev fee = baseFee × amountOut × (1 + penaltyRate × startingDepletion) / BPS
-    /// @dev where startingDepletion = (refBalance - currentBalance) / refBalance
+    /// @dev Compute imbalance-based fee with ratio-aware penalty/bonus, clamped to [minFeeBps, maxFeeBps]
+    /// @dev Fee increases when moving away from initial ratio, decreases when moving toward it
     /// @dev
-    /// @dev KEY INSIGHT:
-    /// @dev   Single swap starts from depletion=0, so penalty=0.
-    /// @dev   Second split swap starts from depletion=out₁/ref, gets penalized.
-    /// @dev   Penalty must be large enough to offset AMM's split advantage.
-    /// @dev   For concentrated liquidity: penaltyRate ≈ refBalance / amountTypical
-    function _computeSuperlinearFee(
-        uint256 amountOut,
-        uint256 currentBalance,
-        uint256 refBalance,
-        uint256 feeBps
+    /// @dev IMBALANCE MEASURE:
+    /// @dev   We compare current ratio (balanceIn/balanceOut) to initial ratio (refBalanceIn/refBalanceOut)
+    /// @dev   Using cross-multiplication to avoid division: balanceIn * refBalanceOut vs refBalanceIn * balanceOut
+    /// @dev
+    /// @dev FEE CLAMPING:
+    /// @dev   At equilibrium: fee = midFeeBps (average of min and max)
+    /// @dev   When restoring: fee decreases toward minFeeBps
+    /// @dev   When depleting: fee increases toward maxFeeBps
+    /// @dev
+    /// @param amount The swap amount (input or output depending on context)
+    /// @param balanceIn Current input balance
+    /// @param balanceOut Current output balance
+    /// @param refBalanceIn Initial/reference input balance (X₀)
+    /// @param refBalanceOut Initial/reference output balance (Y₀)
+    /// @param minFeeBps Minimum fee rate in bps (1e9 = 100%)
+    /// @param maxFeeBps Maximum fee rate in bps (1e9 = 100%)
+    /// @return fee The computed fee amount
+    function _computeImbalanceFee(
+        uint256 amount,
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 refBalanceIn,
+        uint256 refBalanceOut,
+        uint256 minFeeBps,
+        uint256 maxFeeBps
     ) internal pure returns (uint256 fee) {
-        if (refBalance == 0 || amountOut == 0) return 0;
+        if (refBalanceIn == 0 || refBalanceOut == 0 || amount == 0) return 0;
 
-        // Starting depletion = how much was consumed BEFORE this swap, scaled by BPS
-        uint256 startDepletion = currentBalance >= refBalance
-            ? 0
-            : (refBalance - currentBalance) * BPS / refBalance;
+        uint256 effectiveFeeBps = _computeEffectiveFeeBps(
+            balanceIn, balanceOut, refBalanceIn, refBalanceOut, minFeeBps, maxFeeBps
+        );
 
-        // Strong penalty: penaltyRate scales with refBalance to handle concentration
-        // penalty = 1 + startDepletion (at depletion=100%, fee doubles)
-        // But we need MUCH stronger for concentrated liquidity where swaps are small vs refBalance
-        // Use: penalty = 1 + startDepletion × refBalance / currentBalance (amplified)
-        uint256 penaltyMultiplier;
-        if (currentBalance > 0 && startDepletion > 0) {
-            // Amplify penalty by concentration ratio
-            uint256 amplifiedDepletion = startDepletion * refBalance / currentBalance;
-            if (amplifiedDepletion > BPS) amplifiedDepletion = BPS; // Cap at 100%
-            penaltyMultiplier = BPS + amplifiedDepletion;
-        } else {
-            penaltyMultiplier = BPS;
-        }
-
-        // fee = feeBps × amountOut × penaltyMultiplier / BPS²
-        fee = feeBps * amountOut * penaltyMultiplier / (BPS * BPS);
+        // Fee rounds UP to favor maker, clamped to not exceed amount
+        fee = Math.ceilDiv(effectiveFeeBps * amount, BPS);
+        if (fee > amount) fee = amount;
     }
 
-    /// @dev Solve for grossOut given netOut using binary search
-    function _solveGrossForSuperlinearFee(
+    /// @dev Analytical solution for grossOut given netOut
+    /// @dev Since fee(amount) = amount × effectiveFeeBps / BPS where effectiveFeeBps is constant for given balances,
+    /// @dev we can solve: netOut = grossOut × (1 - effectiveFeeBps/BPS)
+    /// @dev Therefore: grossOut = netOut × BPS / (BPS - effectiveFeeBps)
+    function _solveGrossForImbalanceFee(
         uint256 netOut,
-        uint256 currentBalance,
-        uint256 refBalance,
-        uint256 feeBps
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 refBalanceIn,
+        uint256 refBalanceOut,
+        uint256 minFeeBps,
+        uint256 maxFeeBps
     ) internal pure returns (uint256 grossOut) {
-        // Binary search bounds
-        uint256 lo = netOut;
+        if (refBalanceIn == 0 || refBalanceOut == 0 || netOut == 0) return netOut;
 
-        // Upper bound estimate (with max penalty of 3x)
-        uint256 hi = feeBps < BPS / 3
-            ? Math.ceilDiv(netOut * BPS, BPS - 3 * feeBps)
-            : netOut * 2;
-        if (hi > currentBalance) hi = currentBalance;
+        uint256 effectiveFeeBps = _computeEffectiveFeeBps(
+            balanceIn, balanceOut, refBalanceIn, refBalanceOut, minFeeBps, maxFeeBps
+        );
 
-        // Binary search
-        for (uint256 i = 0; i < 60; i++) {
-            grossOut = (lo + hi) / 2;
-            if (lo >= hi) break;
-
-            uint256 feeForGross = _computeSuperlinearFee(grossOut, currentBalance, refBalance, feeBps);
-            uint256 netForGross = grossOut > feeForGross ? grossOut - feeForGross : 0;
-
-            if (netForGross == netOut) {
-                break;
-            } else if (netForGross < netOut) {
-                lo = grossOut + 1;
-            } else {
-                hi = grossOut;
-            }
+        // grossOut = netOut × BPS / (BPS - effectiveFeeBps)
+        uint256 denominator = BPS - effectiveFeeBps;
+        if (denominator == 0) {
+            // Edge case: 100% effective fee rate
+            return balanceOut;
         }
+
+        grossOut = Math.ceilDiv(netOut * BPS, denominator);
+
+        // Clamp to available balance
+        if (grossOut > balanceOut) grossOut = balanceOut;
     }
 
-    /// @dev Solve for grossIn given netIn (what AMM needs) using binary search
-    /// @dev For input fees: grossIn - fee(grossIn) = netIn
-    function _solveGrossForSuperlinearFeeIn(
+    /// @dev Analytical solution for grossIn given netIn
+    /// @dev Same derivation as above: grossIn = netIn × BPS / (BPS - effectiveFeeBps)
+    function _solveGrossForImbalanceFeeIn(
         uint256 netIn,
-        uint256 currentBalance,
-        uint256 refBalance,
-        uint256 feeBps
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 refBalanceIn,
+        uint256 refBalanceOut,
+        uint256 minFeeBps,
+        uint256 maxFeeBps
     ) internal pure returns (uint256 grossIn) {
-        // Binary search bounds
-        uint256 lo = netIn;
+        if (refBalanceIn == 0 || refBalanceOut == 0 || netIn == 0) return netIn;
 
-        // Upper bound estimate (with max penalty of 3x)
-        uint256 hi = feeBps < BPS / 3
-            ? Math.ceilDiv(netIn * BPS, BPS - 3 * feeBps)
-            : netIn * 2;
+        uint256 effectiveFeeBps = _computeEffectiveFeeBps(
+            balanceIn, balanceOut, refBalanceIn, refBalanceOut, minFeeBps, maxFeeBps
+        );
 
-        // Binary search
-        for (uint256 i = 0; i < 60; i++) {
-            grossIn = (lo + hi + 1) / 2; // Round up for ceiling behavior
-            if (lo >= hi) break;
+        // grossIn = netIn × BPS / (BPS - effectiveFeeBps)
+        uint256 denominator = BPS - effectiveFeeBps;
+        if (denominator == 0) {
+            // Edge case: 100% effective fee rate - infinite input needed
+            return type(uint256).max;
+        }
 
-            uint256 feeForGross = _computeSuperlinearFee(grossIn, currentBalance, refBalance, feeBps);
-            uint256 netForGross = grossIn > feeForGross ? grossIn - feeForGross : 0;
+        grossIn = Math.ceilDiv(netIn * BPS, denominator);
+    }
 
-            if (netForGross == netIn) {
-                break;
-            } else if (netForGross < netIn) {
-                lo = grossIn;
-            } else {
-                hi = grossIn - 1;
-            }
+    /// @dev Compute the effective fee rate based on current imbalance, clamped to [minFeeBps, maxFeeBps]
+    /// @dev At equilibrium: returns midpoint (minFeeBps + maxFeeBps) / 2
+    /// @dev When restoring: fee decreases, clamped to minFeeBps
+    /// @dev When depleting: fee increases, clamped to maxFeeBps
+    function _computeEffectiveFeeBps(
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 refBalanceIn,
+        uint256 refBalanceOut,
+        uint256 minFeeBps,
+        uint256 maxFeeBps
+    ) internal pure returns (uint256 effectiveFeeBps) {
+        // Midpoint fee at equilibrium
+        uint256 midFeeBps = (minFeeBps + maxFeeBps) / 2;
+
+        uint256 currentCross = balanceIn * refBalanceOut;
+        uint256 refCross = refBalanceIn * balanceOut;
+
+        if (currentCross > refCross) {
+            // Depleting: current ratio > initial ratio → higher fee, up to maxFeeBps
+            uint256 imbalance = (currentCross - refCross) * BPS / refCross;
+            // Raw fee = midFeeBps × (1 + imbalance/BPS)
+            uint256 rawFeeBps = midFeeBps + midFeeBps * imbalance / BPS;
+            effectiveFeeBps = rawFeeBps > maxFeeBps ? maxFeeBps : rawFeeBps;
+        } else if (currentCross < refCross) {
+            // Restoring: current ratio < initial ratio → lower fee, down to minFeeBps
+            uint256 imbalance = (refCross - currentCross) * BPS / refCross;
+            // Raw fee = midFeeBps × (1 - imbalance/BPS), but can't go below 0
+            uint256 reduction = midFeeBps * imbalance / BPS;
+            uint256 rawFeeBps = midFeeBps > reduction ? midFeeBps - reduction : 0;
+            effectiveFeeBps = rawFeeBps < minFeeBps ? minFeeBps : rawFeeBps;
+        } else {
+            // At equilibrium: midpoint fee
+            effectiveFeeBps = midFeeBps;
         }
     }
 }
