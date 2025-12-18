@@ -261,6 +261,7 @@ abstract contract CoreInvariants is Test {
 
         // Restore state to before the swap
         vm.revertTo(snapshot);
+        snapshot = vm.snapshot();
 
         // Execute swap A
         (, uint256 outA) = _executeSwap(
