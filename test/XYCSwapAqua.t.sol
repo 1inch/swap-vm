@@ -615,4 +615,271 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
         vm.expectRevert(); // reverts with panic: arithmetic underflow or overflow (0x11)
         swap(swapProgram, order);
     }
+
+    // ============================================
+    // Minimal Amounts (1-2 wei)
+    // Tests floor/ceiling division behavior with minimal inputs
+    // ============================================
+
+    function test_xycSwap_minimalAmounts_1wei_ExactIn() public {
+        // 1 wei input on balanced pool - tests floor division
+        MakerSetup memory setup = _makerSetup(INITIAL_BALANCE_A, INITIAL_BALANCE_A); // 1:1 ratio
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        SwapProgram memory swapProgram = _swapProgram(1, true, true); // 1 wei exactIn
+
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // Expected: amountOut = (1 * 1000e18) / (1000e18 + 1) ≈ 0 (floor division)
+        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
+        swap(swapProgram, order);
+    }
+
+    function test_xycSwap_minimalAmounts_1wei_ExactOut() public {
+        // 1 wei output on balanced pool - tests ceiling division
+        MakerSetup memory setup = _makerSetup(INITIAL_BALANCE_A, INITIAL_BALANCE_A); // 1:1 ratio
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        SwapProgram memory swapProgram = _swapProgram(1, true, false); // 1 wei exactOut
+
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // Expected: amountIn = ceil((1 * 1000e18) / (1000e18 - 1)) = 2 (ceiling division)
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        assertEq(amountOut, 1, "Amount out should be exactly 1 wei");
+        assertGe(amountIn, 2, "Amount in should be at least 1 wei due to ceiling division");
+    }
+
+    function test_xycSwap_minimalAmounts_2wei_ExactIn() public {
+        // 2 wei input on balanced pool
+        MakerSetup memory setup = _makerSetup(INITIAL_BALANCE_A, INITIAL_BALANCE_A); // 1:1 ratio
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        SwapProgram memory swapProgram = _swapProgram(2, true, true); // 2 wei exactIn
+
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // Expected: amountOut = (2 * 1000e18) / (1000e18 + 2) ≈ 1 (floor division)
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        assertEq(amountIn, 2, "Amount in should be exactly 2 wei");
+        assertGe(amountOut, 1, "Amount out should be at least 1 wei");
+    }
+
+    function test_xycSwap_minimalAmounts_2wei_ExactOut() public {
+        // 2 wei output on balanced pool
+        MakerSetup memory setup = _makerSetup(INITIAL_BALANCE_A, INITIAL_BALANCE_A); // 1:1 ratio
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        SwapProgram memory swapProgram = _swapProgram(2, true, false); // 2 wei exactOut
+
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        assertEq(amountOut, 2, "Amount out should be exactly 2 wei");
+        assertGe(amountIn, 2, "Amount in should be at least 2 wei due to ceiling division");
+    }
+
+    // ============================================
+    // HIGH PRIORITY: Near-Depletion Scenarios
+    // Tests behavior when amountOut approaches balanceOut
+    // ============================================
+
+    function test_xycSwap_nearDepletion_ExactIn() public {
+        // Try to swap almost all of tokenB out
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        // With XYC formula: amountOut = (amountIn * balanceB) / (balanceA + amountIn)
+        // To get amountOut ≈ balanceB - 1, we need very large amountIn
+        // Let's use amountIn that would give us ~99.9% of balanceB
+        uint256 largeAmountIn = 999000e18; // This should give ~999e18 out of 1000e18
+        
+        SwapProgram memory swapProgram = _swapProgram(largeAmountIn, true, true);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        // Verify near-depletion behavior
+        assertGt(amountIn, 0, "Amount in should be greater than zero");
+        assertGt(amountOut, 0, "Amount out should be greater than zero");
+        assertLt(amountOut, balanceB, "Amount out should be less than balance B");
+    }
+
+    function test_xycSwap_nearDepletion_ExactOut() public {
+        // Request almost all of tokenB (balanceB - 1)
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        uint256 nearFullAmountOut = balanceB - 1; // 999999999999999999999
+        SwapProgram memory swapProgram = _swapProgram(nearFullAmountOut, true, false);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        assertEq(amountOut, nearFullAmountOut, "Amount out should equal requested near-full amount");
+        assertGt(amountIn, 0, "Amount in should be greater than zero");
+    }
+
+    function test_xycSwap_exactDepletion_reverts() public {
+        // Request exactly all of tokenB (balanceB) - should cause division by zero
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        uint256 fullAmountOut = balanceB; // Exact balance
+        SwapProgram memory swapProgram = _swapProgram(fullAmountOut, true, false);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // ExactOut formula: amountIn = ceil((amountOut * balanceIn) / (balanceOut - amountOut))
+        // When amountOut == balanceOut, denominator = 0 → division by zero
+        vm.expectRevert(); // Reverts with panic: division or modulo by zero (0x12)
+        swap(swapProgram, order);
+    }
+
+    // ============================================
+    // Extreme Price Ratios
+    // Tests with highly imbalanced pools (1000000:1 and 1:1000000)
+    // ============================================
+
+    function test_xycSwap_extremeRatio_1000000_to_1_ExactIn() public {
+        // balanceA >> balanceB (1,000,000:1)
+        uint256 balanceA = 1000000e18;
+        uint256 balanceB = 1e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        // Swap 1e18 tokenA for tokenB
+        SwapProgram memory swapProgram = _swapProgram(1e18, true, true);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        // Expected: very small amountOut due to extreme ratio
+        // amountOut = (1e18 * 1e18) / (1000000e18 + 1e18) ≈ 0.000001e18 = 1e12
+        assertEq(amountIn, 1e18, "Amount in should be 1e18");
+        assertGt(amountOut, 0, "Amount out should be greater than zero");
+        assertLt(amountOut, 1e15, "Amount out should be very small due to extreme ratio");
+    }
+
+    function test_xycSwap_extremeRatio_1000000_to_1_ExactOut() public {
+        // balanceA >> balanceB (1,000,000:1)
+        uint256 balanceA = 1000000e18;
+        uint256 balanceB = 1e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        // Request small amount out
+        uint256 requestedOut = 1e12; // 0.000001 token
+        SwapProgram memory swapProgram = _swapProgram(requestedOut, true, false);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        assertEq(amountOut, requestedOut, "Amount out should match requested");
+        assertGt(amountIn, 0, "Amount in should be greater than zero");
+    }
+
+    function test_xycSwap_extremeRatio_1_to_1000000_ExactIn() public {
+        // balanceA << balanceB (1:1,000,000)
+        uint256 balanceA = 1e18;
+        uint256 balanceB = 1000000e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        // Swap small amount of tokenA for tokenB
+        uint256 smallIn = 1e12; // 0.000001 token
+        SwapProgram memory swapProgram = _swapProgram(smallIn, true, true);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        // Expected: large amountOut due to extreme ratio
+        assertEq(amountIn, smallIn, "Amount in should match requested");
+        assertGt(amountOut, amountIn, "Amount out should be larger than input due to ratio");
+    }
+
+    function test_xycSwap_extremeRatio_1_to_1000000_ExactOut() public {
+        // balanceA << balanceB (1:1,000,000)
+        uint256 balanceA = 1e18;
+        uint256 balanceB = 1000000e18;
+        MakerSetup memory setup = _makerSetup(balanceA, balanceB);
+        ISwapVM.Order memory order = createStrategy(setup);
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+        
+        // Request large amount out
+        uint256 requestedOut = 1e18; // 1 token
+        SwapProgram memory swapProgram = _swapProgram(requestedOut, true, false);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        
+        assertEq(amountOut, requestedOut, "Amount out should match requested");
+        assertGt(amountIn, 0, "Amount in should be greater than zero");
+        // amountIn should be very small compared to amountOut
+        assertLt(amountIn, amountOut, "Amount in should be less than amount out due to ratio");
+    }
+
+    // ============================================
+    // Zero Balance Revert Tests
+    // Tests that zero balances properly revert
+    // ============================================
+
+    function test_xycSwap_zeroBalanceIn_reverts() public {
+        // Create a strategy with zero balanceA
+        // This requires shipping with zero balance which should fail at instruction level
+        MakerSetup memory setup = _makerSetup(0, INITIAL_BALANCE_B);
+        ISwapVM.Order memory order = createStrategy(setup);
+        
+        // Ship with non-zero to make it valid, then we'll test the instruction behavior
+        // Note: The XYCSwap instruction checks ctx.swap.balanceIn and ctx.swap.balanceOut
+        // which come from the dynamic balances, not the shipped balances
+        // So we ship with valid balances but the program has zero in dynamic balances
+        shipStrategy(order, tokenA, tokenB, 0, setup.balanceB);
+        
+        SwapProgram memory swapProgram = _swapProgram(1e18, true, true);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // Should revert because balanceIn is 0
+        vm.expectRevert(); // XYCSwapRequiresBothBalancesNonZero
+        swap(swapProgram, order);
+    }
+
+    function test_xycSwap_zeroBalanceOut_reverts() public {
+        // Create a strategy with zero balanceB
+        MakerSetup memory setup = _makerSetup(INITIAL_BALANCE_A, 0);
+        ISwapVM.Order memory order = createStrategy(setup);
+        
+        shipStrategy(order, tokenA, tokenB, setup.balanceA, 0);
+        
+        SwapProgram memory swapProgram = _swapProgram(1e18, true, true);
+        mintTokenInToTaker(swapProgram, type(uint256).max);
+        mintTokenOutToMaker(swapProgram, type(uint256).max);
+
+        // Should revert because balanceOut is 0
+        vm.expectRevert(); // XYCSwapRequiresBothBalancesNonZero
+        swap(swapProgram, order);
+    }
 }
