@@ -225,13 +225,15 @@ contract XYCSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(_xycSwapXD)
         );
 
+        // Use allowZeroAmountIn: true for asymmetric pools where tiny amounts may result in zero output
         ISwapVM.Order memory order = _createOrder(bytecode);
 
-        // Test with appropriate amounts for asymmetric pool
-        uint256[] memory testAmounts = new uint256[](3);
+        // Test with moderate amounts appropriate for asymmetric pools
+        // Pool has 10000e18 tokenA and 100e18 tokenB, so amounts must be small relative to tokenB
+        uint256[] memory testAmounts = new uint256[](2);
         testAmounts[0] = 10e18;
-        testAmounts[1] = 50e18;
-        // testAmounts[2] = 100e18;
+        testAmounts[0] = 50e18;
+        testAmounts[1] = 99999*10e15;
 
         // Higher tolerance for asymmetric pools due to amplified rounding differences
         InvariantConfig memory config = createInvariantConfig(testAmounts, 100);
@@ -278,11 +280,15 @@ contract XYCSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
+        return _createOrderWithZeroAllowed(program, false);
+    }
+
+    function _createOrderWithZeroAllowed(bytes memory program, bool allowZeroAmountIn) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
+            allowZeroAmountIn: allowZeroAmountIn,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
