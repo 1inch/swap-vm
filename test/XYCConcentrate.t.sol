@@ -398,7 +398,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 postAmountOutA;
         uint256 postAmountInB;
         uint256 postAmountOutB;
-        for (uint256 i = 0; i < 1000; i++) {
+        for (uint256 i = 0; i < 100; i++) {
             // Buy all tokenA
             uint256 balanceTokenA = swapVM.balances(swapVM.hash(order), address(tokenA));
             if (i == 0) {

@@ -211,9 +211,9 @@ tests :; forge test -vvv --gas-report
 
 coverage :; mkdir -p coverage && FOUNDRY_PROFILE=default forge coverage --report lcov --ir-minimum --report-file coverage/lcov.info
 
-snapshot :; forge snapshot --no-match-test "testFuzz_*" --no-match-path "test/gas/*"
+snapshot :; forge snapshot --no-match-test "testFuzz_*"
 
-snapshot-check :; forge snapshot --check --no-match-test "testFuzz_*" --no-match-path "test/gas/*"
+snapshot-check :; forge snapshot --check --no-match-test "testFuzz_*"
 
 gas-snapshot :; forge test --match-path "test/gas/*.t.sol" -vv && echo "\n=== LimitSwap Gas ===" && cat snapshots/LimitSwapGas.json && echo "\n=== AMM Gas ===" && cat snapshots/AMMGas.json
 
