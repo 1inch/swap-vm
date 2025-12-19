@@ -279,7 +279,6 @@ abstract contract CoreInvariants is Test {
         uint256 splitTotal = outA + outB;
 
         // Single swap should be at least as good as split swaps
-        console.log("Additivity check: singleOut =", singleOut, ", splitTotal =", splitTotal);
         assertGe(
             singleOut,
             splitTotal,
