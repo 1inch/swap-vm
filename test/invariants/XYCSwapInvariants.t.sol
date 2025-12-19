@@ -230,10 +230,10 @@ contract XYCSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // Test with moderate amounts appropriate for asymmetric pools
         // Pool has 10000e18 tokenA and 100e18 tokenB, so amounts must be small relative to tokenB
-        uint256[] memory testAmounts = new uint256[](2);
+        uint256[] memory testAmounts = new uint256[](3);
         testAmounts[0] = 10e18;
-        testAmounts[0] = 50e18;
-        testAmounts[1] = 99999*10e15;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 99999*10e15;
 
         // Higher tolerance for asymmetric pools due to amplified rounding differences
         InvariantConfig memory config = createInvariantConfig(testAmounts, 100);
