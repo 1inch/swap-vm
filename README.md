@@ -499,7 +499,7 @@ MakerTraits makerTraits = MakerTraitsLib.build({
 **Use Case:** Share liquidity across multiple strategies  
 **Key Difference:** Unlike isolated dynamic balances, Aqua enables shared liquidity
 
-See [Aqua Protocol](https://github.com/1inch/aqua-protocol) for details
+See [Aqua Protocol](https://github.com/1inch/aqua) for details
 
 ### Maker Security
 
