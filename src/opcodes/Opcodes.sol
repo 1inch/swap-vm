@@ -13,6 +13,7 @@ import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCConcentratedSwap } from "../instructions/XYCConcentratedSwap.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
@@ -28,6 +29,7 @@ contract Opcodes is
     Invalidators,
     XYCSwap,
     XYCConcentrate,
+    XYCConcentratedSwap,
     Decay,
     LimitSwap,
     MinRate,
@@ -42,7 +44,7 @@ contract Opcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[45] memory instructions = [
+        function(Context memory, bytes calldata) internal[46] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -100,7 +102,8 @@ contract Opcodes is
             Fee._progressiveFeeInXD,
             Fee._progressiveFeeOutXD,
             Fee._protocolFeeAmountOutXD,
-            Fee._aquaProtocolFeeAmountOutXD
+            Fee._aquaProtocolFeeAmountOutXD,
+            XYCConcentratedSwap._xycConcentratedSwap2D
         ];
 
         // Efficiently turning static memory array into dynamic memory array
