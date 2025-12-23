@@ -85,15 +85,15 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     // Additivity tolerance (default 0, increase for rounding in extreme pools)
     uint256 internal additivityTolerance = 0;
 
-    // Rounding tolerance percent (default 1%, increase for imbalanced pools with high fees)
-    uint256 internal roundingTolerancePercent = 1;
+    // Rounding tolerance in bps (default 100 = 1%, increase for imbalanced pools with high fees)
+    uint256 internal roundingToleranceBps = 100;
 
     // Skip flags for edge cases
     bool internal skipMonotonicity = false;  // Skip for dust amounts where rounding > price impact
     bool internal skipSpotPrice = false;     // Skip for dust amounts where rate > spot
 
-    // Monotonicity tolerance (default 0%, strict; increase for dust where rounding > price impact)
-    uint256 internal monotonicityTolerancePercent = 0;
+    // Monotonicity tolerance in bps (default 0, strict; increase for dust where rounding > price impact)
+    uint256 internal monotonicityToleranceBps = 0;
 
     constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
@@ -211,10 +211,10 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         config.testAmountsExactOut = testAmountsExactOut;  // Use separate exactOut amounts if set
         config.symmetryTolerance = symmetryTolerance;
         config.additivityTolerance = additivityTolerance;
-        config.roundingTolerancePercent = roundingTolerancePercent;
+        config.roundingToleranceBps = roundingToleranceBps;
         config.skipMonotonicity = skipMonotonicity;
         config.skipSpotPrice = skipSpotPrice;
-        config.monotonicityTolerancePercent = monotonicityTolerancePercent;
+        config.monotonicityToleranceBps = monotonicityToleranceBps;
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
         return config;

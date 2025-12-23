@@ -40,6 +40,7 @@ import { ExactInOutSymmetry } from "./ExactInOutSymmetry.t.sol";
  *   }
  */
 abstract contract CoreInvariants is Test {
+    uint256 constant BPS = 10_000;
 
     /**
      * @notice Execute a real swap - must be implemented by inheriting contracts
@@ -66,8 +67,8 @@ abstract contract CoreInvariants is Test {
     struct InvariantConfig {
         uint256 symmetryTolerance;           // Max allowed difference for symmetry (default: 2 wei)
         uint256 additivityTolerance;         // Max allowed rounding difference for additivity (default: 0)
-        uint256 roundingTolerancePercent;    // Rounding check tolerance in percent (default: 1)
-        uint256 monotonicityTolerancePercent; // Monotonicity tolerance in percent (default: 0, strict)
+        uint256 roundingToleranceBps;        // Rounding check tolerance in bps (default: 100 = 1%)
+        uint256 monotonicityToleranceBps;    // Monotonicity tolerance in bps (default: 0, strict)
         uint256[] testAmounts;               // Amounts to test with for exactIn (default: [1e18, 10e18, 50e18])
         uint256[] testAmountsExactOut;       // Amounts to test with for exactOut (if empty, uses testAmounts)
         bool skipAdditivity;                 // Skip additivity check (for non-AMM orders)
@@ -161,7 +162,7 @@ abstract contract CoreInvariants is Test {
                 tokenOut,
                 config.testAmounts,
                 config.exactInTakerData,
-                config.monotonicityTolerancePercent
+                config.monotonicityToleranceBps
             );
         }
 
@@ -202,7 +203,7 @@ abstract contract CoreInvariants is Test {
                 tokenOut,
                 config.exactInTakerData,
                 config.exactOutTakerData,
-                config.roundingTolerancePercent
+                config.roundingToleranceBps
             );
         }
 
@@ -368,11 +369,7 @@ abstract contract CoreInvariants is Test {
     /**
      * @notice Assert price monotonicity invariant
      * @dev Larger trades must get equal or worse prices
-     */
-    /**
-     * @notice Assert price monotonicity invariant
-     * @dev Larger trades must get equal or worse prices
-     * @param tolerancePercent Allow larger trade to have better price up to this % (for dust rounding)
+     * @param toleranceBps Allow larger trade to have better price up to this bps (for dust rounding)
      */
     function assertMonotonicityInvariant(
         SwapVM swapVM,
@@ -381,7 +378,7 @@ abstract contract CoreInvariants is Test {
         address tokenOut,
         uint256[] memory amounts,
         bytes memory takerData,
-        uint256 tolerancePercent
+        uint256 toleranceBps
     ) internal view {
         require(amounts.length > 1, "Need at least 2 amounts for monotonicity test");
 
@@ -399,7 +396,7 @@ abstract contract CoreInvariants is Test {
             // Allow tolerance for dust where rounding > price impact
             uint256 maxAllowedPrice = prevPrice == type(uint256).max
                 ? type(uint256).max
-                : prevPrice * (100 + tolerancePercent) / 100;
+                : prevPrice * (BPS + toleranceBps) / BPS;
 
             assertLe(
                 price,
@@ -412,8 +409,8 @@ abstract contract CoreInvariants is Test {
                     ") > previous price (",
                     vm.toString(prevPrice),
                     ") + ",
-                    vm.toString(tolerancePercent),
-                    "% tolerance"
+                    vm.toString(toleranceBps),
+                    " bps tolerance"
                 )
             );
 
@@ -433,7 +430,7 @@ abstract contract CoreInvariants is Test {
         address tokenOut,
         bytes memory exactInTakerData,
         bytes memory exactOutTakerData,
-        uint256 tolerancePercent
+        uint256 toleranceBps
     ) internal view {
         // Get token decimals for proper scaling
         uint8 decimalsIn = IERC20Metadata(tokenIn).decimals();
@@ -465,7 +462,7 @@ abstract contract CoreInvariants is Test {
 
                     assertLe(
                         actualRate,
-                        spotPrice * (100 + tolerancePercent) / 100,
+                        spotPrice * (BPS + toleranceBps) / BPS,
                         string.concat(
                             "Rounding violation (exactIn): rate for ",
                             vm.toString(amounts[i]),
@@ -494,7 +491,7 @@ abstract contract CoreInvariants is Test {
 
                     assertGe(
                         inverseRate,
-                        spotInverseRate * (100 - tolerancePercent) / 100,
+                        spotInverseRate * (BPS - toleranceBps) / BPS,
                         string.concat(
                             "Rounding violation (exactOut): inverse rate for ",
                             vm.toString(amounts[i]),
@@ -572,8 +569,8 @@ abstract contract CoreInvariants is Test {
         return InvariantConfig({
             symmetryTolerance: 2,  // 2 wei tolerance
             additivityTolerance: 0,  // strict by default
-            roundingTolerancePercent: 1,  // 1% default
-            monotonicityTolerancePercent: 0,  // strict by default
+            roundingToleranceBps: 100,  // 1% = 100 bps default
+            monotonicityToleranceBps: 0,  // strict by default
             testAmounts: amounts,
             testAmountsExactOut: emptyAmounts,  // Empty = use testAmounts
             skipAdditivity: false,
@@ -597,8 +594,8 @@ abstract contract CoreInvariants is Test {
         return InvariantConfig({
             symmetryTolerance: tolerance,
             additivityTolerance: 0,  // strict by default
-            roundingTolerancePercent: 1,  // 1% default
-            monotonicityTolerancePercent: 0,  // strict by default
+            roundingToleranceBps: 100,  // 1% = 100 bps default
+            monotonicityToleranceBps: 0,  // strict by default
             testAmounts: testAmounts,
             testAmountsExactOut: emptyAmounts,  // Empty = use testAmounts
             skipAdditivity: false,

@@ -72,9 +72,9 @@ contract DustAmounts is XYCFeesInvariants {
         additivityTolerance = 0;    // 0 wei
 
         // Monotonicity: 81% for progressive fees (3 wei→0.33, 5 wei→0.6, deviation=80%+rounding)
-        monotonicityTolerancePercent = 81;
+        monotonicityToleranceBps = 8100;  // 81% = 8100 bps
 
-        // Rounding: 5% deviation from spot price (due to minimal price impact)
-        roundingTolerancePercent = 1;
+        // Rounding: 1% deviation from spot price (due to minimal price impact)
+        roundingToleranceBps = 100;  // 1% = 100 bps
     }
 }

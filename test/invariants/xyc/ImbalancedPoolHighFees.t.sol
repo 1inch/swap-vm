@@ -47,6 +47,6 @@ contract ImbalancedPoolHighFees is XYCFeesInvariants {
         additivityTolerance = 1;
 
         // 100:1 ratio + high fees causes >5% price deviation (102/107.4 = 95%)
-        roundingTolerancePercent = 6;
+        roundingToleranceBps = 600;  // 6% = 600 bps
     }
 }
