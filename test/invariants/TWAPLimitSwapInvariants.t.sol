@@ -131,10 +131,15 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         ISwapVM.Order memory order = _createOrder(bytecode);
 
-        // Test at midpoint of TWAP
+        // Test at midpoint of TWAP (50% unlocked = 50e18 available)
         vm.warp(startTime + duration / 2);
 
-        InvariantConfig memory config = _getDefaultConfig();
+        // Use smaller test amounts that fit within 50e18 available liquidity
+        // Note: LimitSwap uses 2:1 rate, so 20e18 in -> 10e18 out max
+        InvariantConfig memory config = createInvariantConfig(
+            dynamic([uint256(2e18), uint256(5e18), uint256(10e18)]),
+            2
+        );
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 

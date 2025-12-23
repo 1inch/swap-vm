@@ -236,13 +236,19 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
             exactOutData
         );
 
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 1e18;
+        amounts[1] = 10e18;
+        amounts[2] = 50e18;
+
         assertMonotonicityInvariant(
             swapVM,
             order,
             address(tokenA),
             address(tokenB),
-            dynamic([uint256(1e18), uint256(10e18), uint256(100e18)]),
-            exactInData
+            amounts,
+            exactInData,
+            0  // strict monotonicity
         );
 
         assertBalanceSufficiencyInvariant(
