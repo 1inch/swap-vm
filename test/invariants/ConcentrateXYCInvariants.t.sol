@@ -102,7 +102,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.8e18;
         uint256 priceMax = 1.25e18;
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
@@ -122,7 +122,8 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     address(tokenA),
                     address(tokenB),
                     deltaA,
-                    deltaB
+                    deltaB,
+                    liquidity
                 )),
             program.build(_xycSwapXD)
         );
@@ -152,7 +153,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.7e18;
         uint256 priceMax = 1.4e18;
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
@@ -172,7 +173,8 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     address(tokenA),
                     address(tokenB),
                     deltaA,
-                    deltaB
+                    deltaB,
+                    liquidity
                 )),
             program.build(_xycSwapXD)
         );
@@ -202,7 +204,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.5e18;
         uint256 priceMax = 2e18;
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
@@ -227,7 +229,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
             program.build(_xycSwapXD)
         );
 
@@ -256,7 +258,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.6e18;
         uint256 priceMax = 1.7e18;
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
@@ -281,7 +283,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
             program.build(_xycSwapXD)
         );
 
@@ -313,7 +315,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256[4] memory priceMaxValues = [uint256(1.1e18), 1.25e18, 2e18, 1.05e18];
 
         for (uint256 i = 0; i < 4; i++) {
-            (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
                 balanceA,
                 balanceB,
                 currentPrice,
@@ -333,7 +335,8 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                         address(tokenA),
                         address(tokenB),
                         deltaA,
-                        deltaB
+                        deltaB,
+                        liquidity
                     )),
                 program.build(_xycSwapXD)
             );
@@ -398,6 +401,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
             useTransferFromAndAquaPush: false,
             threshold: thresholdData,
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",

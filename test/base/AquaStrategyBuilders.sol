@@ -82,7 +82,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
 
         if(setup.swapType == SwapType.CONCENTRATE_GROW_LIQUIDITY ||
             setup.swapType == SwapType.CONCENTRATE_GROW_PRICE_RANGE) {
-            (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+            (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
                 setup.balanceA,
                 setup.balanceB,
                 setup.balanceB * TestConstants.ONE / setup.balanceA,
@@ -97,7 +97,8 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
                     address(tokenA),
                     address(tokenB),
                     deltaA,
-                    deltaB
+                    deltaB,
+                    liquidity
                 )
             );
         }

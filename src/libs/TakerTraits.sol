@@ -31,6 +31,7 @@ library TakerTraitsLib {
     error TakerTraitsExceedingMaxInputAmount(uint256 amountIn, uint256 amountInMax);
     error TakerTraitsTakerAmountInMismatch(uint256 takerAmount, uint256 computedAmount);
     error TakerTraitsTakerAmountOutMismatch(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsDeadlineExpired();
 
     struct Args {
         address taker;
@@ -41,6 +42,7 @@ library TakerTraitsLib {
         bool useTransferFromAndAquaPush;
         bytes threshold;
         address to;
+        uint40 deadline;
 
         bool hasPreTransferInCallback;
         bool hasPreTransferOutCallback;
@@ -57,6 +59,7 @@ library TakerTraitsLib {
     enum TakerDataSlices {
         Threshold,
         To,
+        Deadline,
         PreTransferInHook,
         PostTransferInHook,
         PreTransferOutHook,
@@ -91,24 +94,26 @@ library TakerTraitsLib {
 
         uint256 index0 = args.threshold.length;
         uint256 index1 = (index0 + (args.to != address(0) && args.to != args.taker ? 20 : 0));
-        uint256 index2 = (index1 + args.preTransferInHookData.length.toUint16());
-        uint256 index3 = (index2 + args.postTransferInHookData.length).toUint16();
-        uint256 index4 = (index3 + args.preTransferOutHookData.length).toUint16();
-        uint256 index5 = (index4 + args.postTransferOutHookData.length).toUint16();
-        uint256 index6 = (index5 + args.preTransferInCallbackData.length).toUint16();
-        uint256 index7 = (index6 + args.preTransferOutCallbackData.length).toUint16();
-        uint256 index8 = (index7 + args.instructionsArgs.length).toUint16();
+        uint256 index2 = (index1 + (args.deadline != 0 ? 5 : 0));
+        uint256 index3 = (index2 + args.preTransferInHookData.length.toUint16());
+        uint256 index4 = (index3 + args.postTransferInHookData.length).toUint16();
+        uint256 index5 = (index4 + args.preTransferOutHookData.length).toUint16();
+        uint256 index6 = (index5 + args.postTransferOutHookData.length).toUint16();
+        uint256 index7 = (index6 + args.preTransferInCallbackData.length).toUint16();
+        uint256 index8 = (index7 + args.preTransferOutCallbackData.length).toUint16();
+        uint256 index9 = (index8 + args.instructionsArgs.length).toUint16();
 
-        uint144 slicesIndexes = uint144(
-            (uint144(index0) << 0) |
-            (uint144(index1) << 16) |
-            (uint144(index2) << 32) |
-            (uint144(index3) << 48) |
-            (uint144(index4) << 64) |
-            (uint144(index5) << 80) |
-            (uint144(index6) << 96) |
-            (uint144(index7) << 112) |
-            (uint144(index8) << 128)
+        uint160 slicesIndexes = uint160(
+            (uint160(index0) << 0) |
+            (uint160(index1) << 16) |
+            (uint160(index2) << 32) |
+            (uint160(index3) << 48) |
+            (uint160(index4) << 64) |
+            (uint160(index5) << 80) |
+            (uint160(index6) << 96) |
+            (uint160(index7) << 112) |
+            (uint160(index8) << 128) |
+            (uint160(index9) << 144)
         );
 
         packed = abi.encodePacked(
@@ -122,6 +127,7 @@ library TakerTraitsLib {
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0),
             args.threshold,
             (args.to != address(0) && args.to != args.taker ? abi.encodePacked(args.to) : bytes("")),
+            (args.deadline != 0 ? abi.encodePacked(args.deadline) : bytes("")),
             args.preTransferInHookData,
             args.postTransferInHookData,
             args.preTransferOutHookData,
@@ -134,12 +140,16 @@ library TakerTraitsLib {
     }
 
     function parse(bytes calldata data) internal pure returns (TakerTraits traits, bytes calldata tail) {
-        traits = TakerTraits.wrap(uint160(bytes20(data.slice(0, 20, TakerTraitsMissingTraits.selector))));
-        tail = data.slice(20);
+        traits = TakerTraits.wrap(uint176(bytes22(data.slice(0, 22, TakerTraitsMissingTraits.selector))));
+        tail = data.slice(22);
     }
 
-    function validate(TakerTraits traits, bytes calldata takerData, uint256 takerAmount, uint256 amountIn, uint256 amountOut) internal pure {
+    function validate(TakerTraits traits, bytes calldata takerData, uint256 takerAmount, uint256 amountIn, uint256 amountOut) internal view {
         require(amountOut > 0, TakerTraitsAmountOutMustBeGreaterThanZero(amountOut));
+
+        uint40 takerDeadline = traits.deadline(takerData);
+        require(takerDeadline == 0 || block.timestamp <= takerDeadline, TakerTraitsDeadlineExpired());
+
         if (traits.isExactIn()) {
             require(takerAmount == amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
             (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
@@ -199,6 +209,11 @@ library TakerTraitsLib {
     function to(TakerTraits traits, bytes calldata data, address taker) internal pure returns (address) {
         bytes calldata toData = _getDataSlice(traits, data, TakerDataSlices.To);
         return toData.length == 20 ? address(bytes20(toData)) : taker;
+    }
+
+    function deadline(TakerTraits traits, bytes calldata data) internal pure returns (uint40) {
+        bytes calldata deadlineData = _getDataSlice(traits, data, TakerDataSlices.Deadline);
+        return deadlineData.length == 5 ? uint40(bytes5(deadlineData)) : 0;
     }
 
     function preTransferInHookData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {

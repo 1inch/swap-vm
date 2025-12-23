@@ -130,6 +130,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: true,
             threshold: "", // min TokenA to receive
             to: address(0), // 0 = taker
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: takerPreInData,
@@ -318,6 +319,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: abi.encodePacked(uint256(25e18)),
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "", // Empty taker data
@@ -415,6 +417,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: abi.encodePacked(uint256(25e18)),
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: abi.encodePacked("TAKER_PRE_IN"),

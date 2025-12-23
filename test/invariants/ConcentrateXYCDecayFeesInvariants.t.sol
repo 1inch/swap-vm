@@ -110,8 +110,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 200e18, 200e18
-                )),
+                    address(tokenA), address(tokenB), 200e18, 200e18, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -130,8 +129,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_progressiveFeeOutXD, FeeArgsBuilder.buildProgressiveFee(0.01e9)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 429e18, 429e18
-                )),
+                    address(tokenA), address(tokenB), 429e18, 429e18, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -160,7 +158,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(0.002e9, feeRecipient)),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -187,7 +185,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.001e9)),
             program.build(_progressiveFeeOutXD, FeeArgsBuilder.buildProgressiveFee(0.02e9)),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -210,8 +208,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_decayXD, DecayArgsBuilder.build(450)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 165e18, 165e18
-                )),
+                    address(tokenA), address(tokenB), 165e18, 165e18, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -230,8 +227,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_decayXD, DecayArgsBuilder.build(720)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 514e18, 514e18
-                )),
+                    address(tokenA), address(tokenB), 514e18, 514e18, 1e18)),
             program.build(_xycSwapXD)
         );
 
@@ -260,7 +256,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(360)),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.0035e9)),
             program.build(_xycSwapXD)
         );
@@ -286,7 +282,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(660)),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_progressiveFeeOutXD, FeeArgsBuilder.buildProgressiveFee(0.08e9)),
             program.build(_xycSwapXD)
         );
@@ -309,8 +305,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                 FeeArgsBuilder.buildProtocolFee(0.0025e9, feeRecipient)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 260e18, 260e18
-                )),
+                    address(tokenA), address(tokenB), 260e18, 260e18, 1e18)),
             program.build(_decayXD, DecayArgsBuilder.build(540)),
             program.build(_xycSwapXD)
         );
@@ -330,8 +325,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             program.build(_progressiveFeeInXD, FeeArgsBuilder.buildProgressiveFee(0.03e9)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 567e18, 567e18
-                )),
+                    address(tokenA), address(tokenB), 567e18, 567e18, 1e18)),
             program.build(_decayXD, DecayArgsBuilder.build(780)),
             program.build(_xycSwapXD)
         );
@@ -360,7 +354,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([uint256(1400e18), uint256(1400e18)])
                 )),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_decayXD, DecayArgsBuilder.build(420)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.0045e9)),
             program.build(_xycSwapXD)
@@ -386,7 +380,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([uint256(1900e18), uint256(1900e18)])
                 )),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas)),
+                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
             program.build(_decayXD, DecayArgsBuilder.build(840)),
             program.build(_progressiveFeeOutXD, FeeArgsBuilder.buildProgressiveFee(0.06e9)),
             program.build(_xycSwapXD)
@@ -408,8 +402,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 450e18, 450e18
-                )),
+                    address(tokenA), address(tokenB), 450e18, 450e18, 1e18)),
             program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(0.0055e9)),
             program.build(_decayXD, DecayArgsBuilder.build(480)),
             program.build(_xycSwapXD)
@@ -428,8 +421,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                 )),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), 700e18, 700e18
-                )),
+                    address(tokenA), address(tokenB), 700e18, 700e18, 1e18)),
             program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(0.003e9, feeRecipient)),
             program.build(_progressiveFeeInXD, FeeArgsBuilder.buildProgressiveFee(0.04e9)),
@@ -515,6 +507,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
             useTransferFromAndAquaPush: false,
             threshold: thresholdData,
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",

@@ -153,7 +153,7 @@ contract TWAPSwap is LimitSwap {
 
         // Check minimum trade amount (only during TWAP duration) and available liquidity
         require(durationPassed >= args.duration || ctx.swap.amountOut >= args.minTradeAmountOut, TWAPSwapMinTradeAmountNotReached(ctx.swap.amountOut, args.minTradeAmountOut));
-        require(ctx.swap.amountIn <= available, TWAPSwapTradeAmountExceedLiquidity(ctx.swap.amountIn, available));
+        require(ctx.swap.amountOut <= available, TWAPSwapTradeAmountExceedLiquidity(ctx.swap.amountOut, available));
 
         // Store trade data
         if (!ctx.vm.isStaticContext) {
