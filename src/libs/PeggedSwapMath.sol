@@ -7,21 +7,23 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 /// @title PeggedSwapMath - Complete math library for PeggedSwap
 /// @notice Provides all mathematical operations for PeggedSwap curve (p=0.5)
 /// @notice Formula: √u + √v + A(u + v) = C
+/// @dev Uses 1e27 scale for higher precision (reduces rounding error by ~10^9)
 library PeggedSwapMath {
-    uint256 private constant ONE = 1e18;
+    uint256 internal constant ONE = 1e27;
 
     error PeggedSwapMathNoSolution();
     error PeggedSwapMathInvalidInput();
 
     /// @notice Calculate invariant value: √u + √v + A(u + v)
-    /// @param u Normalized x value (x/X₀) scaled by 1e18
-    /// @param v Normalized y value (y/Y₀) scaled by 1e18
-    /// @param a Linear width parameter scaled by 1e18
-    /// @return Invariant value scaled by 1e18
+    /// @param u Normalized x value (x/X₀) scaled by ONE
+    /// @param v Normalized y value (y/Y₀) scaled by ONE
+    /// @param a Linear width parameter scaled by ONE
+    /// @return Invariant value scaled by sqrt(ONE)
     function invariant(uint256 u, uint256 v, uint256 a) internal pure returns (uint256) {
         uint256 sqrtU = Math.sqrt(u * ONE);
         uint256 sqrtV = Math.sqrt(v * ONE);
-        uint256 linearTerm = (a * (u + v)) / ONE;
+        // a * (u + v) / ONE - safe: a ≤ 2e27, u+v ≤ 2e27 → 4e54 < 1e77
+        uint256 linearTerm = a * (u + v) / ONE;
         return sqrtU + sqrtV + linearTerm;
     }
 
@@ -30,8 +32,8 @@ library PeggedSwapMath {
     /// @param y Current y reserve
     /// @param x0 Initial X reserve (normalization factor)
     /// @param y0 Initial Y reserve (normalization factor)
-    /// @param a Linear width parameter scaled by 1e18
-    /// @return Invariant value scaled by 1e18
+    /// @param a Linear width parameter scaled by ONE
+    /// @return Invariant value scaled by sqrt(ONE)
     function invariantFromReserves(
         uint256 x,
         uint256 y,
@@ -39,8 +41,9 @@ library PeggedSwapMath {
         uint256 y0,
         uint256 a
     ) internal pure returns (uint256) {
-        uint256 u = (x * ONE) / x0;
-        uint256 v = (y * ONE) / y0;
+        // x * ONE / x0 - safe: x ≤ 1e24 (huge reserve), ONE = 1e27 → 1e51 < 1e77
+        uint256 u = x * ONE / x0;
+        uint256 v = y * ONE / y0;
         return invariant(u, v, a);
     }
 
@@ -58,8 +61,8 @@ library PeggedSwapMath {
         // Calculate √u with safe handling
         uint256 sqrtU = Math.sqrt(u * ONE);
 
-        // Calculate au safely
-        uint256 au = (a * u) / ONE;
+        // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
+        uint256 au = a * u / ONE;
 
         // Calculate rightSide = c - √u - au
         // Need to check: invariantC >= sqrtU + au
@@ -80,8 +83,8 @@ library PeggedSwapMath {
         // Quadratic formula: w = (-1 ± √(1 + 4a·rightSide)) / (2a)
         // We want the positive root
 
-        // Calculate 4a * rightSide carefully to avoid overflow
-        uint256 fourARightSide = (4 * a * rightSide) / ONE;
+        // 4 * a * rightSide / ONE - safe: 4a ≤ 8e27, rightSide ≤ 2e27 → 16e54 < 1e77
+        uint256 fourARightSide = 4 * a * rightSide / ONE;
 
         // Calculate discriminant: 1 + 4a * rightSide
         uint256 discriminant = ONE + fourARightSide;
@@ -99,11 +102,11 @@ library PeggedSwapMath {
         // denominator = 2a (in 1e18 scale)
         uint256 denominator = 2 * a;
 
-        // w = numerator * 1e18 / denominator (floor is ok here)
-        uint256 w = (numerator * ONE) / denominator;
+        // numerator * ONE / denominator - safe: numerator ≤ 2e27, ONE = 1e27 → 2e54
+        uint256 w = numerator * ONE / denominator;
 
-        // v = w² / ONE (floor is ok here)
-        v = (w * w) / ONE;
+        // w² / ONE - safe: w ≤ 2e27 → 4e54 < 1e77
+        v = w * w / ONE;
     }
 
 }
