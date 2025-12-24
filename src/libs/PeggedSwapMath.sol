@@ -96,10 +96,10 @@ library PeggedSwapMath {
         // sqrtDiscriminant should always be >= 1 since discriminant >= 1
         require(sqrtDiscriminant >= ONE, PeggedSwapMathNoSolution());
 
-        // numerator = sqrtDiscriminant - 1 (in 1e18 scale)
+        // numerator = sqrtDiscriminant - 1 (in 1e27 scale)
         uint256 numerator = sqrtDiscriminant - ONE;
 
-        // denominator = 2a (in 1e18 scale)
+        // denominator = 2a (in 1e27 scale)
         uint256 denominator = 2 * a;
 
         // numerator * ONE / denominator - safe: numerator ≤ 2e27, ONE = 1e27 → 2e54

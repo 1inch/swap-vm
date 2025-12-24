@@ -79,7 +79,7 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
 
         // For different decimals, symmetry error = remainder from floor(deltaY / rateOut)
         // Maximum error = rateOut - 1 ≈ rateOut = 1e12
-        // This is expected behavior (same as Curve)
+        // This is expected behavior
         symmetryTolerance = 1e12;
         additivityTolerance = 1000;
     }
