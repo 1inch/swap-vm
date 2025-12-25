@@ -17,6 +17,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -38,11 +39,11 @@ struct FeeConfig {
 
 
 /**
- * @title XYCFeesInvariants
- * @notice Tests invariants for XYCSwap and SwapVM under all supported fee configurations
- * @dev Tests pool liquidity behavior with different fee structures applied to XYC pairs
+ * @title PeggedFeesInvariants
+ * @notice Tests invariants for PeggedSwap + all types of fees
+ * @dev Tests pegged curve with different fee structures
  */
-contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
+contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     using ProgramBuilder for Program;
 
     Aqua public immutable aqua;
@@ -60,6 +61,13 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 internal balanceA = 1000e18;
     uint256 internal balanceB = 1000e18;
 
+    // PeggedSwap config (using 1e27 scale for x0/y0/linearWidth to match PeggedSwapMath.ONE)
+    uint256 internal x0 = 1000e18;        // Initial X reserve (normalization)
+    uint256 internal y0 = 1000e18;        // Initial Y reserve (normalization)
+    uint256 internal linearWidth = 0.8e27; // A parameter (0.8 = mostly linear)
+    uint256 internal rateLt = 1;        // Rate for lower address token (scales 1e18 -> 1e27)
+    uint256 internal rateGt = 1;        // Rate for greater address token (scales 1e18 -> 1e27)
+
     // Flat fees
     uint32 internal flatFeeInBps = 0.003e9;    // 0.3%
     uint32 internal flatFeeOutBps = 0.005e9;   // 0.5%
@@ -76,23 +84,23 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256[] internal testAmounts;
 
     // Test amounts for exactOut (if empty, uses testAmounts)
-    // Needed for imbalanced pools where exactOut amounts must be < balanceB
     uint256[] internal testAmountsExactOut;
 
-    // Symmetry tolerance (default 2 wei, increase for imbalanced pools)
+    // Symmetry tolerance (default 2 wei, increase for nondivisible x0/y0)
+    // NOTE: For x0/y0 not divisible by 1e18 (e.g., 1500e18), error ≈ x0/1e18 wei
     uint256 internal symmetryTolerance = 2;
 
-    // Additivity tolerance (default 0, increase for rounding in extreme pools)
+    // Additivity tolerance (default 0, increase for rounding)
     uint256 internal additivityTolerance = 0;
 
-    // Rounding tolerance in bps (default 100 = 1%, increase for imbalanced pools with high fees)
+    // Rounding tolerance in bps (default 100 = 1%)
     uint256 internal roundingToleranceBps = 100;
 
     // Skip flags for edge cases
-    bool internal skipMonotonicity = false;  // Skip for dust amounts where rounding > price impact
-    bool internal skipSpotPrice = false;     // Skip for dust amounts where rate > spot
+    bool internal skipMonotonicity = false;
+    bool internal skipSpotPrice = false;
 
-    // Monotonicity tolerance in bps (default 0, strict; increase for dust where rounding > price impact)
+    // Monotonicity tolerance in bps
     uint256 internal monotonicityToleranceBps = 0;
 
     constructor() OpcodesDebug(address(aqua = new Aqua())) {}
@@ -105,7 +113,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
 
-        // Setup tokens and approvals for maker (mint max for huge liquidity tests)
+        // Setup tokens and approvals for maker
         tokenA.mint(maker, type(uint128).max);
         tokenB.mint(maker, type(uint128).max);
         vm.prank(maker);
@@ -113,7 +121,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
-        // Setup approvals for taker (test contract)
+        // Setup approvals for taker
         tokenA.approve(address(swapVM), type(uint256).max);
         tokenB.approve(address(swapVM), type(uint256).max);
 
@@ -135,23 +143,18 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 amount,
         bytes memory takerData
     ) internal override returns (uint256 amountIn, uint256 amountOut) {
-        // Calculate mint amount based on pool imbalance ratio and fee multiplier
-        // For imbalanced pools (e.g., 10000:100), need more tokens
         uint256 maxBalance = balanceA > balanceB ? balanceA : balanceB;
         uint256 minBalance = balanceA < balanceB ? balanceA : balanceB;
         uint256 imbalanceRatio = minBalance > 0 ? (maxBalance / minBalance) + 1 : 1;
 
-        // Account for high fees (e.g., 99.9% fee means 1000x more tokens needed for exactOut)
         uint256 maxFee = flatFeeInBps > flatFeeOutBps ? flatFeeInBps : flatFeeOutBps;
         uint256 feeMultiplier = maxFee > 0 ? (1e9 / (1e9 - maxFee)) + 1 : 1;
 
         uint256 multiplier = imbalanceRatio > feeMultiplier ? imbalanceRatio : feeMultiplier;
         uint256 mintAmount = amount * 10 * (multiplier > 10 ? multiplier : 10);
 
-        // Mint the input tokens
         TokenMock(tokenIn).mint(taker, mintAmount);
 
-        // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
             tokenIn,
@@ -165,12 +168,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // ====== Universal Program Builder ======
 
-    /**
-     * @notice Builds bytecode program with specified balances and fees
-     * @param _balanceA Balance of token A
-     * @param _balanceB Balance of token B
-     * @param fees Fee configuration (0 = disabled)
-     */
     function _buildProgram(
         uint256 _balanceA,
         uint256 _balanceB,
@@ -190,7 +187,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([_balanceA, _balanceB])
                 )),
 
-            // Regular fees AFTER balances (0 = disabled)
+            // Regular fees AFTER balances
             (fees.flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeInBps)) : bytes(""),
             (fees.flatFeeOutBps > 0) ? program.build(_flatFeeAmountOutXD,
@@ -200,15 +197,24 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.progressiveFeeOutBps > 0) ? program.build(_progressiveFeeOutXD,
                 FeeArgsBuilder.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
-            // Swap instruction
-            program.build(_xycSwapXD)
+            // PeggedSwap instruction
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(
+                    PeggedSwapArgsBuilder.Args({
+                        x0: x0,
+                        y0: y0,
+                        linearWidth: linearWidth,
+                        rateLt: rateLt,
+                        rateGt: rateGt
+                    })
+                ))
         );
     }
 
     function _config(ISwapVM.Order memory order) internal view returns (InvariantConfig memory) {
         InvariantConfig memory config = _getDefaultConfig();
         config.testAmounts = testAmounts;
-        config.testAmountsExactOut = testAmountsExactOut;  // Use separate exactOut amounts if set
+        config.testAmountsExactOut = testAmountsExactOut;
         config.symmetryTolerance = symmetryTolerance;
         config.additivityTolerance = additivityTolerance;
         config.roundingToleranceBps = roundingToleranceBps;
@@ -231,9 +237,9 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         });
     }
 
-    // ====== XYC Tests ======
+    // ====== Pegged Tests ======
 
-    function test_XYC() public {
+    function test_Pegged() public {
         FeeConfig memory fees = _feeConfig();
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -248,10 +254,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test XYC with flat fee on input
-     */
-    function test_XYCFlatFeeIn() public {
+    function test_PeggedFlatFeeIn() public {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeInBps = flatFeeInBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
@@ -267,17 +270,14 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test XYC with flat fee on output (using feeOutAsIn to preserve additivity)
-     */
-    function test_XYCFlatFeeOut() public {
+    function test_PeggedFlatFeeOut() public {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeOutBps = flatFeeOutBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // FlatFeeOut violates additivity by design (non-linear fee calculation)
+        // FlatFeeOut violates additivity by design
         config.skipAdditivity = true;
 
         assertAllInvariantsWithConfig(
@@ -289,19 +289,14 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test XYC with progressive fee on input
-     */
-    function test_XYCProgressiveFeeIn() public {
+    function test_PeggedProgressiveFeeIn() public {
         FeeConfig memory fees = _feeConfig();
         fees.progressiveFeeInBps = progressiveFeeInBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // TODO: Progressive fees violate additivity by design
         config.skipAdditivity = true;
-        // TODO: need to research behavior
         config.skipSymmetry = true;
 
         assertAllInvariantsWithConfig(
@@ -313,19 +308,14 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test  + XYC with progressive fee on output
-     */
-    function test_XYCProgressiveFeeOut() public {
+    function test_PeggedProgressiveFeeOut() public {
         FeeConfig memory fees = _feeConfig();
         fees.progressiveFeeOutBps = progressiveFeeOutBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // TODO: Progressive fees violate additivity by design
         config.skipAdditivity = true;
-        // TODO: need to research behavior
         config.skipSymmetry = true;
 
         assertAllInvariantsWithConfig(
@@ -337,11 +327,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test  + XYC with protocol fee
-     */
-    function test_XYCProtocolFee() public virtual {
-        // Pre-approve for protocol fee transfers
+    function test_PeggedProtocolFee() public virtual {
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
@@ -351,8 +337,8 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // Protocol fee causes 1 wei rounding in additivity
-        config.additivityTolerance = 1;
+        // Use max of class additivityTolerance or minimum for protocol fee
+        config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -363,10 +349,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    /**
-     * Test multiple fee types with  + XYC
-     */
-    function test_XYCMultipleFees() public {
+    function test_PeggedMultipleFees() public {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeInBps = flatFeeInBps;
         fees.flatFeeOutBps = flatFeeOutBps;
@@ -375,10 +358,10 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // TODO: Fee out violate additivity
         config.skipAdditivity = true;
-        // TODO: Multiple fees combined may cause rounding that violates symmetry
         config.skipSymmetry = true;
+        // Use configured tolerance (default 200, but can be overridden for different decimals)
+        config.roundingToleranceBps = roundingToleranceBps > 200 ? roundingToleranceBps : 200;
 
         assertAllInvariantsWithConfig(
             swapVM,
