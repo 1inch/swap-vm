@@ -141,6 +141,7 @@ contract FeeTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "", // no minimum output
             to: address(0),
+            deadline: 0,
             preTransferInHookData: "",
             postTransferInHookData: "",
             preTransferOutHookData: "",

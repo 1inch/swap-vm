@@ -215,6 +215,27 @@ snapshot :; forge snapshot --no-match-test "testFuzz_*"
 
 snapshot-check :; forge snapshot --check --no-match-test "testFuzz_*"
 
+gas-snapshot :; forge test --match-path "test/gas/*.t.sol" -vv && echo "\n=== LimitSwap Gas ===" && cat snapshots/LimitSwapGas.json && echo "\n=== AMM Gas ===" && cat snapshots/AMMGas.json
+
+gas-snapshot-check :; @{ \
+	cp snapshots/LimitSwapGas.json snapshots/LimitSwapGas.json.old 2>/dev/null || true; \
+	cp snapshots/AMMGas.json snapshots/AMMGas.json.old 2>/dev/null || true; \
+	forge test --match-path "test/gas/*.t.sol" -vv; \
+	if diff -q snapshots/LimitSwapGas.json snapshots/LimitSwapGas.json.old >/dev/null 2>&1 && \
+	   diff -q snapshots/AMMGas.json snapshots/AMMGas.json.old >/dev/null 2>&1; then \
+		echo "✅ Gas snapshots match"; \
+		rm -f snapshots/*.old; \
+	else \
+		echo "❌ Gas snapshots differ!"; \
+		echo "=== LimitSwapGas diff ==="; \
+		diff snapshots/LimitSwapGas.json.old snapshots/LimitSwapGas.json || true; \
+		echo "=== AMMGas diff ==="; \
+		diff snapshots/AMMGas.json.old snapshots/AMMGas.json || true; \
+		rm -f snapshots/*.old; \
+		exit 1; \
+	fi; \
+}
+
 format :; forge fmt
 
 clean :; forge clean

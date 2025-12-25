@@ -26,6 +26,7 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingTokensCount();
     error ConcentrateParsingMissingTokenAddresses();
     error ConcentrateParsingMissingDeltas();
+    error ConcentrateParsingMissingLiquidity();
 
     /// @notice Compute initial balance adjustments to achieve concentration within price bounds
     /// @dev JavaScript implementation:
@@ -52,29 +53,30 @@ library XYCConcentrateArgsBuilder {
         uint256 price,
         uint256 priceMin,
         uint256 priceMax
-    ) public pure returns (uint256 deltaA, uint256 deltaB) {
+    ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity) {
         require(priceMin <= price && price <= priceMax, ConcentrateInconsistentPrices(price, priceMin, priceMax));
         uint256 sqrtPriceMin = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
         uint256 sqrtPriceMax = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
         deltaA = (price == priceMin) ? 0 : (balanceA * ONE / (sqrtPriceMin - ONE));
         deltaB = (price == priceMax) ? 0 : (balanceB * ONE / (sqrtPriceMax - ONE));
+        liquidity = Math.sqrt((balanceA + deltaA) * (balanceB + deltaB));
     }
 
-    function buildXD(address[] memory tokens, uint256[] memory deltas) internal pure returns (bytes memory) {
+    function buildXD(address[] memory tokens, uint256[] memory deltas, uint256 liquidity) internal pure returns (bytes memory) {
         require(tokens.length == deltas.length, ConcentrateArraysLengthMismatch(tokens.length, deltas.length));
         bytes memory packed = abi.encodePacked((tokens.length).toUint16());
         for (uint256 i = 0; i < tokens.length; i++) {
             packed = abi.encodePacked(packed, tokens[i]);
         }
-        return abi.encodePacked(packed, deltas);
+        return abi.encodePacked(packed, deltas, liquidity);
     }
 
-    function build2D(address tokenA, address tokenB, uint256 deltaA, uint256 deltaB) internal pure returns (bytes memory) {
+    function build2D(address tokenA, address tokenB, uint256 deltaA, uint256 deltaB, uint256 liquidity) internal pure returns (bytes memory) {
         (uint256 deltaLt, uint256 deltaGt) = tokenA < tokenB ? (deltaA, deltaB) : (deltaB, deltaA);
-        return abi.encodePacked(deltaLt, deltaGt);
+        return abi.encodePacked(deltaLt, deltaGt, liquidity);
     }
 
-    function parseXD(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) {
+    function parseXD(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas, uint256 liquidity) {
         unchecked {
             tokensCount = uint16(bytes2(args.slice(0, 2, ConcentrateParsingMissingTokensCount.selector)));
             uint256 balancesOffset = 2 + 20 * tokensCount;
@@ -82,13 +84,15 @@ library XYCConcentrateArgsBuilder {
 
             tokens = args.slice(2, balancesOffset, ConcentrateParsingMissingTokenAddresses.selector);
             deltas = args.slice(balancesOffset, subargsOffset, ConcentrateParsingMissingDeltas.selector);
+            liquidity = uint256(bytes32(args.slice(subargsOffset, subargsOffset + 32, ConcentrateParsingMissingLiquidity.selector)));
         }
     }
 
-    function parse2D(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint256 deltaIn, uint256 deltaOut) {
+    function parse2D(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint256 deltaIn, uint256 deltaOut, uint256 liquidity) {
         uint256 deltaLt = uint256(bytes32(args.slice(0, 32, ConcentrateTwoTokensMissingDeltaLt.selector)));
         uint256 deltaGt = uint256(bytes32(args.slice(32, 64, ConcentrateTwoTokensMissingDeltaGt.selector)));
         (deltaIn, deltaOut) = tokenIn < tokenOut ? (deltaLt, deltaGt) : (deltaGt, deltaLt);
+        liquidity = uint256(bytes32(args.slice(64, 96, ConcentrateParsingMissingLiquidity.selector)));
     }
 }
 
@@ -103,15 +107,11 @@ contract XYCConcentrate {
     error ConcentrateShouldBeUsedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error ConcentrateExpectedSwapAmountComputationAfterRunLoop(uint256 amountIn, uint256 amountOut);
 
-    mapping(bytes32 orderHash => uint256) public deltaScales;
+    mapping(bytes32 orderHash => uint256) public liquidity;
 
-    function deltaScale(bytes32 orderHash) public view returns (uint256) {
-        uint256 scale = deltaScales[orderHash];
-        return scale == 0 ? ONE : scale;
-    }
-
-    function concentratedBalance(bytes32 orderHash, uint256 balance, uint256 delta) public view returns (uint256) {
-        return balance + delta * deltaScale(orderHash) / ONE;
+    function concentratedBalance(bytes32 orderHash, uint256 balance, uint256 delta, uint256 initialLiquidity) public view returns (uint256) {
+        uint256 currentLiquidity = liquidity[orderHash];
+        return currentLiquidity == 0 ? balance + delta : balance + delta * currentLiquidity / initialLiquidity;
     }
 
     /// @param args.tokensCount       | 2 bytes
@@ -120,7 +120,7 @@ contract XYCConcentrate {
     function _xycConcentrateGrowPriceRangeXD(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas,) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
             address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
@@ -139,15 +139,15 @@ contract XYCConcentrate {
     function _xycConcentrateGrowLiquidityXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas) = XYCConcentrateArgsBuilder.parseXD(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
             address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
 
             if (ctx.query.tokenIn == token) {
-                ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, delta);
+                ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, delta, initialLiquidity);
             } else if (ctx.query.tokenOut == token) {
-                ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, delta);
+                ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, delta, initialLiquidity);
             }
         }
 
@@ -160,7 +160,7 @@ contract XYCConcentrate {
     function _xycConcentrateGrowPriceRange2D(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 deltaIn, uint256 deltaOut) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
+        (uint256 deltaIn, uint256 deltaOut, ) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
         ctx.swap.balanceIn += deltaIn;
         ctx.swap.balanceOut += deltaOut;
     }
@@ -170,9 +170,9 @@ contract XYCConcentrate {
     function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 deltaIn, uint256 deltaOut) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
-        ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, deltaIn);
-        ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, deltaOut);
+        (uint256 deltaIn, uint256 deltaOut, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
+        ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, deltaIn, initialLiquidity);
+        ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, deltaOut, initialLiquidity);
 
         ctx.runLoop();
         _updateScales(ctx);
@@ -182,9 +182,9 @@ contract XYCConcentrate {
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, ConcentrateExpectedSwapAmountComputationAfterRunLoop(ctx.swap.amountIn, ctx.swap.amountOut));
 
         if (!ctx.vm.isStaticContext) {
-            uint256 inv = ctx.swap.balanceIn * ctx.swap.balanceOut;
+            // New invariant (after swap)
             uint256 newInv = (ctx.swap.balanceIn + ctx.swap.amountIn) * (ctx.swap.balanceOut - ctx.swap.amountOut);
-            deltaScales[ctx.query.orderHash] = deltaScale(ctx.query.orderHash) * newInv / inv;
+            liquidity[ctx.query.orderHash] = Math.sqrt(newInv);
         }
     }
 }

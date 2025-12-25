@@ -45,8 +45,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
-    uint256 constant ONE = 1e18;
-    uint256 constant CURVATURE = ONE / 2; // p = 0.5, curvature at the ends of the curve
+    uint256 constant ONE = 1e27;  // Match PeggedSwapMath.ONE
+    uint256 constant CURVATURE = 0.5e27; // p = 0.5, curvature at the ends of the curve
 
     function setUp() public {
         makerPrivateKey = 0x1234;
@@ -176,6 +176,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "",
             to: address(0),
+            deadline: 0,
             preTransferInHookData: "",
             postTransferInHookData: "",
             preTransferOutHookData: "",
@@ -206,7 +207,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 12e17; // A = 1.2 (high linearity for pegged assets)
+        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
         uint256 swapAmount = 100e18; // Small: 100 tokens (0.1% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -237,7 +238,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 12e17; // A = 1.2 (high linearity for pegged assets)
+        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
         uint256 swapAmount = 5000e18; // Medium: 5000 tokens (5% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -268,7 +269,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 12e17; // A = 1.2 (high linearity for pegged assets)
+        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
         uint256 swapAmount = 50000e18; // Large: 50000 tokens (50% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -304,7 +305,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1e17; // A = 0.1 (low linearity for volatile assets)
+        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
         uint256 swapAmount = 100e18; // Small: 100 tokens (0.1% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -332,7 +333,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1e17; // A = 0.1 (low linearity for volatile assets)
+        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
         uint256 swapAmount = 5000e18; // Medium: 5000 tokens (5% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -363,7 +364,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1e17; // A = 0.1 (low linearity for volatile assets)
+        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
         uint256 swapAmount = 50000e18; // Large: 50000 tokens (50% of pool)
 
         (, , uint256 amountOut) = calculateExactIn(
@@ -397,7 +398,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 initialLiquidity = 100000e18;
         uint256 x0Initial = initialLiquidity;
         uint256 y0Initial = initialLiquidity;
-        uint256 linearWidth = 8e17; // A = 0.8 (optimized for stablecoins)
+        uint256 linearWidth = 0.8e27; // A = 0.8 (optimized for stablecoins)
 
         // Calculate target state using analytical solution
         uint256 swapAmount = 1000e18;
@@ -433,7 +434,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                    rateLt: 1,
+                    rateGt: 1
                 })))
         );
 
@@ -502,7 +505,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 y0 = 100000e18;
         uint256 x0Initial = 100000e18;
         uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 8e17; // 0.8
+        uint256 linearWidth = 0.8e27; // 0.8
 
         // Small swap that will cause rounding
         uint256 amountIn = 1; // 1 wei - extreme case
@@ -543,7 +546,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 y0 = 100000e18;
         uint256 x0Initial = 100000e18;
         uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 8e17; // 0.8
+        uint256 linearWidth = 0.8e27; // 0.8
 
         // Small swap that will cause rounding
         uint256 amountOut = 1; // 1 wei - extreme case
@@ -590,7 +593,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             uint256 y0 = 100000 * scale;
             uint256 x0Initial = 100000 * scale;
             uint256 y0Initial = 100000 * scale;
-            uint256 linearWidth = 8e17;
+            uint256 linearWidth = 0.8e27;
 
             uint256 amountIn = 1000 * scale; // 1000 tokens
 
@@ -632,7 +635,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 balanceUSDT = 90000e18;
         uint256 x0Initial = 100000e18;
         uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 5e17;  // 0.5
+        uint256 linearWidth = 0.5e27;  // 0.5
 
         // Build program without fees
         Program memory prog = ProgramBuilder.init(_opcodes());
@@ -646,7 +649,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                    rateLt: 1,
+                    rateGt: 1
                 })))
         );
 
@@ -708,7 +713,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 balanceUSDT = 100000e18;
         uint256 X0 = 100000e18;
         uint256 Y0 = 100000e18;
-        uint256 A = 8e17;  // 0.8
+        uint256 A = 0.8e27;  // 0.8
 
         Program memory prog = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
@@ -722,7 +727,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: X0,
                     y0: Y0,
-                    linearWidth: A
+                    linearWidth: A,
+                    rateLt: 1,
+                    rateGt: 1
                 })))
         );
 
@@ -770,7 +777,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 balanceUSDT = 100000e18;
         uint256 X0 = 100000e18;
         uint256 Y0 = 100000e18;
-        uint256 A = 8e17;  // 0.8
+        uint256 A = 0.8e27;  // 0.8
 
         Program memory prog = ProgramBuilder.init(_opcodes());
 
@@ -785,7 +792,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: X0,
                     y0: Y0,
-                    linearWidth: A
+                    linearWidth: A,
+                    rateLt: 1,
+                    rateGt: 1
                 })))
         );
 
@@ -801,7 +810,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: X0,
                     y0: Y0,
-                    linearWidth: A
+                    linearWidth: A,
+                    rateLt: 1,
+                    rateGt: 1
                 })))
         );
 
@@ -958,7 +969,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         console.log("");
 
         uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 2e18; // A = 2.0 (maximum allowed)
+        uint256 linearWidth = 2e27; // A = 2.0 (maximum allowed)
         uint256 smallSwap = 1000e18;
         uint256 mediumSwap = 10000e18;
         uint256 largeSwap = 30000e18;
@@ -1026,8 +1037,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         // Extremely unbalanced: 99,000 vs 1,000 (99:1 ratio)
         uint256 balanceX = 99000e18;
         uint256 balanceY = 1000e18;
-        uint256 linearWidth = 8e17; // A = 0.8 (standard)
-        
+        uint256 linearWidth = 0.8e27; // A = 0.8 (standard)
+
         // Test swaps in both directions
         uint256 swapAmount = 100e18;
 
@@ -1099,7 +1110,9 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             program.build(_peggedSwapGrowPriceRange2D, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                 x0: poolBalanceA,
                 y0: poolBalanceB,
-                linearWidth: CURVATURE
+                linearWidth: CURVATURE,
+                rateLt: 1,
+                rateGt: 1
             })))
         );
 
@@ -1130,23 +1143,23 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         // Test rounding invariants with reasonable amounts for PeggedSwap
         // (PeggedSwap doesn't work well with tiny wei amounts due to its curve)
         console.log("\n=== Rounding Invariant Tests (PeggedSwap) ===");
-        
+
         // Test accumulation with tolerance for square-root curve behavior
         // PeggedSwap's √ curve causes expected 0.1% difference between split/single swaps
         // This is NOT exploitable (users lose by splitting, never gain)
         // Use 0.2% tolerance to account for this mathematical property
         console.log("Test: Accumulation (50x 1e18) with 0.2% tolerance for curve behavior");
         RoundingInvariants.assertNoAccumulationExploitWithTolerance(
-            vm, swapVM, order, 
-            address(usdcMock), address(usdtMock), 
+            vm, swapVM, order,
+            address(usdcMock), address(usdtMock),
             1e18, 50, takerDataBytes, _executeSwap,
             20 // 20 bps = 0.2% tolerance for √ curve
         );
-        
+
         // Test round-trips
         console.log("Test: Round-trips (50x 10e18)");
         RoundingInvariants.assertNoRoundTripProfit(vm, swapVM, order, address(usdcMock), address(usdtMock), 10e18, 50, takerDataBytes, _executeSwap);
-        
+
         console.log("=== All rounding tests passed ===\n");
     }
 
@@ -1163,4 +1176,3 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerDataBytes);
     }
 }
-

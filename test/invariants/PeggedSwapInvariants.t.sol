@@ -96,7 +96,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 10000e18;
         uint256 x0Initial = 10000e18;
         uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e18; // A = 0.8
+        uint256 linearWidth = 0.8e27; // A = 0.8
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -109,7 +109,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
                 })))
         );
 
@@ -187,7 +189,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 10000e18;
         uint256 x0Initial = 10000e18;
         uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e18; // A = 0.8
+        uint256 linearWidth = 0.8e27; // A = 0.8
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -200,7 +202,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
                 })))
         );
 
@@ -255,7 +259,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 10000e18;
         uint256 x0Initial = 10000e18;
         uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e18; // A = 0.8
+        uint256 linearWidth = 0.8e27; // A = 0.8
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -268,7 +272,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
                 })))
         );
 
@@ -306,7 +312,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 10000e18;
         uint256 x0Initial = 10000e18;
         uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e18; // A = 0.8 (standard for stablecoins)
+        uint256 linearWidth = 0.8e27; // A = 0.8 (standard for stablecoins)
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -319,7 +325,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
-                    linearWidth: linearWidth
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
                 })))
         );
 
@@ -327,10 +335,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // Create test configuration
         // Use amounts that are reasonable for a 10000e18 pool size
+        // Keep total for additivity < pool size: 100 + 500 + 1000 = 1600e18
         uint256[] memory testAmounts = new uint256[](3);
         testAmounts[0] = 100e18;    // 1% of pool
-        testAmounts[1] = 1000e18;   // 10% of pool
-        testAmounts[2] = 5000e18;   // 50% of pool
+        testAmounts[1] = 500e18;    // 5% of pool
+        testAmounts[2] = 1000e18;   // 10% of pool
 
         InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15); // Higher tolerance for PeggedSwap
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
@@ -388,6 +397,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             useTransferFromAndAquaPush: false,
             threshold: thresholdData,
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",

@@ -100,7 +100,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 1000e18;
         uint256 x0 = 1000e18;  // Initial X reserve
         uint256 y0 = 1000e18;  // Initial Y reserve
-        uint256 a = 0.8e18;    // A parameter (0.8 in fixed point)
+        uint256 a = 0.8e27;    // A parameter (0.8 in fixed point)
         uint32 feeBps = 0.003e9; // 0.3% fee
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -117,7 +117,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -127,8 +129,6 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // Skip symmetry due to rounding in PeggedSwap math
-        config.skipSymmetry = true;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -147,7 +147,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 1500e18;
         uint256 x0 = 1500e18;  // Initial X reserve
         uint256 y0 = 1500e18;  // Initial Y reserve
-        uint256 a = 0.5e18;    // A parameter (0.5 in fixed point)
+        uint256 a = 0.5e27;    // A parameter (0.5 in fixed point)
         uint32 feeBps = 0.005e9; // 0.5% fee
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -164,7 +164,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -174,10 +176,10 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: need to research behavior - state-dependent due to scale
-        config.skipAdditivity = true;
-        // Skip symmetry due to rounding in PeggedSwap math
-        config.skipSymmetry = true;
+        // FlatFee + PeggedSwap rounding causes ~500 wei symmetry error
+        config.symmetryTolerance = 500;
+        // FlatFeeOut + PeggedSwap additivity error ~4.3e15 wei
+        config.additivityTolerance = 5e15;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -196,7 +198,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 2000e18;
         uint256 x0 = 2000e18;  // Initial X reserve
         uint256 y0 = 2000e18;  // Initial Y reserve
-        uint256 a = 0.9e18;    // A parameter (0.9 in fixed point - more linear)
+        uint256 a = 0.9e27;    // A parameter (0.9 in fixed point - more linear)
         uint32 feeBps = 0.1e9; // 10% progressive fee
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -213,7 +215,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -245,7 +249,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 2000e18;
         uint256 x0 = 2000e18;  // Initial X reserve
         uint256 y0 = 2000e18;  // Initial Y reserve
-        uint256 a = 0.95e18;   // A parameter (0.95 in fixed point - very linear)
+        uint256 a = 0.95e27;   // A parameter (0.95 in fixed point - very linear)
         uint32 feeBps = 0.1e9; // 10% progressive fee
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -262,7 +266,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -294,7 +300,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 1000e18;
         uint256 x0 = 1000e18;  // Initial X reserve
         uint256 y0 = 1000e18;  // Initial Y reserve
-        uint256 a = 0.7e18;    // A parameter (0.7 in fixed point)
+        uint256 a = 0.7e27;    // A parameter (0.7 in fixed point)
         uint32 feeBps = 0.002e9; // 0.2% protocol fee
 
         // Pre-approve for protocol fee transfers
@@ -315,7 +321,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -369,7 +377,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -413,13 +423,13 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.2e18, feeBps, true);
 
         // Test with A = 0.5 (balanced)
-        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.5e18, feeBps, true);
+        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.5e27, feeBps, true);
 
         // Test with A = 0.8 (mostly linear)
-        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.8e18, feeBps, true);
+        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.8e27, feeBps, true);
 
         // Test with A = 0.95 (very linear)
-        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.95e18, feeBps, true);
+        _testPeggedSwapWithA(balanceA, balanceB, x0, y0, 0.95e27, feeBps, true);
     }
 
     /**
@@ -427,7 +437,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      */
     function test_PeggedSwapImbalancedPools() public {
         uint32 feeBps = 0.003e9; // 0.3% fee
-        uint256 a = 0.8e18;    // A parameter
+        uint256 a = 0.8e27;    // A parameter
 
         // X-heavy pool
         {
@@ -450,7 +460,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                         PeggedSwapArgsBuilder.Args({
                             x0: x0,
                             y0: y0,
-                            linearWidth: a
+                            linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                         })
                     ))
             );
@@ -498,7 +510,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                         PeggedSwapArgsBuilder.Args({
                             x0: x0,
                             y0: y0,
-                            linearWidth: a
+                            linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                         })
                     ))
             );
@@ -550,7 +564,9 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,
                         y0: y0,
-                        linearWidth: a
+                        linearWidth: a,
+                        rateLt: 1,
+                        rateGt: 1
                     })
                 ))
         );
@@ -620,6 +636,7 @@ contract PeggedSwapFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             useTransferFromAndAquaPush: false,
             threshold: thresholdData,
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",

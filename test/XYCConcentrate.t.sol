@@ -104,7 +104,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        (uint256 deltaA, uint256 deltaB) =
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) =
             XYCConcentrateArgsBuilder.computeDeltas(setup.balanceA, setup.balanceB, 1e18, setup.priceBoundA, setup.priceBoundB);
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -133,10 +133,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
                 )),
                 setup.growLiquidityInsteadOfPriceRange ?
                     program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(
-                        tokenA, tokenB, deltaA, deltaB
+                        tokenA, tokenB, deltaA, deltaB, liquidity
                     )) :
                     program.build(XYCConcentrate._xycConcentrateGrowPriceRange2D, XYCConcentrateArgsBuilder.build2D(
-                        tokenA, tokenB, deltaA, deltaB
+                        tokenA, tokenB, deltaA, deltaB, liquidity
                     )),
                 program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
                 program.build(XYCSwap._xycSwapXD)
@@ -164,6 +164,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "", // no minimum output
             to: address(0),
+            deadline: 0,
             preTransferInHookData: "",
             postTransferInHookData: "",
             preTransferOutHookData: "",
@@ -190,6 +191,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "",
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",
@@ -420,15 +422,15 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
         uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
         uint256 rateChangeA = preRateA * 1e18 / postRateA;
-        assertNotApproxEqRel(rateChangeA, setup.priceBoundA, 0.01e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenA");
-        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.02e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenA");
+        assertNotApproxEqRel(rateChangeA, setup.priceBoundA, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenA");
+        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenA");
 
         // Compute and compare rate change for tokenB
         uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
         uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
         uint256 rateChangeB = postRateB * 1e18 / preRateB;
-        assertNotApproxEqRel(rateChangeB, setup.priceBoundB, 0.01e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenB");
-        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.02e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenB");
+        assertNotApproxEqRel(rateChangeB, setup.priceBoundB, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenB");
+        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenB");
     }
 
     function test_RoundingInvariantsWithFees() public {

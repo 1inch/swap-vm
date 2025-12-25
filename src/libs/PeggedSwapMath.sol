@@ -2,24 +2,28 @@
 
 pragma solidity 0.8.30;
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 /// @title PeggedSwapMath - Complete math library for PeggedSwap
 /// @notice Provides all mathematical operations for PeggedSwap curve (p=0.5)
 /// @notice Formula: √u + √v + A(u + v) = C
+/// @dev Uses 1e27 scale for higher precision (reduces rounding error by ~10^9)
 library PeggedSwapMath {
-    uint256 private constant ONE = 1e18;
+    uint256 internal constant ONE = 1e27;
 
     error PeggedSwapMathNoSolution();
     error PeggedSwapMathInvalidInput();
 
     /// @notice Calculate invariant value: √u + √v + A(u + v)
-    /// @param u Normalized x value (x/X₀) scaled by 1e18
-    /// @param v Normalized y value (y/Y₀) scaled by 1e18
-    /// @param a Linear width parameter scaled by 1e18
-    /// @return Invariant value scaled by 1e18
+    /// @param u Normalized x value (x/X₀) scaled by ONE
+    /// @param v Normalized y value (y/Y₀) scaled by ONE
+    /// @param a Linear width parameter scaled by ONE
+    /// @return Invariant value scaled by sqrt(ONE)
     function invariant(uint256 u, uint256 v, uint256 a) internal pure returns (uint256) {
-        uint256 sqrtU = sqrt(u);
-        uint256 sqrtV = sqrt(v);
-        uint256 linearTerm = (a * (u + v)) / ONE;
+        uint256 sqrtU = Math.sqrt(u * ONE);
+        uint256 sqrtV = Math.sqrt(v * ONE);
+        // a * (u + v) / ONE - safe: a ≤ 2e27, u+v ≤ 2e27 → 4e54 < 1e77
+        uint256 linearTerm = a * (u + v) / ONE;
         return sqrtU + sqrtV + linearTerm;
     }
 
@@ -28,8 +32,8 @@ library PeggedSwapMath {
     /// @param y Current y reserve
     /// @param x0 Initial X reserve (normalization factor)
     /// @param y0 Initial Y reserve (normalization factor)
-    /// @param a Linear width parameter scaled by 1e18
-    /// @return Invariant value scaled by 1e18
+    /// @param a Linear width parameter scaled by ONE
+    /// @return Invariant value scaled by sqrt(ONE)
     function invariantFromReserves(
         uint256 x,
         uint256 y,
@@ -37,8 +41,9 @@ library PeggedSwapMath {
         uint256 y0,
         uint256 a
     ) internal pure returns (uint256) {
-        uint256 u = (x * ONE) / x0;
-        uint256 v = (y * ONE) / y0;
+        // x * ONE / x0 - safe: x ≤ 1e24 (huge reserve), ONE = 1e27 → 1e51 < 1e77
+        uint256 u = x * ONE / x0;
+        uint256 v = y * ONE / y0;
         return invariant(u, v, a);
     }
 
@@ -54,10 +59,10 @@ library PeggedSwapMath {
     /// @return v Normalized y value (y/Y₀) scaled by 1e18
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         // Calculate √u with safe handling
-        uint256 sqrtU = sqrt(u);
+        uint256 sqrtU = Math.sqrt(u * ONE);
 
-        // Calculate au safely
-        uint256 au = (a * u) / ONE;
+        // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
+        uint256 au = a * u / ONE;
 
         // Calculate rightSide = c - √u - au
         // Need to check: invariantC >= sqrtU + au
@@ -78,102 +83,30 @@ library PeggedSwapMath {
         // Quadratic formula: w = (-1 ± √(1 + 4a·rightSide)) / (2a)
         // We want the positive root
 
-        // Calculate 4a * rightSide carefully to avoid overflow
-        uint256 fourARightSide = (4 * a * rightSide) / ONE;
+        // 4 * a * rightSide / ONE - safe: 4a ≤ 8e27, rightSide ≤ 2e27 → 16e54 < 1e77
+        uint256 fourARightSide = 4 * a * rightSide / ONE;
 
         // Calculate discriminant: 1 + 4a * rightSide
         uint256 discriminant = ONE + fourARightSide;
 
-        // Calculate √discriminant
-        uint256 sqrtDiscriminant = sqrt(discriminant);
+        // Calculate √discriminant with round UP (key for symmetry)
+        uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Ceil);
 
         // w = (-1 + √discriminant) / (2a)
         // sqrtDiscriminant should always be >= 1 since discriminant >= 1
         require(sqrtDiscriminant >= ONE, PeggedSwapMathNoSolution());
 
-        // numerator = sqrtDiscriminant - 1 (in 1e18 scale)
+        // numerator = sqrtDiscriminant - 1 (in 1e27 scale)
         uint256 numerator = sqrtDiscriminant - ONE;
 
-        // denominator = 2a (in 1e18 scale)
+        // denominator = 2a (in 1e27 scale)
         uint256 denominator = 2 * a;
 
-        // w = numerator * 1e18 / denominator
-        uint256 w = (numerator * ONE) / denominator;
+        // numerator * ONE / denominator - safe: numerator ≤ 2e27, ONE = 1e27 → 2e54
+        uint256 w = numerator * ONE / denominator;
 
-        // v = w² (both scaled by 1e18)
-        v = (w * w) / ONE;
+        // w² / ONE - safe: w ≤ 2e27 → 4e54 < 1e77
+        v = w * w / ONE;
     }
 
-    /// @notice High-precision integer square root with 1e18 fixed-point scaling
-    /// @dev Computes sqrt(x) where both x and result are scaled by 1e18
-    /// @dev Based on OpenZeppelin's Math.sqrt() with adaptations for fixed-point arithmetic
-    /// @dev We want: y such that (y/1e18)² ≈ x/1e18, so y ≈ sqrt(x) * 1e9
-    /// @dev Uses bit-shift method for optimal initial guess and exactly 6 Newton iterations
-    /// @param x Value to take square root of (scaled by 1e18)
-    /// @return y Square root of x (scaled by 1e18)
-    function sqrt(uint256 x) internal pure returns (uint256 y) {
-        if (x == 0) {
-            return 0;
-        }
-        if (x == ONE) {
-            return ONE; // sqrt(1e18) = 1e18
-        }
-
-        unchecked {
-            // We compute: y = sqrt(x) * 1e9 (since sqrt(1e18) = 1e9)
-            // This maintains 1e18 scale: if x = n * 1e18, then y = sqrt(n) * 1e18
-
-            // Step 1: Find good initial estimate using bit-shifts (OpenZeppelin method)
-            // This finds the smallest power of 2 greater than sqrt(x)
-            uint256 xn = 1;
-            uint256 aa = x;
-
-            if (aa >= (1 << 128)) {
-                aa >>= 128;
-                xn <<= 64;
-            }
-            if (aa >= (1 << 64)) {
-                aa >>= 64;
-                xn <<= 32;
-            }
-            if (aa >= (1 << 32)) {
-                aa >>= 32;
-                xn <<= 16;
-            }
-            if (aa >= (1 << 16)) {
-                aa >>= 16;
-                xn <<= 8;
-            }
-            if (aa >= (1 << 8)) {
-                aa >>= 8;
-                xn <<= 4;
-            }
-            if (aa >= (1 << 4)) {
-                aa >>= 4;
-                xn <<= 2;
-            }
-            if (aa >= (1 << 2)) {
-                xn <<= 1;
-            }
-
-            // Refine estimate to middle of interval (reduces error by half)
-            xn = (3 * xn) >> 1;
-
-            // Step 2: Newton iterations (exactly 6 for guaranteed convergence)
-            // Each iteration: xn = (xn + x / xn) / 2
-            // Converges quadratically: error after 6 iterations < 1
-            xn = (xn + x / xn) >> 1;
-            xn = (xn + x / xn) >> 1;
-            xn = (xn + x / xn) >> 1;
-            xn = (xn + x / xn) >> 1;
-            xn = (xn + x / xn) >> 1;
-            xn = (xn + x / xn) >> 1;
-
-            // Step 3: Final correction (ensure we have floor(sqrt(x)))
-            y = xn - (xn > x / xn ? 1 : 0);
-
-            // Step 4: Scale to 1e18 (multiply by 1e9 since sqrt(1e18) = 1e9)
-            y = y * 1e9;
-        }
-    }
 }
