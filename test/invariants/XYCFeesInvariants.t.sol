@@ -39,8 +39,8 @@ struct FeeConfig {
 
 /**
  * @title XYCFeesInvariants
- * @notice Tests invariants for  + XYCSwap + all types of fees
- * @dev Tests d liquidity with different fee structures
+ * @notice Tests invariants for XYCSwap and SwapVM under all supported fee configurations
+ * @dev Tests pool liquidity behavior with different fee structures applied to XYC pairs
  */
 contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     using ProgramBuilder for Program;
