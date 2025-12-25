@@ -144,6 +144,7 @@ contract DecayTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "",
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",

@@ -145,6 +145,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "", // no minimum output
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",
@@ -173,6 +174,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             threshold: "",
             to: address(0),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",
