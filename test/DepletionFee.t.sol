@@ -330,7 +330,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
         uint32 minFeeBps = 0.002e9; // 0.2% min fee
         uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA, balanceB, currentPrice, priceMin, priceMax
         );
 
@@ -346,7 +346,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
                 )),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), deltaA, deltaB
+                    address(tokenA), address(tokenB), deltaA, deltaB, liquidity
                 )),
             program.build(_depletionFeeAmountInXD,
                 FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, refBalanceIn, refBalanceOut)),
@@ -379,7 +379,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
         uint32 minFeeBps = 0.001e9; // 0.1% min fee
         uint32 maxFeeBps = 0.005e9; // 0.5% max fee
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA, balanceB, currentPrice, priceMin, priceMax
         );
 
@@ -395,7 +395,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
                 )),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), deltaA, deltaB
+                    address(tokenA), address(tokenB), deltaA, deltaB, liquidity
                 )),
             program.build(_depletionFeeAmountOutXD,
                 FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, refBalanceIn, refBalanceOut)),
@@ -432,7 +432,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
         uint32 minFeeBps = 0.002e9; // 0.2% min fee
         uint32 maxFeeBps = 0.01e9;  // 1% max fee
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA, balanceB, currentPrice, priceMin, priceMax
         );
 
@@ -448,7 +448,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
                 )),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), deltaA, deltaB
+                    address(tokenA), address(tokenB), deltaA, deltaB, liquidity
                 )),
             program.build(_depletionFeeAmountInXD,
                 FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, refBalanceIn, refBalanceOut)),
@@ -482,7 +482,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
         uint32 minFeeBps = 0.01e9; // 1% min fee
         uint32 maxFeeBps = 0.03e9; // 3% max fee
 
-        (uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA, balanceB, currentPrice, priceMin, priceMax
         );
 
@@ -498,7 +498,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
                 )),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA), address(tokenB), deltaA, deltaB
+                    address(tokenA), address(tokenB), deltaA, deltaB, liquidity
                 )),
             program.build(_depletionFeeAmountOutXD,
                 FeeArgsBuilder.buildDepletionFee(minFeeBps, maxFeeBps, refBalanceIn, refBalanceOut)),
@@ -739,6 +739,7 @@ contract DepletionFeeTest is Test, OpcodesDebug, CoreInvariants {
             useTransferFromAndAquaPush: false,
             threshold: thresholdData,
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
             hasPreTransferOutCallback: false,
             preTransferInHookData: "",
