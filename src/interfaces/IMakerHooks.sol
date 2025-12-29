@@ -3,6 +3,7 @@
 pragma solidity ^0.8.0;
 
 interface IMakerHooks {
+    /// @dev Called before tokenIn is transferred from taker to maker
     function preTransferIn(
         address maker,
         address taker,
@@ -15,7 +16,7 @@ interface IMakerHooks {
         bytes calldata takerData
     ) external;
 
-    /// @dev Maker dynamically handle tokenIn after tokens being transferred
+    /// @dev Called after tokenIn is transferred from taker to maker
     function postTransferIn(
         address maker,
         address taker,
@@ -28,7 +29,7 @@ interface IMakerHooks {
         bytes calldata takerData
     ) external;
 
-    /// @dev Maker can dymically prepare tokenOut before tokens being transfered
+    /// @dev Called before tokenOut is transferred from maker to taker
     function preTransferOut(
         address maker,
         address taker,
@@ -41,6 +42,7 @@ interface IMakerHooks {
         bytes calldata takerData
     ) external;
 
+    /// @dev Called after tokenOut is transferred from maker to taker
     function postTransferOut(
         address maker,
         address taker,

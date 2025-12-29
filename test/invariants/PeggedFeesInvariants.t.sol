@@ -21,6 +21,8 @@ import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
+import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
+
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
 
@@ -33,7 +35,9 @@ struct FeeConfig {
     uint32 flatFeeOutBps;
     uint32 progressiveFeeInBps;
     uint32 progressiveFeeOutBps;
+    uint32 protocolFeeInBps;
     uint32 protocolFeeOutBps;
+    address dynamicFeeProvider;
     address feeRecipient;
 }
 
@@ -179,6 +183,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             // Protocol fees BEFORE balances
             (fees.protocolFeeOutBps > 0) ? program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeOutBps, fees.feeRecipient)) : bytes(""),
+            (fees.protocolFeeInBps > 0) ? program.build(_protocolFeeAmountInXD,
+                FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
+            (fees.dynamicFeeProvider != address(0)) ? program.build(_dynamicProtocolFeeAmountInXD,
+                abi.encodePacked(fees.dynamicFeeProvider)) : bytes(""),
 
             // Balances
             program.build(_dynamicBalancesXD,
@@ -232,7 +240,9 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             flatFeeOutBps: 0,
             progressiveFeeInBps: 0,
             progressiveFeeOutBps: 0,
+            protocolFeeInBps: 0,
             protocolFeeOutBps: 0,
+            dynamicFeeProvider: address(0),
             feeRecipient: feeRecipient
         });
     }
@@ -338,6 +348,51 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _config(order);
 
         // Use max of class additivityTolerance or minimum for protocol fee
+        config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    function test_PeggedProtocolFeeIn() public virtual {
+        FeeConfig memory fees = _feeConfig();
+        fees.protocolFeeInBps = protocolFeeOutBps; // Use same rate as protocolFeeOut
+        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    function test_PeggedDynamicProtocolFeeIn() public virtual {
+        // Deploy fee provider with 0.2% fee
+        ProtocolFeeProviderMock feeProviderMock = new ProtocolFeeProviderMock(
+            protocolFeeOutBps,
+            feeRecipient,
+            address(this)
+        );
+
+        FeeConfig memory fees = _feeConfig();
+        fees.dynamicFeeProvider = address(feeProviderMock);
+        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        // Dynamic protocol fee causes 1 wei rounding in additivity
         config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
 
         assertAllInvariantsWithConfig(

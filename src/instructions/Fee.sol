@@ -9,6 +9,8 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
+import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
+
 import { Calldata } from "../libs/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
@@ -22,6 +24,7 @@ library FeeArgsBuilder {
     error ProtocolFeeMissingFeeBPS();
     error ProtocolFeeMissingTo();
     error ProgressiveFeeMissingFeeBPS();
+    error ProtocolFeeProviderMissingAddress();
 
     function buildFlatFee(uint32 feeBps) internal pure returns (bytes memory) {
         require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
@@ -47,6 +50,10 @@ library FeeArgsBuilder {
         to = address(uint160(bytes20(args.slice(4, 24, ProtocolFeeMissingTo.selector))));
     }
 
+    function parseDynamicProtocolFee(bytes calldata args) internal pure returns (address feeProvider) {
+        feeProvider = address(uint160(bytes20(args.slice(0, 20, ProtocolFeeProviderMissingAddress.selector))));
+    }
+
     function parseProgressiveFee(bytes calldata args) internal pure returns (uint32 feeBps) {
         feeBps = uint32(bytes4(args.slice(0, 4, ProgressiveFeeMissingFeeBPS.selector)));
     }
@@ -57,6 +64,7 @@ contract Fee {
     using ContextLib for Context;
 
     error FeeShouldBeAppliedBeforeSwapAmountsComputation();
+    error FeeDynamicProtocolMissingTo();
 
     IAqua private immutable _AQUA;
 
@@ -151,6 +159,84 @@ contract Fee {
 
         if (!ctx.vm.isStaticContext) {
             _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenOut, feeAmountOut, to);
+        }
+    }
+
+    /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
+    /// @param args.to     | 20 bytes (address to send pulled tokens to)
+    function _protocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
+        (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
+        uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+
+        if (!ctx.vm.isStaticContext) {
+            IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+        }
+    }
+
+    /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
+    /// @param args.to     | 20 bytes (address to send pulled tokens to)
+    function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
+        (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
+        uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+
+        if (!ctx.vm.isStaticContext) {
+            _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+        }
+    }
+
+    /// @param args.feeProvider | 20 bytes (address of the protocol fee provider)
+    function _dynamicProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
+        address feeProvider = FeeArgsBuilder.parseDynamicProtocolFee(args);
+        uint256 feeBps;
+        address to;
+
+        if (feeProvider != address(0)) {
+            (feeBps, to) = IProtocolFeeProvider(feeProvider).getFeeBpsAndRecipient(
+                ctx.query.orderHash,
+                ctx.query.maker,
+                ctx.query.taker,
+                ctx.query.tokenIn,
+                ctx.query.tokenOut,
+                ctx.query.isExactIn
+            );
+        }
+
+        if (feeBps != 0) {
+            require(to != address(0), FeeDynamicProtocolMissingTo());
+
+            uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+
+            if (!ctx.vm.isStaticContext) {
+                IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+            }
+        }
+    }
+
+    /// @param args.feeProvider | 20 bytes (address of the protocol fee provider)
+    function _aquaDynamicProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
+        address feeProvider = FeeArgsBuilder.parseDynamicProtocolFee(args);
+        uint256 feeBps;
+        address to;
+
+        if (feeProvider != address(0)) {
+            (feeBps, to) = IProtocolFeeProvider(feeProvider).getFeeBpsAndRecipient(
+                ctx.query.orderHash,
+                ctx.query.maker,
+                ctx.query.taker,
+                ctx.query.tokenIn,
+                ctx.query.tokenOut,
+                ctx.query.isExactIn
+            );
+        }
+
+        if (feeBps != 0) {
+            require(to != address(0), FeeDynamicProtocolMissingTo());
+
+            uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+
+            if (!ctx.vm.isStaticContext) {
+                _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            }
         }
     }
 

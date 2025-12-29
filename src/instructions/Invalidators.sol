@@ -24,6 +24,9 @@ library InvalidatorsArgsBuilder {
     }
 }
 
+/// @title Invalidators - Order invalidation mechanisms for SwapVM
+/// @notice Provides mechanisms to track and prevent order replay or overfilling
+/// @dev Supports three invalidation strategies: bit-based, token-in based, and token-out based
 contract Invalidators {
     using ContextLib for Context;
 
@@ -58,7 +61,9 @@ contract Invalidators {
         tokenOutInvalidators[msg.sender][orderHash][tokenOut] = type(uint256).max;
     }
 
-    /// @param args.bitIndex | 4 bytes
+    /// @notice Invalidates order using a unique bit index (one-time execution)
+    /// @dev Uses a bitmap to efficiently track which orders have been executed
+    /// @param args.bitIndex | 4 bytes (uint32)
     function _invalidateBit1D(Context memory ctx, bytes calldata args) internal {
         uint256 bitIndex = InvalidatorsArgsBuilder.parseBitIndex(args);
         uint256 bitmap = bitInvalidators[ctx.query.maker][bitIndex >> 8];
@@ -69,6 +74,8 @@ contract Invalidators {
         }
     }
 
+    /// @notice Tracks input token consumption for partial fill orders
+    /// @dev Prevents overfilling by tracking cumulative amountIn per order
     function _invalidateTokenIn1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountIn computed in case of !isExactIn
         if (ctx.swap.amountIn == 0) {
@@ -84,6 +91,8 @@ contract Invalidators {
         }
     }
 
+    /// @notice Tracks output token distribution for partial fill orders
+    /// @dev Prevents overfilling by tracking cumulative amountOut per order
     function _invalidateTokenOut1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountOut computed in case of isExactIn
         if (ctx.swap.amountOut == 0) {

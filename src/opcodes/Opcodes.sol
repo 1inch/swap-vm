@@ -44,7 +44,7 @@ contract Opcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[46] memory instructions = [
+        function(Context memory, bytes calldata) internal[50] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -103,7 +103,11 @@ contract Opcodes is
             Fee._progressiveFeeOutXD,
             Fee._protocolFeeAmountOutXD,
             Fee._aquaProtocolFeeAmountOutXD,
-            PeggedSwap._peggedSwapGrowPriceRange2D
+            PeggedSwap._peggedSwapGrowPriceRange2D,
+            Fee._protocolFeeAmountInXD,
+            Fee._aquaProtocolFeeAmountInXD,
+            Fee._dynamicProtocolFeeAmountInXD,
+            Fee._aquaDynamicProtocolFeeAmountInXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array
