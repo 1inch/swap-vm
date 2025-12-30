@@ -10,7 +10,7 @@ import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/librar
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { TransientLock, TransientLockLib } from "./libs/TransientLock.sol";
-import { CalldataPtr, CalldataPtrLib } from "./libs/CalldataPtr.sol";
+import { CalldataPtrLib } from "./libs/CalldataPtr.sol";
 import { Calldata } from "./libs/Calldata.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";

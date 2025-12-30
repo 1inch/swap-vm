@@ -11,17 +11,21 @@ import { Context } from "../libs/VM.sol";
 import { Controls } from "../instructions/Controls.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperimental.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { Fee } from "../instructions/Fee.sol";
+import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 
 contract AquaOpcodes is
     Controls,
     XYCSwap,
     XYCConcentrate,
+    XYCConcentrateExperimental,
     Decay,
-    Fee
+    Fee,
+    FeeExperimental
 {
-    constructor(address aqua) Fee(aqua) {}
+    constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
@@ -52,18 +56,18 @@ contract AquaOpcodes is
             // XYCConcentrate - liquidity concentration (common AMM feature)
             XYCConcentrate._xycConcentrateGrowLiquidityXD,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
-            XYCConcentrate._xycConcentrateGrowPriceRangeXD,
-            XYCConcentrate._xycConcentrateGrowPriceRange2D,
+            XYCConcentrateExperimental._xycConcentrateGrowPriceRangeXD,
+            XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,
             // Decay - Decay AMM (specific AMM)
             Decay._decayXD,
             // NOTE: Add new instructions here to maintain backward compatibility
             Controls._salt,
             Fee._flatFeeAmountInXD,
-            Fee._flatFeeAmountOutXD,
-            Fee._progressiveFeeInXD,
-            Fee._progressiveFeeOutXD,
-            Fee._protocolFeeAmountOutXD,
-            Fee._aquaProtocolFeeAmountOutXD,
+            FeeExperimental._flatFeeAmountOutXD,
+            FeeExperimental._progressiveFeeInXD,
+            FeeExperimental._progressiveFeeOutXD,
+            FeeExperimental._protocolFeeAmountOutXD,
+            FeeExperimental._aquaProtocolFeeAmountOutXD,
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,

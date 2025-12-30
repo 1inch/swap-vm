@@ -19,6 +19,7 @@ import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -205,7 +206,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -245,7 +246,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -402,7 +403,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(progressiveFeeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)

@@ -13,6 +13,7 @@ import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperimental.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
@@ -20,6 +21,7 @@ import { DutchAuction } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
+import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
@@ -29,6 +31,7 @@ contract Opcodes is
     Invalidators,
     XYCSwap,
     XYCConcentrate,
+    XYCConcentrateExperimental,
     Decay,
     LimitSwap,
     MinRate,
@@ -36,10 +39,11 @@ contract Opcodes is
     BaseFeeAdjuster,
     TWAPSwap,
     Fee,
+    FeeExperimental,
     Extruction,
     PeggedSwap
 {
-    constructor(address aqua) Fee(aqua) {}
+    constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
@@ -77,8 +81,8 @@ contract Opcodes is
             // XYCConcentrate - liquidity concentration (common AMM feature)
             XYCConcentrate._xycConcentrateGrowLiquidityXD,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
-            XYCConcentrate._xycConcentrateGrowPriceRangeXD,
-            XYCConcentrate._xycConcentrateGrowPriceRange2D,
+            XYCConcentrateExperimental._xycConcentrateGrowPriceRangeXD,
+            XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,
             // Decay - Decay AMM (specific AMM)
             Decay._decayXD,
             // LimitSwap - limit orders (specific trading type)
@@ -98,11 +102,11 @@ contract Opcodes is
             Extruction._extruction,
             Controls._salt,
             Fee._flatFeeAmountInXD,
-            Fee._flatFeeAmountOutXD,
-            Fee._progressiveFeeInXD,
-            Fee._progressiveFeeOutXD,
-            Fee._protocolFeeAmountOutXD,
-            Fee._aquaProtocolFeeAmountOutXD,
+            FeeExperimental._flatFeeAmountOutXD,
+            FeeExperimental._progressiveFeeInXD,
+            FeeExperimental._progressiveFeeOutXD,
+            FeeExperimental._protocolFeeAmountOutXD,
+            FeeExperimental._aquaProtocolFeeAmountOutXD,
             PeggedSwap._peggedSwapGrowPriceRange2D,
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,

@@ -44,11 +44,8 @@ contract Balances {
     using ContextLib for Context;
 
     error SetBalancesExpectZeroBalances(uint256 balanceIn, uint256 balanceOut);
-    error SetBalancesExpectsSettingBothBalances(uint256 balanceIn, uint256 balanceOut);
-
     error StaticBalancesRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
     error DynamicBalancesLoadingRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
-    error DyncamicBalancesRequiresSwapAmountsToBeComputed(uint256 amountIn, uint256 amountOut);
     error DynamicBalancesInitRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
 
     mapping(bytes32 orderHash =>

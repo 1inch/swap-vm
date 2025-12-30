@@ -23,6 +23,7 @@ import { TWAPSwap, TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.s
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { MinRateArgsBuilder } from "../../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
 import { InvalidatorsArgsBuilder } from "../../src/instructions/Invalidators.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -498,7 +499,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
         bytes memory feeInstruction;
         if (isProgressive) {
-            feeInstruction = program.build(_progressiveFeeInXD, FeeArgsBuilder.buildProgressiveFee(feeBps));
+            feeInstruction = program.build(_progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(feeBps));
         } else if (isFeeIn) {
             feeInstruction = program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBps));
         } else {

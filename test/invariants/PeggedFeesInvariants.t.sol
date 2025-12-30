@@ -19,6 +19,7 @@ import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
@@ -186,7 +187,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.protocolFeeInBps > 0) ? program.build(_protocolFeeAmountInXD,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
             (fees.dynamicFeeProvider != address(0)) ? program.build(_dynamicProtocolFeeAmountInXD,
-                abi.encodePacked(fees.dynamicFeeProvider)) : bytes(""),
+                FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
 
             // Balances
             program.build(_dynamicBalancesXD,
@@ -201,9 +202,9 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.flatFeeOutBps > 0) ? program.build(_flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeOutBps)) : bytes(""),
             (fees.progressiveFeeInBps > 0) ? program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
+                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
             (fees.progressiveFeeOutBps > 0) ? program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
+                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
             // PeggedSwap instruction
             program.build(_peggedSwapGrowPriceRange2D,

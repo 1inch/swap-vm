@@ -19,9 +19,10 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
 
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
-import { InvalidProtocolFeeProviderMock } from "./mocks/ProtocolFeeProviderMock.sol";
+import { InvalidProtocolFeeProviderMock } from "./mocks/InvalidProtocolFeeProviderMock.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
@@ -96,7 +97,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         bytes memory programBytes = bytes.concat(
             // 0. Apply dynamic protocol fee
             program.build(Fee._dynamicProtocolFeeAmountInXD,
-                abi.encodePacked(setup.dynamicFeeProvider)),
+                FeeArgsBuilder.buildDynamicProtocolFee(setup.dynamicFeeProvider)),
             // 1. Set initial token balances
             program.build(Balances._dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -107,7 +108,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
             setup.flatInFeeBps > 0 ? program.build(Fee._flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(setup.flatInFeeBps)) : bytes(""),
             // 3. Apply flat feeOut (optional)
-            setup.flatOutFeeBps > 0 ? program.build(Fee._flatFeeAmountOutXD,
+            setup.flatOutFeeBps > 0 ? program.build(FeeExperimental._flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(setup.flatOutFeeBps)) : bytes(""),
             // 4. Perform the swap
             program.build(XYCSwap._xycSwapXD)

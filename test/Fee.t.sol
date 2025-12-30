@@ -19,6 +19,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
+import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
@@ -92,7 +93,7 @@ contract FeeTest is Test, OpcodesDebug {
             setup.feeInBps > 0 ? program.build(Fee._flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
             // 3. Apply feeOut (optional)
-            setup.feeOutBps > 0 ? program.build(Fee._flatFeeAmountOutXD,
+            setup.feeOutBps > 0 ? program.build(FeeExperimental._flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
             // 4. Perform the swap
             program.build(XYCSwap._xycSwapXD)

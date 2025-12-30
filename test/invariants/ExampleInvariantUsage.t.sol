@@ -18,6 +18,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -178,7 +179,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
                     dynamic([uint256(1000e18), uint256(1000e18)])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(0.1e9)), // 10% progressive
+                FeeArgsBuilderExperimental.buildProgressiveFee(0.1e9)), // 10% progressive
             program.build(_xycSwapXD)
         );
 

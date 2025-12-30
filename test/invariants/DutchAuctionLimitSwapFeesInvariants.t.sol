@@ -20,6 +20,7 @@ import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -168,7 +169,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
             program.build(_dutchAuctionBalanceIn1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -196,7 +197,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
             program.build(_dutchAuctionBalanceOut1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -256,7 +257,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(progressiveFeeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );

@@ -4,8 +4,6 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-
 import "../../src/instructions/interfaces/IProtocolFeeProvider.sol";
 
 contract InvalidProtocolFeeProviderMock is IProtocolFeeProvider {

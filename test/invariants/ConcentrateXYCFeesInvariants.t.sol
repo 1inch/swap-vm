@@ -19,6 +19,7 @@ import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
@@ -236,7 +237,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -294,7 +295,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -410,7 +411,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             // Dynamic protocol fee on amountIn BEFORE balances
             program.build(_dynamicProtocolFeeAmountInXD,
-                abi.encodePacked(address(feeProviderMock))),
+                FeeArgsBuilder.buildDynamicProtocolFee(address(feeProviderMock))),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
@@ -708,7 +709,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -766,7 +767,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -1017,7 +1018,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidityXD,
                 XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
             program.build(_xycSwapXD)
