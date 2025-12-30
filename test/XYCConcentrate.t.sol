@@ -5,7 +5,6 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { FormatLib } from "./utils/FormatLib.sol";

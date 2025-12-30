@@ -23,7 +23,6 @@ import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { console } from "forge-std/console.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e9;

@@ -6,8 +6,8 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "../libs/Calldata.sol";
-import { CalldataPtr, CalldataPtrLib } from "../libs/CalldataPtr.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 /// @dev Represents the state of the VM
 /// @param isStaticContext Whether the quote is in a static context (e.g., for quoting)

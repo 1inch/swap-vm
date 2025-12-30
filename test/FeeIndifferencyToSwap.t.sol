@@ -5,13 +5,13 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
+
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { Fee, BPS } from "../src/instructions/Fee.sol";
 import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
-import { CalldataPtr, CalldataPtrLib } from "../src/libs/CalldataPtr.sol";
 
 /**
  * @title UniversalFeeTest

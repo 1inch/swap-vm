@@ -11,7 +11,7 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
-import { Calldata } from "../libs/Calldata.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
 uint256 constant BPS = 1e9;

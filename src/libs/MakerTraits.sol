@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "./Calldata.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { TakerTraits, TakerTraitsLib } from "./TakerTraits.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";

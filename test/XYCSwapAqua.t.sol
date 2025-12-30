@@ -13,8 +13,6 @@ import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 
-import { console } from "forge-std/console.sol";
-
 contract XYCSwapAquaTest is AquaSwapVMTest {
     using Math for uint256;
 

@@ -24,7 +24,6 @@ import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions
 import { Debug } from "../src/instructions/Debug.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { console } from "forge-std/console.sol";
 
 uint256 constant ONE = 1e18;
 

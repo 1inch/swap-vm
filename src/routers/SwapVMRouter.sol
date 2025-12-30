@@ -5,7 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Simulator } from "../libs/Simulator.sol";
+import { Simulator } from "@1inch/solidity-utils/contracts/mixins/Simulator.sol";
 
 import { SwapVM } from "../SwapVM.sol";
 import { Opcodes } from "../opcodes/Opcodes.sol";

@@ -6,8 +6,8 @@ pragma solidity 0.8.30;
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "./Calldata.sol";
-import { CalldataPtr, CalldataPtrLib } from "./CalldataPtr.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { ITakerCallbacks } from "../interfaces/ITakerCallbacks.sol";
 
 type TakerTraits is uint256;
