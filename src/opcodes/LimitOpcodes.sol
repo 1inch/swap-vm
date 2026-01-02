@@ -17,6 +17,7 @@ import { DutchAuction } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
+import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 
 contract LimitOpcodes is
@@ -29,14 +30,15 @@ contract LimitOpcodes is
     BaseFeeAdjuster,
     TWAPSwap,
     Fee,
+    FeeExperimental,
     Extruction
 {
-    constructor(address aqua) Fee(aqua) {}
+    constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[38] memory instructions = [
+        function(Context memory, bytes calldata) internal[42] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -80,11 +82,15 @@ contract LimitOpcodes is
             Extruction._extruction,
             Controls._salt,
             Fee._flatFeeAmountInXD,
-            Fee._flatFeeAmountOutXD,
-            Fee._progressiveFeeInXD,
-            Fee._progressiveFeeOutXD,
-            Fee._protocolFeeAmountOutXD,
-            Fee._aquaProtocolFeeAmountOutXD
+            FeeExperimental._flatFeeAmountOutXD,
+            FeeExperimental._progressiveFeeInXD,
+            FeeExperimental._progressiveFeeOutXD,
+            FeeExperimental._protocolFeeAmountOutXD,
+            FeeExperimental._aquaProtocolFeeAmountOutXD,
+            Fee._protocolFeeAmountInXD,
+            Fee._aquaProtocolFeeAmountInXD,
+            Fee._dynamicProtocolFeeAmountInXD,
+            Fee._aquaDynamicProtocolFeeAmountInXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array

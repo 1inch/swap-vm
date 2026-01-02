@@ -281,6 +281,8 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
             program.build(_staticBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
@@ -295,8 +297,6 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: 1.3e18,
                     minTradeAmountOut: 0.01e18 // 0.002% of 500e18
                 }))),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -360,6 +360,8 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
             program.build(_staticBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
@@ -376,8 +378,6 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                 }))),
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );

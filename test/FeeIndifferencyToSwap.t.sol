@@ -5,25 +5,26 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
+
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { Fee, BPS } from "../src/instructions/Fee.sol";
+import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
-import { CalldataPtr, CalldataPtrLib } from "../src/libs/CalldataPtr.sol";
 
 /**
  * @title UniversalFeeTest
  * @notice Proves that Fee module works independently of swap formula
  * @dev Tests FeeIn/FeeOut with different swap formulas to show consistent behavior
  */
-contract FeeIndifferencyToSwap is Test, Fee {
+contract FeeIndifferencyToSwap is Test, FeeExperimental {
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
     uint256 constant ONE = 1e18;
 
-    constructor() Fee(address(0)) {}
+    constructor() FeeExperimental(address(0)) {}
 
     /**
      * @notice Creates a mock Context with custom swap formula

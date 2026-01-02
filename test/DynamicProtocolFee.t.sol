@@ -19,15 +19,17 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
-import { Debug } from "../src/instructions/Debug.sol";
+import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
+
+import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
+import { InvalidProtocolFeeProviderMock } from "./mocks/InvalidProtocolFeeProviderMock.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e9;
 
-contract ProtocolFeeTest is Test, OpcodesDebug {
+contract DynamicProtocolFeeTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
     constructor() OpcodesDebug(address(new Aqua())) {}
@@ -40,6 +42,9 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
     address public protocolFeeRecipient;
+
+    ProtocolFeeProviderMock public feeProvider;
+    InvalidProtocolFeeProviderMock public invalidFeeProvider;
 
     function setUp() public {
         // Setup maker with known private key for signing
@@ -71,32 +76,28 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
 
         protocolFeeRecipient = vm.addr(0x8888);
+
+        // Deploy fee provider mock with default values
+        feeProvider = new ProtocolFeeProviderMock(0.10e9, protocolFeeRecipient, address(this));
+        // Deploy invalid fee provider mock
+        invalidFeeProvider = new InvalidProtocolFeeProviderMock();
     }
 
     struct MakerSetup {
         uint256 balanceA;
         uint256 balanceB;
-        uint32 protocolFeeBps;
+        address dynamicFeeProvider;
         uint32 flatInFeeBps;
         uint32 flatOutFeeBps;
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        return _createOrderWithFeeType(setup, false); // default: protocol fee on amountOut
-    }
-
-    function _createOrderWithFeeType(MakerSetup memory setup, bool protocolFeeOnAmountIn) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         Program memory program = ProgramBuilder.init(_opcodes());
 
         bytes memory programBytes = bytes.concat(
-            // 0. Apply protocol fee (optional)
-            setup.protocolFeeBps > 0 ? (
-                protocolFeeOnAmountIn
-                    ? program.build(Fee._protocolFeeAmountInXD,
-                        FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
-                    : program.build(FeeExperimental._protocolFeeAmountOutXD,
-                        FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
-            ) : bytes(""),
+            // 0. Apply dynamic protocol fee
+            program.build(Fee._dynamicProtocolFeeAmountInXD,
+                FeeArgsBuilder.buildDynamicProtocolFee(setup.dynamicFeeProvider)),
             // 1. Set initial token balances
             program.build(Balances._dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -152,7 +153,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
-            threshold: "", // no minimum output
+            threshold: "",
             to: address(0),
             deadline: 0,
             hasPreTransferInCallback: false,
@@ -169,9 +170,6 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     }
 
     function _swappingTakerData(bytes memory takerData, bytes memory signature) internal view returns (bytes memory) {
-        // Just need to rebuild the takerData with signature for swapping
-        // Since the original takerData was built for quoting (with empty signature),
-        // we need to extract the isExactIn flag first (first two bytes contain flags)
         bool isExactIn = (uint16(bytes2(takerData)) & 0x0001) != 0;
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
@@ -197,148 +195,20 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         }));
     }
 
-    function test_ProtocolFee_Only_ExactIn_ReceivedByRecipient() public {
-        // Creating order
+    // ========== Dynamic Protocol Fee Tests ==========
+
+    function test_DynamicProtocolFee_ExactIn_ReceivedByRecipient() public {
+        // Setup fee provider with 10% fee
+        feeProvider.setFeeBpsAndRecipient(0.10e9, protocolFeeRecipient);
+
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            dynamicFeeProvider: address(feeProvider),
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
-        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
-
-        uint256 amountIn = 10e18;
-        vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
-
-        // Expected amount should be calculated from amountOut before fee deduction
-        // NOTE: swap(...) returns amountOut after fee deduction
-        uint256 expectedProtocolFee = (amountOut * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
-        uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-        assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
-    }
-
-    function test_ProtocolFee_Only_ExactOut_ReceivedByRecipient() public {
-        // Creating order
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 100e18,
-            balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
-            flatInFeeBps: 0,
-            flatOutFeeBps: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
-
-        uint256 amountOut = 50e18;
-        vm.prank(taker);
-        (, uint256 amountOutAfterFee,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactInTakerDataSwap);
-
-        // Expected amount should be calculated from amountOut before fee deduction
-        // NOTE: swap(...) returns amountOut after fee deduction
-        uint256 expectedProtocolFee = (amountOutAfterFee * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
-        uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-        uint256 expectedTotalAmountOut = amountOut * BPS / (BPS - setup.protocolFeeBps);
-
-        assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
-        assertEq(amountOutAfterFee + actualProtocolFee, expectedTotalAmountOut, "Total amountOut should equal received amountOut plus protocol fee");
-    }
-
-    function test_ProtocolFee_ExactIn_WithFlatFeeGivesWorseRate() public {
-        // Creating order
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 100e18,
-            balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
-            flatInFeeBps: 0,
-            flatOutFeeBps: 0.05e9 // 5% flat fee
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
-        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
-
-        uint256 amountIn = 10e18;
-        vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
-
-        // Fee application order (actual execution order):
-        // 1. XYC swap computes rawAmountOut
-        // 2. flatFeeOut is applied: afterFlat = rawAmountOut * (1 - flatFee%)
-        // 3. protocolFeeOut is applied: amountOut = afterFlat * (1 - protocolFee%)
-        //
-        // So protocol fee is computed from the amount AFTER flat fee is applied.
-        // protocolFee = afterFlat * protocolFee% = amountOut / (1 - protocolFee%) * protocolFee%
-        //
-        // Simplified: protocolFee = amountOut * protocolFee% / (1 - protocolFee%)
-
-        uint256 expectedProtocolFee = amountOut * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
-        uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-
-        assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
-
-        // Check that amountOut with only flat fee is greater than amountOut with both fees
-        setup.protocolFeeBps = 0;
-        (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
-        (, uint256 amountOutWithOnlyFlatFee,) = swapVM.asView().quote(orderWithFlatFee, tokenA, tokenB, amountIn, exactInTakerData);
-        assertGt(amountOutWithOnlyFlatFee, amountOut, "Amount out with only flat fee should be greater than amount out with both fees");
-    }
-
-    function test_ProtocolFee_ExactOut_WithFlatFeeGivesWorseRate() public {
-        // Creating order
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 100e18,
-            balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
-            flatInFeeBps: 0.05e9, // 5% flat fee
-            flatOutFeeBps: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
-
-        uint256 amountOut = 50e18;
-        vm.prank(taker);
-        (uint256 amountInAfterBothFee, uint256 amountOutAfterBothFee,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactInTakerDataSwap);
-
-        // FlatFee is applied on amountIn for exactOut swaps, ProtocolFee on amountOut
-        uint256 expectedFlatFee = (amountInAfterBothFee * setup.flatInFeeBps) / BPS;
-        uint256 expectedProtocolFee = (amountOutAfterBothFee * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
-        uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-        uint256 expectedTotalAmountOut = amountOut * BPS / (BPS - setup.protocolFeeBps);
-
-        assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
-        assertEq(amountOutAfterBothFee + actualProtocolFee, expectedTotalAmountOut, "Total amountOut should equal received amountOut plus protocol fee");
-
-        // XYC exactOut(55.555e18) with balances(100e18, 200e18) = 38461538461538461538
-        assertEq(amountInAfterBothFee - expectedFlatFee, 38461538461538461538, "Total amountIn should equal paid amountIn plus flat fee");
-
-        // Check that amountIn with only flat fee is less than amountIn with both fees
-        setup.protocolFeeBps = 0;
-        (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
-        (uint256 amountInAfterFlatFee,,) = swapVM.asView().quote(orderWithFlatFee, tokenA, tokenB, amountOut, exactInTakerData);
-        assertLt(amountInAfterFlatFee, amountInAfterBothFee, "Only flat fee should result in lower amountIn than both fees");
-    }
-
-    // ========== Protocol Fee AmountIn Tests ==========
-
-    function test_ProtocolFeeAmountIn_ExactIn_ReceivedByRecipient() public {
-        // Creating order with protocol fee on amountIn
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 100e18,
-            balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
-            flatInFeeBps: 0,
-            flatOutFeeBps: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFeeType(setup, true);
 
         bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
         bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
@@ -357,21 +227,23 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         // actualAmountIn returned is the effective amount used in swap after fee
         assertLt(actualAmountIn, amountIn, "actualAmountIn should be less than requested (after fee)");
 
-        // Verify amountOut is less than without fee (due to fee deduction from effective amountIn)
+        // Verify amountOut is less than without fee
         uint256 noFeeAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
         assertLt(amountOut, noFeeAmountOut, "AmountOut should be less with protocol fee on amountIn");
     }
 
-    function test_ProtocolFeeAmountIn_ExactOut_ReceivedByRecipient() public {
-        // Creating order with protocol fee on amountIn
+    function test_DynamicProtocolFee_ExactOut_ReceivedByRecipient() public {
+        // Setup fee provider with 10% fee
+        feeProvider.setFeeBpsAndRecipient(0.10e9, protocolFeeRecipient);
+
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            dynamicFeeProvider: address(feeProvider),
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFeeType(setup, true);
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         bytes memory exactOutTakerData = _quotingTakerData(TakerSetup({ isExactIn: false }));
         bytes memory exactOutTakerDataSwap = _swappingTakerData(exactOutTakerData, signature);
@@ -380,14 +252,11 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactOutTakerDataSwap);
 
-        // For ExactOut with protocol fee on amountIn:
-        // feeAmount = baseAmountIn * feeBps / (BPS - feeBps)
-        // totalAmountIn = baseAmountIn + feeAmount
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
 
         // Calculate expected values
         uint256 baseAmountIn = setup.balanceA * amountOut / (setup.balanceB - amountOut);
-        uint256 expectedProtocolFee = baseAmountIn * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = baseAmountIn * 0.10e9 / (BPS - 0.10e9);
         uint256 expectedTotalAmountIn = baseAmountIn + expectedProtocolFee;
 
         assertApproxEqAbs(actualProtocolFee, expectedProtocolFee, 1, "Protocol fee recipient should receive correct fee from tokenIn");
@@ -395,16 +264,134 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         assertEq(actualAmountOut, amountOut, "AmountOut should match requested amount");
     }
 
-    function test_ProtocolFeeAmountIn_WithFlatFeeIn_ExactIn() public {
-        // Creating order with both flat fee and protocol fee on amountIn
+    function test_DynamicProtocolFee_ZeroFee_NoTransfer() public {
+        // Setup fee provider with 0% fee
+        feeProvider.setFeeBpsAndRecipient(0, protocolFeeRecipient);
+
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% protocol fee
+            dynamicFeeProvider: address(feeProvider),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+
+        // No fee should be transferred
+        uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
+        assertEq(actualProtocolFee, 0, "No fee should be transferred when feeBps is 0");
+    }
+
+    function test_DynamicProtocolFee_ZeroAddress_Reverts() public {
+        // Setup fee provider with fee but zero recipient
+        feeProvider.setFeeBpsAndRecipient(0.10e9, address(0));
+
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(feeProvider),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+        vm.prank(taker);
+        vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+    }
+
+    function test_DynamicProtocolFee_ProviderReturnsHighFee_Reverts() public {
+        // Setup fee provider with excessive fee
+        feeProvider.setFeeBpsAndRecipient(1.5e9, protocolFeeRecipient); // 150%
+
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(feeProvider),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(Fee.FeeBpsOutOfRange.selector, 1.5e9));
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+    }
+
+    function test_DynamicProtocolFee_ProviderReturnsFailedCall_Reverts() public {
+        // Use invalid address as provider
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(invalidFeeProvider),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+        vm.prank(taker);
+        vm.expectRevert(Fee.FeeProtocolProviderFailedCall.selector);
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+    }
+
+    function test_DynamicProtocolFee_ZeroProvider_NoFee() public {
+        // Use zero address as provider
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(0),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+
+        // No fee should be transferred to protocol fee recipient
+        uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
+        assertEq(actualProtocolFee, 0, "No fee should be transferred when provider is zero address");
+
+        // Verify amountOut is greater than 0 (swap happened)
+        assertGt(amountOut, 0, "AmountOut should be greater than 0");
+    }
+
+    function test_DynamicProtocolFee_WithFlatFee() public {
+        // Setup fee provider with 10% fee
+        feeProvider.setFeeBpsAndRecipient(0.10e9, protocolFeeRecipient);
+
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(feeProvider),
             flatInFeeBps: 0.05e9,  // 5% flat fee
             flatOutFeeBps: 0
         });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFeeType(setup, true);
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
         bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
@@ -413,14 +400,51 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
 
-        // Both fees applied to amountIn
+        // Both fees applied - verify protocol fee was collected
         uint256 protocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
-
-        // Verify protocol fee was collected (non-zero)
         assertGt(protocolFee, 0, "Protocol fee should be collected");
 
-        // Verify amountOut is less than no-fee swap
+        // Verify amountOut is less than with no fees
         uint256 noFeeAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
         assertLt(amountOut, noFeeAmountOut, "AmountOut should be less with both fees applied");
+    }
+
+    function test_DynamicProtocolFee_ProviderCanChangeFee() public {
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            dynamicFeeProvider: address(feeProvider),
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        uint256 amountIn = 10e18;
+
+        // First swap with 10% fee
+        feeProvider.setFeeBpsAndRecipient(0.10e9, protocolFeeRecipient);
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+
+        uint256 fee1 = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
+        assertGt(fee1, 0, "Fee should be collected with 10% rate");
+
+        // Reset recipient balance
+        vm.prank(protocolFeeRecipient);
+        TokenMock(tokenA).transfer(address(1), fee1);
+
+        // Change fee to 5%
+        feeProvider.setFeeBpsAndRecipient(0.05e9, protocolFeeRecipient);
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+
+        uint256 fee2 = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
+        assertGt(fee2, 0, "Fee should be collected with 5% rate");
+
+        // Lower fee bps should result in lower fee amount
+        assertLt(fee2, fee1, "Lower fee bps should result in lower fee amount");
     }
 }

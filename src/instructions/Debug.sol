@@ -8,7 +8,7 @@ import { console } from "forge-std/console.sol";
 
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
-import { CalldataPtr, CalldataPtrLib } from "../libs/CalldataPtr.sol";
+import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
 contract Debug {

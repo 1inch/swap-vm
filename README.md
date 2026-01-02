@@ -2,7 +2,7 @@
 
 [![Github Release](https://img.shields.io/github/v/tag/1inch/swap-vm?sort=semver&label=github)](https://github.com/1inch/swap-vm/releases/latest)
 [![CI](https://github.com/1inch/swap-vm/actions/workflows/ci.yml/badge.svg)](https://github.com/1inch/swap-vm/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/Coverage-50.46%25-yellow)](https://github.com/1inch/swap-vm)
+[![Coverage](https://img.shields.io/badge/Coverage-85%25-green)](https://github.com/1inch/swap-vm)
 [![Tests](https://img.shields.io/github/actions/workflow/status/1inch/swap-vm/ci.yml?branch=main&label=tests)](https://github.com/1inch/swap-vm/actions)
 [![npm](https://img.shields.io/npm/v/@1inch/swap-vm.svg)](https://www.npmjs.com/package/@1inch/swap-vm)
 [![License](https://img.shields.io/badge/License-Degensoft--SwapVM--1.1-orange)](LICENSE)
@@ -123,7 +123,9 @@ The execution flow shows all available instructions and strategies for each bala
 │    ├─ _progressiveFeeInXD → Size-based dynamic fee (input)│
 │    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
 │    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20) │
-│    └─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
+│    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
+│    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│
+│    └─ _aquaDynamicProtocolFeeAmountInXD → Dynamic Aqua fee│
 │                                                          │
 │ 6. Advanced Strategies (Optional)                        │
 │    ├─ _requireMinRate1D → Enforce minimum exchange rate  │
@@ -174,6 +176,7 @@ The execution flow shows all available instructions and strategies for each bala
 │                                                            │
 │ 2. AMM Logic (Choose Primary Strategy)                     │
 │    ├─ _xycSwapXD → Classic x*y=k constant product          │
+│    ├─ _peggedSwapGrowPriceRange2D → Curve for pegged assets│
 │    └─ _xycConcentrateGrowLiquidityXD/2D → CLMM ranges      │
 │                                                            │
 │ 3. Fee Mechanisms (Optional, Combinable)                   │
@@ -182,7 +185,9 @@ The execution flow shows all available instructions and strategies for each bala
 │    ├─ _progressiveFeeInXD → Size-based dynamic fee (input) │
 │    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
 │    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20)   │
-│    └─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
+│    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
+│    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│
+│    └─ _aquaDynamicProtocolFeeAmountInXD → Dynamic Aqua fee │
 │                                                            │
 │ 4. MEV Protection (Optional)                               │
 │    └─ _decayXD → Virtual reserves (Mooniswap-style)        │
@@ -410,21 +415,28 @@ bytes memory program = bytes.concat(
 );
 
 // 2. Configure order parameters
-MakerTraits makerTraits = MakerTraitsLib.build(MakerTraitsLib.Args({
+ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
+    maker: yourAddress,              // Your address
+    receiver: address(0),            // You receive the tokens (0 = maker)
     shouldUnwrapWeth: false,         // Keep WETH (don't unwrap to ETH)
-    expiration: block.timestamp + 1 days,  // Order expires in 24h
-    receiver: address(0),             // You receive the tokens
-    useAquaInsteadOfSignature: false // Use standard EIP-712 signing
+    useAquaInsteadOfSignature: false, // Use standard EIP-712 signing
+    allowZeroAmountIn: false,        // Require non-zero input
+    hasPreTransferInHook: false,
+    hasPostTransferInHook: false,
+    hasPreTransferOutHook: false,
+    hasPostTransferOutHook: false,
+    preTransferInTarget: address(0),
+    preTransferInData: "",
+    postTransferInTarget: address(0),
+    postTransferInData: "",
+    preTransferOutTarget: address(0),
+    preTransferOutData: "",
+    postTransferOutTarget: address(0),
+    postTransferOutData: "",
+    program: program                 // Your swap program
 }));
 
-// 3. Create order (completely off-chain)
-ISwapVM.Order memory order = ISwapVM.Order({
-    maker: yourAddress,
-    traits: makerTraits,
-    program: program
-});
-
-// 4. Sign order off-chain (gasless)
+// 3. Sign order off-chain (gasless)
 bytes32 orderHash = swapVM.hash(order);
 bytes memory signature = signEIP712(orderHash);
 ```
@@ -499,7 +511,7 @@ MakerTraits makerTraits = MakerTraitsLib.build({
 **Use Case:** Share liquidity across multiple strategies  
 **Key Difference:** Unlike isolated dynamic balances, Aqua enables shared liquidity
 
-See [Aqua Protocol](https://github.com/1inch/aqua-protocol) for details
+See [Aqua Protocol](https://github.com/1inch/aqua) for details
 
 ### Maker Security
 
@@ -657,45 +669,51 @@ Context
 
 ```
 MakerTraits (256-bit packed)
-├── Token Handling
-│   └── shouldUnwrapWeth ────────── Unwrap WETH to ETH on output
+├── Bit Flags (bits 245-255)
+│   ├── shouldUnwrapWeth (255) ──── Unwrap WETH to ETH on output
+│   ├── useAquaInsteadOfSignature (254) ─ Use Aqua balance instead of signature
+│   ├── allowZeroAmountIn (253) ── Allow zero amountIn (skip validation)
+│   ├── hasPreTransferInHook (252) ── Call maker before input transfer
+│   ├── hasPostTransferInHook (251) ── Call maker after input transfer
+│   ├── hasPreTransferOutHook (250) ── Call maker before output transfer
+│   ├── hasPostTransferOutHook (249) ── Call maker after output transfer
+│   ├── preTransferInHookHasTarget (248) ── Hook has custom target
+│   ├── postTransferInHookHasTarget (247)
+│   ├── preTransferOutHookHasTarget (246)
+│   └── postTransferOutHookHasTarget (245)
 │
-├── Order Lifecycle  
-│   └── expiration (40 bits) ────── Unix timestamp when order expires
+├── Data Slices Indexes (bits 160-223, 64 bits)
+│   └── Packed 4x uint16 offsets for hook data slices
 │
-├── Balance Management
-│   ├── useAquaInsteadOfSignature ─ Use Aqua balance instead of signature
-│   └── allowZeroAmountIn ─── Skip Aqua for input transfers
-│
-├── Recipient Control
-│   └── receiver ─────────────────── Custom recipient (0 = maker)
-│
-└── Hooks (Callbacks)
-    ├── hasPreTransferOutHook ────── Call maker before output transfer
-    ├── hasPostTransferInHook ────── Call maker after input transfer
-    ├── preTransferOutData ────────── Data for pre-transfer hook
-    └── postTransferInData ────────── Data for post-transfer hook
+└── Receiver (bits 0-159, 160 bits)
+    └── Custom recipient address (0 = maker)
 ```
 
 ```
-TakerTraits (Variable-length)
-├── Swap Direction
-│   └── isExactIn ────────────────── true = specify input, false = output
+TakerTraits (Variable-length with 176-bit header)
+├── Header (22 bytes packed)
+│   ├── Slices Indexes (160 bits) ── 10x uint16 offsets for data slices
+│   └── Bit Flags (16 bits)
+│       ├── isExactIn (0) ────────── true = specify input, false = output
+│       ├── shouldUnwrapWeth (1) ── Unwrap WETH to ETH on output
+│       ├── hasPreTransferInCallback (2) ── Call taker before input transfer
+│       ├── hasPreTransferOutCallback (3) ── Call taker before output transfer
+│       ├── isStrictThresholdAmount (4) ── true = exact, false = min/max
+│       ├── isFirstTransferFromTaker (5) ── Who transfers first
+│       └── useTransferFromAndAquaPush (6) ── SwapVM does transferFrom + Aqua push
 │
-├── Amount Validation
-│   ├── threshold ────────────────── Min output or max input
-│   └── isStrictThresholdAmount ─── true = exact, false = min/max
-│
-├── Token Handling
-│   ├── shouldUnwrapWeth ─────────── Unwrap WETH to ETH on output
-│   └── to ───────────────────────── Custom recipient (0 = taker)
-│
-├── Transfer Mechanics
-│   ├── isFirstTransferFromTaker ── Who transfers first
-│   └── useTransferFromAndAquaPush ─ SwapVM does transferFrom + Aqua push (vs taker pushes in callback)
-│
-└── Hooks (Callbacks)
-    └── hasPreTransferInHook ─────── Call taker before input transfer
+└── Variable-length Data Slices
+    ├── threshold (0 or 32 bytes) ── Min output or max input
+    ├── to (0 or 20 bytes) ───────── Custom recipient
+    ├── deadline (0 or 5 bytes) ──── Unix timestamp (uint40)
+    ├── preTransferInHookData ────── Data for maker pre-in hook
+    ├── postTransferInHookData ───── Data for maker post-in hook
+    ├── preTransferOutHookData ──── Data for maker pre-out hook
+    ├── postTransferOutHookData ─── Data for maker post-out hook
+    ├── preTransferInCallbackData ─ Data for taker pre-in callback
+    ├── preTransferOutCallbackData ─ Data for taker pre-out callback
+    ├── instructionsArgs ──────────── Data consumed by VM instructions
+    └── signature ─────────────────── EIP-712 signature for order
 ```
 
 ### Instruction Capabilities
@@ -879,7 +897,7 @@ if (useAquaInsteadOfSignature) {
 | Feature | Description | Implementation |
 |---------|-------------|----------------|
 | **Signature Control** | Orders cannot be modified | EIP-712 signatures |
-| **Expiration** | Time-limited orders | `expiration` in MakerTraits |
+| **Expiration** | Time-limited orders | `_deadline` instruction or TakerTraits deadline |
 | **Balance Limits** | Cannot exceed specified amounts | Register bounds checking |
 | **One-time Execution** | Prevent replay | `_invalidateBit1D` instruction |
 | **Custom Logic** | Hooks for validation | Pre/post transfer hooks |
@@ -890,8 +908,10 @@ if (useAquaInsteadOfSignature) {
 // Limit order exposure
 p.build(Invalidators._invalidateBit1D, bitIndex);
 
-// Add expiration
-traits.expiration = block.timestamp + 1 hours;
+// Add expiration via _deadline instruction in program
+p.build(Controls._deadline, ControlsArgsBuilder.buildDeadline(block.timestamp + 1 hours));
+
+// Or via TakerTraits deadline field
 
 // MEV protection
 p.build(Decay._decayXD, DecayArgsBuilder.build(30));

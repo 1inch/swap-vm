@@ -20,10 +20,10 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { console } from "forge-std/console.sol";
 
 uint256 constant ONE = 1e18;
 
@@ -88,8 +88,8 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
                     dynamic([setup.balanceA, setup.balanceB])
                 )),
             // 2. Apply progressive fee based on rate change
-            program.build(Fee._progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(setup.progressiveFeeBps)),
+            program.build(FeeExperimental._progressiveFeeInXD,
+                FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)),
             // 3. Apply flat fee on top of progressive fee
             (setup.flatFeeBps) > 0 ? program.build(Fee._flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(setup.flatFeeBps)) : bytes(""),

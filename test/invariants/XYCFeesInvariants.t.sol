@@ -18,7 +18,10 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
+
+import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -33,6 +36,8 @@ struct FeeConfig {
     uint32 progressiveFeeInBps;
     uint32 progressiveFeeOutBps;
     uint32 protocolFeeOutBps;
+    uint32 protocolFeeInBps;
+    address dynamicFeeProvider;
     address feeRecipient;
 }
 
@@ -183,6 +188,14 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.protocolFeeOutBps > 0) ? program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeOutBps, fees.feeRecipient)) : bytes(""),
 
+            // Dynamic protocol fee on amountIn BEFORE balances
+            (fees.dynamicFeeProvider != address(0)) ? program.build(_dynamicProtocolFeeAmountInXD,
+                FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
+
+            // Protocol fee on amountIn BEFORE balances
+            (fees.protocolFeeInBps > 0) ? program.build(_protocolFeeAmountInXD,
+                FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
+
             // Balances
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
@@ -196,9 +209,9 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.flatFeeOutBps > 0) ? program.build(_flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeOutBps)) : bytes(""),
             (fees.progressiveFeeInBps > 0) ? program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
+                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
             (fees.progressiveFeeOutBps > 0) ? program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
+                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
             // Swap instruction
             program.build(_xycSwapXD)
@@ -227,6 +240,8 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             progressiveFeeInBps: 0,
             progressiveFeeOutBps: 0,
             protocolFeeOutBps: 0,
+            protocolFeeInBps: 0,
+            dynamicFeeProvider: address(0),
             feeRecipient: feeRecipient
         });
     }
@@ -379,6 +394,63 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         config.skipAdditivity = true;
         // TODO: Multiple fees combined may cause rounding that violates symmetry
         config.skipSymmetry = true;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test XYC with protocol fee on amountIn
+     * @notice Tests the _protocolFeeAmountInXD instruction that charges fee from input amount
+     */
+    function test_XYCProtocolFeeIn() public virtual {
+        // Pre-approve for protocol fee transfers
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+
+        FeeConfig memory fees = _feeConfig();
+        fees.protocolFeeInBps = protocolFeeOutBps;  // Use same rate for comparison
+        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test XYC with dynamic protocol fee on amountIn
+     * @notice Tests the _dynamicProtocolFeeAmountInXD instruction that queries fee from provider
+     */
+    function test_XYCDynamicProtocolFeeIn() public virtual {
+        // Deploy fee provider with 0.2% fee
+        ProtocolFeeProviderMock feeProvider = new ProtocolFeeProviderMock(
+            protocolFeeOutBps,
+            feeRecipient,
+            address(this)
+        );
+
+        FeeConfig memory fees = _feeConfig();
+        fees.dynamicFeeProvider = address(feeProvider);
+        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        // Dynamic protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
 
         assertAllInvariantsWithConfig(
             swapVM,

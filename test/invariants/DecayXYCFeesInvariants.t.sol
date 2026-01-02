@@ -19,6 +19,7 @@ import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -205,7 +206,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -245,7 +246,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -283,27 +284,23 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Test Decay + XYC with protocol fee
+     * Test Decay + XYC with protocol fee on amountIn
      */
-    function test_DecayXYCProtocolFee() public {
+    function test_DecayXYCProtocolFeeIn() public {
         uint256 balanceA = 1000e18;
         uint256 balanceB = 1000e18;
         uint16 decayPeriod = 300;
         uint32 feeBps = 0.002e9; // 0.2% protocol fee
 
-        // Pre-approve for protocol fee transfers
-        vm.prank(maker);
-        tokenB.approve(address(swapVM), type(uint256).max);
-
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountInXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -322,7 +319,59 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = exactInData;
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: State-dependent due to decay + protocol fees
+        // Protocol fee on amountIn + decay affects additivity
+        config.additivityTolerance = 1;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Decay + XYC with protocol fee
+     */
+    function test_DecayXYCProtocolFee() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint16 decayPeriod = 300;
+        uint32 feeBps = 0.002e9; // 0.2% protocol fee
+
+        // Pre-approve for protocol fee transfers
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        // Execute trade to create decay offsets
+        _executeSwap(swapVM, order, address(tokenA), address(tokenB), 10e18, exactInData);
+
+        // Wait for partial decay
+        vm.warp(block.timestamp + 150);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = exactInData;
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // Decay violates additivity by design - state changes between swaps
         config.skipAdditivity = true;
 
         assertAllInvariantsWithConfig(
@@ -354,7 +403,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(progressiveFeeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)

@@ -19,7 +19,10 @@ import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
+
+import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -234,7 +237,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -292,7 +295,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -313,6 +316,125 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         config.skipAdditivity = true;
         // TODO: need to research behavior
         config.skipSymmetry = true;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Concentrate + XYC with protocol fee on amountIn
+     */
+    function test_ConcentrateXYCProtocolFeeIn() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.9e18;
+        uint256 priceMax = 1.1e18;
+        uint32 feeBps = 0.002e9; // 0.2% protocol fee
+
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            // Protocol fee on amountIn BEFORE balances
+            program.build(_protocolFeeAmountInXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB,
+                    liquidity
+                )),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test Concentrate + XYC with dynamic protocol fee on amountIn
+     */
+    function test_ConcentrateXYCDynamicProtocolFeeIn() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 currentPrice = 1e18;
+        uint256 priceMin = 0.9e18;
+        uint256 priceMax = 1.1e18;
+        uint32 feeBps = 0.002e9; // 0.2% protocol fee
+
+        // Deploy dynamic fee provider
+        ProtocolFeeProviderMock feeProviderMock = new ProtocolFeeProviderMock(
+            feeBps,
+            feeRecipient,
+            address(this)
+        );
+
+        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
+            balanceA,
+            balanceB,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            // Dynamic protocol fee on amountIn BEFORE balances
+            program.build(_dynamicProtocolFeeAmountInXD,
+                FeeArgsBuilder.buildDynamicProtocolFee(address(feeProviderMock))),
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(
+                    address(tokenA),
+                    address(tokenB),
+                    deltaA,
+                    deltaB,
+                    liquidity
+                )),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -348,13 +470,14 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            // Protocol fee BEFORE balances
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -371,8 +494,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: need to research behavior - state-dependent due to scale
-        config.skipAdditivity = true;
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -405,6 +528,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
@@ -414,8 +539,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeRecipient)),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -586,7 +709,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeInXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -644,7 +767,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -700,13 +823,14 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            // Protocol fee BEFORE balances
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -723,8 +847,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: need to research behavior - state-dependent due to scale
-        config.skipAdditivity = true;
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -757,6 +881,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
@@ -766,8 +892,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeRecipient)),
             program.build(_xycConcentrateGrowPriceRange2D,
                 XYCConcentrateArgsBuilder.build2D(
                     address(tokenA),
@@ -894,7 +1018,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_progressiveFeeOutXD,
-                FeeArgsBuilder.buildProgressiveFee(feeBps)),
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycConcentrateGrowLiquidityXD,
                 XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
             program.build(_xycSwapXD)
@@ -1010,13 +1134,14 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
+            // Protocol fee BEFORE balances
+            program.build(_protocolFeeAmountOutXD,
+                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_protocolFeeAmountOutXD,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             program.build(_xycConcentrateGrowPriceRangeXD,
                 XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
             program.build(_xycSwapXD)
@@ -1027,8 +1152,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: need to research behavior - state-dependent due to scale
-        config.skipAdditivity = true;
+        // Protocol fee causes 1 wei rounding in additivity
+        config.additivityTolerance = 1;
 
         assertAllInvariantsWithConfig(
             swapVM,

@@ -9,9 +9,9 @@ import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
-import { TransientLock, TransientLockLib } from "./libs/TransientLock.sol";
-import { CalldataPtr, CalldataPtrLib } from "./libs/CalldataPtr.sol";
-import { Calldata } from "./libs/Calldata.sol";
+import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
+import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";

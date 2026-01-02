@@ -4,9 +4,9 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context } from "../libs/VM.sol";
-import { Simulator } from "../libs/Simulator.sol";
+import { Simulator } from "@1inch/solidity-utils/contracts/mixins/Simulator.sol";
 
+import { Context } from "../libs/VM.sol";
 import { SwapVM } from "../SwapVM.sol";
 import { AquaOpcodesDebug } from "../opcodes/AquaOpcodesDebug.sol";
 

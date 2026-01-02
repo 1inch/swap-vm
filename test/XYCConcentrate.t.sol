@@ -5,7 +5,6 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { FormatLib } from "./utils/FormatLib.sol";
@@ -23,6 +22,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateExperimental } from "../src/instructions/XYCConcentrateExperimental.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
@@ -135,7 +135,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
                     program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(
                         tokenA, tokenB, deltaA, deltaB, liquidity
                     )) :
-                    program.build(XYCConcentrate._xycConcentrateGrowPriceRange2D, XYCConcentrateArgsBuilder.build2D(
+                    program.build(XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D, XYCConcentrateArgsBuilder.build2D(
                         tokenA, tokenB, deltaA, deltaB, liquidity
                     )),
                 program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),

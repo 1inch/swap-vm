@@ -7,10 +7,9 @@ pragma solidity 0.8.30;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "../libs/Calldata.sol";
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
-uint256 constant BPS = 1e9;
 uint256 constant ONE = 1e18;
 uint256 constant SQRT_ONE = 1e9;
 
@@ -117,25 +116,6 @@ contract XYCConcentrate {
     /// @param args.tokensCount       | 2 bytes
     /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount
-    function _xycConcentrateGrowPriceRangeXD(Context memory ctx, bytes calldata args) internal pure {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas,) = XYCConcentrateArgsBuilder.parseXD(args);
-        for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokens.slice(i * 20)));
-            uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
-
-            if (ctx.query.tokenIn == token) {
-                ctx.swap.balanceIn += delta;
-            } else if (ctx.query.tokenOut == token) {
-                ctx.swap.balanceOut += delta;
-            }
-        }
-    }
-
-    /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokens[]  | 20 bytes * args.tokensCount
-    /// @param args.initialBalances[] | 32 bytes * args.tokensCount
     function _xycConcentrateGrowLiquidityXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
@@ -153,16 +133,6 @@ contract XYCConcentrate {
 
         ctx.runLoop();
         _updateScales(ctx);
-    }
-
-    /// @param args.deltaLt | 32 bytes
-    /// @param args.deltaGt | 32 bytes
-    function _xycConcentrateGrowPriceRange2D(Context memory ctx, bytes calldata args) internal pure {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-
-        (uint256 deltaIn, uint256 deltaOut, ) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
-        ctx.swap.balanceIn += deltaIn;
-        ctx.swap.balanceOut += deltaOut;
     }
 
     /// @param args.deltaLt | 32 bytes
