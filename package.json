@@ -1,6 +1,6 @@
 {
   "name": "@1inch/swap-vm",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "main": "index.js",
   "directories": {
