@@ -2,18 +2,18 @@
 # yarn lockfile v1
 
 
-"@1inch/aqua@github:1inch/aqua#0.0.8":
-  version "0.0.8"
-  resolved "https://codeload.github.com/1inch/aqua/tar.gz/abb6d7b3f1452084210f2bada711302ab6949ca3"
+"@1inch/aqua@github:1inch/aqua#0.0.9":
+  version "0.0.9"
+  resolved "https://codeload.github.com/1inch/aqua/tar.gz/89cedfa608aa9fdc60d8cd936b76a540e4b9346f"
   dependencies:
-    "@1inch/solidity-utils" "6.9.0"
+    "@1inch/solidity-utils" "6.9.2"
     "@openzeppelin/contracts" "5.4.0"
     forge-std "github:foundry-rs/forge-std#v1.11.0"
 
-"@1inch/solidity-utils@6.9.0":
-  version "6.9.0"
-  resolved "https://npm.pkg.github.com/download/@1inch/solidity-utils/6.9.0/1bd0855a1ace40dc81baea060d81b4b7875b76e4#1bd0855a1ace40dc81baea060d81b4b7875b76e4"
-  integrity sha512-/laQuK34+nNcTizyGu/7pAz14dqvZN6Uj2WaoyJZ9mKiGz5ZQN5JJ34z+Ccsr5+D/Jgeof6Par6OTv5PKwediw==
+"@1inch/solidity-utils@6.9.2":
+  version "6.9.2"
+  resolved "https://registry.yarnpkg.com/@1inch/solidity-utils/-/solidity-utils-6.9.2.tgz#40d59ffebb654cb8ab029bb85b578b628dca945f"
+  integrity sha512-WcsJycCh7f4boTFrku74FtUvKqsm5rltfr+z++NcVuOp0suMOJk8H54bByZeyr6XRUW6m9mIhCPdTXkQR7yfQA==
   dependencies:
     "@metamask/eth-sig-util" "8.0.0"
     "@nomicfoundation/hardhat-ethers" "3.0.8"
