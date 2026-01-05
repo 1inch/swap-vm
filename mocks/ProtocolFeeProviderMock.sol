@@ -97,7 +97,7 @@ contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
     ) external view override returns (uint32 feeBps, address to) {
         assembly ("memory-safe") {
             let params := sload(_params.slot)
-            feeBps := and(params, 0xffffffff) // feeBps is the first 4 bytes
+            feeBps := and(params, 0xffffffff) // feeBps is in the lower 4 bytes
             to := and(shr(32, params), 0xffffffffffffffffffffffffffffffffffffffff) // to is the next 20 bytes
         }
     }
