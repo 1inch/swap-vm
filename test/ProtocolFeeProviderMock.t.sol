@@ -12,7 +12,7 @@ import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 
 contract ProtocolFeeProviderMockTest is Test {
     ProtocolFeeProviderMock private feeProvider;
-    address private feeRecipient = feeRecipient = vm.addr(0x1234);
+    address private feeRecipient = vm.addr(0x1234);
     uint32 private constant INITIAL_FEE_BPS = 0.002e9; // 0.2% in 1e9 scale
     bytes32 private constant DUMMY_ORDER_HASH = keccak256("DUMMY_ORDER");
 
