@@ -4,9 +4,9 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../src/instructions/interfaces/IProtocolFeeProvider.sol";
+import {IProtocolFeeProvider} from "../src/instructions/interfaces/IProtocolFeeProvider.sol";
 
 /**
  * @title ProtocolFeeProviderMock
@@ -50,11 +50,15 @@ import "../src/instructions/interfaces/IProtocolFeeProvider.sol";
  *                  Production implementations should include access control and validation.
  */
 contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
-    /// @notice Fee rate in basis points (1e9 scale, e.g., 0.002e9 = 0.2%)
-    uint32 private _feeBps;
+    // We use structure and assembly save and store to avoid multiple loads executed by solidity compiler
+    struct ProtocolFeeParams {
+        /// @notice Fee rate in basis points (1e9 scale, e.g., 0.002e9 = 0.2%)
+        uint32 feeBps;
+        /// @notice Address that receives protocol fees
+        address to;
+    }
 
-    /// @notice Address that receives protocol fees
-    address private _to;
+    ProtocolFeeParams private _params;
 
     /**
      * @notice Creates a new ProtocolFeeProviderMock
@@ -64,8 +68,8 @@ contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
      * @param owner Address with permission to update fee settings
      */
     constructor(uint32 feeBps, address to, address owner) Ownable(owner) {
-        _feeBps = feeBps;
-        _to = to;
+        _params.feeBps = feeBps;
+        _params.to = to;
     }
 
     /**
@@ -76,8 +80,11 @@ contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
      * @param to New address to receive protocol fees
      */
     function setFeeBpsAndRecipient(uint32 feeBps, address to) onlyOwner external {
-        _feeBps = feeBps;
-        _to = to;
+        assembly ("memory-safe") {
+            let value := feeBps
+            value := or(value, shl(32, to)) // set to
+            sstore(_params.slot, value)
+        }
     }
 
     /// @inheritdoc IProtocolFeeProvider
@@ -89,6 +96,10 @@ contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
         address /* tokenOut */,
         bool /* isExactIn */
     ) external view override returns (uint32 feeBps, address to) {
-        return (_feeBps, _to);
+        assembly ("memory-safe") {
+            let params := sload(_params.slot)
+            feeBps := and(params, 0xffffffff) // feeBps is in the lower 4 bytes
+            to := shr(32, params) // to is the next 20 bytes
+        }
     }
 }
