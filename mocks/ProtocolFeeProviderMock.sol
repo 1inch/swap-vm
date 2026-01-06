@@ -50,6 +50,7 @@ import {IProtocolFeeProvider} from "../src/instructions/interfaces/IProtocolFeeP
  *                  Production implementations should include access control and validation.
  */
 contract ProtocolFeeProviderMock is IProtocolFeeProvider, Ownable {
+    // We use structure and assembly save and store to avoid multiple loads executed by solidity compiler
     struct ProtocolFeeParams {
         /// @notice Fee rate in basis points (1e9 scale, e.g., 0.002e9 = 0.2%)
         uint32 feeBps;
