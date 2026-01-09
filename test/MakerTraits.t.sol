@@ -19,14 +19,11 @@ import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.s
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
 /**
- * @title MakerAmountValidationTest
- * @notice Tests for amount validation in MakerTraits
- * @dev Validates the require statements in MakerTraits.validate:
- *      1. tokenIn != tokenOut
- *      2. amountIn > 0 (when allowZeroAmountIn is false)
- *      3. amountIn == 0 allowed (when allowZeroAmountIn is true)
+ * @title MakerTraitsTest
+ * @notice Integration tests for amount validation in MakerTraits via swap
+ * @dev Tests the same validations through actual swap execution
  */
-contract MakerAmountValidationTest is Test, OpcodesDebug {
+contract MakerTraitsTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
     constructor() OpcodesDebug(address(new Aqua())) {}
@@ -71,10 +68,9 @@ contract MakerAmountValidationTest is Test, OpcodesDebug {
     // The MakerTraits check is a secondary validation layer.
 
     function test_TokenInMustNotEqualTokenOut_Reverts() public {
-        // Build an order that includes both tokens in balances
         // When tokenIn == tokenOut, the Balances instruction fails first because it can only
         // match one token (the else-if never matches when both are the same address)
-        (ISwapVM.Order memory order, bytes memory signature) = _buildOrderWithBothTokens(false);
+        (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(tokenA), address(tokenA));
         bytes memory takerData = _buildTakerData(true, signature);
 
         // Try to swap with tokenIn == tokenOut - Balances fails first with its own error
@@ -84,7 +80,7 @@ contract MakerAmountValidationTest is Test, OpcodesDebug {
     }
 
     function test_TokenInMustNotEqualTokenOut_Quote_Reverts() public {
-        (ISwapVM.Order memory order, bytes memory signature) = _buildOrderWithBothTokens(false);
+        (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(tokenA), address(tokenA));
         bytes memory takerData = _buildTakerData(true, signature);
 
         // Quote also reverts when tokenIn == tokenOut
@@ -141,7 +137,7 @@ contract MakerAmountValidationTest is Test, OpcodesDebug {
         assertEq(tokenB.balanceOf(taker) - takerTokenBBefore, amountOut, "Taker should receive correct tokenB amount");
     }
 
-    // ==================== REQUIRE 3: allowZeroAmountIn flag behavior ====================
+    // ==================== allowZeroAmountIn flag behavior ====================
     // Note: Even with allowZeroAmountIn = true, TakerTraits.validate requires amountOut > 0
     // So we test the flag with very small amounts that result in non-zero swap but near-zero input
 
@@ -251,45 +247,6 @@ contract MakerAmountValidationTest is Test, OpcodesDebug {
         bytes memory programBytes = bytes.concat(
             program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
                 dynamic([tokenIn, tokenOut]),
-                dynamic([uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)])
-            )),
-            program.build(XYCSwap._xycSwapXD)
-        );
-
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: allowZeroAmountIn,
-            receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programBytes
-        }));
-
-        bytes32 orderHash = swapVM.hash(order);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
-        signature = abi.encodePacked(r, s, v);
-    }
-
-    /// @dev Builds an order that includes both tokenA in balances to allow testing tokenIn == tokenOut
-    function _buildOrderWithBothTokens(
-        bool allowZeroAmountIn
-    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory programBytes = bytes.concat(
-            program.build(Balances._staticBalancesXD, BalancesArgsBuilder.build(
-                dynamic([address(tokenA), address(tokenA)]),
                 dynamic([uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)])
             )),
             program.build(XYCSwap._xycSwapXD)

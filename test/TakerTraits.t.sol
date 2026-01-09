@@ -209,6 +209,32 @@ contract TakerTraitsTest is Test, OpcodesDebug {
         swapVM.swap(order, address(tokenB), address(tokenA), 50e18, TakerTraitsLib.build(args));
     }
 
+    // ==================== Amount Validation Tests ====================
+
+    function test_AmountOutZero_Reverts() public {
+        (ISwapVM.Order memory order, bytes memory signature) = _createLimitOrderWithAllowZeroAmountIn(0x2007, true);
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.isExactIn = false;
+
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
+        swapVM.swap(order, address(tokenB), address(tokenA), 0, TakerTraitsLib.build(args));
+    }
+
+    function test_StrictThreshold_ExactOut_Mismatch_Reverts() public {
+        (ISwapVM.Order memory order, bytes memory signature) = _createLimitOrder(0x2008);
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.isExactIn = false;
+        args.isStrictThresholdAmount = true;
+        args.threshold = abi.encodePacked(uint256(40e18));
+
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsNonExactThresholdAmountIn.selector, 50e18, 40e18));
+        swapVM.swap(order, address(tokenB), address(tokenA), 25e18, TakerTraitsLib.build(args));
+    }
+
     // ==================== To (Recipient) Tests ====================
 
     function test_To_NotSet_SendsToTaker() public {
@@ -497,6 +523,13 @@ contract TakerTraitsTest is Test, OpcodesDebug {
     }
 
     function _createLimitOrder(uint64 salt) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        return _createLimitOrderWithAllowZeroAmountIn(salt, false);
+    }
+
+    function _createLimitOrderWithAllowZeroAmountIn(
+        uint64 salt,
+        bool allowZeroAmountIn
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
             p.build(Balances._staticBalancesXD,
@@ -514,7 +547,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
+            allowZeroAmountIn: allowZeroAmountIn,
             receiver: address(0),
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
