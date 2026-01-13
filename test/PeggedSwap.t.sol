@@ -52,7 +52,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
         usdcMock = new MockToken("USD Coin", "USDC");
         usdtMock = new MockToken("Tether USD", "USDT");

@@ -11,11 +11,13 @@ import { console2 } from "forge-std/console2.sol";
 
 library Config {
     error AquaAddressDoesNotExist();
+    error WethAddressDoesNotExist();
     error NameDoesNotExist();
     error VersionDoesNotExist();
 
     function readSwapVMRouterParameters(Vm vm) internal view returns (
         address aquaAddress,
+        address wethAddress,
         string memory name,
         string memory version
     ) {
@@ -28,6 +30,10 @@ library Config {
         aquaAddress = vm.parseJsonAddress(json, string.concat(".aqua", key));
         if (aquaAddress == address(0)) revert AquaAddressDoesNotExist();
         console2.log("Aqua address:", aquaAddress);
+
+        wethAddress = vm.parseJsonAddress(json, string.concat(".weth", key));
+        if (wethAddress == address(0)) revert WethAddressDoesNotExist();
+        console2.log("WETH address:", wethAddress);
 
         name = vm.parseJsonString(json, string.concat(".swapVmRouterName", key));
         if (bytes(name).length == 0) revert NameDoesNotExist();

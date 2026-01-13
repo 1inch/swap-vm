@@ -40,7 +40,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
     function setUp() public override virtual {
         super.setUp();
 
-        swapVM = new AquaSwapVMRouter(address(aqua), "SwapVM", "1.0.0");
+        swapVM = new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
 
         taker = new MockTaker(aqua, swapVM, address(this));
         taker2 = new MockTaker(aqua, swapVM, address(this));

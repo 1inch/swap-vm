@@ -49,7 +49,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         maker = vm.addr(makerPK);
         taker = address(this);
         protocolFeeCollector = address(0x1234567890123456789012345678901234567890);
-        swapVM = new SwapVMRouter(address(aqua), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
