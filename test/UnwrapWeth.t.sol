@@ -37,8 +37,8 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
         weth = new WETHMock();
+        swapVM = new SwapVMRouter(address(0), address(weth), "SwapVM", "1.0.0");
         tokenB = new TokenMock("Token B", "TKB");
 
         tokenB.mint(maker, 1_000_000e18);
