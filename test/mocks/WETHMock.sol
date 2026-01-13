@@ -5,6 +5,8 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IWETH } from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
 
 contract WETHMock is ERC20, IWETH {
+    error WithdrawFailed();
+
     constructor() ERC20("Wrapped Ether", "WETH") {}
 
     function deposit() public payable override {
@@ -14,9 +16,9 @@ contract WETHMock is ERC20, IWETH {
 
     function withdraw(uint256 amount) external override {
         _burn(msg.sender, amount);
-        emit Withdrawal(msg.sender, amount);
         (bool success,) = msg.sender.call{value: amount}("");
-        require(success, "WETH: ETH_TRANSFER_FAILED");
+        require(success, WithdrawFailed());
+        emit Withdrawal(msg.sender, amount);
     }
 
     receive() external payable {
