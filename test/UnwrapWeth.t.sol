@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+import { EthReceiver } from "@1inch/solidity-utils/contracts/mixins/EthReceiver.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
@@ -131,6 +132,14 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         weth.deposit{value: amount}();
     }
 
+    function test_RejectDirectEtherTransfer() public {
+        vm.deal(address(this), 1 ether);
+
+        (bool success, bytes memory returnData) = address(swapVM).call{value: 1 ether}("");
+
+        assertFalse(success, "Direct ether transfer should fail");
+        assertEq(returnData, abi.encodeWithSelector(EthReceiver.EthDepositRejected.selector), "Should revert with EthDepositRejected");
+    }
     // ==================== MAKER UNWRAP TESTS ====================
 
     function test_MakerShouldUnwrapWeth_SendsEthToMaker() public {
