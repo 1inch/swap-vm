@@ -22,7 +22,7 @@ contract OrderHasher {
 
     function orderTypedData(ISwapVM.Order calldata order) public view returns (bytes memory) {
         bytes32 hash = keccak256(abi.encode(
-            SwapVM(swapVM).ORDER_TYPEHASH(),
+            SwapVM(payable(swapVM)).ORDER_TYPEHASH(),
             order.maker,
             order.traits,
             keccak256(order.data)

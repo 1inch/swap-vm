@@ -48,7 +48,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
         tokenA = new MockToken("Token A", "TKA");
         tokenB = new MockToken("Token B", "TKB");

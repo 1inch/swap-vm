@@ -19,6 +19,7 @@ contract DeployLimitSwapVMRouter is Script {
     function run() external {
         (
             address aquaAddress,
+            address wethAddress,
             string memory name,
             string memory version
         ) = vm.readSwapVMRouterParameters();
@@ -26,6 +27,7 @@ contract DeployLimitSwapVMRouter is Script {
         vm.startBroadcast();
         LimitSwapVMRouter swapVMRouter = new LimitSwapVMRouter(
             aquaAddress,
+            wethAddress,
             name,
             version
         );
