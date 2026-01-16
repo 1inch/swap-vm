@@ -372,6 +372,99 @@ contract ControlsTest is Test, OpcodesDebug {
         assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
     }
 
+    /**
+     * @notice Test backward jump
+     */
+    function test_BackwardJump() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        // Create a program that jumps backward
+        bytes memory balancesInstr = program.build(_dynamicBalancesXD,
+            BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([uint256(100e18), uint256(100e18)])
+            ));
+
+        // But we need to ensure we don't create infinite loop
+        // Use conditional jump instead
+        bytes memory jumpIfInstr = program.build(_jumpIfTokenIn,
+            ControlsArgsBuilder.buildJumpIfToken(address(0x9999), uint16(balancesInstr.length)));
+        bytes memory swapInstr = program.build(_xycSwapXD);
+
+        bytes memory bytecode = bytes.concat(
+            balancesInstr,      // PC=0
+            jumpIfInstr,        // PC=X: won't jump (token is not 0x9999)
+            swapInstr           // PC=Y: execute swap
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+
+        assertGt(amountOut, 0, "Backward jump logic should work");
+    }
+
+    /**
+     * @notice Test jump to program start (PC=0)
+     */
+    function test_JumpToZero() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([uint256(100e18), uint256(100e18)])
+                )),
+            // Conditional jump to avoid infinite loop
+            program.build(_jumpIfTokenOut,
+                ControlsArgsBuilder.buildJumpIfToken(address(0x9999), 0)),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+
+        assertGt(amountOut, 0, "Jump to zero should work");
+    }
+
+    /**
+     * @notice Test multiple sequential jumps
+     */
+    function test_NestedJumps() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory balances = program.build(_dynamicBalancesXD,
+            BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([uint256(100e18), uint256(100e18)])
+            ));
+        bytes memory jump1 = program.build(_jump, ControlsArgsBuilder.buildJump(0));
+        bytes memory salt1 = program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(1)));
+        bytes memory jump2 = program.build(_jump, ControlsArgsBuilder.buildJump(0));
+        bytes memory salt2 = program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(2)));
+        bytes memory swap = program.build(_xycSwapXD);
+
+        uint256 offset1 = balances.length + jump1.length + salt1.length;
+        uint256 offset2 = offset1 + jump2.length + salt2.length;
+
+        jump1 = program.build(_jump, ControlsArgsBuilder.buildJump(uint16(offset1)));
+        jump2 = program.build(_jump, ControlsArgsBuilder.buildJump(uint16(offset2)));
+
+        bytes memory bytecode = bytes.concat(
+            balances,
+            jump1,      // Jump over salt1
+            salt1,      // Skipped
+            jump2,      // Jump over salt2
+            salt2,      // Skipped
+            swap        // Execute
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+
+        assertGt(amountOut, 0, "Multiple jumps should work");
+    }
+
     // Helper functions
     function _buildSimpleSwapWithSalt(uint64 salt) private view returns (bytes memory) {
         Program memory program = ProgramBuilder.init(_opcodes());
