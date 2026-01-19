@@ -98,7 +98,12 @@ contract TWAPSwap is LimitSwap {
         uint256 timestamp;
     }
 
-    mapping(bytes32 orderHash => LastSwap) public twapLastSwaps;
+    mapping(bytes32 => LastSwap) public twapLastSwaps;
+
+    function _getLastSwapKey(bytes32 orderHash, address tokenIn, address tokenOut) internal pure returns (bytes32) {
+        (address token0, address token1) = tokenIn < tokenOut ? (tokenIn, tokenOut) : (tokenOut, tokenIn);
+        return keccak256(abi.encodePacked(orderHash, token0, token1));
+    }
 
     constructor() {} // 0.01% decay per second for Dutch auction (price gets worse for maker) - price discovery
 
@@ -117,7 +122,8 @@ contract TWAPSwap is LimitSwap {
         uint256 baseAmountIn = args.balanceIn;
         uint256 auctionStartTime = args.startTime;
 
-        LastSwap memory lastSwap = twapLastSwaps[ctx.query.orderHash];
+        bytes32 lastSwapKey = _getLastSwapKey(ctx.query.orderHash, ctx.query.tokenIn, ctx.query.tokenOut);
+        LastSwap memory lastSwap = twapLastSwaps[lastSwapKey];
         if (lastSwap.timestamp > 0) {
             // Subsequent trades
             baseAmountOut = lastSwap.amountOut;
@@ -157,7 +163,7 @@ contract TWAPSwap is LimitSwap {
 
         // Store trade data
         if (!ctx.vm.isStaticContext) {
-            twapLastSwaps[ctx.query.orderHash] = LastSwap({
+            twapLastSwaps[lastSwapKey] = LastSwap({
                 amountIn: ctx.swap.amountIn,
                 amountOut: ctx.swap.amountOut,
                 timestamp: block.timestamp

@@ -106,10 +106,14 @@ contract XYCConcentrate {
     error ConcentrateShouldBeUsedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error ConcentrateExpectedSwapAmountComputationAfterRunLoop(uint256 amountIn, uint256 amountOut);
 
-    mapping(bytes32 orderHash => uint256) public liquidity;
+    mapping(bytes32 => uint256) public liquidity;
 
-    function concentratedBalance(bytes32 orderHash, uint256 balance, uint256 delta, uint256 initialLiquidity) public view returns (uint256) {
-        uint256 currentLiquidity = liquidity[orderHash];
+    function _getLiquidityKey(bytes32 orderHash, address tokenIn, address tokenOut) internal pure returns (bytes32) {
+        (address tokenLt, address tokenGt) = tokenIn < tokenOut ? (tokenIn, tokenOut) : (tokenOut, tokenIn);
+        return keccak256(abi.encodePacked(orderHash, tokenLt, tokenGt));
+    }
+
+    function concentratedBalance(uint256 balance, uint256 delta, uint256 initialLiquidity, uint256 currentLiquidity) public pure returns (uint256) {
         return currentLiquidity == 0 ? balance + delta : balance + delta * currentLiquidity / initialLiquidity;
     }
 
@@ -119,20 +123,23 @@ contract XYCConcentrate {
     function _xycConcentrateGrowLiquidityXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
+        bytes32 liquidityKey = _getLiquidityKey(ctx.query.orderHash, ctx.query.tokenIn, ctx.query.tokenOut);
+        uint256 currentLiquidity = liquidity[liquidityKey];
+
         (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
             address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
 
             if (ctx.query.tokenIn == token) {
-                ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, delta, initialLiquidity);
+                ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, delta, initialLiquidity, currentLiquidity);
             } else if (ctx.query.tokenOut == token) {
-                ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, delta, initialLiquidity);
+                ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, delta, initialLiquidity, currentLiquidity);
             }
         }
 
         ctx.runLoop();
-        _updateScales(ctx);
+        _updateScales(ctx, liquidityKey);
     }
 
     /// @param args.deltaLt | 32 bytes
@@ -140,21 +147,24 @@ contract XYCConcentrate {
     function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
+        bytes32 liquidityKey = _getLiquidityKey(ctx.query.orderHash, ctx.query.tokenIn, ctx.query.tokenOut);
+        uint256 currentLiquidity = liquidity[liquidityKey];
+
         (uint256 deltaIn, uint256 deltaOut, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
-        ctx.swap.balanceIn = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceIn, deltaIn, initialLiquidity);
-        ctx.swap.balanceOut = concentratedBalance(ctx.query.orderHash, ctx.swap.balanceOut, deltaOut, initialLiquidity);
+        ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, deltaIn, initialLiquidity, currentLiquidity);
+        ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, deltaOut, initialLiquidity, currentLiquidity);
 
         ctx.runLoop();
-        _updateScales(ctx);
+        _updateScales(ctx, liquidityKey);
     }
 
-    function _updateScales(Context memory ctx) private {
+    function _updateScales(Context memory ctx, bytes32 liquidityKey) private {
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, ConcentrateExpectedSwapAmountComputationAfterRunLoop(ctx.swap.amountIn, ctx.swap.amountOut));
 
         if (!ctx.vm.isStaticContext) {
             // New invariant (after swap)
             uint256 newInv = (ctx.swap.balanceIn + ctx.swap.amountIn) * (ctx.swap.balanceOut - ctx.swap.amountOut);
-            liquidity[ctx.query.orderHash] = Math.sqrt(newInv);
+            liquidity[liquidityKey] = Math.sqrt(newInv);
         }
     }
 }
