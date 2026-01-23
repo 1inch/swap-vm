@@ -113,7 +113,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function setUp() public virtual {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");

@@ -11,7 +11,7 @@ import { SwapVM } from "../SwapVM.sol";
 import { OpcodesDebug } from "../opcodes/OpcodesDebug.sol";
 
 contract SwapVMRouterDebug is Simulator, SwapVM, OpcodesDebug {
-    constructor(address aqua, string memory name, string memory version) SwapVM(aqua, name, version) OpcodesDebug(aqua) { }
+    constructor(address aqua, address weth, string memory name, string memory version) SwapVM(aqua, weth, name, version) OpcodesDebug(aqua) { }
 
     function _instructions() internal pure override returns (function(Context memory, bytes calldata) internal[] memory) {
         return _opcodes();

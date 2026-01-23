@@ -12,6 +12,7 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
@@ -20,7 +21,7 @@ import { Context, ContextLib, VM, SwapRegisters, SwapQuery  } from "./libs/VM.so
 import { MakerTraits, MakerTraitsLib } from "./libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 
-abstract contract SwapVM is EIP712 {
+abstract contract SwapVM is EIP712, OnlyWethReceiver {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
@@ -57,7 +58,7 @@ abstract contract SwapVM is EIP712 {
 
     mapping(bytes32 orderHash => TransientLock) private _reentrancyGuards;
 
-    constructor(address aqua, string memory name, string memory version) EIP712(name, version) {
+    constructor(address aqua, address weth, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) {
         AQUA = IAqua(aqua);
     }
 

@@ -45,7 +45,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy SwapVM router
-        swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = new TokenMock("Token A", "TKA");

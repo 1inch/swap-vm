@@ -54,6 +54,7 @@ contract SwapVMTest is Test, OpcodesDebug {
     struct SwapResult {
         uint256 amountIn;
         uint256 amountOut;
+        bytes32 orderHash;
     }
 
     struct BalanceSnapshot {
@@ -67,7 +68,7 @@ contract SwapVMTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy custom SwapVM router with Invalidators
-        swapVM = new SwapVMRouter(address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = new TokenMock("Token A", "TKA");
@@ -135,20 +136,55 @@ contract SwapVMTest is Test, OpcodesDebug {
         return TakerTraitsLib.build(args);
     }
 
+    /// @notice Sets up expectation that SwapVM contract will emit Swapped event with these parameters
+    /// @dev The emit here is NOT broadcasting - it's Foundry's syntax to specify expected event values.
+    ///      Test fails if contract doesn't emit matching event on next call.
+    function _expectSwappedEvent(
+        ISwapVM.Order memory order,
+        address tokenIn,
+        address tokenOut,
+        uint256 expectedAmountIn,
+        uint256 expectedAmountOut
+    ) internal {
+        bytes32 orderHash = swapVM.hash(order);
+        vm.expectEmit(true, true, true, true, address(swapVM));
+        // Specify expected event parameters (Foundry will verify contract emits this)
+        emit SwapVM.Swapped(
+            orderHash,
+            maker,
+            taker,
+            tokenIn,
+            tokenOut,
+            expectedAmountIn,
+            expectedAmountOut
+        );
+    }
+
     function _executeSwap(
         ISwapVM.Order memory order,
         uint256 amount,
         bytes memory takerData
     ) internal returns (SwapResult memory) {
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
+        (uint256 amountIn, uint256 amountOut, bytes32 orderHash) = swapVM.swap(
             order,
             address(tokenB),
             address(tokenA),
             amount,
             takerData
         );
-        return SwapResult(amountIn, amountOut);
+        return SwapResult(amountIn, amountOut, orderHash);
+    }
+
+    function _executeSwapWithEventCheck(
+        ISwapVM.Order memory order,
+        uint256 amount,
+        bytes memory takerData,
+        uint256 expectedAmountIn,
+        uint256 expectedAmountOut
+    ) internal returns (SwapResult memory) {
+        _expectSwappedEvent(order, address(tokenB), address(tokenA), expectedAmountIn, expectedAmountOut);
+        return _executeSwap(order, amount, takerData);
     }
 
     function _getBalances() internal view returns (BalanceSnapshot memory) {
@@ -173,6 +209,18 @@ contract SwapVMTest is Test, OpcodesDebug {
         assertEq(before.takerTokenB - afterSwap.takerTokenB, expectedIn, string(abi.encodePacked(message, ": incorrect TokenB spent")));
     }
 
+    function _verifySwapWithOrderHash(
+        SwapResult memory result,
+        BalanceSnapshot memory before,
+        uint256 expectedIn,
+        uint256 expectedOut,
+        bytes32 expectedOrderHash,
+        string memory message
+    ) internal view {
+        _verifySwap(result, before, expectedIn, expectedOut, message);
+        assertEq(result.orderHash, expectedOrderHash, string(abi.encodePacked(message, ": incorrect orderHash")));
+    }
+
 
     function test_LimitSwapWithTokenOutInvalidator() public {
         // === Setup ===
@@ -187,24 +235,25 @@ contract SwapVMTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
         bytes memory takerData = _buildTakerData(25e18, signature);
+        bytes32 expectedOrderHash = swapVM.hash(order);
 
         // === Execute First Partial Fill ===
         // Taker buys 25 TokenA for 50 TokenB
         BalanceSnapshot memory before = _getBalances();
-        SwapResult memory result = _executeSwap(order, 50e18, takerData);
-        _verifySwap(result, before, 50e18, 25e18, "First fill");
+        SwapResult memory result = _executeSwapWithEventCheck(order, 50e18, takerData, 50e18, 25e18);
+        _verifySwapWithOrderHash(result, before, 50e18, 25e18, expectedOrderHash, "First fill");
 
         // === Execute Second Partial Fill ===
         // Taker buys another 25 TokenA for 50 TokenB
         before = _getBalances();
-        result = _executeSwap(order, 50e18, takerData);
-        _verifySwap(result, before, 50e18, 25e18, "Second fill");
+        result = _executeSwapWithEventCheck(order, 50e18, takerData, 50e18, 25e18);
+        _verifySwapWithOrderHash(result, before, 50e18, 25e18, expectedOrderHash, "Second fill");
 
         // === Execute Third Partial Fill ===
         // This should work as we haven't exceeded the total balance
         before = _getBalances();
-        result = _executeSwap(order, 80e18, takerData);
-        _verifySwap(result, before, 80e18, 40e18, "Third fill");
+        result = _executeSwapWithEventCheck(order, 80e18, takerData, 80e18, 40e18);
+        _verifySwapWithOrderHash(result, before, 80e18, 40e18, expectedOrderHash, "Third fill");
 
         // === Attempt to Overfill ===
         // Try to buy more than remaining (only 10 TokenA left)
@@ -223,8 +272,8 @@ contract SwapVMTest is Test, OpcodesDebug {
         // Fill the remaining 10 TokenA for 20 TokenB
         bytes memory finalTakerData = _buildTakerData(10e18, signature);
         before = _getBalances();
-        result = _executeSwap(order, 20e18, finalTakerData);
-        _verifySwap(result, before, 20e18, 10e18, "Final fill");
+        result = _executeSwapWithEventCheck(order, 20e18, finalTakerData, 20e18, 10e18);
+        _verifySwapWithOrderHash(result, before, 20e18, 10e18, expectedOrderHash, "Final fill");
 
         // === Verify Order Fully Filled ===
         // Total filled: 100 TokenA for 200 TokenB (as intended)
@@ -255,13 +304,15 @@ contract SwapVMTest is Test, OpcodesDebug {
             salt: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes32 expectedOrderHash = swapVM.hash(order);
 
         // Use simplified taker data construction
         bytes memory takerData = _buildTakerData(25e18, signature);
 
-        // First fill - works
+        // First fill - works with event check
+        _expectSwappedEvent(order, address(tokenB), address(tokenA), 50e18, 25e18);
         vm.prank(taker);
-        (, uint256 amountOut1,) = swapVM.swap(
+        (uint256 amountIn1, uint256 amountOut1, bytes32 orderHash1) = swapVM.swap(
             order,
             address(tokenB),
             address(tokenA),
@@ -269,10 +320,13 @@ contract SwapVMTest is Test, OpcodesDebug {
             takerData
         );
         assertEq(amountOut1, 25e18, "Without invalidator: first fill works");
+        assertEq(amountIn1, 50e18, "Without invalidator: first fill amountIn correct");
+        assertEq(orderHash1, expectedOrderHash, "Without invalidator: first fill orderHash correct");
 
         // Second fill - also works! (This is the desired behavior for reusable orders)
+        _expectSwappedEvent(order, address(tokenB), address(tokenA), 50e18, 25e18);
         vm.prank(taker);
-        (, uint256 amountOut2,) = swapVM.swap(
+        (uint256 amountIn2, uint256 amountOut2, bytes32 orderHash2) = swapVM.swap(
             order,
             address(tokenB),
             address(tokenA),
@@ -280,7 +334,50 @@ contract SwapVMTest is Test, OpcodesDebug {
             takerData
         );
         assertEq(amountOut2, 25e18, "Without invalidator: order can be reused!");
+        assertEq(amountIn2, 50e18, "Without invalidator: second fill amountIn correct");
+        assertEq(orderHash2, expectedOrderHash, "Without invalidator: second fill orderHash correct");
 
         // This demonstrates the difference - invalidators provide fill tracking
+    }
+
+    function test_SwappedEvent_EmitsCorrectParameters() public {
+        // === Setup ===
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            tokenIn: address(tokenB),
+            tokenOut: address(tokenA),
+            useInvalidator: false,
+            salt: 0x9999
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes memory takerData = _buildTakerData(50e18, signature);
+        bytes32 expectedOrderHash = swapVM.hash(order);
+
+        // === Verify Event Parameters ===
+        vm.expectEmit(true, true, true, true, address(swapVM));
+        emit SwapVM.Swapped(
+            expectedOrderHash,
+            maker,
+            taker,
+            address(tokenB),  // tokenIn
+            address(tokenA),  // tokenOut
+            100e18,           // amountIn
+            50e18             // amountOut
+        );
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut, bytes32 orderHash) = swapVM.swap(
+            order,
+            address(tokenB),
+            address(tokenA),
+            100e18,
+            takerData
+        );
+
+        // Verify return values match event
+        assertEq(amountIn, 100e18, "amountIn should match");
+        assertEq(amountOut, 50e18, "amountOut should match");
+        assertEq(orderHash, expectedOrderHash, "orderHash should match");
     }
 }
