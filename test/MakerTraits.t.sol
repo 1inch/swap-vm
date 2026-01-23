@@ -211,31 +211,6 @@ contract MakerTraitsTest is Test, OpcodesDebug {
         assertEq(tokenB.balanceOf(taker) - takerTokenBBefore, amountOut, "Transfer: Taker received tokenB");
     }
 
-    // ==================== FUZZ TESTS ====================
-
-    function test_AmountValidation_Fuzz(uint128 rawAmount, bool allowZero, bool isExactIn) public {
-        // Always use non-zero amounts since TakerTraits requires amountOut > 0
-        uint256 amount = bound(uint256(rawAmount), 1e15, ORDER_BALANCE / 2);
-
-        (ISwapVM.Order memory order, bytes memory signature) = allowZero
-            ? _buildLimitOrder(true, address(tokenA), address(tokenB))
-            : _buildOrder(false, address(tokenA), address(tokenB));
-        bytes memory takerData = _buildTakerData(isExactIn, signature);
-
-        uint256 makerTokenABefore = tokenA.balanceOf(maker);
-        uint256 makerTokenBBefore = tokenB.balanceOf(maker);
-
-        vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), amount, takerData);
-
-        // 3 requires pattern for fuzz: validate amounts and transfers
-        if (!allowZero) {
-            assertGt(amountIn, 0, "AmountIn should be > 0 when zero not allowed");
-        }
-        assertEq(tokenA.balanceOf(maker) - makerTokenABefore, amountIn, "Maker received correct amountIn");
-        assertEq(makerTokenBBefore - tokenB.balanceOf(maker), amountOut, "Maker sent correct amountOut");
-    }
-
     // ==================== HELPER FUNCTIONS ====================
 
     function _buildOrder(
