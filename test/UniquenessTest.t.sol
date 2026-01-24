@@ -312,7 +312,7 @@ contract UniquenessTest is AquaSwapVMTest {
             balances2
         );
 
-        // Verify both strategies have the same hash
+        // Verify both strategies have different hashes
         assertNotEq(strategyHash1, strategyHash2, "Both strategies should not have the same hash");
         assertEq(strategyHash1, orderHash1, "Strategy hash should equal order hash");
 
