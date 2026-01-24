@@ -316,8 +316,9 @@ contract UniquenessTest is AquaSwapVMTest {
         assertNotEq(strategyHash1, strategyHash2, "Both strategies should not have the same hash");
         assertEq(strategyHash1, orderHash1, "Strategy hash should equal order hash");
 
-        // Perform cross-strategy swap: B -> C
-        // This demonstrates that taker can swap between different token sets using the same orderHash
+        // Attempt cross-strategy swap: B -> C
+        // This demonstrates that a cross-strategy swap is prevented when strategies have different (unique) orderHashes,
+        // reverting with SafeBalancesForTokenNotInActiveStrategy to protect against using balances from another strategy.
         uint256 swapAmountB = 50e18;
 
         // Mint tokenB to taker
