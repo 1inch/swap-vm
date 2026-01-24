@@ -48,12 +48,6 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
-    // Helper to compute liquidity key same way as XYCConcentrate
-    function _computeLiquidityKey(bytes32 orderHash, address tokenIn, address tokenOut) internal pure returns (bytes32) {
-        (address tokenLt, address tokenGt) = tokenIn < tokenOut ? (tokenIn, tokenOut) : (tokenOut, tokenIn);
-        return keccak256(abi.encodePacked(orderHash, tokenLt, tokenGt));
-    }
-
     function setUp() public {
         // Setup maker with known private key for signing
         makerPrivateKey = 0x1234;
@@ -102,27 +96,38 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         view
         returns (ISwapVM.Order memory order, bytes memory signature)
     {
-        // Compute deltas for each pair with different price bounds
-        (uint256 deltaA_forB, uint256 deltaB_forA, uint256 liquidityAB) =
-            XYCConcentrateArgsBuilder.computeDeltas(setup.balanceA, setup.balanceB, 1e18, 0.01e18, 25e18);
-        (uint256 deltaA_forC, uint256 deltaC_forA, uint256 liquidityAC) =
-            XYCConcentrateArgsBuilder.computeDeltas(setup.balanceA, setup.balanceC, 1e18, 0.02e18, 20e18);
-        (uint256 deltaB_forC, uint256 deltaC_forB, uint256 liquidityBC) =
-            XYCConcentrateArgsBuilder.computeDeltas(setup.balanceB, setup.balanceC, 1e18, 0.05e18, 10e18);
+        // Use chain calculation for consistent deltas across all pairs
+        // Compute current price for base pair A-B
+        uint256 basePairPrice = (setup.balanceB * 1e18) / setup.balanceA;
 
-        // Build XD args with all three tokens
+        // Compute deltas for base pair and get concentration ratio
+        (uint256 deltaA, uint256 deltaB, uint256 concentrationRatio) =
+            XYCConcentrateArgsBuilder.computeDeltasChain(
+                setup.balanceA,    // balance of token A
+                setup.balanceB,    // balance of token B
+                basePairPrice,     // current price A-B
+                0.01e18,           // min price = 0.01 (very wide range)
+                25e18              // max price = 25.0
+            );
+
+        // Apply concentration ratio to token C
+        uint256 deltaC = (setup.balanceC * (concentrationRatio - 1e18)) / 1e18;
+
+        // Build arrays for XD format
         address[] memory tokens = new address[](3);
         tokens[0] = tokenA;
         tokens[1] = tokenB;
         tokens[2] = tokenC;
 
-        // For simplicity, use average deltas (in real scenario, deltas would be pair-specific)
         uint256[] memory deltas = new uint256[](3);
-        deltas[0] = (deltaA_forB + deltaA_forC) / 2;
-        deltas[1] = (deltaB_forA + deltaB_forC) / 2;
-        deltas[2] = (deltaC_forA + deltaC_forB) / 2;
+        deltas[0] = deltaA;
+        deltas[1] = deltaB;
+        deltas[2] = deltaC;
 
-        uint256 avgLiquidity = (liquidityAB + liquidityAC + liquidityBC) / 3;
+        uint256[] memory initialBalances = new uint256[](3);
+        initialBalances[0] = setup.balanceA + deltaA;
+        initialBalances[1] = setup.balanceB + deltaB;
+        initialBalances[2] = setup.balanceC + deltaC;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -149,7 +154,7 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
                     dynamic([setup.balanceA, setup.balanceB, setup.balanceC])
                 )),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidityXD,
-                    XYCConcentrateArgsBuilder.buildXD(tokens, deltas, avgLiquidity)
+                    XYCConcentrateArgsBuilder.buildXD(tokens, deltas, initialBalances)
                 ),
                 program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
                 program.build(XYCSwap._xycSwapXD)
@@ -200,19 +205,14 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenB, setup.balanceB / 2, takerData);
 
-        // Get liquidity keys for all pairs
-        bytes32 keyAB = _computeLiquidityKey(orderHash, tokenA, tokenB);
-        bytes32 keyAC = _computeLiquidityKey(orderHash, tokenA, tokenC);
-        bytes32 keyBC = _computeLiquidityKey(orderHash, tokenB, tokenC);
+        // Check concentrated balances - A and B were used, C was not
+        uint256 concentratedA = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concentratedB = concentrate.concentratedBalances(orderHash, tokenB);
+        uint256 concentratedC = concentrate.concentratedBalances(orderHash, tokenC);
 
-        // Check that liquidity values are different (AB was used, AC and BC were not)
-        uint256 liquidityAB = concentrate.liquidity(keyAB);
-        uint256 liquidityAC = concentrate.liquidity(keyAC);
-        uint256 liquidityBC = concentrate.liquidity(keyBC);
-
-        assertTrue(liquidityAB > 0, "Liquidity A-B should be updated");
-        assertEq(liquidityAC, 0, "Liquidity A-C should still be 0");
-        assertEq(liquidityBC, 0, "Liquidity B-C should still be 0");
+        assertTrue(concentratedA > 0, "Token A concentrated balance should be updated");
+        assertTrue(concentratedB > 0, "Token B concentrated balance should be updated");
+        assertEq(concentratedC, 0, "Token C concentrated balance should still be 0");
     }
 
     function test_ThreeTokens_SequentialSwapsAcrossPairs() public {
@@ -226,42 +226,41 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         bytes memory takerData = _buildTakerData(false, signature);
 
-        bytes32 keyAB = _computeLiquidityKey(orderHash, tokenA, tokenB);
-        bytes32 keyAC = _computeLiquidityKey(orderHash, tokenA, tokenC);
-        bytes32 keyBC = _computeLiquidityKey(orderHash, tokenB, tokenC);
-
         // Swap 1: A -> B
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
-        uint256 liqAB_1 = concentrate.liquidity(keyAB);
-        uint256 liqAC_1 = concentrate.liquidity(keyAC);
-        uint256 liqBC_1 = concentrate.liquidity(keyBC);
 
-        assertTrue(liqAB_1 > 0, "A-B liquidity should be set after first swap");
-        assertEq(liqAC_1, 0, "A-C liquidity should still be 0");
-        assertEq(liqBC_1, 0, "B-C liquidity should still be 0");
+        uint256 concA_1 = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB_1 = concentrate.concentratedBalances(orderHash, tokenB);
+        uint256 concC_1 = concentrate.concentratedBalances(orderHash, tokenC);
+
+        assertTrue(concA_1 > 0, "Token A should be updated after first swap");
+        assertTrue(concB_1 > 0, "Token B should be updated after first swap");
+        assertEq(concC_1, 0, "Token C should still be 0");
 
         // Swap 2: A -> C
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenC, 500e18, takerData);
-        uint256 liqAB_2 = concentrate.liquidity(keyAB);
-        uint256 liqAC_2 = concentrate.liquidity(keyAC);
-        uint256 liqBC_2 = concentrate.liquidity(keyBC);
 
-        assertEq(liqAB_2, liqAB_1, "A-B liquidity should not change");
-        assertTrue(liqAC_2 > 0, "A-C liquidity should be set after second swap");
-        assertEq(liqBC_2, 0, "B-C liquidity should still be 0");
+        uint256 concA_2 = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB_2 = concentrate.concentratedBalances(orderHash, tokenB);
+        uint256 concC_2 = concentrate.concentratedBalances(orderHash, tokenC);
+
+        assertTrue(concA_2 > concA_1, "Token A should increase (used in both swaps)");
+        assertEq(concB_2, concB_1, "Token B should not change");
+        assertTrue(concC_2 > 0, "Token C should be set after second swap");
 
         // Swap 3: B -> C
         vm.prank(taker);
         swapVM.swap(order, tokenB, tokenC, 300e18, takerData);
-        uint256 liqAB_3 = concentrate.liquidity(keyAB);
-        uint256 liqAC_3 = concentrate.liquidity(keyAC);
-        uint256 liqBC_3 = concentrate.liquidity(keyBC);
 
-        assertEq(liqAB_3, liqAB_1, "A-B liquidity should not change");
-        assertEq(liqAC_3, liqAC_2, "A-C liquidity should not change");
-        assertTrue(liqBC_3 > 0, "B-C liquidity should be set after third swap");
+        uint256 concA_3 = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB_3 = concentrate.concentratedBalances(orderHash, tokenB);
+        uint256 concC_3 = concentrate.concentratedBalances(orderHash, tokenC);
+
+        assertEq(concA_3, concA_2, "Token A should not change");
+        assertTrue(concB_3 != concB_2, "Token B should update");
+        assertTrue(concC_3 < concC_2, "Token C balance should decrease");
     }
 
     function test_ThreeTokens_PairIndependenceAfterExhaustion() public {
@@ -338,10 +337,6 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         bytes memory takerData = _buildTakerData(false, signature);
 
-        bytes32 keyAB = _computeLiquidityKey(orderHash, tokenA, tokenB);
-        bytes32 keyAC = _computeLiquidityKey(orderHash, tokenA, tokenC);
-        bytes32 keyBC = _computeLiquidityKey(orderHash, tokenB, tokenC);
-
         // Perform 30 swaps across different pairs
         for (uint256 i = 0; i < 30; i++) {
             uint256 pairSelector = i % 3;
@@ -359,17 +354,17 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
             }
         }
 
-        // Verify all pairs have their own liquidity tracking
-        uint256 liqAB = concentrate.liquidity(keyAB);
-        uint256 liqBC = concentrate.liquidity(keyBC);
-        uint256 liqCA = concentrate.liquidity(keyAC);
+        // Verify all tokens have concentrated balances tracked
+        uint256 concA = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB = concentrate.concentratedBalances(orderHash, tokenB);
+        uint256 concC = concentrate.concentratedBalances(orderHash, tokenC);
 
-        assertTrue(liqAB > 0, "A-B liquidity should be tracked");
-        assertTrue(liqBC > 0, "B-C liquidity should be tracked");
-        assertTrue(liqCA > 0, "C-A liquidity should be tracked");
+        assertTrue(concA > 0, "Token A concentrated balance should be tracked");
+        assertTrue(concB > 0, "Token B concentrated balance should be tracked");
+        assertTrue(concC > 0, "Token C concentrated balance should be tracked");
 
-        // All should be different (statistical impossibility they're equal after different swaps)
-        assertTrue(liqAB != liqBC || liqBC != liqCA, "All liquidities should be independently tracked");
+        // All should be different (statistical impossibility they're equal after different swap patterns)
+        assertTrue(concA != concB || concB != concC, "All token balances should be independently tracked");
     }
 
     function test_ThreeTokens_ReverseDirectionSamePair() public {
@@ -383,20 +378,24 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         bytes memory takerData = _buildTakerData(false, signature);
 
-        bytes32 keyAB = _computeLiquidityKey(orderHash, tokenA, tokenB);
-
         // Forward: A -> B
         vm.prank(taker);
         swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
-        uint256 liqAfterForward = concentrate.liquidity(keyAB);
 
-        // Reverse: B -> A (should use SAME liquidity key)
+        uint256 concA_forward = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB_forward = concentrate.concentratedBalances(orderHash, tokenB);
+
+        // Reverse: B -> A (should update same token balances)
         vm.prank(taker);
         swapVM.swap(order, tokenB, tokenA, 500e18, takerData);
-        uint256 liqAfterReverse = concentrate.liquidity(keyAB);
 
-        // Both directions should update the same liquidity tracking
-        assertTrue(liqAfterForward > 0, "Liquidity should be set after forward swap");
-        assertTrue(liqAfterReverse != liqAfterForward, "Liquidity should update after reverse swap");
+        uint256 concA_reverse = concentrate.concentratedBalances(orderHash, tokenA);
+        uint256 concB_reverse = concentrate.concentratedBalances(orderHash, tokenB);
+
+        // Both directions should update the same token tracking
+        assertTrue(concA_forward > 0, "Token A should be set after forward swap");
+        assertTrue(concB_forward > 0, "Token B should be set after forward swap");
+        assertTrue(concA_reverse < concA_forward, "Token A should decrease after reverse swap");
+        assertTrue(concB_reverse > concB_forward, "Token B should increase after reverse swap");
     }
 }

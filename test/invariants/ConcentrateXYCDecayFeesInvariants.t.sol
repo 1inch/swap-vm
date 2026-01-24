@@ -140,26 +140,26 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order1_GrowLiquidityXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 600e18;
-        deltas[1] = 600e18;
+        uint256 balanceA = 2000e18;
+        uint256 balanceB = 2000e18;
+        uint256 deltaA = 600e18;
+        uint256 deltaB = 600e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(2000e18), uint256(2000e18)])
+                    dynamic([balanceA, balanceB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(900)),
             program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(0.002e9, feeRecipient)),
-            program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_xycSwapXD)
         );
 
@@ -167,26 +167,26 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order1_GrowPriceRangeXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 833e18;
-        deltas[1] = 833e18;
+        uint256 balanceA = 2500e18;
+        uint256 balanceB = 2500e18;
+        uint256 deltaA = 833e18;
+        uint256 deltaB = 833e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(2500e18), uint256(2500e18)])
+                    dynamic([balanceA, balanceB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(1200)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.001e9)),
             program.build(_progressiveFeeOutXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.02e9)),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_xycSwapXD)
         );
 
@@ -240,24 +240,24 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 3: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order3_GrowLiquidityXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 360e18;
-        deltas[1] = 360e18;
+        uint256 balanceA = 1200e18;
+        uint256 balanceB = 1200e18;
+        uint256 deltaA = 360e18;
+        uint256 deltaB = 360e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1200e18), uint256(1200e18)])
+                    dynamic([balanceA, balanceB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(360)),
-            program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.0035e9)),
             program.build(_xycSwapXD)
         );
@@ -266,24 +266,24 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order3_GrowPriceRangeXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 600e18;
-        deltas[1] = 600e18;
+        uint256 balanceA = 1600e18;
+        uint256 balanceB = 1600e18;
+        uint256 deltaA = 600e18;
+        uint256 deltaB = 600e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1600e18), uint256(1600e18)])
+                    dynamic([balanceA, balanceB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(660)),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_progressiveFeeOutXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.08e9)),
             program.build(_xycSwapXD)
         );
@@ -339,23 +339,24 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 5: Balances -> Concentrate -> Decay -> Fees -> XYC ======
 
     function test_Order5_GrowLiquidityXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
+        uint256 balanceA = 1400e18;
+        uint256 balanceB = 1400e18;
 
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 420e18;
-        deltas[1] = 420e18;
+        uint256 deltaA = 420e18;
+        uint256 deltaB = 420e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1400e18), uint256(1400e18)])
+                    dynamic([balanceA, balanceB])
                 )),
-            program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_decayXD, DecayArgsBuilder.build(420)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.0045e9)),
             program.build(_xycSwapXD)
@@ -365,23 +366,23 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order5_GrowPriceRangeXD() public {
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = 633e18;
-        deltas[1] = 633e18;
+        uint256 balanceA = 1900e18;
+        uint256 balanceB = 1900e18;
+        uint256 deltaA = 633e18;
+        uint256 deltaB = 633e18;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1900e18), uint256(1900e18)])
+                    dynamic([balanceA, balanceB])
                 )),
-            program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, 1e18)),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_decayXD, DecayArgsBuilder.build(840)),
             program.build(_progressiveFeeOutXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.06e9)),
             program.build(_xycSwapXD)

@@ -204,22 +204,13 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.5e18;
         uint256 priceMax = 2e18;
 
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB,) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
             priceMin,
             priceMax
         );
-
-        // Create arrays for XD version
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = deltaA;
-        deltas[1] = deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -229,7 +220,10 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_xycSwapXD)
         );
 
@@ -258,22 +252,13 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.6e18;
         uint256 priceMax = 1.7e18;
 
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
+        (uint256 deltaA, uint256 deltaB,) = XYCConcentrateArgsBuilder.computeDeltas(
             balanceA,
             balanceB,
             currentPrice,
             priceMin,
             priceMax
         );
-
-        // Create arrays for XD version
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = deltaA;
-        deltas[1] = deltaB;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
@@ -283,7 +268,10 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB]),
+                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
             program.build(_xycSwapXD)
         );
 
