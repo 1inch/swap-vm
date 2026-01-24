@@ -268,7 +268,7 @@ contract UniquenessTest is AquaSwapVMTest {
         // Create first strategy with tokens A and B
         ISwapVM.Order memory strategy1 = createStrategy(buildSimpleXYCProgram(1));
 
-        // Create second strategy with the same program (will have same orderHash)
+        // Create second strategy with a different salt (will have a different orderHash)
         ISwapVM.Order memory strategy2 = createStrategy(buildSimpleXYCProgram(2));
 
         // Calculate orderHash for both strategies
