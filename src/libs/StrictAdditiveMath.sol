@@ -6,37 +6,67 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-/// @title StrictAdditiveMath - Math library for x^α * y = K AMM with fee reinvested inside pricing
-/// @notice Implements strict additive fee model where: y * Ψ(x) = K with Ψ(x) = x^α
-/// @dev Based on the paper "Strict-Additive Fees Reinvested Inside Pricing for AMMs"
-/// @dev Key property: Split invariance - swapping (a+b) equals swapping a then b
-/// @dev Uses fixed-point arithmetic with 1e27 precision for intermediate calculations
+/// @title StrictAdditiveMath - Gas-optimized math for x^α * y = K AMM
+/// @notice Implements strict additive fee model using Balancer-style optimizations
+/// @dev Based on Balancer's LogExpMath with precomputed constants and unrolled Taylor series
+/// @dev Key optimizations:
+///   - Precomputed e^(2^n) constants for decomposition (no loops)
+///   - Unrolled Taylor series with fixed terms (no dynamic iteration)
+///   - Special high-precision path for ratios close to 1
 library StrictAdditiveMath {
-    /// @dev Precision scale for fixed-point math (1e27 for high precision)
-    uint256 internal constant ONE = 1e27;
-    
     /// @dev Alpha scale - alpha is represented as alpha/ALPHA_SCALE where ALPHA_SCALE = 1e9
-    /// @dev Example: alpha = 0.997 is stored as 997_000_000
     uint256 internal constant ALPHA_SCALE = 1e9;
     
-    /// @dev Maximum number of iterations for the power calculation
-    uint256 internal constant MAX_ITERATIONS = 100;
-    
-    /// @dev Convergence threshold for Newton-Raphson (in ONE scale)
-    uint256 internal constant CONVERGENCE_THRESHOLD = 1e9; // 1e-18 in ONE scale
+    /// @dev Fixed-point scale (18 decimals)
+    int256 internal constant ONE_18 = 1e18;
+    int256 internal constant ONE_20 = 1e20;
+    int256 internal constant ONE_36 = 1e36;
+
+    /// @dev Domain bounds for natural exponentiation
+    int256 internal constant MAX_NATURAL_EXPONENT = 130e18;
+    int256 internal constant MIN_NATURAL_EXPONENT = -41e18;
+
+    /// @dev Bounds for ln_36's argument (values close to 1)
+    int256 internal constant LN_36_LOWER_BOUND = ONE_18 - 1e17; // 0.9
+    int256 internal constant LN_36_UPPER_BOUND = ONE_18 + 1e17; // 1.1
+
+    /// @dev Precomputed e^(2^n) constants for exp decomposition
+    int256 internal constant x0 = 128000000000000000000; // 2^7
+    int256 internal constant a0 = 38877084059945950922200000000000000000000000000000000000; // e^(x0)
+    int256 internal constant x1 = 64000000000000000000; // 2^6
+    int256 internal constant a1 = 6235149080811616882910000000; // e^(x1)
+
+    // 20 decimal constants
+    int256 internal constant x2 = 3200000000000000000000; // 2^5
+    int256 internal constant a2 = 7896296018268069516100000000000000; // e^(x2)
+    int256 internal constant x3 = 1600000000000000000000; // 2^4
+    int256 internal constant a3 = 888611052050787263676000000; // e^(x3)
+    int256 internal constant x4 = 800000000000000000000; // 2^3
+    int256 internal constant a4 = 298095798704172827474000; // e^(x4)
+    int256 internal constant x5 = 400000000000000000000; // 2^2
+    int256 internal constant a5 = 5459815003314423907810; // e^(x5)
+    int256 internal constant x6 = 200000000000000000000; // 2^1
+    int256 internal constant a6 = 738905609893065022723; // e^(x6)
+    int256 internal constant x7 = 100000000000000000000; // 2^0
+    int256 internal constant a7 = 271828182845904523536; // e^(x7)
+    int256 internal constant x8 = 50000000000000000000; // 2^-1
+    int256 internal constant a8 = 164872127070012814685; // e^(x8)
+    int256 internal constant x9 = 25000000000000000000; // 2^-2
+    int256 internal constant a9 = 128402541668774148407; // e^(x9)
+    int256 internal constant x10 = 12500000000000000000; // 2^-3
+    int256 internal constant a10 = 113314845306682631683; // e^(x10)
+    int256 internal constant x11 = 6250000000000000000; // 2^-4
+    int256 internal constant a11 = 106449445891785942956; // e^(x11)
 
     error StrictAdditiveMathAlphaOutOfRange(uint256 alpha);
     error StrictAdditiveMathInvalidInput();
-    error StrictAdditiveMathNoConvergence();
     error StrictAdditiveMathOverflow();
 
-    /// @notice Calculate ratio^alpha using binary exponentiation with fixed-point
-    /// @dev For ratio = numerator/denominator, calculates (numerator/denominator)^alpha
-    /// @dev Uses the identity: r^α ≈ r^(n/d) where alpha = n/d in ALPHA_SCALE
+    /// @notice Calculate (numerator/denominator)^alpha
     /// @param numerator The numerator of the ratio
-    /// @param denominator The denominator of the ratio (must be > 0)
+    /// @param denominator The denominator of the ratio
     /// @param alpha The exponent scaled by ALPHA_SCALE (e.g., 997_000_000 for 0.997)
-    /// @return result The result scaled by ONE
+    /// @return result The result scaled by ONE_18
     function powRatio(
         uint256 numerator,
         uint256 denominator,
@@ -46,31 +76,25 @@ library StrictAdditiveMath {
         require(alpha <= ALPHA_SCALE, StrictAdditiveMathAlphaOutOfRange(alpha));
         
         if (numerator == 0) return 0;
-        if (alpha == 0) return ONE;
-        if (alpha == ALPHA_SCALE) return numerator * ONE / denominator;
-        if (numerator == denominator) return ONE;
+        if (alpha == 0) return uint256(ONE_18);
+        if (numerator == denominator) return uint256(ONE_18);
+        if (alpha == ALPHA_SCALE) return numerator * uint256(ONE_18) / denominator;
         
-        // For r^α where r = numerator/denominator and α = alpha/ALPHA_SCALE
-        // We use: r^α = exp(α * ln(r))
+        // Calculate ratio in 18 decimal fixed point
+        int256 ratio = int256(numerator * uint256(ONE_18) / denominator);
         
-        // Calculate ln(r) = ln(numerator/denominator) = ln(numerator) - ln(denominator)
-        // Using fixed-point logarithm
-        int256 lnR = _ln(numerator) - _ln(denominator);
+        // x^α = exp(α * ln(x))
+        int256 lnRatio = _ln(ratio);
+        int256 exponent = (lnRatio * int256(alpha)) / int256(ALPHA_SCALE);
         
-        // Calculate α * ln(r) with proper scaling
-        // lnR is in ONE scale, alpha is in ALPHA_SCALE
-        int256 exponent = (lnR * int256(alpha)) / int256(ALPHA_SCALE);
-        
-        // Calculate exp(α * ln(r))
-        result = _exp(exponent);
+        result = uint256(_exp(exponent));
     }
-    
-    /// @notice Calculate ratio^(1/alpha) for ExactOut calculations
-    /// @dev For ratio = numerator/denominator, calculates (numerator/denominator)^(1/alpha)
+
+    /// @notice Calculate (numerator/denominator)^(1/alpha) for ExactOut
     /// @param numerator The numerator of the ratio
-    /// @param denominator The denominator of the ratio (must be > 0)
+    /// @param denominator The denominator of the ratio
     /// @param alpha The exponent denominator scaled by ALPHA_SCALE
-    /// @return result The result scaled by ONE
+    /// @return result The result scaled by ONE_18
     function powRatioInverse(
         uint256 numerator,
         uint256 denominator,
@@ -80,151 +104,217 @@ library StrictAdditiveMath {
         require(alpha > 0 && alpha <= ALPHA_SCALE, StrictAdditiveMathAlphaOutOfRange(alpha));
         
         if (numerator == 0) return 0;
-        if (alpha == ALPHA_SCALE) return numerator * ONE / denominator;
-        if (numerator == denominator) return ONE;
+        if (numerator == denominator) return uint256(ONE_18);
+        if (alpha == ALPHA_SCALE) return numerator * uint256(ONE_18) / denominator;
         
-        // For r^(1/α) where r = numerator/denominator and α = alpha/ALPHA_SCALE
-        // We use: r^(1/α) = exp((1/α) * ln(r)) = exp(ln(r) * ALPHA_SCALE / alpha)
+        // Calculate ratio in 18 decimal fixed point
+        int256 ratio = int256(numerator * uint256(ONE_18) / denominator);
         
-        // Calculate ln(r)
-        int256 lnR = _ln(numerator) - _ln(denominator);
+        // x^(1/α) = exp(ln(x) / α) = exp(ln(x) * ALPHA_SCALE / alpha)
+        int256 lnRatio = _ln(ratio);
+        int256 exponent = (lnRatio * int256(ALPHA_SCALE)) / int256(alpha);
         
-        // Calculate ln(r) / α with proper scaling
-        // lnR is in ONE scale, we divide by alpha and multiply by ALPHA_SCALE
-        int256 exponent = (lnR * int256(ALPHA_SCALE)) / int256(alpha);
-        
-        // Calculate exp(ln(r) / α)
-        result = _exp(exponent);
+        result = uint256(_exp(exponent));
     }
 
-    /// @notice Natural logarithm using Taylor series
-    /// @dev Input: x as raw uint256
-    /// @dev Output: ln(x) scaled by ONE (1e27)
-    /// @dev Uses ln(x) = ln(x/ONE * ONE) = ln(x/ONE) + ln(ONE)
-    function _ln(uint256 x) internal pure returns (int256) {
-        require(x > 0, StrictAdditiveMathInvalidInput());
+    /// @notice Natural logarithm with 18 decimal fixed point
+    /// @dev Uses Balancer's optimized approach with precomputed decomposition
+    function _ln(int256 a) internal pure returns (int256) {
+        require(a > 0, StrictAdditiveMathInvalidInput());
         
-        // Scale x to be around ONE for better precision
-        // Find n such that x * 2^n is in range [ONE, 2*ONE]
-        int256 scale = 0;
-        uint256 scaledX = x;
-        
-        // Scale up if too small
-        while (scaledX < ONE && scale > -256) {
-            scaledX = scaledX * 2;
-            scale -= 1;
+        // Use high-precision path for values close to 1
+        if (LN_36_LOWER_BOUND < a && a < LN_36_UPPER_BOUND) {
+            return _ln_36(a) / ONE_18;
         }
         
-        // Scale down if too large
-        while (scaledX >= 2 * ONE && scale < 256) {
-            scaledX = scaledX / 2;
-            scale += 1;
+        if (a < ONE_18) {
+            // ln(a) = -ln(1/a) for a < 1
+            return -_ln((ONE_18 * ONE_18) / a);
         }
+
+        // Decompose using precomputed e^(2^n) constants
+        int256 sum = 0;
         
-        // Now scaledX is approximately in [ONE, 2*ONE]
-        // ln(x) = ln(scaledX) + scale * ln(2)
-        
-        // Calculate ln(scaledX) using ln(1+t) = t - t²/2 + t³/3 - ...
-        // where t = (scaledX - ONE) / ONE
-        
-        // For scaledX in [ONE, 2*ONE], t is in [0, 1]
-        int256 t = (int256(scaledX) - int256(ONE));
-        
-        // Taylor series: ln(1+t) = t - t²/2 + t³/3 - t⁴/4 + ...
-        int256 result = 0;
-        int256 term = t;  // t^1 / 1
-        
-        for (uint256 i = 1; i <= 50 && (term > int256(CONVERGENCE_THRESHOLD) || term < -int256(CONVERGENCE_THRESHOLD)); i++) {
-            if (i % 2 == 1) {
-                result += term / int256(i);
-            } else {
-                result -= term / int256(i);
-            }
-            term = (term * t) / int256(ONE);
+        if (a >= a0 * ONE_18) {
+            a /= a0;
+            sum += x0;
         }
-        
-        // Add scale * ln(2)
-        // ln(2) ≈ 0.693147180559945... in ONE scale
-        int256 LN_2 = 693147180559945309417232121458176568 * int256(ONE) / 1e36;
-        
-        result += scale * LN_2;
-        
-        return result;
+        if (a >= a1 * ONE_18) {
+            a /= a1;
+            sum += x1;
+        }
+
+        // Convert to 20 decimal precision for remaining terms
+        sum *= 100;
+        a *= 100;
+
+        if (a >= a2) { a = (a * ONE_20) / a2; sum += x2; }
+        if (a >= a3) { a = (a * ONE_20) / a3; sum += x3; }
+        if (a >= a4) { a = (a * ONE_20) / a4; sum += x4; }
+        if (a >= a5) { a = (a * ONE_20) / a5; sum += x5; }
+        if (a >= a6) { a = (a * ONE_20) / a6; sum += x6; }
+        if (a >= a7) { a = (a * ONE_20) / a7; sum += x7; }
+        if (a >= a8) { a = (a * ONE_20) / a8; sum += x8; }
+        if (a >= a9) { a = (a * ONE_20) / a9; sum += x9; }
+        if (a >= a10) { a = (a * ONE_20) / a10; sum += x10; }
+        if (a >= a11) { a = (a * ONE_20) / a11; sum += x11; }
+
+        // Taylor series for remainder: ln(a) = 2 * (z + z³/3 + z⁵/5 + ...)
+        // where z = (a - 1) / (a + 1)
+        int256 z = ((a - ONE_20) * ONE_20) / (a + ONE_20);
+        int256 z_squared = (z * z) / ONE_20;
+
+        int256 num = z;
+        int256 seriesSum = num;
+
+        // Unrolled Taylor series (6 terms sufficient for 18 decimal precision)
+        num = (num * z_squared) / ONE_20;
+        seriesSum += num / 3;
+
+        num = (num * z_squared) / ONE_20;
+        seriesSum += num / 5;
+
+        num = (num * z_squared) / ONE_20;
+        seriesSum += num / 7;
+
+        num = (num * z_squared) / ONE_20;
+        seriesSum += num / 9;
+
+        num = (num * z_squared) / ONE_20;
+        seriesSum += num / 11;
+
+        seriesSum *= 2;
+
+        return (sum + seriesSum) / 100;
     }
 
-    /// @notice Exponential function using Taylor series
-    /// @dev Input: x scaled by ONE
-    /// @dev Output: exp(x) scaled by ONE
-    function _exp(int256 x) internal pure returns (uint256) {
-        // Handle edge cases
-        if (x == 0) return ONE;
-        
-        // For very negative x, result is close to 0
-        if (x < -63 * int256(ONE)) return 0;
-        
-        // For very positive x, overflow
-        require(x < 130 * int256(ONE), StrictAdditiveMathOverflow());
-        
-        // Reduce x to range [-1, 1] by using exp(x) = exp(x/n)^n
-        // We use exp(x) = exp(x - k*ln(2)) * 2^k
-        int256 LN_2 = 693147180559945309417232121458176568 * int256(ONE) / 1e36;
-        
-        int256 k = x / LN_2;
-        int256 r = x - k * LN_2;  // r is in [-ln(2), ln(2)]
-        
-        // Calculate exp(r) using Taylor series: exp(r) = 1 + r + r²/2! + r³/3! + ...
-        int256 result = int256(ONE);
-        int256 term = int256(ONE);
-        
-        for (uint256 i = 1; i <= 30; i++) {
-            term = (term * r) / (int256(ONE) * int256(i));
-            result += term;
-            
-            if (term > -int256(CONVERGENCE_THRESHOLD) && term < int256(CONVERGENCE_THRESHOLD)) {
-                break;
-            }
+    /// @notice High-precision natural log for values close to 1
+    function _ln_36(int256 x) private pure returns (int256) {
+        x *= ONE_18;
+
+        int256 z = ((x - ONE_36) * ONE_36) / (x + ONE_36);
+        int256 z_squared = (z * z) / ONE_36;
+
+        int256 num = z;
+        int256 seriesSum = num;
+
+        // Unrolled Taylor series (8 terms for 36 decimal precision)
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 3;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 5;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 7;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 9;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 11;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 13;
+
+        num = (num * z_squared) / ONE_36;
+        seriesSum += num / 15;
+
+        return seriesSum * 2;
+    }
+
+    /// @notice Exponential function with 18 decimal fixed point
+    /// @dev Uses Balancer's optimized decomposition with precomputed constants
+    function _exp(int256 x) internal pure returns (int256) {
+        require(x >= MIN_NATURAL_EXPONENT && x <= MAX_NATURAL_EXPONENT, StrictAdditiveMathOverflow());
+
+        if (x < 0) {
+            return (ONE_18 * ONE_18) / _exp(-x);
         }
-        
-        // Multiply by 2^k
-        if (k >= 0) {
-            if (k > 88) return type(uint256).max; // Overflow protection
-            result = result << uint256(k);
+
+        // Decompose using precomputed e^(2^n) constants
+        int256 firstAN;
+        if (x >= x0) {
+            x -= x0;
+            firstAN = a0;
+        } else if (x >= x1) {
+            x -= x1;
+            firstAN = a1;
         } else {
-            result = result >> uint256(-k);
+            firstAN = 1;
         }
-        
-        return result >= 0 ? uint256(result) : 0;
+
+        // Convert to 20 decimal precision
+        x *= 100;
+
+        int256 product = ONE_20;
+
+        if (x >= x2) { x -= x2; product = (product * a2) / ONE_20; }
+        if (x >= x3) { x -= x3; product = (product * a3) / ONE_20; }
+        if (x >= x4) { x -= x4; product = (product * a4) / ONE_20; }
+        if (x >= x5) { x -= x5; product = (product * a5) / ONE_20; }
+        if (x >= x6) { x -= x6; product = (product * a6) / ONE_20; }
+        if (x >= x7) { x -= x7; product = (product * a7) / ONE_20; }
+        if (x >= x8) { x -= x8; product = (product * a8) / ONE_20; }
+        if (x >= x9) { x -= x9; product = (product * a9) / ONE_20; }
+
+        // Taylor series for remainder: exp(x) = 1 + x + x²/2! + x³/3! + ...
+        int256 seriesSum = ONE_20;
+        int256 term = x;
+        seriesSum += term;
+
+        // Unrolled Taylor series (12 terms sufficient for 18 decimal precision)
+        term = ((term * x) / ONE_20) / 2;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 3;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 4;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 5;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 6;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 7;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 8;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 9;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 10;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 11;
+        seriesSum += term;
+
+        term = ((term * x) / ONE_20) / 12;
+        seriesSum += term;
+
+        return (((product * seriesSum) / ONE_20) * firstAN) / 100;
     }
 
     /// @notice ExactIn calculation: Δy = y * (1 - (x / (x + Δx))^α)
-    /// @param balanceIn Current balance of input token (x)
-    /// @param balanceOut Current balance of output token (y)
-    /// @param amountIn Amount of input token (Δx)
-    /// @param alpha The alpha parameter scaled by ALPHA_SCALE
-    /// @return amountOut Amount of output token (Δy)
     function calcExactIn(
         uint256 balanceIn,
         uint256 balanceOut,
         uint256 amountIn,
         uint256 alpha
     ) internal pure returns (uint256 amountOut) {
-        // y' = y * (x / (x + Δx))^α
-        // Δy = y - y' = y * (1 - (x / (x + Δx))^α)
-        
-        // Calculate (x / (x + Δx))^α
+        // (x / (x + Δx))^α
         uint256 ratio = powRatio(balanceIn, balanceIn + amountIn, alpha);
         
-        // Δy = y * (ONE - ratio) / ONE
-        // Use floor division to protect maker
-        amountOut = balanceOut * (ONE - ratio) / ONE;
+        // Δy = y * (ONE_18 - ratio) / ONE_18
+        amountOut = balanceOut * (uint256(ONE_18) - ratio) / uint256(ONE_18);
     }
 
     /// @notice ExactOut calculation: Δx = x * ((y / (y - Δy))^(1/α) - 1)
-    /// @param balanceIn Current balance of input token (x)
-    /// @param balanceOut Current balance of output token (y)
-    /// @param amountOut Amount of output token (Δy)
-    /// @param alpha The alpha parameter scaled by ALPHA_SCALE
-    /// @return amountIn Amount of input token (Δx)
     function calcExactOut(
         uint256 balanceIn,
         uint256 balanceOut,
@@ -233,13 +323,10 @@ library StrictAdditiveMath {
     ) internal pure returns (uint256 amountIn) {
         require(amountOut < balanceOut, StrictAdditiveMathInvalidInput());
         
-        // Δx = x * ((y / (y - Δy))^(1/α) - 1)
-        
-        // Calculate (y / (y - Δy))^(1/α)
+        // (y / (y - Δy))^(1/α)
         uint256 ratio = powRatioInverse(balanceOut, balanceOut - amountOut, alpha);
         
-        // Δx = x * (ratio - ONE) / ONE
-        // Use ceiling division to protect maker
-        amountIn = Math.ceilDiv(balanceIn * (ratio - ONE), ONE);
+        // Δx = x * (ratio - ONE_18) / ONE_18 (ceiling)
+        amountIn = Math.ceilDiv(balanceIn * (ratio - uint256(ONE_18)), uint256(ONE_18));
     }
 }
