@@ -12,6 +12,7 @@ import { Controls } from "../instructions/Controls.sol";
 import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
+import { XYCSwapStrictAdditive } from "../instructions/XYCSwapStrictAdditive.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
 import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperimental.sol";
 import { Decay } from "../instructions/Decay.sol";
@@ -30,6 +31,7 @@ contract Opcodes is
     Balances,
     Invalidators,
     XYCSwap,
+    XYCSwapStrictAdditive,
     XYCConcentrate,
     XYCConcentrateExperimental,
     Decay,
@@ -48,7 +50,7 @@ contract Opcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[50] memory instructions = [
+        function(Context memory, bytes calldata) internal[51] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -111,7 +113,8 @@ contract Opcodes is
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            XYCSwapStrictAdditive._xycSwapStrictAdditiveXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array
