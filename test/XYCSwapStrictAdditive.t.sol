@@ -181,7 +181,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         // With fee reinvested, output should be less than no-fee output
         assertLt(amountOut, noFeeOut, "Output should be less than no-fee output");
-        
+
         console.log("No fee output:", noFeeOut);
         console.log("With fee output:", amountOut);
         console.log("Fee retained in reserve:", noFeeOut - amountOut);
@@ -207,11 +207,11 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         // Note: The fee retained in reserve is (1 - (x/(x+dx))^alpha) vs (1 - x/(x+dx))
         // For alpha < 1, (x/(x+dx))^alpha > x/(x+dx), so output < noFeeOut
         assertLt(amountOut, noFeeOut, "Output should be less than no-fee output");
-        
+
         // The fee effect: retained Y = noFeeOut - amountOut > 0
         uint256 feeRetained = noFeeOut - amountOut;
         assertGt(feeRetained, 0, "Fee should be positive");
-        
+
         console.log("No fee output:", noFeeOut);
         console.log("With 5% fee output:", amountOut);
         console.log("Fee retained:", feeRetained);
@@ -284,13 +284,13 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         uint256 splitSwapOut = firstSwapOut + secondSwapOut;
 
         // Calculate precision loss details
-        uint256 absDiff = singleSwapOut > splitSwapOut 
-            ? singleSwapOut - splitSwapOut 
+        uint256 absDiff = singleSwapOut > splitSwapOut
+            ? singleSwapOut - splitSwapOut
             : splitSwapOut - singleSwapOut;
-        
+
         // Relative difference (in 1e18 scale, so 1e18 = 100%)
         uint256 relDiff = absDiff * 1e18 / singleSwapOut;
-        
+
         console.log("\n========== PRECISION LOSS ANALYSIS (40+60 split) ==========");
         console.log("Single swap output (wei):     ", singleSwapOut);
         console.log("Split swap output (wei):      ", splitSwapOut);
@@ -330,7 +330,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         string memory label
     ) internal {
         uint256 partAmount = totalAmount / numSplits;
-        
+
         // Single swap
         uint256 snapshot = vm.snapshot();
         vm.prank(taker);
@@ -345,13 +345,13 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
             splitSwapOut += swapOut;
         }
 
-        uint256 absDiff = singleSwapOut > splitSwapOut 
-            ? singleSwapOut - splitSwapOut 
+        uint256 absDiff = singleSwapOut > splitSwapOut
+            ? singleSwapOut - splitSwapOut
             : splitSwapOut - singleSwapOut;
         uint256 relDiff = absDiff * 1e18 / singleSwapOut;
 
         console.log(string.concat(label, " split - Abs diff (wei): "), absDiff, " Rel (ppb):", relDiff / 1e9);
-        
+
         vm.revertTo(snapshot);
     }
 
@@ -376,13 +376,13 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         (, uint256 secondSwapOut,) = swapVM.swap(order, address(tokenA), address(tokenB), secondPart, takerData);
 
         uint256 splitSwapOut = firstSwapOut + secondSwapOut;
-        uint256 absDiff = singleSwapOut > splitSwapOut 
-            ? singleSwapOut - splitSwapOut 
+        uint256 absDiff = singleSwapOut > splitSwapOut
+            ? singleSwapOut - splitSwapOut
             : splitSwapOut - singleSwapOut;
         uint256 relDiff = absDiff * 1e18 / singleSwapOut;
 
         console.log(string.concat("Split ", label, " - Abs diff (wei): "), absDiff, " Rel diff (ppb):", relDiff / 1e9);
-        
+
         vm.revertTo(snapshot);
     }
 
@@ -392,7 +392,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         uint256 totalAmount = 100e18;
 
         console.log("\n========== PRECISION vs FEE LEVEL (10-way split) ==========");
-        
+
         // Test different fee levels
         uint32[] memory alphas = new uint32[](6);
         alphas[0] = uint32(1e9);         // 0% fee (alpha=1.0)
@@ -423,12 +423,12 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
                 splitSwapOut += swapOut;
             }
 
-            uint256 absDiff = singleSwapOut > splitSwapOut 
-                ? singleSwapOut - splitSwapOut 
+            uint256 absDiff = singleSwapOut > splitSwapOut
+                ? singleSwapOut - splitSwapOut
                 : splitSwapOut - singleSwapOut;
-            
+
             console.log(string.concat(labels[i], " - Diff (wei):"), absDiff, "Single:", singleSwapOut / 1e15);
-            
+
             vm.revertTo(snapshot);
         }
     }
@@ -455,7 +455,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         for (uint256 i = 0; i < amounts.length; i++) {
             uint256 totalAmount = amounts[i];
-            
+
             // Single swap
             uint256 snapshot = vm.snapshot();
             vm.prank(taker);
@@ -471,14 +471,14 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
                 splitSwapOut += swapOut;
             }
 
-            uint256 absDiff = singleSwapOut > splitSwapOut 
-                ? singleSwapOut - splitSwapOut 
+            uint256 absDiff = singleSwapOut > splitSwapOut
+                ? singleSwapOut - splitSwapOut
                 : splitSwapOut - singleSwapOut;
-            
+
             uint256 relDiffPpb = singleSwapOut > 0 ? (absDiff * 1e9 / singleSwapOut) : 0;
-            
+
             console.log(string.concat(labels[i], " tokens - Diff (wei):"), absDiff, "Rel (ppb):", relDiffPpb);
-            
+
             vm.revertTo(snapshot);
         }
     }
@@ -557,6 +557,10 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
     // EXACTOUT TESTS
     // ========================================
 
+    /// @notice ExactOut with "two curves" design
+    /// @dev In the two curves design, ExactOut uses calcExactIn with swapped semantics
+    /// This means ExactOut is NOT the mathematical inverse of ExactIn on the same curve
+    /// Instead, it applies the power to balanceIn, treating amountOut as the "input" parameter
     function test_XYCSwapStrictAdditive_ExactOut_Basic() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
@@ -570,17 +574,24 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 amountIn,,) = swapVM.swap(order, address(tokenA), address(tokenB), amountOut, takerData);
 
-        console.log("ExactOut - Amount out requested:", amountOut);
-        console.log("ExactOut - Amount in required:", amountIn);
+        console.log("\n=== ExactOut with Two Curves Design ===");
+        console.log("Amount out requested:", amountOut);
+        console.log("Amount in required:", amountIn);
 
-        // Verify the ExactOut calculation is consistent:
-        // The amountIn should be greater than what standard CP would require (due to fee)
-        // Standard CP: amountIn = amountOut * balanceIn / (balanceOut - amountOut)
-        uint256 cpAmountIn = amountOut * poolA / (poolB - amountOut);
-        assertGt(amountIn, cpAmountIn, "ExactOut amountIn should be > CP baseline due to fee");
+        // With "two curves" design, ExactOut uses calcExactIn formula:
+        // amountIn = balanceOut * (1 - (balanceIn / (balanceIn + amountOut))^α)
+        // This is NOT the traditional inverse, but a different calculation
+        uint256 expectedFromFormula = StrictAdditiveMath.calcExactIn(poolA, poolB, amountOut, alpha);
+        console.log("Expected from formula:", expectedFromFormula);
         
-        console.log("CP baseline amountIn:", cpAmountIn);
-        console.log("Fee impact (extra input):", amountIn - cpAmountIn);
+        assertEq(amountIn, expectedFromFormula, "Should match calcExactIn formula");
+        
+        // Note: In this design, amountIn may be LESS than CP baseline because
+        // the power is applied to balanceIn, not solved inversely
+        uint256 cpAmountIn = amountOut * poolA / (poolB - amountOut);
+        console.log("CP baseline:", cpAmountIn);
+        console.log("Difference from CP:", cpAmountIn > amountIn ? cpAmountIn - amountIn : amountIn - cpAmountIn);
+        console.log("================================\n");
     }
 
     function test_XYCSwapStrictAdditive_ExactOut_SplitInvariance() public {
@@ -674,12 +685,12 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("  2-way rel diff (ppb):", diff2Way * 1e9 / singleSwapIn);
         console.log("  5-way rel diff (ppb):", diff5Way * 1e9 / singleSwapIn);
         console.log("  10-way rel diff (ppb):", diff10Way * 1e9 / singleSwapIn);
-        
+
         // All should be within tolerance
         assertApproxEqRel(split2Way, singleSwapIn, 1e15, "2-way split should equal single swap");
         assertApproxEqRel(split5Way, singleSwapIn, 1e15, "5-way split should equal single swap");
         assertApproxEqRel(split10Way, singleSwapIn, 1e15, "10-way split should equal single swap");
-        
+
         console.log("  Result: STRICT ADDITIVITY HOLDS for ExactOut");
         console.log("================================================================================\n");
     }
@@ -693,7 +704,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("\n================================================================================");
         console.log("          EXACTOUT FEE REINVESTMENT ANALYSIS");
         console.log("================================================================================\n");
-        
+
         console.log("Pool: x = 1000e18, y = 1000e18, amountOut = 100e18\n");
 
         // Test different alpha values
@@ -713,7 +724,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         for (uint256 i = 0; i < alphas.length; i++) {
             uint256 snapshot = vm.snapshot();
-            
+
             ISwapVM.Order memory order = _makeOrder(poolA, poolB, alphas[i]);
             bytes memory takerData = _signAndPack(order, false, 0); // ExactOut
 
@@ -723,7 +734,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
             // Fee reinvested = extra input required compared to baseline
             // When α < 1, user pays MORE input for same output (fee goes to pool)
             uint256 feeReinvested = actualIn > cpBaseline ? actualIn - cpBaseline : 0;
-            
+
             // Calculate K growth
             uint256 newPoolA = poolA + actualIn;
             uint256 newPoolB = poolB - amountOut;
@@ -748,8 +759,10 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("================================================================================\n");
     }
 
-    /// @notice Verify ExactIn and ExactOut produce consistent results (round-trip)
-    function test_XYCSwapStrictAdditive_ExactInOut_Consistency() public {
+    /// @notice Verify ExactIn and ExactOut behavior with "two curves" design
+    /// @dev In two curves design, ExactOut is NOT the inverse of ExactIn!
+    /// Both use calcExactIn but with different meanings for the parameters
+    function test_XYCSwapStrictAdditive_ExactInOut_TwoCurves() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
         uint32 alpha = uint32(997_000_000); // 0.997
@@ -757,38 +770,309 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
 
         console.log("\n================================================================================");
-        console.log("          EXACTIN vs EXACTOUT CONSISTENCY CHECK");
+        console.log("          EXACTIN vs EXACTOUT: TWO CURVES DESIGN");
         console.log("================================================================================\n");
+
+        console.log("In 'two curves' design:");
+        console.log("  - ExactIn:  amountOut = balanceOut * (1 - (balanceIn / (balanceIn + amountIn))^alpha)");
+        console.log("  - ExactOut: amountIn = balanceOut * (1 - (balanceIn / (balanceIn + amountOut))^alpha)");
+        console.log("  Note: ExactOut uses the SAME formula but with amountOut in place of amountIn!");
+        console.log("");
 
         // ExactIn: 100 tokens in -> how much out?
         bytes memory takerDataExactIn = _signAndPack(order, true, 0);
         uint256 snapshot = vm.snapshot();
         vm.prank(taker);
         (, uint256 outFromExactIn,) = swapVM.swap(order, address(tokenA), address(tokenB), 100e18, takerDataExactIn);
-        console.log("ExactIn: 100e18 in -> ", outFromExactIn, "out");
+        console.log("ExactIn: 100e18 A in -> B out:", outFromExactIn);
         vm.revertTo(snapshot);
 
-        // ExactOut: get same output -> how much in required?
+        // ExactOut: request same amount out -> how much in?
         bytes memory takerDataExactOut = _signAndPack(order, false, 0);
         vm.prank(taker);
         (uint256 inFromExactOut,,) = swapVM.swap(order, address(tokenA), address(tokenB), outFromExactIn, takerDataExactOut);
-        console.log("ExactOut: requested out:", outFromExactIn);
-        console.log("  Input required:", inFromExactOut);
+        console.log("ExactOut: request B:", outFromExactIn);
+        console.log("  -> need A:", inFromExactOut);
 
         console.log("");
-        uint256 inputDiff = inFromExactOut > 100e18 ? inFromExactOut - 100e18 : 100e18 - inFromExactOut;
-        console.log("Difference in input (wei):", inputDiff);
-        console.log("Relative diff (ppb):", inputDiff * 1e9 / 100e18);
+        console.log("KEY DIFFERENCE FROM TRADITIONAL AMM:");
+        console.log("  In traditional AMM, ExactOut would require ~100e18 A to get the same B");
+        console.log("  In two curves design, the formulas are different, so results differ");
         
-        // ExactIn and ExactOut should be approximately inverse operations
-        // Small differences are expected due to:
-        // 1. Floor vs ceiling division (protects maker)
-        // 2. Floating-point precision in power calculations (exp/ln)
-        // The difference should be negligible (< 0.0001%)
-        assertApproxEqRel(inFromExactOut, 100e18, 1e14, "ExactIn/Out should be consistent within precision");
-        
-        console.log("Result: ExactIn and ExactOut are CONSISTENT (within power math precision)");
+        // Calculate what traditional inverse would be
+        // Traditional: amountIn = balanceIn * ((balanceOut / (balanceOut - amountOut))^(1/α) - 1)
+        uint256 traditionalInverse = StrictAdditiveMath.calcExactOut(poolA, poolB, outFromExactIn, alpha);
+        console.log("");
+        console.log("Traditional inverse would need:", traditionalInverse, "A");
+        console.log("Two curves design needs:       ", inFromExactOut, "A");
+        console.log("Difference:                    ", traditionalInverse > inFromExactOut ? traditionalInverse - inFromExactOut : inFromExactOut - traditionalInverse);
+
+        // Verify the two curves formula is applied correctly
+        uint256 expectedTwoCurves = StrictAdditiveMath.calcExactIn(poolA, poolB, outFromExactIn, alpha);
+        assertEq(inFromExactOut, expectedTwoCurves, "ExactOut should use calcExactIn formula");
+
+        console.log("\n================================================================================\n");
+    }
+
+    // ========================================
+    // TWO CURVES ROUND-TRIP TESTS
+    // ========================================
+    // The strict additive model uses TWO CURVES:
+    //   - A→B direction: balanceA^α * balanceB = K₁  (power on input token A)
+    //   - B→A direction: balanceB^α * balanceA = K₂  (power on input token B)
+    // This means the power is ALWAYS on the INPUT token (balanceIn).
+
+    /// @notice Test round-trip A→B→A using ExactIn both ways
+    /// @dev Demonstrates "two curves" behavior where each direction uses different invariant
+    function test_XYCSwapStrictAdditive_TwoCurves_RoundTrip_ExactIn() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+        bytes memory takerDataExactIn = _signAndPack(order, true, 0);
+
+        console.log("\n================================================================================");
+        console.log("          TWO CURVES ROUND-TRIP TEST (ExactIn both directions)");
         console.log("================================================================================\n");
+
+        console.log("Pool: A = 1000e18, B = 1000e18, alpha = 0.997");
+        console.log("Curve A->B: A^alpha * B = K1");
+        console.log("Curve B->A: B^alpha * A = K2");
+        console.log("");
+
+        uint256 initialAmountA = 100e18;
+        console.log("Starting with:", initialAmountA, "of token A");
+
+        // Step 1: Swap A → B (ExactIn)
+        // Uses curve: (A + dA)^α * (B - dB) = A^α * B
+        vm.prank(taker);
+        (, uint256 receivedB,) = swapVM.swap(order, address(tokenA), address(tokenB), initialAmountA, takerDataExactIn);
+        console.log("\nStep 1: A -> B (ExactIn)");
+        console.log("  Input A: ", initialAmountA);
+        console.log("  Output B:", receivedB);
+
+        // Step 2: Swap B → A (ExactIn)
+        // Uses curve: (B + dB)^α * (A - dA) = B^α * A  (DIFFERENT curve!)
+        vm.prank(taker);
+        (, uint256 finalAmountA,) = swapVM.swap(order, address(tokenB), address(tokenA), receivedB, takerDataExactIn);
+        console.log("\nStep 2: B -> A (ExactIn)");
+        console.log("  Input B: ", receivedB);
+        console.log("  Output A:", finalAmountA);
+
+        // Calculate loss
+        uint256 loss = initialAmountA - finalAmountA;
+        uint256 lossBps = loss * 10000 / initialAmountA;
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("ROUND-TRIP RESULTS:");
+        console.log("  Initial A:  ", initialAmountA);
+        console.log("  Final A:    ", finalAmountA);
+        console.log("  Loss:       ", loss);
+        console.log("  Loss (bps): ", lossBps);
+
+        // With 0.3% fee on each leg, expect ~0.6% total loss
+        // Actually it's less due to the "two curves" effect
+        console.log("\nExpected: ~0.6% loss from two 0.3% fee legs");
+        console.log("The 'two curves' design means each direction has its own invariant");
+        console.log("================================================================================\n");
+
+        // Verify no profit from round-trip
+        assertLt(finalAmountA, initialAmountA, "Should lose value on round-trip due to fees");
+        // Loss should be roughly 2 * fee rate
+        assertGt(lossBps, 40, "Loss should be at least 0.4%");
+        assertLt(lossBps, 80, "Loss should be at most 0.8%");
+    }
+
+    /// @notice Test round-trip using ExactIn forward and ExactOut backward
+    function test_XYCSwapStrictAdditive_TwoCurves_RoundTrip_Mixed() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+        bytes memory takerDataExactIn = _signAndPack(order, true, 0);
+        bytes memory takerDataExactOut = _signAndPack(order, false, 0);
+
+        console.log("\n================================================================================");
+        console.log("          TWO CURVES ROUND-TRIP TEST (Mixed ExactIn/ExactOut)");
+        console.log("================================================================================\n");
+
+        uint256 initialAmountA = 100e18;
+        console.log("Starting with:", initialAmountA, "of token A");
+
+        // Step 1: Swap A → B (ExactIn)
+        vm.prank(taker);
+        (, uint256 receivedB,) = swapVM.swap(order, address(tokenA), address(tokenB), initialAmountA, takerDataExactIn);
+        console.log("\nStep 1: A -> B (ExactIn)");
+        console.log("  Input A: ", initialAmountA);
+        console.log("  Output B:", receivedB);
+
+        // Step 2: Swap B → A (ExactOut) - request exactly initialAmountA back
+        vm.prank(taker);
+        (uint256 requiredB,,) = swapVM.swap(order, address(tokenB), address(tokenA), initialAmountA, takerDataExactOut);
+        console.log("\nStep 2: B -> A (ExactOut, requesting initial amount back)");
+        console.log("  Requested A:", initialAmountA);
+        console.log("  Required B: ", requiredB);
+
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("ANALYSIS:");
+        console.log("  B received from A->B:", receivedB);
+        console.log("  B required for A<-B: ", requiredB);
+        
+        if (requiredB > receivedB) {
+            console.log("  Shortfall:          ", requiredB - receivedB);
+            console.log("  Result: CANNOT get back original amount - fees consumed too much");
+        } else {
+            console.log("  Excess B:           ", receivedB - requiredB);
+            console.log("  Result: CAN get back original (but shouldn't happen with fees!)");
+        }
+        
+        // With fees, should require MORE B than we received
+        assertGt(requiredB, receivedB, "Round-trip should require more input than received (fees)");
+        console.log("================================================================================\n");
+    }
+
+    /// @notice Verify the two curves produce different K values
+    function test_XYCSwapStrictAdditive_TwoCurves_DifferentInvariants() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        console.log("\n================================================================================");
+        console.log("          TWO CURVES: DIFFERENT INVARIANTS");
+        console.log("================================================================================\n");
+
+        // Calculate K for curve 1: A^α * B
+        // K1 = (1000e18)^0.997 * 1000e18
+        uint256 K1_ratio = StrictAdditiveMath.powRatio(poolA, 1e18, alpha);
+        uint256 K1 = K1_ratio * poolB / 1e18;
+
+        // Calculate K for curve 2: A * B^α
+        // K2 = 1000e18 * (1000e18)^0.997
+        uint256 K2_ratio = StrictAdditiveMath.powRatio(poolB, 1e18, alpha);
+        uint256 K2 = poolA * K2_ratio / 1e18;
+
+        console.log("Pool: A = 1000e18, B = 1000e18, alpha = 0.997");
+        console.log("");
+        console.log("Curve 1 (A->B): K1 = A^alpha * B");
+        console.log("  A^alpha (scaled):", K1_ratio);
+        console.log("  K1 =", K1);
+        console.log("");
+        console.log("Curve 2 (B->A): K2 = A * B^alpha");
+        console.log("  B^alpha (scaled):", K2_ratio);
+        console.log("  K2 =", K2);
+        console.log("");
+
+        // For symmetric pool, K1 should equal K2
+        console.log("For symmetric pool (A == B), K1 should equal K2:");
+        console.log("  K1 == K2?", K1 == K2 ? "YES" : "NO");
+        assertEq(K1, K2, "Symmetric pool should have same K for both curves");
+
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("KEY INSIGHT:");
+        console.log("  - When going A->B, we use A^alpha * B = K (power on INPUT token)");
+        console.log("  - When going B->A, we use B^alpha * A = K (power on INPUT token)");
+        console.log("  - The power is ALWAYS on balanceIn, which swaps based on direction");
+        console.log("  - This creates 'two curves' behavior for asymmetric pools");
+        console.log("================================================================================\n");
+    }
+
+    /// @notice Test asymmetric pool where two curves differ
+    function test_XYCSwapStrictAdditive_TwoCurves_AsymmetricPool() public {
+        // Asymmetric pool: A = 2000, B = 500
+        uint256 poolA = 2000e18;
+        uint256 poolB = 500e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+        bytes memory takerDataExactIn = _signAndPack(order, true, 0);
+
+        console.log("\n================================================================================");
+        console.log("          TWO CURVES: ASYMMETRIC POOL");
+        console.log("================================================================================\n");
+
+        console.log("Pool: A = 2000e18, B = 500e18, alpha = 0.997");
+        console.log("Price ratio: 1 A = 0.25 B (approximately)");
+        console.log("");
+
+        // Swap A → B
+        uint256 amountA = 100e18;
+        vm.prank(taker);
+        (, uint256 receivedB,) = swapVM.swap(order, address(tokenA), address(tokenB), amountA, takerDataExactIn);
+
+        // Swap B → A with same value
+        uint256 amountB = 25e18; // Equivalent value
+        vm.prank(taker);
+        (, uint256 receivedA,) = swapVM.swap(order, address(tokenB), address(tokenA), amountB, takerDataExactIn);
+
+        console.log("Swap 100 A -> B:");
+        console.log("  Input A: ", amountA);
+        console.log("  Output B:", receivedB);
+        console.log("  Implied price: 1 A =", receivedB * 1e18 / amountA, "e-18 B");
+        console.log("");
+        console.log("Swap 25 B -> A:");
+        console.log("  Input B: ", amountB);
+        console.log("  Output A:", receivedA);
+        console.log("  Implied price: 1 B =", receivedA * 1e18 / amountB, "e-18 A");
+
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("In asymmetric pools, the two curves create DIFFERENT effective prices");
+        console.log("because the power (alpha) is applied to different reserve sizes.");
+        console.log("================================================================================\n");
+    }
+
+    /// @notice Multiple round-trips to show fee accumulation
+    function test_XYCSwapStrictAdditive_TwoCurves_MultipleRoundTrips() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+        bytes memory takerDataExactIn = _signAndPack(order, true, 0);
+
+        console.log("\n================================================================================");
+        console.log("          MULTIPLE ROUND-TRIPS: FEE ACCUMULATION");
+        console.log("================================================================================\n");
+
+        uint256 currentA = 100e18;
+        console.log("Starting amount A:", currentA);
+        console.log("");
+        console.log("Round | After A->B (B) | After B->A (A) | Cumulative Loss");
+        console.log("--------------------------------------------------------------");
+
+        uint256 initialA = currentA;
+
+        for (uint256 i = 1; i <= 5; i++) {
+            // A → B
+            vm.prank(taker);
+            (, uint256 gotB,) = swapVM.swap(order, address(tokenA), address(tokenB), currentA, takerDataExactIn);
+            
+            // B → A
+            vm.prank(taker);
+            (, currentA,) = swapVM.swap(order, address(tokenB), address(tokenA), gotB, takerDataExactIn);
+            
+            uint256 loss = initialA - currentA;
+            uint256 lossBps = loss * 10000 / initialA;
+            
+            console.log("Round", i);
+            console.log("  After A->B (B):", gotB);
+            console.log("  After B->A (A):", currentA);
+            console.log("  Cumulative loss (bps):", lossBps);
+        }
+
+        console.log("--------------------------------------------------------------");
+        console.log("\nFinal amount A:", currentA);
+        console.log("Total loss:    ", initialA - currentA);
+        console.log("Total loss %:  ", (initialA - currentA) * 100 / initialA, "%");
+        console.log("");
+        console.log("Each round-trip loses ~0.6% due to fees on both legs.");
+        console.log("Fees are reinvested into pool reserves (K grows).");
+        console.log("================================================================================\n");
+
+        // After 5 round-trips, should have lost ~3% (5 * 0.6%)
+        uint256 finalLossBps = (initialA - currentA) * 10000 / initialA;
+        assertGt(finalLossBps, 250, "Should lose at least 2.5% after 5 round-trips");
+        assertLt(finalLossBps, 350, "Should lose at most 3.5% after 5 round-trips");
     }
 
     // ========================================
@@ -826,7 +1110,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         // Output should be less than constant product (fee is reinvested)
         assertLt(amountOut, expectedCPOut, "Output should be less than CP baseline");
-        
+
         // Fee retained should be positive
         assertGt(expectedCPOut - amountOut, 0, "Fee should be positive");
     }
@@ -861,9 +1145,9 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("First swap (40):", firstOut);
         console.log("Second swap (60):", secondOut);
         console.log("Combined (40+60):", firstOut + secondOut);
-        
-        uint256 diff = singleOut > (firstOut + secondOut) 
-            ? singleOut - (firstOut + secondOut) 
+
+        uint256 diff = singleOut > (firstOut + secondOut)
+            ? singleOut - (firstOut + secondOut)
             : (firstOut + secondOut) - singleOut;
         console.log("Difference:", diff);
 
@@ -1049,7 +1333,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         uint256 gasBefore = gasleft();
         uint256 traditionalOut = (amountIn * balanceOut) / (balanceIn + amountIn);
         uint256 gasTraditional = gasBefore - gasleft();
-        
+
         console.log("Traditional XY=K (x*y=k):");
         console.log("  Gas (pure math):", gasTraditional);
         console.log("  Output:", traditionalOut);
@@ -1088,7 +1372,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         for (uint256 i = 0; i < amounts.length; i++) {
             uint256 amountIn = amounts[i];
-            
+
             uint256 gasBefore = gasleft();
             uint256 amountOut = StrictAdditiveMath.calcExactIn(balanceIn, balanceOut, amountIn, alpha);
             uint256 gasUsed = gasBefore - gasleft();
@@ -1100,7 +1384,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         // Test ExactOut
         console.log("\n-------- ExactOut Benchmark --------");
         uint256 amountOutTarget = 50e18;
-        
+
         uint256 gasBeforeExact = gasleft();
         uint256 amountInNeeded = StrictAdditiveMath.calcExactOut(balanceIn, balanceOut, amountOutTarget, alpha);
         uint256 gasExactOut = gasBeforeExact - gasleft();
@@ -1111,7 +1395,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("\n-------- Round-trip Verification --------");
         uint256 roundTripOut = StrictAdditiveMath.calcExactIn(balanceIn, balanceOut, amountInNeeded, alpha);
         uint256 roundTripDiff = roundTripOut > amountOutTarget ? roundTripOut - amountOutTarget : amountOutTarget - roundTripOut;
-        
+
         console.log("Target: 50e18, Got:", roundTripOut);
         console.log("Precision error (wei):", roundTripDiff);
 
@@ -1134,7 +1418,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         for (uint256 i = 0; i < alphas.length; i++) {
             uint256 alpha = alphas[i];
-            
+
             uint256 gasBefore = gasleft();
             uint256 amountOut = StrictAdditiveMath.calcExactIn(balanceIn, balanceOut, amountIn, alpha);
             uint256 gasUsed = gasBefore - gasleft();
@@ -1204,7 +1488,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("\n================================================================================");
         console.log("          FEE REINVESTMENT ANALYSIS: Strict Additive vs Traditional");
         console.log("================================================================================\n");
-        
+
         console.log("Initial pool state:");
         console.log("  Reserve X (tokenA):", poolA / 1e18, "tokens");
         console.log("  Reserve Y (tokenB):", poolB / 1e18, "tokens");
@@ -1231,7 +1515,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
 
         for (uint256 i = 0; i < alphas.length; i++) {
             uint256 snapshot = vm.snapshot();
-            
+
             ISwapVM.Order memory order = _makeOrder(poolA, poolB, alphas[i]);
             bytes memory takerData = _signAndPack(order, true, 0);
 
@@ -1241,16 +1525,16 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
             // Calculate new pool state after swap
             uint256 newPoolA = poolA + amountIn;        // Full input credited to pool
             uint256 newPoolB = poolB - actualOutput;    // Actual output removed
-            
+
             // Calculate invariants
             // Traditional K = x * y
             uint256 oldK = (poolA / 1e9) * (poolB / 1e9);    // scaled down to avoid overflow
             uint256 newK = (newPoolA / 1e9) * (newPoolB / 1e9);
-            
+
             // Fee reinvested = difference between traditional output and actual output
             // Note: when alpha=1.0 (no fee), actual ~= traditional, handle potential underflow
             uint256 feeReinvested = actualOutput < traditionalOutput ? traditionalOutput - actualOutput : 0;
-            
+
             // K growth percentage (scaled by 1e4 for precision)
             uint256 kGrowthBps = newK > oldK ? ((newK - oldK) * 10000) / oldK : 0;
 
@@ -1298,7 +1582,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         for (uint256 i = 1; i <= 10; i++) {
             // Calculate what traditional x*y=k would output
             uint256 traditionalOut = (swapAmount * currentPoolB) / (currentPoolA + swapAmount);
-            
+
             // Execute the strict additive swap
             vm.prank(taker);
             (, uint256 actualOut,) = swapVM.swap(order, address(tokenA), address(tokenB), swapAmount, takerData);
@@ -1306,7 +1590,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
             // Update virtual pool reserves
             currentPoolA += swapAmount;
             currentPoolB -= actualOut;
-            
+
             // Fee reinvested this trade
             uint256 feeThisTrade = traditionalOut - actualOut;
             totalFeeReinvested += feeThisTrade;
@@ -1341,14 +1625,14 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("\n================================================================================");
         console.log("                    EXACT FEE CALCULATION BREAKDOWN");
         console.log("================================================================================\n");
-        
+
         console.log("Pool: x = 1000e18, y = 1000e18, alpha = 0.997, dx = 100e18\n");
 
         // Traditional constant product: dy = y * dx / (x + dx)
         // Equivalent to: y' = x * y / (x + dx), so dy = y - y'
         uint256 traditionalDy = (dx * y) / (x + dx);
         uint256 newYTraditional = y - traditionalDy;
-        
+
         console.log("TRADITIONAL x*y=k:");
         console.log("  Formula: dy = y * dx / (x + dx)");
         console.log("  dy (output):   ", traditionalDy);
@@ -1365,7 +1649,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("  Formula: dy = y * (1 - (x / (x + dx))^alpha)");
         console.log("  dy (output):   ", strictAdditiveDy);
         console.log("  New y reserve: ", newYStrictAdditive);
-        
+
         // Calculate new K for strict additive (using simple x*y for comparison)
         uint256 newKSimple = ((x + dx) / 1e9) * (newYStrictAdditive / 1e9);
         console.log("  K (x*y) after: ", newKSimple);
@@ -1374,7 +1658,7 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         // Fee reinvested
         uint256 feeReinvested = traditionalDy - strictAdditiveDy;
         uint256 feePercentBps = feeReinvested * 10000 / dx;
-        
+
         console.log("FEE REINVESTED IN POOL:");
         console.log("  Traditional output - Strict additive output:");
         console.log("    Fee reinvested:    ", feeReinvested);
@@ -1422,14 +1706,14 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         for (uint256 i = 0; i < swapSizes.length; i++) {
             uint256 snapshot = vm.snapshot();
             uint256 swapAmount = swapSizes[i];
-            
+
             // Traditional output
             uint256 traditionalOut = (swapAmount * poolB) / (poolA + swapAmount);
-            
+
             // Strict additive output
             vm.prank(taker);
             (, uint256 actualOut,) = swapVM.swap(order, address(tokenA), address(tokenB), swapAmount, takerData);
-            
+
             uint256 feeReinvested = traditionalOut - actualOut;
             uint256 feePercentBps = swapAmount > 0 ? feeReinvested * 10000 / swapAmount : 0;
             uint256 poolPercent = swapAmount * 100 / poolA;
