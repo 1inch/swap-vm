@@ -87,7 +87,7 @@ contract XYCSwapStrictAdditive {
     /// ╚═══════════════════════════════════════════════════════════════════════════════════════╝
     function _xycSwapStrictAdditiveXD(Context memory ctx, bytes calldata args) internal pure {
         require(
-            ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0, 
+            ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0,
             XYCSwapStrictAdditiveRequiresBothBalancesNonZero(ctx.swap.balanceIn, ctx.swap.balanceOut)
         );
 
@@ -95,7 +95,8 @@ contract XYCSwapStrictAdditive {
 
         if (ctx.query.isExactIn) {
             require(ctx.swap.amountOut == 0, XYCSwapStrictAdditiveRecomputeDetected());
-            
+
+            // 0 < α <= 1
             // Δy = y * (1 - (x / (x + Δx))^α)
             // Floor division for tokenOut is desired behavior (protects maker)
             ctx.swap.amountOut = StrictAdditiveMath.calcExactIn(
@@ -106,7 +107,7 @@ contract XYCSwapStrictAdditive {
             );
         } else {
             require(ctx.swap.amountIn == 0, XYCSwapStrictAdditiveRecomputeDetected());
-            
+
             // Δx = x * ((y / (y - Δy))^(1/α) - 1)
             // Ceiling division for tokenIn is desired behavior (protects maker)
             ctx.swap.amountIn = StrictAdditiveMath.calcExactOut(

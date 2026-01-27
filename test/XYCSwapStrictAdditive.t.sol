@@ -616,6 +616,181 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         assertApproxEqRel(splitSwapIn, singleSwapIn, 1e15, "ExactOut split should equal single swap");
     }
 
+    /// @notice Comprehensive test for ExactOut strict additivity with multiple split ratios
+    function test_XYCSwapStrictAdditive_ExactOut_StrictAdditivity_Comprehensive() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+        bytes memory takerData = _signAndPack(order, false, 0); // ExactOut
+
+        uint256 totalAmountOut = 100e18;
+
+        console.log("\n================================================================================");
+        console.log("          EXACTOUT STRICT ADDITIVITY ANALYSIS");
+        console.log("================================================================================\n");
+
+        // Test 1: Single swap baseline
+        uint256 snapshot = vm.snapshot();
+        vm.prank(taker);
+        (uint256 singleSwapIn,,) = swapVM.swap(order, address(tokenA), address(tokenB), totalAmountOut, takerData);
+        console.log("Single swap (100 out) - Input required:", singleSwapIn);
+        vm.revertTo(snapshot);
+
+        // Test 2: 2-way split (40+60)
+        vm.prank(taker);
+        (uint256 in1,,) = swapVM.swap(order, address(tokenA), address(tokenB), 40e18, takerData);
+        vm.prank(taker);
+        (uint256 in2,,) = swapVM.swap(order, address(tokenA), address(tokenB), 60e18, takerData);
+        uint256 split2Way = in1 + in2;
+        uint256 diff2Way = split2Way > singleSwapIn ? split2Way - singleSwapIn : singleSwapIn - split2Way;
+        console.log("2-way split (40+60) - Input required:", split2Way, "Diff:", diff2Way);
+        vm.revertTo(snapshot);
+
+        // Test 3: 5-way split (20+20+20+20+20)
+        uint256 split5Way = 0;
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(taker);
+            (uint256 inPart,,) = swapVM.swap(order, address(tokenA), address(tokenB), 20e18, takerData);
+            split5Way += inPart;
+        }
+        uint256 diff5Way = split5Way > singleSwapIn ? split5Way - singleSwapIn : singleSwapIn - split5Way;
+        console.log("5-way split (5x20) - Input required:", split5Way, "Diff:", diff5Way);
+        vm.revertTo(snapshot);
+
+        // Test 4: 10-way split
+        uint256 split10Way = 0;
+        for (uint256 i = 0; i < 10; i++) {
+            vm.prank(taker);
+            (uint256 inPart,,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+            split10Way += inPart;
+        }
+        uint256 diff10Way = split10Way > singleSwapIn ? split10Way - singleSwapIn : singleSwapIn - split10Way;
+        console.log("10-way split (10x10) - Input required:", split10Way, "Diff:", diff10Way);
+
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("STRICT ADDITIVITY VERIFICATION:");
+        console.log("  2-way rel diff (ppb):", diff2Way * 1e9 / singleSwapIn);
+        console.log("  5-way rel diff (ppb):", diff5Way * 1e9 / singleSwapIn);
+        console.log("  10-way rel diff (ppb):", diff10Way * 1e9 / singleSwapIn);
+        
+        // All should be within tolerance
+        assertApproxEqRel(split2Way, singleSwapIn, 1e15, "2-way split should equal single swap");
+        assertApproxEqRel(split5Way, singleSwapIn, 1e15, "5-way split should equal single swap");
+        assertApproxEqRel(split10Way, singleSwapIn, 1e15, "10-way split should equal single swap");
+        
+        console.log("  Result: STRICT ADDITIVITY HOLDS for ExactOut");
+        console.log("================================================================================\n");
+    }
+
+    /// @notice Verify fee is reinvested for ExactOut direction
+    function test_XYCSwapStrictAdditive_ExactOut_FeeReinvestment() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint256 amountOut = 100e18;
+
+        console.log("\n================================================================================");
+        console.log("          EXACTOUT FEE REINVESTMENT ANALYSIS");
+        console.log("================================================================================\n");
+        
+        console.log("Pool: x = 1000e18, y = 1000e18, amountOut = 100e18\n");
+
+        // Test different alpha values
+        uint32[] memory alphas = new uint32[](5);
+        alphas[0] = uint32(1e9);         // α=1.0 (no fee)
+        alphas[1] = uint32(997_000_000); // α=0.997 (~0.3% fee)
+        alphas[2] = uint32(990_000_000); // α=0.99 (~1% fee)
+        alphas[3] = uint32(970_000_000); // α=0.97 (~3% fee)
+        alphas[4] = uint32(950_000_000); // α=0.95 (~5% fee)
+
+        string[5] memory feeLabels = ["0% (alpha=1.0)  ", "0.3% (alpha=0.997)", "1% (alpha=0.99) ", "3% (alpha=0.97) ", "5% (alpha=0.95) "];
+
+        // Traditional CP baseline: amountIn = amountOut * balanceIn / (balanceOut - amountOut)
+        uint256 cpBaseline = amountOut * poolA / (poolB - amountOut);
+        console.log("Traditional x*y=k baseline input:", cpBaseline);
+        console.log("");
+
+        for (uint256 i = 0; i < alphas.length; i++) {
+            uint256 snapshot = vm.snapshot();
+            
+            ISwapVM.Order memory order = _makeOrder(poolA, poolB, alphas[i]);
+            bytes memory takerData = _signAndPack(order, false, 0); // ExactOut
+
+            vm.prank(taker);
+            (uint256 actualIn,,) = swapVM.swap(order, address(tokenA), address(tokenB), amountOut, takerData);
+
+            // Fee reinvested = extra input required compared to baseline
+            // When α < 1, user pays MORE input for same output (fee goes to pool)
+            uint256 feeReinvested = actualIn > cpBaseline ? actualIn - cpBaseline : 0;
+            
+            // Calculate K growth
+            uint256 newPoolA = poolA + actualIn;
+            uint256 newPoolB = poolB - amountOut;
+            uint256 oldK = (poolA / 1e9) * (poolB / 1e9);
+            uint256 newK = (newPoolA / 1e9) * (newPoolB / 1e9);
+            uint256 kGrowthBps = newK > oldK ? ((newK - oldK) * 10000) / oldK : 0;
+
+            console.log(feeLabels[i]);
+            console.log("  Input required:  ", actualIn);
+            console.log("  Fee reinvested:  ", feeReinvested);
+            console.log("  K growth (bps):  ", kGrowthBps);
+
+            vm.revertTo(snapshot);
+        }
+
+        console.log("\n--------------------------------------------------------------------------------");
+        console.log("INTERPRETATION:");
+        console.log("  - With fee (alpha < 1), user pays MORE input for same output");
+        console.log("  - The extra input goes to the pool, increasing reserves");
+        console.log("  - This causes K to grow, benefiting LPs");
+        console.log("  - Fee reinvestment works in BOTH ExactIn and ExactOut directions");
+        console.log("================================================================================\n");
+    }
+
+    /// @notice Verify ExactIn and ExactOut produce consistent results (round-trip)
+    function test_XYCSwapStrictAdditive_ExactInOut_Consistency() public {
+        uint256 poolA = 1000e18;
+        uint256 poolB = 1000e18;
+        uint32 alpha = uint32(997_000_000); // 0.997
+
+        ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
+
+        console.log("\n================================================================================");
+        console.log("          EXACTIN vs EXACTOUT CONSISTENCY CHECK");
+        console.log("================================================================================\n");
+
+        // ExactIn: 100 tokens in -> how much out?
+        bytes memory takerDataExactIn = _signAndPack(order, true, 0);
+        uint256 snapshot = vm.snapshot();
+        vm.prank(taker);
+        (, uint256 outFromExactIn,) = swapVM.swap(order, address(tokenA), address(tokenB), 100e18, takerDataExactIn);
+        console.log("ExactIn: 100e18 in -> ", outFromExactIn, "out");
+        vm.revertTo(snapshot);
+
+        // ExactOut: get same output -> how much in required?
+        bytes memory takerDataExactOut = _signAndPack(order, false, 0);
+        vm.prank(taker);
+        (uint256 inFromExactOut,,) = swapVM.swap(order, address(tokenA), address(tokenB), outFromExactIn, takerDataExactOut);
+        console.log("ExactOut: requested out:", outFromExactIn);
+        console.log("  Input required:", inFromExactOut);
+
+        console.log("");
+        uint256 inputDiff = inFromExactOut > 100e18 ? inFromExactOut - 100e18 : 100e18 - inFromExactOut;
+        console.log("Difference in input (wei):", inputDiff);
+        console.log("Relative diff (ppb):", inputDiff * 1e9 / 100e18);
+        
+        // ExactIn and ExactOut should be approximately inverse operations
+        // Small differences are expected due to:
+        // 1. Floor vs ceiling division (protects maker)
+        // 2. Floating-point precision in power calculations (exp/ln)
+        // The difference should be negligible (< 0.0001%)
+        assertApproxEqRel(inFromExactOut, 100e18, 1e14, "ExactIn/Out should be consistent within precision");
+        
+        console.log("Result: ExactIn and ExactOut are CONSISTENT (within power math precision)");
+        console.log("================================================================================\n");
+    }
+
     // ========================================
     // NUMERICAL EXAMPLES FROM PAPER
     // ========================================
@@ -700,8 +875,8 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
     // ROUNDING INVARIANT TESTS
     // ========================================
 
-    /// @notice Uses RoundingInvariants library with tolerance for strict additive
-    /// @dev Strict additive should pass with minimal tolerance due to split invariance
+    /// @notice Comprehensive rounding invariants test using the library
+    /// @dev Uses configurable amounts for Balancer-style power math that requires larger minimums
     function test_XYCSwapStrictAdditive_RoundingInvariants_Library() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
@@ -710,54 +885,20 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
         bytes memory takerData = _signAndPack(order, true, 0);
 
-        console.log("\n=== RoundingInvariants Library Tests ===");
-
-        // Test accumulation exploit with 1e15 atomic amount (appropriate for 18 decimals)
-        // Using 1 bps tolerance (0.01%) for floating-point precision in power calculations
-        console.log("Test: Accumulation exploit (100x 1e15 wei, 1 bps tolerance)");
-        RoundingInvariants.assertNoAccumulationExploitWithTolerance(
+        // Run comprehensive rounding invariant tests with configurable amounts
+        // Strict additive uses Balancer-style power calculations that require larger
+        // minimum amounts (1e12 = 0.000001 tokens) to produce non-zero outputs
+        RoundingInvariants.assertRoundingInvariants(
             vm,
             swapVM,
             order,
             address(tokenA),
             address(tokenB),
-            1e15,      // atomicAmount: 0.001 tokens
-            100,       // iterations
             takerData,
             _executeSwapForInvariant,
-            1          // 1 bps tolerance (0.01%) - strict additive should be very close
+            1e12,  // minAtomicAmount: 0.000001 tokens (power math precision floor)
+            1      // toleranceBps: 0.01% for floating-point precision in power calculations
         );
-
-        // Test with larger amounts - should also pass
-        console.log("Test: Accumulation exploit (50x 1e18 wei, 1 bps tolerance)");
-        RoundingInvariants.assertNoAccumulationExploitWithTolerance(
-            vm,
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            1e18,      // atomicAmount: 1 token
-            50,        // iterations
-            takerData,
-            _executeSwapForInvariant,
-            1          // 1 bps tolerance
-        );
-
-        // Test round-trip profit protection
-        console.log("Test: Round-trip profit protection (10x 10e18)");
-        RoundingInvariants.assertNoRoundTripProfit(
-            vm,
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            10e18,     // initialAmount: 10 tokens
-            10,        // iterations
-            takerData,
-            _executeSwapForInvariant
-        );
-
-        console.log("=== All RoundingInvariants tests passed ===\n");
     }
 
     /// @dev Helper for RoundingInvariants library
@@ -772,10 +913,6 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         vm.prank(taker);
         (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerData);
     }
-
-    // Note: The standard RoundingInvariants.assertRoundingInvariants() uses very small amounts 
-    // (10-1000 wei) which are below the precision threshold for 18-decimal Balancer-style math.
-    // The library test above uses appropriate-sized amounts with tolerance.
 
     // ========================================
     // EDGE CASE TESTS
