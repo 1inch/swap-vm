@@ -1,0 +1,351 @@
+---
+alwaysApply: true
+---
+
+# SwapVM Architecture
+
+SwapVM is a VM-based swap protocol where orders are bytecode programs executed by the VM.
+
+## Directory Structure
+
+```
+src/
+├── SwapVM.sol              # Base contract: order execution, transfers, hooks, signatures
+├── instructions/           # Individual instruction implementations
+│   ├── Balances.sol        # Balance management (static/dynamic)
+│   ├── Controls.sol        # Flow control (jump, deadline, conditionals)
+│   ├── Fee.sol             # Fee calculation instructions
+│   ├── XYCSwap.sol         # XY=K constant product swap
+│   ├── LimitSwap.sol       # Limit order swap logic
+│   ├── Invalidators.sol    # Order invalidation
+│   ├── MinRate.sol         # Minimum rate validation
+│   ├── Decay.sol           # Time-based decay
+│   ├── DutchAuction.sol    # Dutch auction pricing
+│   └── ...
+├── interfaces/             # Contract interfaces
+│   ├── ISwapVM.sol         # SwapVM interface
+│   ├── IMakerHooks.sol     # Maker hook callbacks
+│   └── ITakerCallbacks.sol # Taker callback interface
+├── libs/                   # Libraries
+│   ├── VM.sol              # VM implementation (execution loop, context)
+│   ├── MakerTraits.sol     # Order traits encoding
+│   ├── TakerTraits.sol     # Taker preferences encoding
+│   └── ...
+├── opcodes/                # Opcode registries (instruction arrays)
+│   ├── Opcodes.sol         # Full instruction set
+│   ├── LimitOpcodes.sol    # Limit order instruction set
+│   └── AquaOpcodes.sol     # Aqua-specific instruction set
+├── routers/                # Router implementations
+│   ├── SwapVMRouter.sol    # Full instruction router
+│   ├── LimitSwapVMRouter.sol
+│   └── AquaSwapVMRouter.sol
+└── strategies/             # Program builders
+    └── AquaAMM.sol         # Example AMM strategy
+```
+
+## Inheritance Hierarchy
+
+```
+SwapVM (abstract base)
+├── SwapVMRouter
+│   └── inherits Opcodes
+│       └── inherits instruction contracts (XYCSwap, Balances, Controls, ...)
+├── LimitSwapVMRouter
+│   └── inherits LimitOpcodes
+└── AquaSwapVMRouter
+    └── inherits AquaOpcodes
+```
+
+## Core Concepts
+
+### VM Execution
+
+Programs are bytecode where each instruction is encoded as:
+```
+[opcode: 1 byte][argsLength: 1 byte][args: argsLength bytes]
+```
+
+The VM executes instructions in sequence. Key structures:
+- `VM`: VM state (program counter, opcodes array, static context flag)
+- `Context`: Full execution context (VM, query, swap registers)
+- `SwapRegisters`: Mutable state (balanceIn/Out, amountIn/Out)
+
+### Swap Flow
+
+1. User calls `router.swap(order, tokenIn, tokenOut, amount, takerData)`
+2. SwapVM extracts program from `order.traits.program(order.data)`
+3. SwapVM creates VM context with `_instructions()` array
+4. VM executes program bytecode
+5. SwapVM handles token transfers and hooks
+
+---
+
+## Adding New Instruction
+
+### Step 1: Create Instruction Contract
+
+Create `src/instructions/NewInstruction.sol`:
+
+```solidity
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity 0.8.30;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { Context, ContextLib } from "../libs/VM.sol";
+
+/// @notice Args builder library (exported for use by strategies)
+library NewInstructionArgsBuilder {
+    function build(uint256 param1, uint256 param2) internal pure returns (bytes memory) {
+        return abi.encodePacked(param1, param2);
+    }
+}
+
+contract NewInstruction {
+    using ContextLib for Context;
+
+    /// @dev Custom errors for validation failures
+    error NewInstructionError();
+    error NewInstructionRequiresBalance(uint256 balanceIn, uint256 balanceOut);
+
+    /// @notice Instruction implementation
+    /// @dev XD suffix = cross-directional (works for both exactIn and exactOut)
+    /// @dev 1D suffix = one-directional (exactIn only or exactOut only)
+    function _newInstructionXD(Context memory ctx, bytes calldata args) internal pure {
+        // 1. Validate balances
+        require(ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0, 
+            NewInstructionRequiresBalance(ctx.swap.balanceIn, ctx.swap.balanceOut));
+
+        // 2. Parse args if needed
+        uint256 param1 = uint256(bytes32(args[0:32]));
+        
+        // 3. Compute based on direction
+        if (ctx.query.isExactIn) {
+            require(ctx.swap.amountOut == 0, NewInstructionError()); // Prevent recompute
+            ctx.swap.amountOut = ctx.swap.amountIn * param1 / ctx.swap.balanceIn;
+        } else {
+            require(ctx.swap.amountIn == 0, NewInstructionError()); // Prevent recompute
+            ctx.swap.amountIn = ctx.swap.amountOut * ctx.swap.balanceIn / param1;
+        }
+    }
+    
+    /// @notice Stateful instruction example (uses view, not pure)
+    function _newStatefulInstruction(Context memory ctx, bytes calldata args) internal view {
+        // For instructions that read state but don't write during quote
+        if (!ctx.vm.isStaticContext) {
+            // State writes would go here
+        }
+    }
+}
+```
+
+### Step 2: Add to Opcodes
+
+Edit `src/opcodes/Opcodes.sol`:
+
+```solidity
+// Add import at the top
+import { NewInstruction } from "../instructions/NewInstruction.sol";
+
+// Add to inheritance list
+contract Opcodes is
+    Controls,
+    Balances,
+    // ... existing instructions
+    NewInstruction  // Add your instruction
+{
+    function _opcodes() internal pure virtual returns (
+        function(Context memory, bytes calldata) internal[] memory result
+    ) {
+        // Increase array size from [50] to [51]
+        function(Context memory, bytes calldata) internal[51] memory instructions = [
+            _notInstruction,
+            // ... existing instructions (indices 1-49)
+            // NOTE: Add new instructions here to maintain backward compatibility
+            NewInstruction._newInstructionXD  // Add at end (index 50)
+        ];
+
+        // Efficient static-to-dynamic array conversion
+        uint256 instructionsArrayLength = instructions.length - 1;
+        assembly ("memory-safe") {
+            result := instructions
+            mstore(result, instructionsArrayLength)
+        }
+    }
+}
+```
+
+**Important**: Also update `OpcodesDebug.sol` with the same changes to support debugging.
+
+### Step 3: Add Debug Version (Optional)
+
+If the instruction needs debug support, add to `src/opcodes/OpcodesDebug.sol`.
+
+### Step 4: Write Tests
+
+Create `test/NewInstruction.t.sol` following existing test patterns.
+
+---
+
+## Adding New AMM/Strategy
+
+### Step 1: Create Strategy Contract
+
+Create `src/strategies/NewAMM.sol`:
+
+```solidity
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity 0.8.30;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { OpcodesDebug } from "../opcodes/OpcodesDebug.sol";
+import { SwapVM, ISwapVM } from "../SwapVM.sol";
+import { MakerTraitsLib } from "../libs/MakerTraits.sol";
+import { ProgramBuilder, Program } from "../../test/utils/ProgramBuilder.sol";
+
+// Import args builders from instruction contracts
+import { FeeArgsBuilder } from "../instructions/Fee.sol";
+import { ControlsArgsBuilder } from "../instructions/Controls.sol";
+
+/// @title NewAMM
+/// @notice Strategy for building NewAMM order programs
+contract NewAMM is OpcodesDebug {
+    using ProgramBuilder for Program;
+
+    constructor(address aqua) OpcodesDebug(aqua) {}
+
+    /// @notice Builds an order program for this AMM strategy
+    function buildProgram(
+        address maker,
+        uint40 expiration,
+        uint16 feeBpsIn,
+        uint64 salt
+    ) external pure returns (ISwapVM.Order memory) {
+        Program memory program = ProgramBuilder.init(_opcodes());
+        
+        // Build instruction sequence (use ternary for optional instructions)
+        bytes memory bytecode = bytes.concat(
+            // Apply fee if configured
+            (feeBpsIn > 0) ? program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBpsIn)) : bytes(""),
+            // Execute swap
+            program.build(_xycSwapXD),
+            // Check deadline
+            program.build(_deadline, ControlsArgsBuilder.buildDeadline(expiration)),
+            // Add salt for uniqueness if provided
+            (salt > 0) ? program.build(_salt, ControlsArgsBuilder.buildSalt(salt)) : bytes("")
+        );
+
+        // Build order with traits
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: true,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: bytecode
+        }));
+    }
+}
+```
+
+### Step 2: Custom Opcode Set (Optional)
+
+If your strategy needs a custom instruction set:
+
+1. Create `src/opcodes/NewAMMOpcodes.sol`:
+```solidity
+contract NewAMMOpcodes is Controls, Balances, XYCSwap, Fee, NewInstruction {
+    // Custom instruction set for this AMM
+}
+```
+
+2. Create `src/routers/NewAMMRouter.sol`:
+```solidity
+contract NewAMMRouter is SwapVM, NewAMMOpcodes {
+    function _instructions() internal pure override returns (...) {
+        return _opcodes();
+    }
+}
+```
+
+---
+
+## Instruction Naming Conventions
+
+- `XD` suffix: Cross-directional (works for exactIn and exactOut)
+- `1D` suffix: One-directional (exactIn only or exactOut only)
+- No suffix: Context-independent or special instructions
+
+## Common Instruction Patterns
+
+| Category | Instructions |
+|----------|-------------|
+| Balance | `_staticBalancesXD`, `_dynamicBalancesXD` |
+| Swap | `_xycSwapXD`, `_limitSwap1D`, `_peggedSwap1D` |
+| Fee | `_flatFeeAmountInXD`, `_protocolFeeAmountInXD` |
+| Control | `_jump`, `_deadline`, `_jumpIfTokenIn` |
+| Validation | `_requireMinRate1D`, `_invalidateBit1D` |
+| Adjustment | `_decayXD`, `_dutchAuctionXD`, `_oraclePriceAdjuster` |
+
+## Opcode Reservation
+
+- Opcode 0: Reserved (`_notInstruction`)
+- Opcodes 1-10: Reserved for debug instructions
+- New instructions: Add at end to maintain backward compatibility
+
+---
+
+## Quick Reference: Adding New Instruction Checklist
+
+1. [ ] Create `src/instructions/NewInstruction.sol`
+   - [ ] Add license header and pragma
+   - [ ] Import `Context, ContextLib` from `../libs/VM.sol`
+   - [ ] Create `ArgsBuilder` library with `build()` function
+   - [ ] Create contract with instruction function(s)
+   - [ ] Add custom errors
+   - [ ] Handle both `isExactIn` true/false if XD
+2. [ ] Update `src/opcodes/Opcodes.sol`
+   - [ ] Add import statement
+   - [ ] Add to inheritance list
+   - [ ] Increase array size
+   - [ ] Add instruction to array (at end)
+3. [ ] Update `src/opcodes/OpcodesDebug.sol` (same changes)
+4. [ ] Create `test/NewInstruction.t.sol`
+5. [ ] Run tests: `forge test --match-contract NewInstruction`
+
+## Key Files Reference
+
+| File | Purpose |
+|------|---------|
+| `src/SwapVM.sol` | Base contract: order execution, token transfers, hooks |
+| `src/libs/VM.sol` | VM execution loop, Context/SwapRegisters structs |
+| `src/libs/MakerTraits.sol` | Order traits encoding (flags, hooks, program) |
+| `src/libs/TakerTraits.sol` | Taker preferences (exactIn, threshold, callbacks) |
+| `src/opcodes/Opcodes.sol` | Full instruction set registry |
+| `src/opcodes/OpcodesDebug.sol` | Debug version with logging |
+| `src/routers/SwapVMRouter.sol` | Main router connecting SwapVM + Opcodes |
+| `src/strategies/AquaAMM.sol` | Example strategy (program builder) |
+| `test/utils/ProgramBuilder.sol` | Helper for building bytecode programs |
+
+## Design Patterns
+
+- **Composition over Inheritance**: Instructions are composed into opcode sets
+- **Separation of Concerns**: VM execution, instruction logic, and routing are separate
+- **Extensibility**: New instructions added without modifying existing code
+- **Gas Efficiency**: Compact bytecode encoding, efficient storage patterns
+- **Static Context**: `ctx.vm.isStaticContext` prevents state changes during `quote()`
