@@ -45,11 +45,11 @@ library XYCSwapStrictAdditiveArgsBuilder {
 ///   - α = 1.0: No fee, standard x*y=k
 ///   - α < 1.0: Fee is reinvested, lowering output for same input
 ///   - Lower α = higher effective fee
-/// @dev Mathematical formulas (TWO CURVES design):
-    ///   - When token X is input: uses curve x^α * y = K
-    ///   - When token Y is input: uses curve x * y^α = K
+/// @dev Mathematical formulas (TWO CURVES design - both strictly additive):
+    ///   - X→Y direction uses curve: K = y * x^α (power on input token X)
+    ///   - Y→X direction uses curve: K = x * y^α (power on input token Y)
     ///   - ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)
-    ///   - ExactOut: Δx = y * (1 - (x / (x + Δy))^α)  [same formula, amountOut as "input"]
+    ///   - ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same curve]
 contract XYCSwapStrictAdditive {
     using ContextLib for Context;
 
@@ -65,21 +65,18 @@ contract XYCSwapStrictAdditive {
     /// ╔═══════════════════════════════════════════════════════════════════════════════════════╗
     /// ║  STRICT ADDITIVE FEE WITH REINVESTMENT INSIDE PRICING (TWO CURVES)                   ║
     /// ║                                                                                       ║
-    /// ║  Two Curves Design:                                                                   ║
-    /// ║    - X→Y direction: x^α * y = K  (power on input token X)                            ║
-    /// ║    - Y→X direction: x * y^α = K  (power on input token Y)                            ║
+    /// ║  Two Curves Design (both ExactIn and ExactOut strictly additive):                    ║
+    /// ║    - X→Y direction: K = y * x^α  (power on input token X)                            ║
+    /// ║    - Y→X direction: K = x * y^α  (power on input token Y)                            ║
     /// ║                                                                                       ║
-    /// ║  Both ExactIn and ExactOut use the SAME formula:                                      ║
-    /// ║    result = balanceOut * (1 - (balanceIn / (balanceIn + amount))^α)                  ║
+    /// ║  ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)                                           ║
+    /// ║  ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same curve]             ║
     /// ║                                                                                       ║
-    /// ║  ExactIn:  amount = amountIn,  result = amountOut                                    ║
-    /// ║  ExactOut: amount = amountOut, result = amountIn                                     ║
-    /// ║                                                                                       ║
-    /// ║  Benefits:                                                                            ║
-    /// ║    - Strict additivity: swap(a+b) = swap(b) ∘ swap(a)                                 ║
+    /// ║  Properties:                                                                          ║
+    /// ║    - BOTH ExactIn and ExactOut are strictly additive                                 ║
+    /// ║    - Round trip costs trader (real bid-ask spread for economic incentive)            ║
     /// ║    - Full input credit (all input goes to reserve)                                   ║
     /// ║    - Fee reinvested inside pricing (no external bucket)                              ║
-    /// ║    - Deterministic final state regardless of trade splitting                          ║
     /// ║                                                                                       ║
     /// ║  Alpha parameter guide:                                                               ║
     /// ║    - α = 1.000 (1e9): No fee, standard constant product                              ║
@@ -110,10 +107,10 @@ contract XYCSwapStrictAdditive {
         } else {
             require(ctx.swap.amountIn == 0, XYCSwapStrictAdditiveRecomputeDetected());
 
-            // Two Curves Design: use same formula as ExactIn, but with amountOut as the "amount"
-            // amountIn = balanceOut * (1 - (balanceIn / (balanceIn + amountOut))^α)
-            // This creates the second curve: x * y^α = K (power on output token when viewed from other direction)
-            ctx.swap.amountIn = StrictAdditiveMath.calcExactIn(
+            // ExactOut: use inverse formula on the SAME curve (strictly additive)
+            // Δx = x * ((y / (y - Δy))^(1/α) - 1)
+            // Ceiling division for tokenIn is desired behavior (protects maker)
+            ctx.swap.amountIn = StrictAdditiveMath.calcExactOut(
                 ctx.swap.balanceIn,
                 ctx.swap.balanceOut,
                 ctx.swap.amountOut,

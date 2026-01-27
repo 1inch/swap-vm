@@ -578,84 +578,93 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("Amount out requested:", amountOut);
         console.log("Amount in required:", amountIn);
 
-        // With "two curves" design, ExactOut uses calcExactIn formula:
-        // amountIn = balanceOut * (1 - (balanceIn / (balanceIn + amountOut))^α)
-        // This is NOT the traditional inverse, but a different calculation
-        uint256 expectedFromFormula = StrictAdditiveMath.calcExactIn(poolA, poolB, amountOut, alpha);
-        console.log("Expected from formula:", expectedFromFormula);
+        // ExactOut uses calcExactOut (inverse on same curve, strictly additive):
+        // Δx = x * ((y / (y - Δy))^(1/α) - 1)
+        uint256 expectedFromFormula = StrictAdditiveMath.calcExactOut(poolA, poolB, amountOut, alpha);
+        console.log("Expected from calcExactOut:", expectedFromFormula);
         
-        assertEq(amountIn, expectedFromFormula, "Should match calcExactIn formula");
+        assertEq(amountIn, expectedFromFormula, "Should match calcExactOut formula");
         
-        // Note: In this design, amountIn may be LESS than CP baseline because
-        // the power is applied to balanceIn, not solved inversely
+        // ExactOut with fee should require MORE input than CP baseline
         uint256 cpAmountIn = amountOut * poolA / (poolB - amountOut);
         console.log("CP baseline:", cpAmountIn);
-        console.log("Difference from CP:", cpAmountIn > amountIn ? cpAmountIn - amountIn : amountIn - cpAmountIn);
+        assertGt(amountIn, cpAmountIn, "ExactOut should require more than CP due to fee");
+        console.log("Fee (extra input vs CP):", amountIn - cpAmountIn);
         console.log("================================\n");
     }
 
-    /// @notice Direct math verification of ExactOut strict additivity
-    /// @dev Tests if Δx = y * (1 - (x / (x + Δy))^α) is strictly additive with CORRECT reserve evolution
-    function test_XYCSwapStrictAdditive_ExactOut_MathVerification() public pure {
-        uint256 x = 1000e18;  // balanceIn
-        uint256 y = 1000e18;  // balanceOut
-        uint256 alpha = 997_000_000;  // 0.997
+    /// @notice Direct math verification: current implementation is NOT strictly additive
+    function test_XYCSwapStrictAdditive_ExactOut_Model1_Actual() public pure {
+        uint256 x = 1000e18;
+        uint256 y = 1000e18;
+        uint256 alpha = 997_000_000;
         
-        uint256 dy1 = 40e18;   // first "input" to formula
-        uint256 dy2 = 60e18;   // second "input" to formula
-        uint256 dyTotal = 100e18;
+        console.log("\n=== MODEL 1: Current impl (x += dx, y -= dy) - NOT strictly additive ===");
+        
+        uint256 dxTotal = StrictAdditiveMath.calcExactIn(x, y, 100e18, alpha);
+        console.log("Single (dy=100): dx =", dxTotal);
+        
+        uint256 dx1 = StrictAdditiveMath.calcExactIn(x, y, 40e18, alpha);
+        uint256 dx2 = StrictAdditiveMath.calcExactIn(x + dx1, y - 40e18, 60e18, alpha);
+        console.log("Split (40+60): dx =", dx1 + dx2);
+        
+        uint256 diff = dxTotal > (dx1 + dx2) ? dxTotal - (dx1 + dx2) : (dx1 + dx2) - dxTotal;
+        console.log("Difference =", diff);
+        console.log("Diff ppm =", diff * 1e6 / dxTotal);
+    }
 
-        console.log("\n=== EXACTOUT STRICT ADDITIVITY - TWO RESERVE MODELS ===");
+    /// @notice Verify the formula IS strictly additive in its natural form
+    /// @dev Formula: output = B * (1 - (A / (A + input))^α)
+    /// @dev Strictly additive when: A' = A + input, B' = B - output
+    function test_XYCSwapStrictAdditive_Formula_IsStrictlyAdditive() public pure {
+        uint256 A = 1000e18;  // reserve A (formula's balanceIn)
+        uint256 B = 1000e18;  // reserve B (formula's balanceOut)
+        uint256 alpha = 997_000_000;
+        
+        console.log("\n=== FORMULA STRICT ADDITIVITY PROOF ===");
+        console.log("Formula: output = B * (1 - (A / (A + input))^alpha)");
+        console.log("Reserve update: A' = A + input, B' = B - output\n");
+        
+        // Single: input = 100, compute output
+        uint256 outputTotal = StrictAdditiveMath.calcExactIn(A, B, 100e18, alpha);
+        console.log("Single (input=100): output =", outputTotal);
+        
+        // Split: input1=40, input2=60
+        uint256 output1 = StrictAdditiveMath.calcExactIn(A, B, 40e18, alpha);
+        // Reserve update: A' = A + 40, B' = B - output1
+        uint256 A2 = A + 40e18;
+        uint256 B2 = B - output1;
+        
+        uint256 output2 = StrictAdditiveMath.calcExactIn(A2, B2, 60e18, alpha);
+        console.log("Split (40+60): output =", output1 + output2);
+        
+        uint256 diff = outputTotal > (output1 + output2) 
+            ? outputTotal - (output1 + output2) 
+            : (output1 + output2) - outputTotal;
+        console.log("Difference =", diff);
+        console.log("(~0 proves formula is strictly additive!)");
+        
+        // Assert strictly additive (< 1000 wei tolerance for rounding)
+        assertLt(diff, 1000, "Formula should be strictly additive");
+    }
+    
+    /// @notice The problem: ExactOut's token flow doesn't match formula semantics
+    function test_XYCSwapStrictAdditive_ExactOut_TokenFlowMismatch() public pure {
+        console.log("\n=== WHY EXACTOUT IS NOT STRICTLY ADDITIVE ===");
         console.log("Formula: dx = y * (1 - (x / (x + dy))^alpha)");
-        console.log("x = 1000, y = 1000, alpha = 0.997\n");
-
-        // Single swap
-        uint256 dxTotal = StrictAdditiveMath.calcExactIn(x, y, dyTotal, alpha);
-        console.log("Single swap (dy=100): dx_total =", dxTotal);
-
-        // ============================================
-        // MODEL 1: Actual swap reserves (x += dx, y -= dy)
-        // This is what the current implementation does
-        // ============================================
-        console.log("\n--- MODEL 1: Actual reserves (x += dx, y -= dy) ---");
-        uint256 dx1_m1 = StrictAdditiveMath.calcExactIn(x, y, dy1, alpha);
-        console.log("First swap dx1 =", dx1_m1);
+        console.log("  - Formula 'input' = dy (desired output)");  
+        console.log("  - Formula 'output' = dx (required input)\n");
         
-        uint256 xPrime_m1 = x + dx1_m1;  // x increases by dx (actual input)
-        uint256 yPrime_m1 = y - dy1;      // y decreases by dy (actual output)
-        console.log("Reserves: x' =", xPrime_m1);
+        console.log("For strict additivity, reserves must update as:");
+        console.log("  - x' = x + dy (formula input added to x)");
+        console.log("  - y' = y - dx (formula output removed from y)\n");
         
-        uint256 dx2_m1 = StrictAdditiveMath.calcExactIn(xPrime_m1, yPrime_m1, dy2, alpha);
-        console.log("Second swap dx2 =", dx2_m1);
-        console.log("Split total =", dx1_m1 + dx2_m1);
+        console.log("But ACTUAL token flow is:");
+        console.log("  - x' = x + dx (actual input added)");
+        console.log("  - y' = y - dy (actual output removed)\n");
         
-        uint256 diff_m1 = dxTotal > (dx1_m1 + dx2_m1) ? dxTotal - (dx1_m1 + dx2_m1) : (dx1_m1 + dx2_m1) - dxTotal;
-        console.log("Diff from single =", diff_m1);
-        console.log("Diff ppm =", diff_m1 * 1e6 / dxTotal);
-
-        // ============================================
-        // MODEL 2: Formula-natural reserves (x += dy, y -= dx)
-        // This is what strict additivity requires
-        // ============================================
-        console.log("\n--- MODEL 2: Formula-natural reserves (x += dy, y -= dx) ---");
-        uint256 dx1_m2 = StrictAdditiveMath.calcExactIn(x, y, dy1, alpha);
-        console.log("First swap dx1 =", dx1_m2);
-        
-        uint256 xPrime_m2 = x + dy1;      // x increases by dy (formula input)
-        uint256 yPrime_m2 = y - dx1_m2;   // y decreases by dx (formula output)
-        console.log("Reserves: x' =", xPrime_m2);
-        
-        uint256 dx2_m2 = StrictAdditiveMath.calcExactIn(xPrime_m2, yPrime_m2, dy2, alpha);
-        console.log("Second swap dx2 =", dx2_m2);
-        console.log("Split total =", dx1_m2 + dx2_m2);
-        
-        uint256 diff_m2 = dxTotal > (dx1_m2 + dx2_m2) ? dxTotal - (dx1_m2 + dx2_m2) : (dx1_m2 + dx2_m2) - dxTotal;
-        console.log("Diff from single =", diff_m2);
-        console.log("(should be ~0 for strict additivity)");
-        
-        console.log("\n=== CONCLUSION ===");
-        console.log("Model 1 (actual): NOT strictly additive");
-        console.log("Model 2 (formula-natural): IS strictly additive");
+        console.log("MISMATCH! That's why ExactOut isn't strictly additive.");
+        console.log("The 'two curves' design trades strict additivity for simplicity.");
     }
 
     /// @notice Test ExactOut split behavior (NOT strictly additive in two curves design)
@@ -804,13 +813,13 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, alpha);
 
         console.log("\n================================================================================");
-        console.log("          EXACTIN vs EXACTOUT: TWO CURVES DESIGN");
+        console.log("          EXACTIN vs EXACTOUT: SAME CURVE, INVERSE OPERATIONS");
         console.log("================================================================================\n");
 
-        console.log("In 'two curves' design:");
-        console.log("  - ExactIn:  amountOut = balanceOut * (1 - (balanceIn / (balanceIn + amountIn))^alpha)");
-        console.log("  - ExactOut: amountIn = balanceOut * (1 - (balanceIn / (balanceIn + amountOut))^alpha)");
-        console.log("  Note: ExactOut uses the SAME formula but with amountOut in place of amountIn!");
+        console.log("Both ExactIn and ExactOut use the SAME curve K = y * x^alpha:");
+        console.log("  - ExactIn:  amountOut = y * (1 - (x / (x + amountIn))^alpha)");
+        console.log("  - ExactOut: amountIn = x * ((y / (y - amountOut))^(1/alpha) - 1)");
+        console.log("  They are mathematical INVERSES on the same curve!");
         console.log("");
 
         // ExactIn: 100 tokens in -> how much out?
@@ -828,22 +837,24 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         console.log("ExactOut: request B:", outFromExactIn);
         console.log("  -> need A:", inFromExactOut);
 
+        // Since they're inverses on the same curve, ExactOut should return ~100e18
+        // (with ceiling rounding for protection)
         console.log("");
-        console.log("KEY DIFFERENCE FROM TRADITIONAL AMM:");
-        console.log("  In traditional AMM, ExactOut would require ~100e18 A to get the same B");
-        console.log("  In two curves design, the formulas are different, so results differ");
+        console.log("VERIFICATION:");
+        console.log("  ExactIn gave output from 100e18 input");
+        console.log("  ExactOut requesting that output should need ~100e18 input");
+        console.log("  Actual input needed:", inFromExactOut);
         
-        // Calculate what traditional inverse would be
-        // Traditional: amountIn = balanceIn * ((balanceOut / (balanceOut - amountOut))^(1/α) - 1)
-        uint256 traditionalInverse = StrictAdditiveMath.calcExactOut(poolA, poolB, outFromExactIn, alpha);
-        console.log("");
-        console.log("Traditional inverse would need:", traditionalInverse, "A");
-        console.log("Two curves design needs:       ", inFromExactOut, "A");
-        console.log("Difference:                    ", traditionalInverse > inFromExactOut ? traditionalInverse - inFromExactOut : inFromExactOut - traditionalInverse);
+        // Verify calcExactOut is used
+        uint256 expectedFromCalcExactOut = StrictAdditiveMath.calcExactOut(poolA, poolB, outFromExactIn, alpha);
+        assertEq(inFromExactOut, expectedFromCalcExactOut, "ExactOut should use calcExactOut formula");
 
-        // Verify the two curves formula is applied correctly
-        uint256 expectedTwoCurves = StrictAdditiveMath.calcExactIn(poolA, poolB, outFromExactIn, alpha);
-        assertEq(inFromExactOut, expectedTwoCurves, "ExactOut should use calcExactIn formula");
+        // The round-trip should be very close to 100e18 (small precision error)
+        uint256 diff = inFromExactOut > 100e18 
+            ? inFromExactOut - 100e18 
+            : 100e18 - inFromExactOut;
+        console.log("  Difference from 100e18 (precision):", diff);
+        assertLt(diff, 1e15, "Precision difference should be small");
 
         console.log("\n================================================================================\n");
     }

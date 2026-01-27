@@ -1,0 +1,412 @@
+% ============================================================
+% Strict-Additive Fees Reinvested Inside Pricing for AMMs
+% Two-Curve Design
+% Author: Vadim Fadeev
+% ============================================================
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{microtype}
+
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+% theorem styles
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% macros
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Rp}{\R_{>0}}
+\newcommand{\dx}{\Delta x}
+\newcommand{\dy}{\Delta y}
+\newcommand{\projY}{\pi_y}
+
+\title{\textbf{Strict-Additive Fees Reinvested Inside Pricing for AMMs}\\
+\large Single-Curve and Two-Curve Constructions with ExactIn/ExactOut}
+\author{Vadim Fadeev}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Constant-product AMMs ($xy=k$) are strictly additive (split-invariant): executing a trade of size $a+b$ yields the same final pool state as executing $a$ and then $b$.
+This paper studies fee mechanisms where fees are \emph{reinvested inside pricing} (no external fee buckets) while preserving strict additivity.
+We show that strict additivity forces a telescoping structure that can be expressed as an invariant of the form $K=y\,\Psi(x)$.
+This yields a \emph{single-curve} design that is strictly additive for ExactIn and ExactOut and is invertible (a perfect round trip returns the pool to the start when the trader swaps back exactly what they received).
+We then introduce a \emph{two-curve} directional design: one curve for $X\to Y$ and another for $Y\to X$, each strictly additive for splits, but their mismatch creates a real bid-ask spread (a round trip costs the trader and accumulates in reserves).
+We provide full intermediate derivations and numeric examples.
+\end{abstract}
+
+\tableofcontents
+
+\section{Setup}
+
+\begin{definition}[State]
+The pool state is reserves $(x,y)\in\Rp^2$, where $x$ is token $X$ reserve and $y$ is token $Y$ reserve.
+\end{definition}
+
+\begin{definition}[State update map]
+Let $F_\theta:\Rp^2\to\Rp^2$ be a state update map parameterized by a trade parameter $\theta$.
+For ExactIn we take $\theta=\dx$; for ExactOut we take $\theta=\dy$.
+We write
+\[
+F_\theta(x,y)=(x_\theta,y_\theta).
+\]
+\end{definition}
+
+\begin{definition}[Strict additivity / split invariance]
+A family $\{F_\theta\}$ is \emph{strictly additive} in parameter $\theta$ if for all $a,b>0$,
+\[
+F_{a+b} = F_b\circ F_a.
+\]
+Equivalently, applying $a$ then $b$ produces the same final state as applying $a+b$ once.
+\end{definition}
+
+\begin{definition}[Output function]
+For ExactIn (parameter $\dx$), define
+\[
+\Delta y = f((x,y),\dx) := y-\projY(F_{\dx}(x,y)),
+\]
+where $\projY(x',y')=y'$.
+\end{definition}
+
+\section{Baseline: constant product $xy=k$}
+
+\begin{lemma}[Constant product ExactIn]
+With invariant $xy=k$ and full input credit $x'=x+\dx$, the post-swap $y$ is uniquely
+\[
+ y' = \frac{xy}{x+\dx} = y\frac{x}{x+\dx},
+\]
+and
+\[
+\Delta y_{\mathrm{cp}} = y-y' = y\frac{\dx}{x+\dx}.
+\]
+\end{lemma}
+
+\begin{lemma}[Strict additivity for constant product]
+Constant product is strictly additive for ExactIn.
+\end{lemma}
+
+\begin{proof}
+Let $\dx=a+b$. After $a$, $y_1=xy/(x+a)$. After $b$, $y_2=(x+a)y_1/(x+a+b)=xy/(x+a+b)$, equal to the one-shot result.
+\end{proof}
+
+\section{Why the cocycle condition appears}
+
+A common way to model reinvested fees is to start from constant product and multiply by a factor $R(x,\Delta)\ge 1$ that keeps extra $Y$ in the pool:
+\[
+ y'(x,\Delta) = y\frac{x}{x+\Delta}R(x,\Delta).
+\]
+
+\begin{theorem}[Strict additivity implies the cocycle identity]
+The update rule
+\[
+F_\Delta(x,y)=\left(x+\Delta,\; y\frac{x}{x+\Delta}R(x,\Delta)\right)
+\]
+is strictly additive in $\Delta$ iff
+\[
+\boxed{R(x,a)R(x+a,b)=R(x,a+b)}\qquad\forall x,a,b>0.
+\]
+\end{theorem}
+
+\begin{proof}
+Split $\Delta=a+b$.
+After $a$:
+\[
+ y_1 = y\frac{x}{x+a}R(x,a),\quad x_1=x+a.
+\]
+After $b$:
+\[
+ y_2 = y_1\frac{x_1}{x_1+b}R(x_1,b)
+     = \Big(y\frac{x}{x+a}R(x,a)\Big)\frac{x+a}{x+a+b}R(x+a,b).
+\]
+Cancel $x+a$:
+\[
+ y_2 = y\frac{x}{x+a+b}R(x,a)R(x+a,b).
+\]
+One-shot:
+\[
+ y_S = y\frac{x}{x+a+b}R(x,a+b).
+\]
+Strict additivity requires $y_2=y_S$ for all $y>0$, hence the boxed identity.
+\end{proof}
+
+\section{From $R$ to $\Psi$: a better description of the potential function}
+
+\subsection{Telescoping solution via an endpoint potential $G$}
+
+\begin{theorem}[General telescoping form]
+If the cocycle identity holds, then (under mild regularity) there exists $G:\Rp\to\Rp$ such that
+\[
+\boxed{R(x,\Delta)=\frac{G(x)}{G(x+\Delta)}}.
+\]
+Conversely, any such ratio satisfies the cocycle identity.
+\end{theorem}
+
+\begin{proof}
+Sufficiency is immediate:
+\[
+\frac{G(x)}{G(x+a)}\cdot\frac{G(x+a)}{G(x+a+b)}=\frac{G(x)}{G(x+a+b)}.
+\]
+Necessity can be shown by fixing a reference point and defining $G$ by endpoint products so that intermediate factors cancel.
+\end{proof}
+
+\subsection{Defining $\Psi$ and its economic meaning}
+
+Substitute $R(x,\Delta)=G(x)/G(x+\Delta)$:
+\[
+ y' = y\frac{x}{x+\Delta}\frac{G(x)}{G(x+\Delta)} = y\frac{xG(x)}{(x+\Delta)G(x+\Delta)}.
+\]
+Define the combined potential coordinate
+\[
+\boxed{\Psi(x):=xG(x)}.
+\]
+Then the update becomes
+\begin{equation}
+\boxed{\;x'=x+\Delta,\qquad y'=y\frac{\Psi(x)}{\Psi(x+\Delta)}.\;}
+\label{eq:psi-exactin}
+\end{equation}
+
+\begin{proposition}[Invariant]
+The quantity
+\[
+\boxed{K:=y\Psi(x)}
+\]
+is invariant under the update \eqref{eq:psi-exactin}.
+\end{proposition}
+
+\begin{proof}
+Multiply both sides of \eqref{eq:psi-exactin} by $\Psi(x')=\Psi(x+\Delta)$:
+\[
+ y'\Psi(x') = y\frac{\Psi(x)}{\Psi(x')}\Psi(x') = y\Psi(x).
+\]
+\end{proof}
+
+\begin{remark}[Economic interpretation of $\Psi$]
+$\Psi$ is a monotone (typically increasing) re-parameterization of the $x$-reserve.
+The swap outcome depends only on the endpoint ratio $\Psi(x)/\Psi(x')$.
+You can interpret $\Psi(x)$ as the pool's \emph{effective} or \emph{virtual} $X$-liquidity coordinate.
+A different $\Psi$ changes the curvature of the AMM and therefore changes how much output is paid for the same input.
+\end{remark}
+
+\begin{proposition}[Marginal price]
+On the invariant curve $y\Psi(x)=K$, the instantaneous price (marginal $Y$ out per $X$ in) is
+\[
+\boxed{p(x,y)=-\frac{dy}{dx} = \frac{y\Psi'(x)}{\Psi(x)}.}
+\]
+\end{proposition}
+
+\begin{proof}
+Differentiate $y\Psi(x)=K$:
+$\Psi(x)dy + y\Psi'(x)dx =0$. Rearranging yields the formula.
+\end{proof}
+
+\section{Curve A: Single-curve design (one invariant)}
+
+Curve A uses one function $\Psi$ for both directions, i.e., one conserved quantity $K=y\Psi(x)$. It is strictly additive and invertible.
+
+\subsection{ExactIn $X\to Y$}
+
+From \eqref{eq:psi-exactin}, the output is
+\begin{equation}
+\boxed{\;\Delta y = y-y' = y\left(1-\frac{\Psi(x)}{\Psi(x+\dx)}\right).\;}
+\label{eq:curveA-exactin-out}
+\end{equation}
+
+\subsection{ExactOut $X\to Y$: full derivation}
+
+Given a target $0<\dy<y$, set $y'=y-\dy$.
+Conservation of $K=y\Psi(x)$ implies
+\[
+ (y-\dy)\Psi(x') = y\Psi(x).
+\]
+Solve for $\Psi(x')$:
+\[
+ \Psi(x') = \Psi(x)\frac{y}{y-\dy}.
+\]
+Assuming $\Psi$ is invertible:
+\[
+ x' = \Psi^{-1}\!\left(\Psi(x)\frac{y}{y-\dy}\right),\qquad
+ \boxed{\dx = x'-x = \Psi^{-1}\!\left(\Psi(x)\frac{y}{y-\dy}\right)-x.}
+\]
+
+\subsection{Strict additivity checks}
+
+\begin{lemma}[ExactIn strict additivity for Curve A]
+For all $a,b>0$,
+\[
+F^{A,\mathrm{in}}_{a+b} = F^{A,\mathrm{in}}_b\circ F^{A,\mathrm{in}}_a.
+\]
+\end{lemma}
+
+\begin{proof}
+After $a$: $y_1=y\Psi(x)/\Psi(x+a)$. After $b$: $y_2=y_1\Psi(x+a)/\Psi(x+a+b)=y\Psi(x)/\Psi(x+a+b)$.
+\end{proof}
+
+\begin{lemma}[ExactOut strict additivity for Curve A]
+For $a,b>0$ with $a+b<y$, the ExactOut map is strictly additive in $\dy$.
+\end{lemma}
+
+\begin{proof}
+Write $r(\dy)=y/(y-\dy)$. Note that $r(a)\,r(b\mid y-a)=y/(y-a)\cdot (y-a)/(y-a-b)=y/(y-a-b)=r(a+b)$.
+Since ExactOut is $\Psi(x')=\Psi(x)r(\dy)$, endpoint multiplication yields the same $\Psi(x')$ and hence the same $x'$.
+\end{proof}
+
+\subsection{Why Curve A does not allow round-trip extraction}
+
+\begin{proposition}[Round trip is an identity (ideal real arithmetic)]
+In Curve A, perform ExactIn $X\to Y$ with input $\dx$ producing output $\dy$. Then input exactly that $\dy$ back in the reverse direction. The pool returns to the initial state (modulo rounding).
+\end{proposition}
+
+\begin{proof}
+Both legs preserve the same invariant $K=y\Psi(x)$. After the first leg, the trader received $\dy=y-y'$. Inputting $\dy$ back restores $y$ to its initial value. With $y$ restored and $K$ unchanged, $\Psi(x)$ must also be restored, implying $x$ returns (for invertible $\Psi$).
+\end{proof}
+
+\subsection{Reinvested fee accounting relative to constant product}
+
+For the same $\dx$, constant product yields $y_{\mathrm{cp}}=y\,x/(x+\dx)$. Curve A yields $y'=y\Psi(x)/\Psi(x+\dx)$.
+Define retained $Y$ vs constant product:
+\[
+\boxed{\mathrm{fee}_Y^{(\mathrm{vs\,CP})}=y' - y_{\mathrm{cp}} = y\left(\frac{\Psi(x)}{\Psi(x+\dx)}-\frac{x}{x+\dx}\right).}
+\]
+This quantity measures how much more $Y$ remains in the pool compared to pure constant product for the same input.
+
+\section{Curve A power family: $\Psi(x)=x^\alpha$}
+
+Let $0<\alpha\le 1$ and $\Psi(x)=x^\alpha$. Then invariant is
+\[
+\boxed{K=x^\alpha y.}
+\]
+ExactIn output is
+\[
+\boxed{\Delta y = y\left(1-\left(\frac{x}{x+\dx}\right)^\alpha\right).}
+\]
+ExactOut input for target $\dy$ is
+\[
+\boxed{\dx = x\left(\left(\frac{y}{y-\dy}\right)^{1/\alpha}-1\right).}
+\]
+Marginal price becomes
+\[
+\boxed{p=\alpha\frac{y}{x}.}
+\]
+
+\section{Curve B: Two-curve directional design (real spread)}
+
+Curve B uses one curve for $X\to Y$ and a different curve for $Y\to X$.
+Each direction remains strictly additive for splits because each direction uses telescoping endpoint ratios.
+But the mismatch produces a real bid-ask spread (round trips cost the trader and accumulate in reserves).
+
+\subsection{Directional strictly additive maps}
+
+Choose monotone functions $\Psi_X$ and $\Phi_Y$.
+Define:
+\[
+\boxed{F^{B,X\mathrm{in}}_{\dx}(x,y)=\left(x+\dx,\;y\frac{\Psi_X(x)}{\Psi_X(x+\dx)}\right),}
+\]
+\[
+\boxed{F^{B,Y\mathrm{in}}_{\dy}(x,y)=\left(x\frac{\Phi_Y(y)}{\Phi_Y(y+\dy)},\;y+\dy\right).}
+\]
+Each map is strictly additive in its own input parameter by telescoping.
+
+\subsection{Concrete two-curve example: symmetric power haircuts}
+
+Take $\Psi_X(x)=x^\alpha$ and $\Phi_Y(y)=y^\alpha$ with $0<\alpha<1$.
+Then:
+\[
+X\to Y:\quad y' = y\left(\frac{x}{x+\dx}\right)^\alpha.
+\]
+\[
+Y\to X:\quad x' = x\left(\frac{y}{y+\dy}\right)^\alpha.
+\]
+Unlike Curve A, these two directions do not preserve the same global $K$, so a round trip is no longer an identity.
+
+\section{Numeric showcase}
+
+We present paper-checkable numbers comparing constant product, Curve A (single curve), and Curve B (two curves).
+
+\subsection{Example 1: $x=y=1000$, $\dx=100$, $\alpha=0.8$}
+
+\paragraph{Constant product baseline.}
+\[
+ y_{\mathrm{cp}} = 1000\cdot\frac{1000}{1100} = 909.0909090909,
+ \quad \Delta y_{\mathrm{cp}}=90.9090909091.
+\]
+
+\paragraph{Curve A forward $X\to Y$.}
+\[
+ y_1 = 1000\left(\frac{1000}{1100}\right)^{0.8}\approx 926.5862513559,
+ \quad \Delta y\approx 73.4137486441.
+\]
+Retained vs CP (extra $Y$ left in pool relative to CP):
+\[
+ y_1-y_{\mathrm{cp}}\approx 17.4953422650.
+\]
+
+\paragraph{Curve A round trip.}
+If the trader inputs back exactly $\Delta y\approx 73.4137486441$ in the reverse direction under the same invariant $x^\alpha y=K$, the pool returns to $(1000,1000)$ (up to rounding), and trader net PnL is $0$.
+
+\paragraph{Curve B round trip (spread).}
+After forward, pool is $(x_1,y_1)=(1100,926.5862513559)$ and trader holds $\Delta y$.
+Swap back using Curve B reverse rule with input $\dy=\Delta y$ so $y_2=1000$ and
+\[
+ x_2 = 1100\left(\frac{926.5862513559}{1000}\right)^{0.8}\approx 1034.9071005121.
+\]
+Thus trader receives
+\[
+ \Delta x_{\mathrm{back}} = 1100-1034.9071005121\approx 65.0928994879,
+\]
+so the trader loses about $34.9071\,X$ on the round trip and the pool gains the same amount.
+
+\subsection{Example 2: $x=y=1000$, $\dx=100$, $\alpha=0.997$ (near CP)}
+
+\paragraph{Curve A forward.}
+\[
+ y_1 = 1000\left(\frac{1000}{1100}\right)^{0.997}\approx 909.3508831104,
+ \quad \Delta y\approx 90.6491168896.
+\]
+Constant product yields $\Delta y_{\mathrm{cp}}\approx 90.9090909091$, hence retained vs CP is
+\[
+ y_1-y_{\mathrm{cp}}\approx 0.2599740195\,Y.
+\]
+
+\section{Pitfall: scaling ExactOut input by a constant breaks strict additivity}
+
+Suppose you compute Curve A power ExactOut base input
+\[
+\dx_{\mathrm{base}}=x\left(\left(\frac{y}{y-\dy}\right)^{1/\alpha}-1\right)
+\]
+and then charge
+\[
+\dx_{\mathrm{new}} = c\,\dx_{\mathrm{base}},\quad c>1.
+\]
+This generally breaks ExactOut strict additivity in $\dy$ because the correct telescoping structure requires endpoint multiplicativity in the ratio $y/(y-\dy)$, not post-hoc scaling of $\dx$.
+To preserve strict additivity, one must modify the exponent (an endpoint function), not multiply the solved $\dx$.
+
+\section{Summary}
+
+\begin{itemize}[leftmargin=2em]
+\item Strict additivity for ExactIn with reinvested-within-pricing factors forces a cocycle identity and therefore a telescoping endpoint representation.
+\item Curve A: a single potential function $\Psi$ yields invariant $K=y\Psi(x)$, strict additivity for ExactIn/ExactOut, and invertibility (no round-trip extraction).
+\item Curve B: two directional curves (two potentials) remain strictly additive per direction but create a real spread and accumulate reserves on round trips.
+\end{itemize}
+
+\section*{References}
+\begin{itemize}
+\item Uniswap v2 Whitepaper: \url{https://app.uniswap.org/whitepaper.pdf}
+\item Angeris et al., Constant Function Market Makers (CFMM): \url{https://web.stanford.edu/~boyd/papers/pdf/cfmm.pdf}
+\item CFMM geometry and axioms (optional reading):
+\url{https://arxiv.org/pdf/2308.08066.pdf}, \url{https://arxiv.org/pdf/2210.00048.pdf}, \url{https://arxiv.org/pdf/2302.00196.pdf}
+\end{itemize}
+
+\end{document}
