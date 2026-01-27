@@ -11,6 +11,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
+import { ContextLib } from "../src/libs/VM.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
@@ -375,18 +376,15 @@ contract ControlsTest is Test, OpcodesDebug {
     /**
      * @notice Test backward jump
      */
-    function test_BackwardJump() public {
+    function test_SkipBackwardJump() public {
         Program memory program = ProgramBuilder.init(_opcodes());
 
-        // Create a program that jumps backward
         bytes memory balancesInstr = program.build(_dynamicBalancesXD,
             BalancesArgsBuilder.build(
                 dynamic([address(tokenA), address(tokenB)]),
                 dynamic([uint256(100e18), uint256(100e18)])
             ));
 
-        // But we need to ensure we don't create infinite loop
-        // Use conditional jump instead
         bytes memory jumpIfInstr = program.build(_jumpIfTokenIn,
             ControlsArgsBuilder.buildJumpIfToken(address(0x9999), uint16(balancesInstr.length)));
         bytes memory swapInstr = program.build(_xycSwapXD);
@@ -401,6 +399,68 @@ contract ControlsTest is Test, OpcodesDebug {
         uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
 
         assertGt(amountOut, 0, "Backward jump logic should work");
+    }
+
+    function test_BackwardJump() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory jumpInst1 = program.build(_jump,
+            ControlsArgsBuilder.buildJump(uint16(0)));
+        bytes memory balancesInstr = program.build(_dynamicBalancesXD,
+            BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([uint256(100e18), uint256(100e18)])
+            ));
+        bytes memory swapInstr = program.build(_xycSwapXD);
+        bytes memory jumpInst2 = program.build(_jump,
+            ControlsArgsBuilder.buildJump(uint16(0)));
+        bytes memory jumpIfInstrIn = program.build(_jumpIfTokenIn,
+            ControlsArgsBuilder.buildJumpIfToken(address(tokenA), uint16(jumpInst1.length)));
+
+        uint16 jumpIfInstrInOffset = uint16(
+            jumpInst1.length +
+            balancesInstr.length +
+            swapInstr.length +
+            jumpInst2.length
+        );
+
+        jumpInst1 = program.build(_jump,
+            ControlsArgsBuilder.buildJump(jumpIfInstrInOffset));
+
+        jumpInst2 = program.build(_jump,
+            ControlsArgsBuilder.buildJump(uint16(jumpIfInstrInOffset + jumpIfInstrIn.length)));
+
+        bytes memory bytecode = bytes.concat(
+            jumpInst1,
+            balancesInstr,
+            swapInstr,
+            jumpInst2,
+            jumpIfInstrIn
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+
+        assertGt(amountOut, 0, "Backward jump logic should work");
+    }
+
+    /**
+     * @notice Test jump to out of bounds (should revert)
+     */
+    function test_JumpToOutOfBounds() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory bytecode = bytes.concat(
+            program.build(_jump,
+                ControlsArgsBuilder.buildJump(65535)), // Jump out of bounds
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        vm.expectRevert(
+            abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0)
+        );
+        _executeSwap(order, address(tokenA), address(tokenB), 1e18);
     }
 
     /**
