@@ -45,9 +45,10 @@ library XYCSwapStrictAdditiveArgsBuilder {
 ///   - α = 1.0: No fee, standard x*y=k
 ///   - α < 1.0: Fee is reinvested, lowering output for same input
 ///   - Lower α = higher effective fee
-/// @dev Mathematical formulas (TWO CURVES design - both strictly additive):
-    ///   - X→Y direction uses curve: K = y * x^α (power on input token X)
-    ///   - Y→X direction uses curve: K = x * y^α (power on input token Y)
+/// @dev Mathematical formulas (DISSIPATIVE design - single deterministic mapping):
+    ///   - Single rule: power α is always applied to the INPUT token's reserve
+    ///   - X→Y: K = y * x^α (power on input X)
+    ///   - Y→X: K = x * y^α (power on input Y)
     ///   - ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)
     ///   - ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same curve]
 contract XYCSwapStrictAdditive {
@@ -63,20 +64,20 @@ contract XYCSwapStrictAdditive {
     /// @dev Uses balanceIn and balanceOut from ctx.swap which should be set by Balances instruction
     ///
     /// ╔═══════════════════════════════════════════════════════════════════════════════════════╗
-    /// ║  STRICT ADDITIVE FEE WITH REINVESTMENT INSIDE PRICING (TWO CURVES)                   ║
+    /// ║  STRICT ADDITIVE FEE WITH REINVESTMENT INSIDE PRICING (DISSIPATIVE DESIGN)           ║
     /// ║                                                                                       ║
-    /// ║  Two Curves Design (both ExactIn and ExactOut strictly additive):                    ║
-    /// ║    - X→Y direction: K = y * x^α  (power on input token X)                            ║
-    /// ║    - Y→X direction: K = x * y^α  (power on input token Y)                            ║
+    /// ║  Single Deterministic Dissipative Mapping:                                           ║
+    /// ║    - ONE rule: power α is always applied to the INPUT token's reserve                ║
+    /// ║    - X→Y: K = y * x^α  |  Y→X: K = x * y^α                                           ║
     /// ║                                                                                       ║
     /// ║  ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)                                           ║
-    /// ║  ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same curve]             ║
+    /// ║  ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same direction]         ║
     /// ║                                                                                       ║
     /// ║  Properties:                                                                          ║
     /// ║    - BOTH ExactIn and ExactOut are strictly additive                                 ║
-    /// ║    - Round trip costs trader (real bid-ask spread for economic incentive)            ║
+    /// ║    - Non-conservative: round trips dissipate trader value into pool                  ║
+    /// ║    - Time-irreversible: creates real bid-ask spread for economic incentive           ║
     /// ║    - Full input credit (all input goes to reserve)                                   ║
-    /// ║    - Fee reinvested inside pricing (no external bucket)                              ║
     /// ║                                                                                       ║
     /// ║  Alpha parameter guide:                                                               ║
     /// ║    - α = 1.000 (1e9): No fee, standard constant product                              ║

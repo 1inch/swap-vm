@@ -32,7 +32,7 @@
 \newcommand{\projY}{\pi_y}
 
 \title{\textbf{Strict-Additive Fees Reinvested Inside Pricing for AMMs}\\
-\large Single-Curve and Two-Curve Constructions with ExactIn/ExactOut}
+\large Conservative and Dissipative Constructions with ExactIn/ExactOut}
 \author{Vadim Fadeev \and Sergey Prilutskiy}
 \date{\today}
 
@@ -43,8 +43,9 @@
 Constant-product AMMs ($xy=k$) are strictly additive (split-invariant): executing a trade of size $a+b$ yields the same final pool state as executing $a$ and then $b$.
 This paper studies fee mechanisms where fees are \emph{reinvested inside pricing} (no external fee buckets) while preserving strict additivity.
 We show that strict additivity forces a telescoping structure that can be expressed as an invariant of the form $K=y\,\Psi(x)$.
-This yields a \emph{single-curve} design that is strictly additive for ExactIn and ExactOut and is invertible (a perfect round trip returns the pool to the start when the trader swaps back exactly what they received).
-We then introduce a \emph{two-curve} directional design: one curve for $X\to Y$ and another for $Y\to X$, each strictly additive for splits, but their mismatch creates a real bid-ask spread (a round trip costs the trader and accumulates in reserves).
+This yields a \emph{conservative} design that is strictly additive for ExactIn and ExactOut and is invertible (a perfect round trip returns the pool to the start when the trader swaps back exactly what they received).
+We then introduce a \emph{dissipative} design: a single deterministic mapping where the power $\alpha$ is always applied to the input token's reserve.
+This mapping is strictly additive for splits in both directions, but is non-conservative---round trips cost the trader and accumulate value in reserves, creating a real bid-ask spread for economic incentive.
 We provide full intermediate derivations and numeric examples.
 \end{abstract}
 
@@ -212,9 +213,9 @@ Differentiate $y\Psi(x)=K$:
 $\Psi(x)dy + y\Psi'(x)dx =0$. Rearranging yields the formula.
 \end{proof}
 
-\section{Curve A: Single-curve design (one invariant)}
+\section{Conservative Design (Single Invariant)}
 
-Curve A uses one function $\Psi$ for both directions, i.e., one conserved quantity $K=y\Psi(x)$. It is strictly additive and invertible.
+The conservative design uses one function $\Psi$ for both directions, i.e., one conserved quantity $K=y\Psi(x)$. It is strictly additive and invertible (time-reversible).
 
 \subsection{ExactIn $X\to Y$}
 
@@ -263,10 +264,10 @@ Write $r(\dy)=y/(y-\dy)$. Note that $r(a)\,r(b\mid y-a)=y/(y-a)\cdot (y-a)/(y-a-
 Since ExactOut is $\Psi(x')=\Psi(x)r(\dy)$, endpoint multiplication yields the same $\Psi(x')$ and hence the same $x'$.
 \end{proof}
 
-\subsection{Why Curve A does not allow round-trip extraction}
+\subsection{Why conservative design allows perfect round trips}
 
 \begin{proposition}[Round trip is an identity (ideal real arithmetic)]
-In Curve A, perform ExactIn $X\to Y$ with input $\dx$ producing output $\dy$. Then input exactly that $\dy$ back in the reverse direction. The pool returns to the initial state (modulo rounding).
+In the conservative design, perform ExactIn $X\to Y$ with input $\dx$ producing output $\dy$. Then input exactly that $\dy$ back in the reverse direction. The pool returns to the initial state (modulo rounding).
 \end{proposition}
 
 \begin{proof}
@@ -275,14 +276,14 @@ Both legs preserve the same invariant $K=y\Psi(x)$. After the first leg, the tra
 
 \subsection{Reinvested fee accounting relative to constant product}
 
-For the same $\dx$, constant product yields $y_{\mathrm{cp}}=y\,x/(x+\dx)$. Curve A yields $y'=y\Psi(x)/\Psi(x+\dx)$.
+For the same $\dx$, constant product yields $y_{\mathrm{cp}}=y\,x/(x+\dx)$. The conservative design yields $y'=y\Psi(x)/\Psi(x+\dx)$.
 Define retained $Y$ vs constant product:
 \[
 \boxed{\mathrm{fee}_Y^{(\mathrm{vs\,CP})}=y' - y_{\mathrm{cp}} = y\left(\frac{\Psi(x)}{\Psi(x+\dx)}-\frac{x}{x+\dx}\right).}
 \]
 This quantity measures how much more $Y$ remains in the pool compared to pure constant product for the same input.
 
-\section{Curve A power family: $\Psi(x)=x^\alpha$}
+\section{Conservative power family: $\Psi(x)=x^\alpha$}
 
 Let $0<\alpha\le 1$ and $\Psi(x)=x^\alpha$. Then invariant is
 \[
@@ -301,39 +302,46 @@ Marginal price becomes
 \boxed{p=\alpha\frac{y}{x}.}
 \]
 
-\section{Curve B: Two-curve directional design (real spread)}
+\section{Dissipative Design (Single Deterministic Mapping)}
 
-Curve B uses one curve for $X\to Y$ and a different curve for $Y\to X$.
-Each direction remains strictly additive for splits because each direction uses telescoping endpoint ratios.
-But the mismatch produces a real bid-ask spread (round trips cost the trader and accumulate in reserves).
+The dissipative design uses a \emph{single} mapping rule: the power $\alpha$ is always applied to the \textbf{input token's reserve}.
+This is not two separate curves, but one unified, asymmetric mapping that is non-conservative (dissipative).
 
-\subsection{Directional strictly additive maps}
+\subsection{The unified dissipative mapping}
 
-Choose monotone functions $\Psi_X$ and $\Phi_Y$.
-Define:
+The key insight is that there is \textbf{one rule}: when token $T$ is input, apply $\Psi_T(t)=t^\alpha$ to its reserve.
+This yields a single parameterized family of state updates:
 \[
-\boxed{F^{B,X\mathrm{in}}_{\dx}(x,y)=\left(x+\dx,\;y\frac{\Psi_X(x)}{\Psi_X(x+\dx)}\right),}
+\boxed{F_{\Delta_{\mathrm{in}}}(x,y)=\begin{cases}
+\left(x+\dx,\;y\left(\dfrac{x}{x+\dx}\right)^\alpha\right) & \text{when $X$ is input,}\\[1em]
+\left(x\left(\dfrac{y}{y+\dy}\right)^\alpha,\;y+\dy\right) & \text{when $Y$ is input.}
+\end{cases}}
 \]
-\[
-\boxed{F^{B,Y\mathrm{in}}_{\dy}(x,y)=\left(x\frac{\Phi_Y(y)}{\Phi_Y(y+\dy)},\;y+\dy\right).}
-\]
-Each map is strictly additive in its own input parameter by telescoping.
+Each direction is strictly additive in its own input parameter by telescoping.
 
-\subsection{Concrete two-curve example: symmetric power haircuts}
+\subsection{Why ``dissipative'' is the right framing}
 
-Take $\Psi_X(x)=x^\alpha$ and $\Phi_Y(y)=y^\alpha$ with $0<\alpha<1$.
-Then:
+\begin{itemize}
+\item \textbf{Single rule}: Power the input token's reserve ratio---one formula, not two curves.
+\item \textbf{Deterministic}: Given (state, input, direction), output is uniquely determined.
+\item \textbf{Non-conservative}: Round trips lose value (like friction in physics).
+\item \textbf{Time-irreversible}: Unlike conservative Hamiltonian systems, you cannot reverse time to recover the initial state.
+\end{itemize}
+
+\subsection{Symmetric power example: $\Psi(t)=t^\alpha$}
+
+With $0<\alpha<1$:
 \[
 X\to Y:\quad y' = y\left(\frac{x}{x+\dx}\right)^\alpha.
 \]
 \[
 Y\to X:\quad x' = x\left(\frac{y}{y+\dy}\right)^\alpha.
 \]
-Unlike Curve A, these two directions do not preserve the same global $K$, so a round trip is no longer an identity.
+Unlike the conservative design, these directions do not preserve a single global $K$, so round trips dissipate trader value into the pool.
 
 \section{Numeric showcase}
 
-We present paper-checkable numbers comparing constant product, Curve A (single curve), and Curve B (two curves).
+We present paper-checkable numbers comparing constant product, the conservative design, and the dissipative design.
 
 \subsection{Example 1: $x=y=1000$, $\dx=100$, $\alpha=0.8$}
 
@@ -343,7 +351,7 @@ We present paper-checkable numbers comparing constant product, Curve A (single c
  \quad \Delta y_{\mathrm{cp}}=90.9090909091.
 \]
 
-\paragraph{Curve A forward $X\to Y$.}
+\paragraph{Conservative forward $X\to Y$.}
 \[
  y_1 = 1000\left(\frac{1000}{1100}\right)^{0.8}\approx 926.5862513559,
  \quad \Delta y\approx 73.4137486441.
@@ -353,12 +361,12 @@ Retained vs CP (extra $Y$ left in pool relative to CP):
  y_1-y_{\mathrm{cp}}\approx 17.4953422650.
 \]
 
-\paragraph{Curve A round trip.}
+\paragraph{Conservative round trip.}
 If the trader inputs back exactly $\Delta y\approx 73.4137486441$ in the reverse direction under the same invariant $x^\alpha y=K$, the pool returns to $(1000,1000)$ (up to rounding), and trader net PnL is $0$.
 
-\paragraph{Curve B round trip (spread).}
+\paragraph{Dissipative round trip (spread).}
 After forward, pool is $(x_1,y_1)=(1100,926.5862513559)$ and trader holds $\Delta y$.
-Swap back using Curve B reverse rule with input $\dy=\Delta y$ so $y_2=1000$ and
+Swap back using dissipative reverse rule with input $\dy=\Delta y$ so $y_2=1000$ and
 \[
  x_2 = 1100\left(\frac{926.5862513559}{1000}\right)^{0.8}\approx 1034.9071005121.
 \]
@@ -366,11 +374,11 @@ Thus trader receives
 \[
  \Delta x_{\mathrm{back}} = 1100-1034.9071005121\approx 65.0928994879,
 \]
-so the trader loses about $34.9071\,X$ on the round trip and the pool gains the same amount.
+so the trader loses about $34.9071\,X$ on the round trip and the pool gains the same amount (dissipation).
 
 \subsection{Example 2: $x=y=1000$, $\dx=100$, $\alpha=0.997$ (near CP)}
 
-\paragraph{Curve A forward.}
+\paragraph{Conservative/Dissipative forward.}
 \[
  y_1 = 1000\left(\frac{1000}{1100}\right)^{0.997}\approx 909.3508831104,
  \quad \Delta y\approx 90.6491168896.
@@ -382,7 +390,7 @@ Constant product yields $\Delta y_{\mathrm{cp}}\approx 90.9090909091$, hence ret
 
 \section{Pitfall: scaling ExactOut input by a constant breaks strict additivity}
 
-Suppose you compute Curve A power ExactOut base input
+Suppose you compute conservative power ExactOut base input
 \[
 \dx_{\mathrm{base}}=x\left(\left(\frac{y}{y-\dy}\right)^{1/\alpha}-1\right)
 \]
@@ -397,8 +405,8 @@ To preserve strict additivity, one must modify the exponent (an endpoint functio
 
 \begin{itemize}[leftmargin=2em]
 \item Strict additivity for ExactIn with reinvested-within-pricing factors forces a cocycle identity and therefore a telescoping endpoint representation.
-\item Curve A: a single potential function $\Psi$ yields invariant $K=y\Psi(x)$, strict additivity for ExactIn/ExactOut, and invertibility (no round-trip extraction).
-\item Curve B: two directional curves (two potentials) remain strictly additive per direction but create a real spread and accumulate reserves on round trips.
+\item \textbf{Conservative design}: a single potential function $\Psi$ yields invariant $K=y\Psi(x)$, strict additivity for ExactIn/ExactOut, and invertibility (no round-trip extraction). Time-reversible.
+\item \textbf{Dissipative design}: a single deterministic mapping where the power $\alpha$ is always applied to the input token's reserve. Strictly additive per direction, but non-conservative---round trips dissipate trader value into the pool, creating a real bid-ask spread for economic incentive. Time-irreversible.
 \end{itemize}
 
 \section*{References}
