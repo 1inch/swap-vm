@@ -162,5 +162,55 @@ library RoundingInvariants {
 
         console.log("=== All rounding tests passed ===\n");
     }
+
+    /**
+     * @notice Comprehensive rounding test with configurable amounts and tolerance
+     * @dev For AMMs with high-precision math (e.g., Balancer-style power calculations)
+     *      that require larger minimum amounts to produce non-zero outputs
+     * @param minAtomicAmount Minimum swap amount that produces non-zero output
+     * @param toleranceBps Tolerance in basis points (0 = strict, higher for curve-based AMMs)
+     */
+    function assertRoundingInvariants(
+        Vm vm_,
+        SwapVM swapVM,
+        ISwapVM.Order memory order,
+        address tokenA,
+        address tokenB,
+        bytes memory takerData,
+        function(SwapVM, ISwapVM.Order memory, address, address, uint256, bytes memory)
+            internal returns (uint256) executeSwap,
+        uint256 minAtomicAmount,
+        uint256 toleranceBps
+    ) internal {
+        console.log("\n=== Rounding Invariant Tests (configurable) ===");
+
+        // Test 1: Accumulation with minimum atomic amount
+        console.log("Test: Atomic swap accumulation (100x minAtomic)");
+        assertNoAccumulationExploitWithTolerance(
+            vm_, swapVM, order, tokenA, tokenB, 
+            minAtomicAmount, 100, takerData, executeSwap, toleranceBps
+        );
+
+        // Test 2: Accumulation with 1000x atomic amount
+        console.log("Test: Small swap accumulation (50x 1000*minAtomic)");
+        assertNoAccumulationExploitWithTolerance(
+            vm_, swapVM, order, tokenA, tokenB, 
+            minAtomicAmount * 1000, 50, takerData, executeSwap, toleranceBps
+        );
+
+        // Test 3: Round-trip with atomic amounts
+        console.log("Test: Small round-trips (10x 1000*minAtomic)");
+        assertNoRoundTripProfit(vm_, swapVM, order, tokenA, tokenB, minAtomicAmount * 1000, 10, takerData, executeSwap);
+
+        // Test 4: Round-trip with medium amounts
+        console.log("Test: Medium round-trips (50x 1e18)");
+        assertNoRoundTripProfit(vm_, swapVM, order, tokenA, tokenB, 1e18, 50, takerData, executeSwap);
+
+        // Test 5: Stress test - many round-trips
+        console.log("Test: Stress round-trips (100x 10e18)");
+        assertNoRoundTripProfit(vm_, swapVM, order, tokenA, tokenB, 10e18, 100, takerData, executeSwap);
+
+        console.log("=== All rounding tests passed ===\n");
+    }
 }
 

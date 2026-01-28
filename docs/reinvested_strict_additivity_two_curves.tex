@@ -1,0 +1,491 @@
+% ============================================================
+% Strict-Additive Fees Reinvested Inside Pricing for AMMs
+% Two-Curve Design
+% Author: Vadim Fadeev
+% ============================================================
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{microtype}
+
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+% theorem styles
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% macros
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Rp}{\R_{>0}}
+\newcommand{\dx}{\Delta x}
+\newcommand{\dy}{\Delta y}
+\newcommand{\projY}{\pi_y}
+
+\title{\textbf{Strict-Additive Fees Reinvested Inside Pricing for AMMs}\\
+\large Conservative and Dissipative Constructions with ExactIn/ExactOut}
+\author{Vadim Fadeev \and Sergey Prilutskiy}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Constant-product AMMs ($xy=k$) are strictly additive (split-invariant): executing a trade of size $a+b$ yields the same final pool state as executing $a$ and then $b$.
+This paper studies fee mechanisms where fees are \emph{reinvested inside pricing} (no external fee buckets) while preserving strict additivity.
+We show that strict additivity forces a telescoping structure that can be expressed as an invariant of the form $K=y\,\Psi(x)$.
+This yields a \emph{conservative} design that is strictly additive for ExactIn and ExactOut and is invertible (a perfect round trip returns the pool to the start when the trader swaps back exactly what they received).
+We then introduce a \emph{dissipative} design: a single deterministic mapping where the power $\alpha$ is always applied to the input token's reserve.
+This mapping is strictly additive for splits in both directions, but is non-conservative---round trips cost the trader and accumulate value in reserves, creating a real bid-ask spread for economic incentive.
+We provide full intermediate derivations and numeric examples.
+\end{abstract}
+
+\tableofcontents
+
+\section{Setup}
+
+\begin{definition}[State]
+The pool state is reserves $(x,y)\in\Rp^2$, where $x$ is token $X$ reserve and $y$ is token $Y$ reserve.
+\end{definition}
+
+\begin{definition}[State update map]
+Let $F_\theta:\Rp^2\to\Rp^2$ be a state update map parameterized by a trade parameter $\theta$.
+For ExactIn we take $\theta=\dx$; for ExactOut we take $\theta=\dy$.
+We write
+\[
+F_\theta(x,y)=(x_\theta,y_\theta).
+\]
+\end{definition}
+
+\begin{definition}[Strict additivity / split invariance]
+A family $\{F_\theta\}$ is \emph{strictly additive} in parameter $\theta$ if for all $a,b>0$,
+\[
+F_{a+b} = F_b\circ F_a.
+\]
+Equivalently, applying $a$ then $b$ produces the same final state as applying $a+b$ once.
+\end{definition}
+
+\begin{definition}[Output function]
+For ExactIn (parameter $\dx$), define
+\[
+\Delta y = f((x,y),\dx) := y-\projY(F_{\dx}(x,y)),
+\]
+where $\projY(x',y')=y'$.
+\end{definition}
+
+\section{Baseline: constant product $xy=k$}
+
+\begin{lemma}[Constant product ExactIn]
+With invariant $xy=k$ and full input credit $x'=x+\dx$, the post-swap $y$ is uniquely
+\[
+ y' = \frac{xy}{x+\dx} = y\frac{x}{x+\dx},
+\]
+and
+\[
+\Delta y_{\mathrm{cp}} = y-y' = y\frac{\dx}{x+\dx}.
+\]
+\end{lemma}
+
+\begin{lemma}[Strict additivity for constant product]
+Constant product is strictly additive for ExactIn.
+\end{lemma}
+
+\begin{proof}
+Let $\dx=a+b$. After $a$, $y_1=xy/(x+a)$. After $b$, $y_2=(x+a)y_1/(x+a+b)=xy/(x+a+b)$, equal to the one-shot result.
+\end{proof}
+
+\section{Why the cocycle condition appears}
+
+A common way to model reinvested fees is to start from constant product and multiply by a factor $R(x,\Delta)\ge 1$ that keeps extra $Y$ in the pool:
+\[
+ y'(x,\Delta) = y\frac{x}{x+\Delta}R(x,\Delta).
+\]
+
+\begin{theorem}[Strict additivity implies the cocycle identity]
+The update rule
+\[
+F_\Delta(x,y)=\left(x+\Delta,\; y\frac{x}{x+\Delta}R(x,\Delta)\right)
+\]
+is strictly additive in $\Delta$ iff
+\[
+\boxed{R(x,a)R(x+a,b)=R(x,a+b)}\qquad\forall x,a,b>0.
+\]
+\end{theorem}
+
+\begin{proof}
+Split $\Delta=a+b$.
+After $a$:
+\[
+ y_1 = y\frac{x}{x+a}R(x,a),\quad x_1=x+a.
+\]
+After $b$:
+\[
+ y_2 = y_1\frac{x_1}{x_1+b}R(x_1,b)
+     = \Big(y\frac{x}{x+a}R(x,a)\Big)\frac{x+a}{x+a+b}R(x+a,b).
+\]
+Cancel $x+a$:
+\[
+ y_2 = y\frac{x}{x+a+b}R(x,a)R(x+a,b).
+\]
+One-shot:
+\[
+ y_S = y\frac{x}{x+a+b}R(x,a+b).
+\]
+Strict additivity requires $y_2=y_S$ for all $y>0$, hence the boxed identity.
+\end{proof}
+
+\section{From $R$ to $\Psi$: a better description of the potential function}
+
+\subsection{Telescoping solution via an endpoint potential $G$}
+
+\begin{theorem}[General telescoping form]
+If the cocycle identity holds, then (under mild regularity) there exists $G:\Rp\to\Rp$ such that
+\[
+\boxed{R(x,\Delta)=\frac{G(x)}{G(x+\Delta)}}.
+\]
+Conversely, any such ratio satisfies the cocycle identity.
+\end{theorem}
+
+\begin{proof}
+Sufficiency is immediate:
+\[
+\frac{G(x)}{G(x+a)}\cdot\frac{G(x+a)}{G(x+a+b)}=\frac{G(x)}{G(x+a+b)}.
+\]
+Necessity can be shown by fixing a reference point and defining $G$ by endpoint products so that intermediate factors cancel.
+\end{proof}
+
+\subsection{Defining $\Psi$ and its economic meaning}
+
+Substitute $R(x,\Delta)=G(x)/G(x+\Delta)$:
+\[
+ y' = y\frac{x}{x+\Delta}\frac{G(x)}{G(x+\Delta)} = y\frac{xG(x)}{(x+\Delta)G(x+\Delta)}.
+\]
+Define the combined potential coordinate
+\[
+\boxed{\Psi(x):=xG(x)}.
+\]
+Then the update becomes
+\begin{equation}
+\boxed{\;x'=x+\Delta,\qquad y'=y\frac{\Psi(x)}{\Psi(x+\Delta)}.\;}
+\label{eq:psi-exactin}
+\end{equation}
+
+\begin{proposition}[Invariant]
+The quantity
+\[
+\boxed{K:=y\Psi(x)}
+\]
+is invariant under the update \eqref{eq:psi-exactin}.
+\end{proposition}
+
+\begin{proof}
+Multiply both sides of \eqref{eq:psi-exactin} by $\Psi(x')=\Psi(x+\Delta)$:
+\[
+ y'\Psi(x') = y\frac{\Psi(x)}{\Psi(x')}\Psi(x') = y\Psi(x).
+\]
+\end{proof}
+
+\begin{remark}[Economic interpretation of $\Psi$]
+$\Psi$ is a monotone (typically increasing) re-parameterization of the $x$-reserve.
+The swap outcome depends only on the endpoint ratio $\Psi(x)/\Psi(x')$.
+You can interpret $\Psi(x)$ as the pool's \emph{effective} or \emph{virtual} $X$-liquidity coordinate.
+A different $\Psi$ changes the curvature of the AMM and therefore changes how much output is paid for the same input.
+\end{remark}
+
+\begin{proposition}[Marginal price]
+On the invariant curve $y\Psi(x)=K$, the instantaneous price (marginal $Y$ out per $X$ in) is
+\[
+\boxed{p(x,y)=-\frac{dy}{dx} = \frac{y\Psi'(x)}{\Psi(x)}.}
+\]
+\end{proposition}
+
+\begin{proof}
+Differentiate $y\Psi(x)=K$:
+$\Psi(x)dy + y\Psi'(x)dx =0$. Rearranging yields the formula.
+\end{proof}
+
+\section{Conservative Design (Single Invariant)}
+
+The conservative design uses one function $\Psi$ for both directions, i.e., one conserved quantity $K=y\Psi(x)$. It is strictly additive and invertible (time-reversible).
+
+\subsection{ExactIn $X\to Y$}
+
+From \eqref{eq:psi-exactin}, the output is
+\begin{equation}
+\boxed{\;\Delta y = y-y' = y\left(1-\frac{\Psi(x)}{\Psi(x+\dx)}\right).\;}
+\label{eq:curveA-exactin-out}
+\end{equation}
+
+\subsection{ExactOut $X\to Y$: full derivation}
+
+Given a target $0<\dy<y$, set $y'=y-\dy$.
+Conservation of $K=y\Psi(x)$ implies
+\[
+ (y-\dy)\Psi(x') = y\Psi(x).
+\]
+Solve for $\Psi(x')$:
+\[
+ \Psi(x') = \Psi(x)\frac{y}{y-\dy}.
+\]
+Assuming $\Psi$ is invertible:
+\[
+ x' = \Psi^{-1}\!\left(\Psi(x)\frac{y}{y-\dy}\right),\qquad
+ \boxed{\dx = x'-x = \Psi^{-1}\!\left(\Psi(x)\frac{y}{y-\dy}\right)-x.}
+\]
+
+\subsection{Strict additivity checks}
+
+\begin{lemma}[ExactIn strict additivity for Curve A]
+For all $a,b>0$,
+\[
+F^{A,\mathrm{in}}_{a+b} = F^{A,\mathrm{in}}_b\circ F^{A,\mathrm{in}}_a.
+\]
+\end{lemma}
+
+\begin{proof}
+After $a$: $y_1=y\Psi(x)/\Psi(x+a)$. After $b$: $y_2=y_1\Psi(x+a)/\Psi(x+a+b)=y\Psi(x)/\Psi(x+a+b)$.
+\end{proof}
+
+\begin{lemma}[ExactOut strict additivity for Curve A]
+For $a,b>0$ with $a+b<y$, the ExactOut map is strictly additive in $\dy$.
+\end{lemma}
+
+\begin{proof}
+Write $r(\dy)=y/(y-\dy)$. Note that $r(a)\,r(b\mid y-a)=y/(y-a)\cdot (y-a)/(y-a-b)=y/(y-a-b)=r(a+b)$.
+Since ExactOut is $\Psi(x')=\Psi(x)r(\dy)$, endpoint multiplication yields the same $\Psi(x')$ and hence the same $x'$.
+\end{proof}
+
+\subsection{Why conservative design allows perfect round trips}
+
+\begin{proposition}[Round trip is an identity (ideal real arithmetic)]
+In the conservative design, perform ExactIn $X\to Y$ with input $\dx$ producing output $\dy$. Then input exactly that $\dy$ back in the reverse direction. The pool returns to the initial state (modulo rounding).
+\end{proposition}
+
+\begin{proof}
+Both legs preserve the same invariant $K=y\Psi(x)$. After the first leg, the trader received $\dy=y-y'$. Inputting $\dy$ back restores $y$ to its initial value. With $y$ restored and $K$ unchanged, $\Psi(x)$ must also be restored, implying $x$ returns (for invertible $\Psi$).
+\end{proof}
+
+\subsection{Reinvested fee accounting relative to constant product}
+
+For the same $\dx$, constant product yields $y_{\mathrm{cp}}=y\,x/(x+\dx)$. The conservative design yields $y'=y\Psi(x)/\Psi(x+\dx)$.
+Define retained $Y$ vs constant product:
+\[
+\boxed{\mathrm{fee}_Y^{(\mathrm{vs\,CP})}=y' - y_{\mathrm{cp}} = y\left(\frac{\Psi(x)}{\Psi(x+\dx)}-\frac{x}{x+\dx}\right).}
+\]
+This quantity measures how much more $Y$ remains in the pool compared to pure constant product for the same input.
+
+\section{Conservative power family: $\Psi(x)=x^\alpha$}
+
+Let $0<\alpha\le 1$ and $\Psi(x)=x^\alpha$. Then invariant is
+\[
+\boxed{K=x^\alpha y.}
+\]
+ExactIn output is
+\[
+\boxed{\Delta y = y\left(1-\left(\frac{x}{x+\dx}\right)^\alpha\right).}
+\]
+ExactOut input for target $\dy$ is
+\[
+\boxed{\dx = x\left(\left(\frac{y}{y-\dy}\right)^{1/\alpha}-1\right).}
+\]
+Marginal price becomes
+\[
+\boxed{p=\alpha\frac{y}{x}.}
+\]
+
+
+\paragraph{Implementation formulas (ExactIn / ExactOut).}
+For on-chain implementations it is useful to expose closed forms for both swap directions.
+We write the trader input as \(\dx_{\mathrm{in}}\) or \(\dy_{\mathrm{in}}\) and the trader output as \(\dy_{\mathrm{out}}\) or \(\dx_{\mathrm{out}}\).
+
+\textbf{(i) \(X \to Y\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dy_{\mathrm{out}} 
+&= y - y' 
+= y\left(1 - \left(\frac{x}{x+\dx_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dx_{\mathrm{in}}
+&= x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dy_{\mathrm{out}}<y.
+\end{align}
+
+\textbf{(ii) \(Y \to X\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dx_{\mathrm{out}}
+&= x - x'
+= x\left(1 - \left(\frac{y}{y+\dy_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dy_{\mathrm{in}}
+&= y\left(\left(\frac{x}{x-\dx_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dx_{\mathrm{out}}<x.
+\end{align}
+
+\section{Dissipative Design (Single Deterministic Mapping)}
+
+The dissipative design uses a \emph{single} mapping rule: the power $\alpha$ is always applied to the \textbf{input token's reserve}.
+This is not two separate curves, but one unified, asymmetric mapping that is non-conservative (dissipative).
+
+\subsection{The unified dissipative mapping}
+
+The key insight is that there is \textbf{one rule}: when token $T$ is input, apply $\Psi_T(t)=t^\alpha$ to its reserve.
+This yields a single parameterized family of state updates:
+\[
+\boxed{F_{\Delta_{\mathrm{in}}}(x,y)=\begin{cases}
+\left(x+\dx,\;y\left(\dfrac{x}{x+\dx}\right)^\alpha\right) & \text{when $X$ is input,}\\[1em]
+\left(x\left(\dfrac{y}{y+\dy}\right)^\alpha,\;y+\dy\right) & \text{when $Y$ is input.}
+\end{cases}}
+\]
+Each direction is strictly additive in its own input parameter by telescoping.
+
+\subsection{Why ``dissipative'' is the right framing}
+
+\begin{itemize}
+\item \textbf{Single rule}: Power the input token's reserve ratio---one formula, not two curves.
+\item \textbf{Deterministic}: Given (state, input, direction), output is uniquely determined.
+\item \textbf{Non-conservative}: Round trips lose value (like friction in physics).
+\item \textbf{Time-irreversible}: Unlike conservative Hamiltonian systems, you cannot reverse time to recover the initial state.
+\end{itemize}
+
+\subsection{Symmetric power example: $\Psi(t)=t^\alpha$}
+
+With $0<\alpha<1$:
+\[
+X\to Y:\quad y' = y\left(\frac{x}{x+\dx}\right)^\alpha.
+\]
+\[
+Y\to X:\quad x' = x\left(\frac{y}{y+\dy}\right)^\alpha.
+\]
+Unlike the conservative design, these directions do not preserve a single global $K$, so round trips dissipate trader value into the pool.
+
+
+\paragraph{Implementation formulas (ExactIn / ExactOut).}
+Even though this section defines a \emph{dissipative} mapping (no invariant), the per-swap
+closed forms are identical to Section~6, because each direction still follows the same one-step
+update rule.
+
+\textbf{(i) \(X \to Y\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dy_{\mathrm{out}} 
+&= y - y' 
+= y\left(1 - \left(\frac{x}{x+\dx_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dx_{\mathrm{in}}
+&= x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dy_{\mathrm{out}}<y.
+\end{align}
+
+\textbf{(ii) \(Y \to X\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dx_{\mathrm{out}}
+&= x - x'
+= x\left(1 - \left(\frac{y}{y+\dy_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dy_{\mathrm{in}}
+&= y\left(\left(\frac{x}{x-\dx_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dx_{\mathrm{out}}<x.
+\end{align}
+
+\section{Numeric showcase}
+We now provide a couple of concrete numeric examples (with fully expanded calculations) so that all quantities can be checked by hand.
+
+\paragraph{Example 1 (not strict additive):} Let \(x=y=1000\), \(\alpha=0.8\), and swap \(\dx_{\mathrm{in}}=100\) in the \(X\to Y\) direction.
+\begin{align*}
+\text{(CP baseline)}\quad
+y' &= \frac{xy}{x+\dx_{\mathrm{in}}} = \frac{1000\cdot 1000}{1100} = \frac{1{,}000{,}000}{1100} \approx 909.0909090909,\\
+\dy_{\mathrm{out}}^{\mathrm{CP}} &= 1000 - y' \approx 90.9090909091.
+\end{align*}
+For the power rule (Sections~6--7):
+\begin{align*}
+r &= \frac{x}{x+\dx_{\mathrm{in}}} = \frac{1000}{1100}=\frac{10}{11}\approx 0.9090909090909,\\
+\ln r &\approx -0.0953101798043,\\
+r^{0.8} &= \exp(0.8\ln r)=\exp\!\big(-0.0762481438435\big)\approx 0.9265862513559,\\
+y_1 &= 1000\,r^{0.8} \approx 926.5862513558695,\\
+\dy_{\mathrm{out}} &= 1000 - y_1 \approx 73.4137486441305.
+\end{align*}
+If we now swap back \(Y\to X\) by inputting \(\dy_{\mathrm{in}}=\dy_{\mathrm{out}}\) so that \(y_2=1000\), the update gives
+\begin{align*}
+\left(\frac{y_1}{1000}\right)^{0.8}
+&= \exp\!\Big(0.8\ln\!\big(\tfrac{y_1}{1000}\big)\Big)
+= \exp\!\big(-0.0609985150748\big)\approx 0.9408246368292,\\
+x_2 &= 1100\left(\frac{y_1}{1000}\right)^{0.8} \approx 1034.9071005121361,\\
+\dx_{\mathrm{back}} &= 1100-x_2 \approx 65.0928994878639.
+\end{align*}
+Here \(\dx_{\mathrm{back}}<100\), so doing the round trip loses value (not strict additive).
+
+\paragraph{Example 2 (close to strict additive):} Same setup, but \(\alpha=0.997\).
+\begin{align*}
+r^{0.997} &= \exp(0.997\ln r)=\exp\!\big(-0.0950242492649\big)\approx 0.9093508831104,\\
+y_1 &= 1000\,r^{0.997} \approx 909.3508831104054,\\
+\dy_{\mathrm{out}} &= 1000-y_1 \approx 90.6491168895946.
+\end{align*}
+Swap back \(Y\to X\) with \(\dy_{\mathrm{in}}=\dy_{\mathrm{out}}\):
+\begin{align*}
+\left(\frac{y_1}{1000}\right)^{0.997}
+&= \exp\!\Big(0.997\ln\!\big(\tfrac{y_1}{1000}\big)\Big)
+= \exp\!\big(-0.0947391765171\big)\approx 0.9096101512187,\\
+x_2 &= 1100\left(\frac{y_1}{1000}\right)^{0.997} \approx 1000.5711663406179,\\
+\dx_{\mathrm{back}} &= 1100-x_2 \approx 99.4288336593821.
+\end{align*}
+Now \(\dx_{\mathrm{back}}\) is much closer to \(100\), i.e.\ the round-trip loss is small.
+
+\paragraph{Example 3 (ExactOut input computation):} Let \(x=y=1000\), \(\alpha=0.8\), and request an \emph{ExactOut} swap \(X\to Y\) with \(\dy_{\mathrm{out}}=50\).
+From Sections~6--7,
+\[
+\dx_{\mathrm{in}} = x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right)
+= 1000\left(\left(\frac{1000}{950}\right)^{1.25}-1\right).
+\]
+Expanding the power:
+\begin{align*}
+\frac{1000}{950} &= \frac{20}{19} \approx 1.0526315789474,\\
+\ln\!\left(\tfrac{20}{19}\right) &\approx 0.0512932943876,\\
+\left(\tfrac{20}{19}\right)^{1.25} &= \exp\!\Big(1.25\ln\!\left(\tfrac{20}{19}\right)\Big)
+= \exp\!\big(0.0641166179844\big)\approx 1.0662167315579,\\
+\dx_{\mathrm{in}} &= 1000\big(1.0662167315579-1\big)\approx 66.2167315578528.
+\end{align*}
+\section{Pitfall: scaling ExactOut input by a constant breaks strict additivity}
+
+Suppose you compute conservative power ExactOut base input
+\[
+\dx_{\mathrm{base}}=x\left(\left(\frac{y}{y-\dy}\right)^{1/\alpha}-1\right)
+\]
+and then charge
+\[
+\dx_{\mathrm{new}} = c\,\dx_{\mathrm{base}},\quad c>1.
+\]
+This generally breaks ExactOut strict additivity in $\dy$ because the correct telescoping structure requires endpoint multiplicativity in the ratio $y/(y-\dy)$, not post-hoc scaling of $\dx$.
+To preserve strict additivity, one must modify the exponent (an endpoint function), not multiply the solved $\dx$.
+
+\section{Summary}
+
+\begin{itemize}[leftmargin=2em]
+\item Strict additivity for ExactIn with reinvested-within-pricing factors forces a cocycle identity and therefore a telescoping endpoint representation.
+\item \textbf{Conservative design}: a single potential function $\Psi$ yields invariant $K=y\Psi(x)$, strict additivity for ExactIn/ExactOut, and invertibility (no round-trip extraction). Time-reversible.
+\item \textbf{Dissipative design}: a single deterministic mapping where the power $\alpha$ is always applied to the input token's reserve. Strictly additive per direction, but non-conservative---round trips dissipate trader value into the pool, creating a real bid-ask spread for economic incentive. Time-irreversible.
+\end{itemize}
+
+\section*{References}
+\begin{itemize}
+\item Uniswap v2 Whitepaper: \url{https://app.uniswap.org/whitepaper.pdf}
+\item Angeris et al., Constant Function Market Makers (CFMM): \url{https://web.stanford.edu/~boyd/papers/pdf/cfmm.pdf}
+\item CFMM geometry and axioms (optional reading):
+\url{https://arxiv.org/pdf/2308.08066.pdf}, \url{https://arxiv.org/pdf/2210.00048.pdf}, \url{https://arxiv.org/pdf/2302.00196.pdf}
+\end{itemize}
+
+\end{document}
