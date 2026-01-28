@@ -249,8 +249,11 @@ library StatelessSwapMath {
     }
 
     /**
-     * @notice Natural logarithm with improved range reduction to [1/√2, √2)
-     * @dev Uses ln(x) = ln(x * 2^k / 2^k) = k*ln(2) + ln(x/2^(-k))
+     * @notice Natural logarithm using arctanh formula for superior convergence
+     * @dev Uses ln(x) = 2 * arctanh((x-1)/(x+1)) with range reduction to [1/√2, √2)
+     *      For x in this range, y = (x-1)/(x+1) is in [-0.172, +0.172]
+     *      arctanh converges MUCH faster: error ~ |y|^(2n+1)/(2n+1) vs |u|^n/n for Taylor
+     *      With 10 terms and |y| < 0.172: error < 10^-18
      * @param x Input value in 1e18 scale (must be > 0)
      * @return result = ln(x) in 1e18 scale (can be negative)
      */
@@ -260,7 +263,6 @@ library StatelessSwapMath {
         int256 result = 0;
 
         // Target range: [1/√2, √2) ≈ [0.707, 1.414)
-        // This gives |u| < 0.414 for Taylor series, much better convergence
         uint256 SQRT2 = 1414213562373095048;  // √2 in 1e18
         uint256 INV_SQRT2 = 707106781186547524;  // 1/√2 in 1e18
 
@@ -274,58 +276,57 @@ library StatelessSwapMath {
             result += int256(LN2);
         }
 
-        // Now x is in [0.707, 1.414), compute ln(x) using Taylor series around 1
-        // ln(1+u) = u - u²/2 + u³/3 - u⁴/4 + ...
-        // where u = x - 1, and |u| < 0.414
-        int256 u = int256(x) - int256(ONE);
+        // Use arctanh formula: ln(x) = 2 * arctanh((x-1)/(x+1))
+        // where arctanh(y) = y + y³/3 + y⁵/5 + y⁷/7 + ...
+        // For x in [0.707, 1.414), y = (x-1)/(x+1) is in [-0.172, +0.172]
+        // This converges MUCH faster than ln(1+u) series
 
-        // For better convergence, use: ln(x) = 2*arctanh((x-1)/(x+1))
-        // But Taylor series should be fine for |u| < 0.414 with enough terms
+        int256 num = int256(x) - int256(ONE);    // x - 1
+        int256 denom = int256(x) + int256(ONE);  // x + 1
+        int256 y = num * int256(ONE) / denom;    // y = (x-1)/(x+1)
 
-        int256 term = u;
-        int256 sum = term;
-        int256 uPower = u;
+        // Compute arctanh(y) = y + y³/3 + y⁵/5 + y⁷/7 + ...
+        // Only odd powers, all positive coefficients
+        int256 y2 = y * y / int256(ONE);  // y²
+        int256 yPower = y;
+        int256 sum = yPower;  // y
 
-        // Unroll 12 terms for accuracy
-        uPower = uPower * u / int256(ONE);  // u²
-        sum -= uPower / 2;
+        yPower = yPower * y2 / int256(ONE);  // y³
+        sum += yPower / 3;
 
-        uPower = uPower * u / int256(ONE);  // u³
-        sum += uPower / 3;
+        yPower = yPower * y2 / int256(ONE);  // y⁵
+        sum += yPower / 5;
 
-        uPower = uPower * u / int256(ONE);  // u⁴
-        sum -= uPower / 4;
+        yPower = yPower * y2 / int256(ONE);  // y⁷
+        sum += yPower / 7;
 
-        uPower = uPower * u / int256(ONE);  // u⁵
-        sum += uPower / 5;
+        yPower = yPower * y2 / int256(ONE);  // y⁹
+        sum += yPower / 9;
 
-        uPower = uPower * u / int256(ONE);  // u⁶
-        sum -= uPower / 6;
+        yPower = yPower * y2 / int256(ONE);  // y¹¹
+        sum += yPower / 11;
 
-        uPower = uPower * u / int256(ONE);  // u⁷
-        sum += uPower / 7;
+        yPower = yPower * y2 / int256(ONE);  // y¹³
+        sum += yPower / 13;
 
-        uPower = uPower * u / int256(ONE);  // u⁸
-        sum -= uPower / 8;
+        yPower = yPower * y2 / int256(ONE);  // y¹⁵
+        sum += yPower / 15;
 
-        uPower = uPower * u / int256(ONE);  // u⁹
-        sum += uPower / 9;
+        yPower = yPower * y2 / int256(ONE);  // y¹⁷
+        sum += yPower / 17;
 
-        uPower = uPower * u / int256(ONE);  // u¹⁰
-        sum -= uPower / 10;
+        yPower = yPower * y2 / int256(ONE);  // y¹⁹
+        sum += yPower / 19;
 
-        uPower = uPower * u / int256(ONE);  // u¹¹
-        sum += uPower / 11;
-
-        uPower = uPower * u / int256(ONE);  // u¹²
-        sum -= uPower / 12;
-
-        return result + sum;
+        // ln(x) = 2 * arctanh(y)
+        return result + 2 * sum;
     }
 
     /**
-     * @notice Exponential function with range reduction
-     * @dev Uses exp(x) = exp(x mod ln2) * 2^(x/ln2)
+     * @notice Exponential function with double range reduction for high precision
+     * @dev Uses exp(x) = 2^k * exp(r/2)² where x = k*ln(2) + r
+     *      Double squaring reduces |r/2| to < 0.35, giving excellent Taylor convergence
+     *      With 16 terms and |r/2| < 0.35: error < 10^-18
      * @param x Input value in 1e18 scale (can be negative)
      * @return result = e^x in 1e18 scale
      */
@@ -335,67 +336,86 @@ library StatelessSwapMath {
         if (x > 130 * int256(ONE)) return type(uint256).max;  // Overflow
 
         // Range reduction: exp(x) = 2^k * exp(r) where x = k*ln(2) + r
-        // k = floor(x / ln(2))
         int256 k;
         if (x >= 0) {
             k = x / int256(LN2);
         } else {
-            // For negative x, we need floor division (round toward -inf)
+            // For negative x, floor division (round toward -inf)
             k = (x - int256(LN2) + 1) / int256(LN2);
         }
-        int256 r = x - k * int256(LN2);  // r is in (-ln2, ln2)
+        int256 r = x - k * int256(LN2);  // r is in (-ln2, ln2), |r| < 0.693
 
-        // Compute exp(r) using Taylor series
-        // exp(r) = 1 + r + r²/2! + r³/3! + r⁴/4! + ...
+        // Double range reduction: compute exp(r/2)² to get exp(r)
+        // This reduces |r/2| to < 0.35, giving better Taylor convergence
+        int256 halfR = r / 2;
+
+        // Compute exp(halfR) using Taylor series
+        // exp(z) = 1 + z + z²/2! + z³/3! + z⁴/4! + ...
         int256 term = int256(ONE);
         int256 sum = term;
 
-        // Unroll 12 terms for accuracy
-        term = term * r / int256(ONE);
-        sum += term;  // r
+        // Unroll 16 terms for high accuracy
+        term = term * halfR / int256(ONE);
+        sum += term;  // z
 
-        term = term * r / int256(2 * ONE);
-        sum += term;  // r²/2!
+        term = term * halfR / int256(2 * ONE);
+        sum += term;  // z²/2!
 
-        term = term * r / int256(3 * ONE);
-        sum += term;  // r³/3!
+        term = term * halfR / int256(3 * ONE);
+        sum += term;  // z³/3!
 
-        term = term * r / int256(4 * ONE);
-        sum += term;  // r⁴/4!
+        term = term * halfR / int256(4 * ONE);
+        sum += term;  // z⁴/4!
 
-        term = term * r / int256(5 * ONE);
-        sum += term;  // r⁵/5!
+        term = term * halfR / int256(5 * ONE);
+        sum += term;  // z⁵/5!
 
-        term = term * r / int256(6 * ONE);
-        sum += term;  // r⁶/6!
+        term = term * halfR / int256(6 * ONE);
+        sum += term;  // z⁶/6!
 
-        term = term * r / int256(7 * ONE);
-        sum += term;  // r⁷/7!
+        term = term * halfR / int256(7 * ONE);
+        sum += term;  // z⁷/7!
 
-        term = term * r / int256(8 * ONE);
-        sum += term;  // r⁸/8!
+        term = term * halfR / int256(8 * ONE);
+        sum += term;  // z⁸/8!
 
-        term = term * r / int256(9 * ONE);
-        sum += term;  // r⁹/9!
+        term = term * halfR / int256(9 * ONE);
+        sum += term;  // z⁹/9!
 
-        term = term * r / int256(10 * ONE);
-        sum += term;  // r¹⁰/10!
+        term = term * halfR / int256(10 * ONE);
+        sum += term;  // z¹⁰/10!
 
-        term = term * r / int256(11 * ONE);
-        sum += term;  // r¹¹/11!
+        term = term * halfR / int256(11 * ONE);
+        sum += term;  // z¹¹/11!
 
-        term = term * r / int256(12 * ONE);
-        sum += term;  // r¹²/12!
+        term = term * halfR / int256(12 * ONE);
+        sum += term;  // z¹²/12!
+
+        term = term * halfR / int256(13 * ONE);
+        sum += term;  // z¹³/13!
+
+        term = term * halfR / int256(14 * ONE);
+        sum += term;  // z¹⁴/14!
+
+        term = term * halfR / int256(15 * ONE);
+        sum += term;  // z¹⁵/15!
+
+        term = term * halfR / int256(16 * ONE);
+        sum += term;  // z¹⁶/16!
+
+        // Square the result to get exp(r) = exp(r/2)²
+        if (sum <= 0) return 0;
+        int256 expR = sum * sum / int256(ONE);
+
+        if (expR <= 0) return 0;
 
         // Apply the 2^k multiplier
-        if (sum <= 0) return 0;
-
         if (k >= 0) {
             if (k > 255) return type(uint256).max;  // Overflow protection
-            return uint256(sum) << uint256(k);
+            return uint256(expR) << uint256(k);
         } else {
             if (-k > 255) return 0;  // Underflow protection
-            return uint256(sum) >> uint256(-k);
+            return uint256(expR) >> uint256(-k);
         }
     }
 }

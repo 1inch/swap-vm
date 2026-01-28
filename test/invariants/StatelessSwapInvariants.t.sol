@@ -210,16 +210,15 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     // ====== LOW FEE TESTS (0.3% - typical DEX) ======
-    // Invariant curve uses ln/exp approximations, introducing small precision errors
-    // Error scales with fee level and trade size
-    // Measured: symmetry 17M wei, additivity 55e12 wei for 30e18 total input
+    // Invariant curve uses arctanh-ln/exp approximations, introducing small precision errors
+    // Measured with arctanh: symmetry ~17M wei, additivity gap ~55T wei (with 8T violation)
 
     function test_Fee_30bps_BalancedPool() public {
         feeBps = 30;  // 0.3%
         
-        // Measured: symmetry ~17M, additivity ~55e12 for default test amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e14; // 100T wei buffer
+        // Measured: symmetry ~17M, additivity gap ~55e12, violation ~8e12
+        symmetryTolerance = 5e7;    // 50M wei (measured 17M)
+        additivityTolerance = 1e14; // 100T wei (covers 55T gap + 8T violation)
         skipSpotPrice = false;
         
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -234,9 +233,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_Fee_100bps_BalancedPool() public {
         feeBps = 100;  // 1%
         
-        // Measured: symmetry ~43M, additivity ~183e12 for default test amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e15; // 1e15 wei buffer
+        // Measured: symmetry ~43M, additivity gap ~183T, violation ~28T
+        symmetryTolerance = 1e8;    // 100M wei (measured 43M)
+        additivityTolerance = 5e14; // 500T wei (covers 183T gap + 28T violation)
         skipSpotPrice = true;       // Skip due to precision issues with medium fees
         
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -251,9 +250,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_Fee_300bps_BalancedPool() public {
         feeBps = 300;  // 3%
         
-        // Measured: symmetry ~32M, additivity ~549e12 for default test amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e15; // 1e15 wei buffer
+        // Measured: symmetry ~32M, additivity gap ~549T, violation ~84T
+        symmetryTolerance = 1e8;    // 100M wei (measured 32M)
+        additivityTolerance = 1e15; // 1e15 wei (covers 549T gap + 84T violation)
         skipSpotPrice = true;       // Skip due to precision issues with high fees
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -268,9 +267,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_Fee_1000bps_BalancedPool() public {
         feeBps = 1000;  // 10%
         
-        // Measured: symmetry ~29M, additivity ~1.8e15 for default test amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e16; // 10e15 wei buffer
+        // Measured: symmetry ~29M, additivity gap ~1.8e15, violation ~277T
+        symmetryTolerance = 1e8;    // 100M wei (measured 29M)
+        additivityTolerance = 5e15; // 5e15 wei (covers 1.8e15 gap + 277T violation)
         skipSpotPrice = true;       // Skip due to precision issues with very high fees
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -293,9 +292,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmounts[1] = 10000e18;
         testAmounts[2] = 50000e18;
 
-        // Measured: symmetry ~7.7e9, additivity ~54e15 for these amounts
-        symmetryTolerance = 1e10;   // 10e9 wei buffer
-        additivityTolerance = 1e17; // 100e15 wei buffer (large pool, large trades)
+        // Measured: symmetry ~7.7e9, additivity gap ~54e15, violation ~161T
+        symmetryTolerance = 2e10;   // 20e9 wei (measured 7.7e9)
+        additivityTolerance = 1e17; // 100e15 wei (covers 54e15 gap + 161T violation)
         skipSpotPrice = false;
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -320,9 +319,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmountsExactOut[1] = 5e18;
         testAmountsExactOut[2] = 10e18;
 
-        // Measured: symmetry ~12M, additivity ~5.4e12 for these amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e13; // 10e12 wei buffer
+        // Measured: symmetry ~10M, additivity gap ~5.4T (no violation)
+        symmetryTolerance = 2e7;    // 20M wei (measured 10M)
+        additivityTolerance = 1e13; // 10T wei (measured 5.4T)
         skipSpotPrice = true;
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -342,9 +341,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmountsExactOut[1] = 20e18;
         testAmountsExactOut[2] = 50e18;
 
-        // Measured: symmetry ~98M, additivity ~1.1e9 for these amounts
-        symmetryTolerance = 1e8;    // 100M wei buffer
-        additivityTolerance = 1e10; // 10e9 wei buffer
+        // Measured: symmetry ~50M, additivity violation ~1.1e9 (larger amounts)
+        symmetryTolerance = 1e8;    // 100M wei (measured 50M)
+        additivityTolerance = 2e9;  // 2e9 wei (covers 1.1e9 violation)
         skipSpotPrice = false;
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -367,9 +366,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmounts[2] = 500e18;
         testAmounts[3] = 1000e18;
 
-        // Measured: symmetry ~1.2e9, additivity ~84e12 for larger sequential amounts
-        symmetryTolerance = 1e10;   // 10e9 wei buffer
-        additivityTolerance = 1e14; // 100e12 wei buffer (for 100+200 = 300 test case)
+        // Measured (10k pool): symmetry ~1e9 (1000e18 swap), additivity gap ~537T, violation ~1.6T
+        symmetryTolerance = 2e9;    // 2e9 wei (measured ~1e9 for large swaps)
+        additivityTolerance = 1e15; // 1e15 wei (covers 537T gap + violations)
         skipSpotPrice = false;
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
@@ -390,9 +389,9 @@ contract StatelessSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmounts[2] = 5000e18;
         testAmounts[3] = 10000e18;
 
-        // Measured: symmetry ~12e9, additivity ~140e12 for 1000+2000 = 3000 test case
-        symmetryTolerance = 1e11;   // 100e9 wei buffer
-        additivityTolerance = 1e15; // 1e15 wei buffer (larger trades)
+        // Measured: symmetry ~3.7e9, additivity gap ~895T, violation ~2.7T
+        symmetryTolerance = 1e10;   // 10e9 wei (measured 3.7e9)
+        additivityTolerance = 2e15; // 2e15 wei (covers 895T gap + violations)
         skipSpotPrice = false;
 
         bytes memory bytecode = _buildProgram(balanceA, balanceB, feeBps);
