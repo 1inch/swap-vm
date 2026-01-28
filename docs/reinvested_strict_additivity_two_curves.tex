@@ -302,6 +302,37 @@ Marginal price becomes
 \boxed{p=\alpha\frac{y}{x}.}
 \]
 
+
+\paragraph{Implementation formulas (ExactIn / ExactOut).}
+For on-chain implementations it is useful to expose closed forms for both swap directions.
+We write the trader input as \(\dx_{\mathrm{in}}\) or \(\dy_{\mathrm{in}}\) and the trader output as \(\dy_{\mathrm{out}}\) or \(\dx_{\mathrm{out}}\).
+
+\textbf{(i) \(X \to Y\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dy_{\mathrm{out}} 
+&= y - y' 
+= y\left(1 - \left(\frac{x}{x+\dx_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dx_{\mathrm{in}}
+&= x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dy_{\mathrm{out}}<y.
+\end{align}
+
+\textbf{(ii) \(Y \to X\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dx_{\mathrm{out}}
+&= x - x'
+= x\left(1 - \left(\frac{y}{y+\dy_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dy_{\mathrm{in}}
+&= y\left(\left(\frac{x}{x-\dx_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dx_{\mathrm{out}}<x.
+\end{align}
+
 \section{Dissipative Design (Single Deterministic Mapping)}
 
 The dissipative design uses a \emph{single} mapping rule: the power $\alpha$ is always applied to the \textbf{input token's reserve}.
@@ -339,55 +370,95 @@ Y\to X:\quad x' = x\left(\frac{y}{y+\dy}\right)^\alpha.
 \]
 Unlike the conservative design, these directions do not preserve a single global $K$, so round trips dissipate trader value into the pool.
 
+
+\paragraph{Implementation formulas (ExactIn / ExactOut).}
+Even though this section defines a \emph{dissipative} mapping (no invariant), the per-swap
+closed forms are identical to Section~6, because each direction still follows the same one-step
+update rule.
+
+\textbf{(i) \(X \to Y\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dy_{\mathrm{out}} 
+&= y - y' 
+= y\left(1 - \left(\frac{x}{x+\dx_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dx_{\mathrm{in}}
+&= x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dy_{\mathrm{out}}<y.
+\end{align}
+
+\textbf{(ii) \(Y \to X\) direction.}
+\begin{align}
+\textbf{ExactIn:}\quad 
+\dx_{\mathrm{out}}
+&= x - x'
+= x\left(1 - \left(\frac{y}{y+\dy_{\mathrm{in}}}\right)^{\alpha}\right),
+\\[4pt]
+\textbf{ExactOut:}\quad 
+\dy_{\mathrm{in}}
+&= y\left(\left(\frac{x}{x-\dx_{\mathrm{out}}}\right)^{1/\alpha}-1\right),
+\qquad 0<\dx_{\mathrm{out}}<x.
+\end{align}
+
 \section{Numeric showcase}
+We now provide a couple of concrete numeric examples (with fully expanded calculations) so that all quantities can be checked by hand.
 
-We present paper-checkable numbers comparing constant product, the conservative design, and the dissipative design.
+\paragraph{Example 1 (not strict additive):} Let \(x=y=1000\), \(\alpha=0.8\), and swap \(\dx_{\mathrm{in}}=100\) in the \(X\to Y\) direction.
+\begin{align*}
+\text{(CP baseline)}\quad
+y' &= \frac{xy}{x+\dx_{\mathrm{in}}} = \frac{1000\cdot 1000}{1100} = \frac{1{,}000{,}000}{1100} \approx 909.0909090909,\\
+\dy_{\mathrm{out}}^{\mathrm{CP}} &= 1000 - y' \approx 90.9090909091.
+\end{align*}
+For the power rule (Sections~6--7):
+\begin{align*}
+r &= \frac{x}{x+\dx_{\mathrm{in}}} = \frac{1000}{1100}=\frac{10}{11}\approx 0.9090909090909,\\
+\ln r &\approx -0.0953101798043,\\
+r^{0.8} &= \exp(0.8\ln r)=\exp\!\big(-0.0762481438435\big)\approx 0.9265862513559,\\
+y_1 &= 1000\,r^{0.8} \approx 926.5862513558695,\\
+\dy_{\mathrm{out}} &= 1000 - y_1 \approx 73.4137486441305.
+\end{align*}
+If we now swap back \(Y\to X\) by inputting \(\dy_{\mathrm{in}}=\dy_{\mathrm{out}}\) so that \(y_2=1000\), the update gives
+\begin{align*}
+\left(\frac{y_1}{1000}\right)^{0.8}
+&= \exp\!\Big(0.8\ln\!\big(\tfrac{y_1}{1000}\big)\Big)
+= \exp\!\big(-0.0609985150748\big)\approx 0.9408246368292,\\
+x_2 &= 1100\left(\frac{y_1}{1000}\right)^{0.8} \approx 1034.9071005121361,\\
+\dx_{\mathrm{back}} &= 1100-x_2 \approx 65.0928994878639.
+\end{align*}
+Here \(\dx_{\mathrm{back}}<100\), so doing the round trip loses value (not strict additive).
 
-\subsection{Example 1: $x=y=1000$, $\dx=100$, $\alpha=0.8$}
+\paragraph{Example 2 (close to strict additive):} Same setup, but \(\alpha=0.997\).
+\begin{align*}
+r^{0.997} &= \exp(0.997\ln r)=\exp\!\big(-0.0950242492649\big)\approx 0.9093508831104,\\
+y_1 &= 1000\,r^{0.997} \approx 909.3508831104054,\\
+\dy_{\mathrm{out}} &= 1000-y_1 \approx 90.6491168895946.
+\end{align*}
+Swap back \(Y\to X\) with \(\dy_{\mathrm{in}}=\dy_{\mathrm{out}}\):
+\begin{align*}
+\left(\frac{y_1}{1000}\right)^{0.997}
+&= \exp\!\Big(0.997\ln\!\big(\tfrac{y_1}{1000}\big)\Big)
+= \exp\!\big(-0.0947391765171\big)\approx 0.9096101512187,\\
+x_2 &= 1100\left(\frac{y_1}{1000}\right)^{0.997} \approx 1000.5711663406179,\\
+\dx_{\mathrm{back}} &= 1100-x_2 \approx 99.4288336593821.
+\end{align*}
+Now \(\dx_{\mathrm{back}}\) is much closer to \(100\), i.e.\ the round-trip loss is small.
 
-\paragraph{Constant product baseline.}
+\paragraph{Example 3 (ExactOut input computation):} Let \(x=y=1000\), \(\alpha=0.8\), and request an \emph{ExactOut} swap \(X\to Y\) with \(\dy_{\mathrm{out}}=50\).
+From Sections~6--7,
 \[
- y_{\mathrm{cp}} = 1000\cdot\frac{1000}{1100} = 909.0909090909,
- \quad \Delta y_{\mathrm{cp}}=90.9090909091.
+\dx_{\mathrm{in}} = x\left(\left(\frac{y}{y-\dy_{\mathrm{out}}}\right)^{1/\alpha}-1\right)
+= 1000\left(\left(\frac{1000}{950}\right)^{1.25}-1\right).
 \]
-
-\paragraph{Conservative forward $X\to Y$.}
-\[
- y_1 = 1000\left(\frac{1000}{1100}\right)^{0.8}\approx 926.5862513559,
- \quad \Delta y\approx 73.4137486441.
-\]
-Retained vs CP (extra $Y$ left in pool relative to CP):
-\[
- y_1-y_{\mathrm{cp}}\approx 17.4953422650.
-\]
-
-\paragraph{Conservative round trip.}
-If the trader inputs back exactly $\Delta y\approx 73.4137486441$ in the reverse direction under the same invariant $x^\alpha y=K$, the pool returns to $(1000,1000)$ (up to rounding), and trader net PnL is $0$.
-
-\paragraph{Dissipative round trip (spread).}
-After forward, pool is $(x_1,y_1)=(1100,926.5862513559)$ and trader holds $\Delta y$.
-Swap back using dissipative reverse rule with input $\dy=\Delta y$ so $y_2=1000$ and
-\[
- x_2 = 1100\left(\frac{926.5862513559}{1000}\right)^{0.8}\approx 1034.9071005121.
-\]
-Thus trader receives
-\[
- \Delta x_{\mathrm{back}} = 1100-1034.9071005121\approx 65.0928994879,
-\]
-so the trader loses about $34.9071\,X$ on the round trip and the pool gains the same amount (dissipation).
-
-\subsection{Example 2: $x=y=1000$, $\dx=100$, $\alpha=0.997$ (near CP)}
-
-\paragraph{Conservative/Dissipative forward.}
-\[
- y_1 = 1000\left(\frac{1000}{1100}\right)^{0.997}\approx 909.3508831104,
- \quad \Delta y\approx 90.6491168896.
-\]
-Constant product yields $\Delta y_{\mathrm{cp}}\approx 90.9090909091$, hence retained vs CP is
-\[
- y_1-y_{\mathrm{cp}}\approx 0.2599740195\,Y.
-\]
-
+Expanding the power:
+\begin{align*}
+\frac{1000}{950} &= \frac{20}{19} \approx 1.0526315789474,\\
+\ln\!\left(\tfrac{20}{19}\right) &\approx 0.0512932943876,\\
+\left(\tfrac{20}{19}\right)^{1.25} &= \exp\!\Big(1.25\ln\!\left(\tfrac{20}{19}\right)\Big)
+= \exp\!\big(0.0641166179844\big)\approx 1.0662167315579,\\
+\dx_{\mathrm{in}} &= 1000\big(1.0662167315579-1\big)\approx 66.2167315578528.
+\end{align*}
 \section{Pitfall: scaling ExactOut input by a constant breaks strict additivity}
 
 Suppose you compute conservative power ExactOut base input
