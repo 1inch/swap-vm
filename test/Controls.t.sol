@@ -447,7 +447,7 @@ contract ControlsTest is Test, OpcodesDebug {
     /**
      * @notice Test jump to out of bounds (should revert)
      */
-    function test_JumpToOutOfBounds() public {
+    function test_JumpToOutOfBounds_Revert() public {
         Program memory program = ProgramBuilder.init(_opcodes());
 
         bytes memory bytecode = bytes.concat(
@@ -457,10 +457,79 @@ contract ControlsTest is Test, OpcodesDebug {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amount = 1e18;
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        TokenMock(address(tokenA)).mint(taker, amount);
+
         vm.expectRevert(
             abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0)
         );
-        _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+        swapVM.swap(
+            order,
+            address(tokenA),
+            address(tokenB),
+            amount,
+            takerData
+        );
+    }
+
+    /**
+     * @notice Test jump to out of bounds (normal execution)
+     */
+    function test_JumpToOutOfBounds_NoRevert() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+            BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([uint256(100e18), uint256(100e18)])
+            )),
+            program.build(_xycSwapXD),
+            program.build(_jump,
+                ControlsArgsBuilder.buildJump(65535)) // Jump out of bounds
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+
+        assertGt(amountOut, 0, "Some output amount should be received");
+    }
+
+    /**
+     * @notice Test jump inside instruction (revert)
+     */
+    function test_JumpInsideInstruction_Revert() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+
+        bytes memory bytecode = bytes.concat(
+            program.build(_jump,
+                ControlsArgsBuilder.buildJump(20)), // Jump inside next instruction
+            program.build(_dynamicBalancesXD,
+            BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([uint256(100e18), uint256(100e18)])
+            )),
+            program.build(_xycSwapXD)
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        uint256 amount = 1e18;
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        TokenMock(address(tokenA)).mint(taker, amount);
+
+        // it may revert with different errors depending on where it jumps or
+        // may not revert at all and just produce wrong results - we don't care about that here
+        // because jumping inside instruction is invalid anyway and taker should use
+        // quote() to verify the program beforehand and get correct results
+        vm.expectRevert();
+        swapVM.swap(
+            order,
+            address(tokenA),
+            address(tokenB),
+            amount,
+            takerData
+        );
     }
 
     /**
