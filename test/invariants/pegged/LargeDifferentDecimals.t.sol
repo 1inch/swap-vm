@@ -18,7 +18,7 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
         // Skip super.setUp() - do custom initialization
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
 
         // Create tokens with correct decimals: 18 and 6
         tokenA = TokenMock(address(new TokenMockDecimals("Token A", "TKA", 18)));

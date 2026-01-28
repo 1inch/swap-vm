@@ -19,6 +19,7 @@ contract DeployAquaSwapVMRouter is Script {
     function run() external {
         (
             address aquaAddress,
+            address wethAddress,
             string memory name,
             string memory version
         ) = vm.readSwapVMRouterParameters();
@@ -26,6 +27,7 @@ contract DeployAquaSwapVMRouter is Script {
         vm.startBroadcast();
         AquaSwapVMRouter swapVMRouter = new AquaSwapVMRouter(
             aquaAddress,
+            wethAddress,
             name,
             version
         );
