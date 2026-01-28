@@ -33,26 +33,13 @@ Solidity Best Practices
 - Use static analysis tools like Slither and Mythril in the development workflow.
 - Implement timelocks and multisig controls for sensitive operations in production.
 - Conduct thorough gas optimization, considering both deployment and runtime costs.
-- Use OpenZeppelin's AccessControl for fine-grained permissions.
 - Use Solidity 0.8.0+ for built-in overflow/underflow protection.
-- Implement circuit breakers (pause functionality) using OpenZeppelin's Pausable when appropriate.
 - Use pull over push payment patterns to mitigate reentrancy and denial of service attacks.
 - Implement rate limiting for sensitive functions to prevent abuse.
-- Use OpenZeppelin's SafeERC20 for interacting with ERC20 tokens.
-- Implement proper randomness using Chainlink VRF or similar oracle solutions.
 - Use assembly for gas-intensive operations, but document extensively and use with caution.
 - Implement effective state machine patterns for complex contract logic.
-- Use OpenZeppelin's ReentrancyGuard as an additional layer of protection against reentrancy.
-- Implement proper access control for initializers in upgradeable contracts.
-- Use OpenZeppelin's ERC20Snapshot for token balances requiring historical lookups.
-- Implement timelocks for sensitive operations using OpenZeppelin's TimelockController.
-- Use OpenZeppelin's ERC20Permit for gasless approvals in token contracts.
-- Implement proper slippage protection for DEX-like functionalities.
-- Use OpenZeppelin's ERC20Votes for governance token implementations.
 - Implement effective storage patterns to optimize gas costs (e.g., packing variables).
 - Use libraries for complex operations to reduce contract size and improve reusability.
-- Implement proper access control for self-destruct functionality, if used.
-- Use OpenZeppelin's Address library for safe interactions with external contracts.
 - Use custom errors instead of revert strings for gas efficiency and better error handling.
 - Implement NatSpec comments for all public and external functions.
 - Use immutable variables for values set once at construction time.
@@ -61,8 +48,35 @@ Solidity Best Practices
 - Implement fallback and receive functions with caution, clearly documenting their purpose.
 - Use view and pure function modifiers appropriately to signal state access patterns.
 - Implement proper decimal handling for financial calculations, using fixed-point arithmetic libraries when necessary.
-- Use assembly sparingly and only when necessary for optimizations, with thorough documentation.
 - Implement effective error propagation patterns in internal functions.
+- Implement proper slippage protection for DEX-like functionalities.
+- Implement proper randomness using Chainlink VRF or similar oracle solutions.
+- Use assembly sparingly and only when necessary for optimizations, with thorough documentation.
+- Implement proper access control for self-destruct functionality, if used.
+- Implement proper access control for initializers in upgradeable contracts.
+- Use OpenZeppelin's AccessControl for fine-grained permissions.
+- Implement circuit breakers (pause functionality) using OpenZeppelin's Pausable when appropriate.
+- Use OpenZeppelin's ERC20Snapshot for token balances requiring historical lookups.
+- Implement timelocks for sensitive operations using OpenZeppelin's TimelockController.
+- Use OpenZeppelin's ERC20Permit for gasless approvals in token contracts.
+- Use OpenZeppelin's ERC20Votes for governance token implementations.
+- Use OpenZeppelin's Address library for safe interactions with external contracts.
+
+1inch Libraries (use instead of OpenZeppelin equivalents)
+- Use `@1inch/solidity-utils/contracts/libraries/SafeERC20.sol` for ERC20 interactions (not OZ SafeERC20)
+- Use `@1inch/solidity-utils/contracts/libraries/ECDSA.sol` for signature verification (not OZ ECDSA)
+- Use `@1inch/solidity-utils/contracts/libraries/TransientLock.sol` for reentrancy protection (not OZ ReentrancyGuard)
+- Use `@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol` for ETH/WETH handling
+- Use `@1inch/solidity-utils/contracts/mixins/Simulator.sol` for quote/simulation functionality
+- Use `@1inch/solidity-utils/contracts/libraries/Calldata.sol` and `CalldataPtr.sol` for calldata parsing
+- Use `@1inch/solidity-utils/contracts/mocks/TokenMock.sol` for test token mocks
+- Use `@1inch/aqua/src/Aqua.sol` for Aqua strategy integration
+
+OpenZeppelin (still used for)
+- `@openzeppelin/contracts/utils/cryptography/EIP712.sol` for EIP712 typed signing
+- `@openzeppelin/contracts/utils/math/Math.sol` for math utilities (mulDiv, etc.)
+- `@openzeppelin/contracts/utils/math/SafeCast.sol` for safe type casting
+- `@openzeppelin/contracts/token/ERC20/IERC20.sol` for ERC20 interface only
 
 Testing and Quality Assurance
 - Implement a comprehensive testing strategy including unit, integration, and end-to-end tests.
@@ -76,7 +90,7 @@ Performance Optimization
 - Implement efficient indexing and querying strategies for off-chain data.
 
 Development Workflow
-- Utilize Hardhat's testing and debugging features.
+- Use Foundry (forge) for testing and debugging.
 - Implement a robust CI/CD pipeline for smart contract deployments.
 - Use static type checking and linting tools in pre-commit hooks.
 
