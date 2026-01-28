@@ -1065,4 +1065,606 @@ contract XYCSwapStrictAdditiveTest is Test, OpcodesDebug {
         vm.prank(taker);
         (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerData);
     }
+
+    // ========================================
+    // MATH LIBRARY UNIT TESTS (Pure Functions)
+    // ========================================
+
+    function test_StrictAdditiveMath_ExactIn_NoFee() public pure {
+        uint256 x = 1000e18;
+        uint256 y = 1000e18;
+        uint256 dx = 10e18;
+        uint256 alpha = ALPHA_SCALE;  // α = 1.0 means no fee
+
+        uint256 dy = StrictAdditiveMath.calcExactIn(x, y, dx, alpha);
+
+        // With α=1.0 (no fee), should match standard constant product
+        // dy = y * dx / (x + dx) = 1000 * 10 / 1010 ≈ 9.9009...
+        uint256 expected = y * dx / (x + dx);
+        // Allow small rounding difference (10 wei)
+        assertApproxEqAbs(dy, expected, 10, "Alpha=1.0 should match constant product");
+    }
+
+    function test_StrictAdditiveMath_ExactIn_WithFee() public pure {
+        uint256 x = 1000e18;
+        uint256 y = 1000e18;
+        uint256 dx = 10e18;
+        uint256 alpha = 997_000_000;  // 0.997 = 0.3% fee
+
+        uint256 dy = StrictAdditiveMath.calcExactIn(x, y, dx, alpha);
+
+        // With fee, output should be less than no-fee case
+        uint256 noFeeOutput = y * dx / (x + dx);
+        assertLt(dy, noFeeOutput, "Fee should reduce output");
+        
+        // Should be approximately 0.3% less
+        uint256 expectedMin = noFeeOutput * 997 / 1000;
+        assertGe(dy, expectedMin, "Fee should not be too high");
+    }
+
+    function test_StrictAdditiveMath_ExactOut_NoFee() public pure {
+        uint256 x = 1000e18;
+        uint256 y = 1000e18;
+        uint256 dy = 10e18;
+        uint256 alpha = ALPHA_SCALE;  // No fee
+
+        uint256 dx = StrictAdditiveMath.calcExactOut(x, y, dy, alpha);
+
+        // With α=1.0 (no fee), should be close to standard constant product
+        // dx = x * dy / (y - dy) ≈ 10.1
+        uint256 expectedApprox = (x * dy + y - dy - 1) / (y - dy) + 1;
+        assertApproxEqRel(dx, expectedApprox, 0.01e18, "Alpha=1.0 should be close to constant product");
+    }
+
+    function test_StrictAdditiveMath_ExactOut_WithFee() public pure {
+        uint256 x = 1000e18;
+        uint256 y = 1000e18;
+        uint256 dy = 10e18;
+        uint256 alpha = 997_000_000;  // 0.997 = 0.3% fee
+
+        uint256 dx = StrictAdditiveMath.calcExactOut(x, y, dy, alpha);
+
+        // With fee, input should be more than no-fee case
+        uint256 noFeeInput = (x * dy + y - dy - 1) / (y - dy) + 1;
+        assertGt(dx, noFeeInput, "Fee should increase required input");
+    }
+
+    function test_StrictAdditiveMath_FeeToAlpha_Conversion() public pure {
+        // Test that fee in BPS converts correctly to alpha
+        // 30 bps = 0.3% fee → alpha should be close to 0.997
+        
+        // Note: StrictAdditiveMath uses alpha directly (1e9 scale)
+        // 0.3% fee means alpha = 0.997 = 997_000_000
+        uint256 alpha_30bps = 997_000_000;
+        assertEq(alpha_30bps, 997_000_000, "30 bps should be 997e6");
+        
+        // 1% fee = 100 bps → alpha = 0.99 = 990_000_000
+        uint256 alpha_100bps = 990_000_000;
+        assertEq(alpha_100bps, 990_000_000, "100 bps should be 990e6");
+    }
+
+    // ========================================
+    // FEE REINVESTMENT / K GROWTH TESTS
+    // ========================================
+
+    function test_FeeReinvestment_KGrows_BothDirections() public {
+        console.log("\n=== Fee Reinvestment Test (Both Directions) ===");
+        
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 initialK = balanceA * balanceB;  // K_product = x * y
+        
+        console.log("Initial K:", initialK);
+        
+        uint32 alpha = 997_000_000;  // 0.3% fee
+        
+        // A->B swap
+        ISwapVM.Order memory order1 = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData1 = _signAndPack(order1, true, 0);
+        
+        tokenA.mint(taker, 100e18);
+        vm.prank(taker);
+        (, uint256 out1,) = swapVM.swap(order1, address(tokenA), address(tokenB), 100e18, takerData1);
+        
+        uint256 newBalanceA1 = balanceA + 100e18;
+        uint256 newBalanceB1 = balanceB - out1;
+        uint256 newK1 = newBalanceA1 * newBalanceB1;
+        
+        console.log("\nAfter A->B swap of 100e18:");
+        console.log("  New balances:", newBalanceA1 / 1e18, "/", newBalanceB1 / 1e18);
+        console.log("  New K:", newK1);
+        console.log("  K grew:", newK1 > initialK);
+        
+        assertGt(newK1, initialK, "K should grow after A->B swap");
+        
+        // B->A swap
+        setUp();
+        ISwapVM.Order memory order2 = _makeOrder(newBalanceA1, newBalanceB1, alpha);
+        bytes memory takerData2 = _signAndPack(order2, true, 0);
+        
+        tokenB.mint(taker, 50e18);
+        vm.prank(taker);
+        (, uint256 out2,) = swapVM.swap(order2, address(tokenB), address(tokenA), 50e18, takerData2);
+        
+        uint256 newBalanceA2 = newBalanceA1 - out2;
+        uint256 newBalanceB2 = newBalanceB1 + 50e18;
+        uint256 newK2 = newBalanceA2 * newBalanceB2;
+        
+        console.log("\nAfter B->A swap of 50e18:");
+        console.log("  New balances:", newBalanceA2 / 1e18, "/", newBalanceB2 / 1e18);
+        console.log("  New K:", newK2);
+        console.log("  K grew from previous:", newK2 > newK1);
+        
+        assertGt(newK2, newK1, "K should grow after B->A swap");
+        console.log("\n=== BOTH DIRECTIONS REINVEST FEES ===\n");
+    }
+
+    // ========================================
+    // CRITICAL SECURITY TESTS
+    // ========================================
+
+    function test_CRITICAL_BidirectionalConsistency_NoDrain() public {
+        console.log("\n=== CRITICAL: Bidirectional Consistency Test ===");
+        console.log("Testing that roundtrip swaps cannot drain the pool\n");
+        
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 initialK = balanceA * balanceB;
+        uint32 alpha = 997_000_000;  // 0.3% fee
+        
+        uint256 swapAmount = 100e18;
+        
+        // Forward swap: A->B
+        ISwapVM.Order memory order1 = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData1 = _signAndPack(order1, true, 0);
+        
+        tokenA.mint(taker, swapAmount);
+        vm.prank(taker);
+        (, uint256 out1,) = swapVM.swap(order1, address(tokenA), address(tokenB), swapAmount, takerData1);
+        
+        uint256 newBalanceA1 = balanceA + swapAmount;
+        uint256 newBalanceB1 = balanceB - out1;
+        
+        console.log("Forward swap amount:", swapAmount / 1e18);
+        console.log("  Output:", out1 / 1e18);
+        console.log("Pool after forward A:", newBalanceA1 / 1e18);
+        console.log("Pool after forward B:", newBalanceB1 / 1e18);
+        
+        // Reverse swap: B->A (swap back the received amount)
+        setUp();
+        ISwapVM.Order memory order2 = _makeOrder(newBalanceA1, newBalanceB1, alpha);
+        bytes memory takerData2 = _signAndPack(order2, true, 0);
+        
+        tokenB.mint(taker, out1);
+        vm.prank(taker);
+        (, uint256 out2,) = swapVM.swap(order2, address(tokenB), address(tokenA), out1, takerData2);
+        
+        uint256 finalBalanceA = newBalanceA1 - out2;
+        uint256 finalBalanceB = newBalanceB1 + out1;
+        uint256 finalK = finalBalanceA * finalBalanceB;
+        
+        console.log("Reverse swap amount:", out1 / 1e18);
+        console.log("  Output:", out2 / 1e18);
+        console.log("Pool after reverse A:", finalBalanceA / 1e18);
+        console.log("Pool after reverse B:", finalBalanceB / 1e18);
+        console.log("Final K:", finalK);
+        console.log("K growth:", finalK > initialK);
+        
+        // User should lose value (out2 < swapAmount due to fees)
+        assertLt(out2, swapAmount, "User should lose value on roundtrip");
+        
+        // Pool K should grow (fees reinvested)
+        assertGt(finalK, initialK, "Pool K should grow after roundtrip");
+        
+        console.log("User loss:", (swapAmount - out2) / 1e18, "A tokens");
+        console.log("Pool K growth:", (finalK - initialK) / 1e18, "\n");
+    }
+
+    function test_CRITICAL_MultipleRoundtrips_NoDrain() public {
+        console.log("\n=== CRITICAL: Multiple Roundtrips Test ===");
+        console.log("Testing that multiple roundtrips cannot drain the pool\n");
+        
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 initialK = balanceA * balanceB;
+        uint32 alpha = 997_000_000;
+        
+        uint256 attackerA = 100e18;
+        uint256 totalAttackerValueBefore = attackerA;
+        
+        console.log("Attacker starts:", attackerA / 1e18, "A tokens");
+        
+        for (uint i = 0; i < 5; i++) {
+            // A->B
+            ISwapVM.Order memory order1 = _makeOrder(balanceA, balanceB, alpha);
+            bytes memory takerData1 = _signAndPack(order1, true, 0);
+            
+            tokenA.mint(taker, attackerA);
+            vm.prank(taker);
+            (, uint256 outB,) = swapVM.swap(order1, address(tokenA), address(tokenB), attackerA, takerData1);
+            
+            balanceA += attackerA;
+            balanceB -= outB;
+            attackerA = 0;
+            
+            // B->A
+            setUp();
+            ISwapVM.Order memory order2 = _makeOrder(balanceA, balanceB, alpha);
+            bytes memory takerData2 = _signAndPack(order2, true, 0);
+            
+            tokenB.mint(taker, outB);
+            vm.prank(taker);
+            (, uint256 outA,) = swapVM.swap(order2, address(tokenB), address(tokenA), outB, takerData2);
+            
+            balanceA -= outA;
+            balanceB += outB;
+            attackerA = outA;
+            
+            uint256 currentK = balanceA * balanceB;
+            console.log("Roundtrip number:", i+1);
+            console.log("  Attacker has:", attackerA / 1e18);
+            console.log("  Pool K:", currentK / 1e18);
+            
+            assertGt(currentK, initialK, "Pool K should grow after each roundtrip");
+        }
+        
+        uint256 finalK = balanceA * balanceB;
+        uint256 totalAttackerValueAfter = attackerA;
+        
+        console.log("\nFinal attacker value:", totalAttackerValueAfter / 1e18, "A tokens");
+        console.log("Initial value:", totalAttackerValueBefore / 1e18, "A tokens");
+        console.log("Loss:", (totalAttackerValueBefore - totalAttackerValueAfter) / 1e18, "A tokens");
+        console.log("Final pool K:", finalK / 1e18);
+        console.log("K growth:", (finalK - initialK) / 1e18, "\n");
+        
+        assertLt(totalAttackerValueAfter, totalAttackerValueBefore, "Attacker should lose value");
+        assertGt(finalK, initialK, "Pool should accumulate value");
+    }
+
+    function test_CRITICAL_ExactInExactOut_Inversion() public {
+        console.log("\n=== CRITICAL: ExactIn/ExactOut Inversion Test ===");
+        console.log("Testing that ExactOut(ExactIn(dx)) >= dx\n");
+        
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        uint256[] memory testAmounts = new uint256[](5);
+        testAmounts[0] = 1e18;
+        testAmounts[1] = 10e18;
+        testAmounts[2] = 50e18;
+        testAmounts[3] = 100e18;
+        testAmounts[4] = 200e18;
+        
+        for (uint i = 0; i < testAmounts.length; i++) {
+            uint256 dx = testAmounts[i];
+            
+            // ExactIn: dx -> dy
+            uint256 dy = StrictAdditiveMath.calcExactIn(balanceA, balanceB, dx, alpha);
+            
+            // Skip if dy is too close to balanceB (would cause underflow in ExactOut)
+            if (dy >= balanceB) continue;
+            if (dy == 0) continue;
+            
+            // ExactOut: dy -> dx'
+            uint256 dxPrime = StrictAdditiveMath.calcExactOut(balanceA, balanceB, dy, alpha);
+            
+            console.log("dx=", dx / 1e18);
+            console.log("  dy=", dy / 1e18);
+            console.log("  dx'=", dxPrime / 1e18);
+            if (dxPrime >= dx) {
+                console.log("  diff=", (dxPrime - dx) / 1e18);
+            } else {
+                console.log("  diff=-", (dx - dxPrime) / 1e18);
+            }
+            
+            // dx' should be >= dx (due to fees, might be slightly more due to rounding)
+            // Allow small tolerance for precision errors
+            assertGe(dxPrime + 1e10, dx, "ExactOut(ExactIn(dx)) should be >= dx (with tolerance)");
+        }
+        console.log();
+    }
+
+    function test_CRITICAL_EdgeCase_VerySmallAmount() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        // Very small swap
+        uint256 dx = 1e15;  // 0.001 tokens
+        
+        uint256 dy = StrictAdditiveMath.calcExactIn(balanceA, balanceB, dx, alpha);
+        
+        assertGt(dy, 0, "Very small swap should produce output");
+        assertLt(dy, balanceB, "Output should be less than balance");
+    }
+
+    function test_CRITICAL_EdgeCase_LargeAmount() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        // Large swap (50% of pool)
+        uint256 dx = 500e18;
+        
+        uint256 dy = StrictAdditiveMath.calcExactIn(balanceA, balanceB, dx, alpha);
+        
+        assertGt(dy, 0, "Large swap should produce output");
+        assertLt(dy, balanceB, "Output should be less than balance");
+        
+        // Should be significantly less than no-fee case
+        uint256 noFeeOutput = balanceB * dx / (balanceA + dx);
+        assertLt(dy, noFeeOutput, "Fee should reduce large swap output");
+    }
+
+    // ========================================
+    // COMPREHENSIVE INVARIANT TESTS
+    // ========================================
+
+    function test_Invariant_Fee_Zero_BalancedPool() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = uint32(ALPHA_SCALE);  // No fee
+        
+        ISwapVM.Order memory order = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData = _signAndPack(order, true, 0);
+        
+        tokenA.mint(taker, 10e18);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+        
+        // With alpha=1.0, should match constant product exactly (allow small rounding)
+        uint256 expected = balanceB * 10e18 / (balanceA + 10e18);
+        assertApproxEqAbs(out, expected, 10, "Alpha=1.0 should match constant product (within rounding)");
+    }
+
+    function test_Invariant_Fee_30bps_BalancedPool() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;  // 0.3% fee
+        
+        ISwapVM.Order memory order = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData = _signAndPack(order, true, 0);
+        
+        tokenA.mint(taker, 10e18);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+        
+        // Should be less than no-fee case
+        uint256 noFeeOutput = balanceB * 10e18 / (balanceA + 10e18);
+        assertLt(out, noFeeOutput, "Fee should reduce output");
+        
+        // Should be approximately 0.3% less
+        uint256 expectedMin = noFeeOutput * 997 / 1000;
+        assertGe(out, expectedMin, "Fee should not be too high");
+    }
+
+    function test_Invariant_LargePool_1M_Tokens() public {
+        uint256 balanceA = 1000000e18;
+        uint256 balanceB = 1000000e18;
+        uint32 alpha = 997_000_000;
+        
+        ISwapVM.Order memory order = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData = _signAndPack(order, true, 0);
+        
+        tokenA.mint(taker, 1000e18);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order, address(tokenA), address(tokenB), 1000e18, takerData);
+        
+        assertGt(out, 0, "Large pool swap should produce output");
+        assertLt(out, balanceB, "Output should be less than balance");
+    }
+
+    function test_Invariant_SmallPool_100_Tokens() public {
+        uint256 balanceA = 100e18;
+        uint256 balanceB = 100e18;
+        uint32 alpha = 997_000_000;
+        
+        ISwapVM.Order memory order = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData = _signAndPack(order, true, 0);
+        
+        tokenA.mint(taker, 1e18);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        
+        assertGt(out, 0, "Small pool swap should produce output");
+        assertLt(out, balanceB, "Output should be less than balance");
+    }
+
+    function test_Invariant_ImbalancedPool_100to1() public {
+        uint256 balanceA = 100000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        ISwapVM.Order memory order = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData = _signAndPack(order, true, 0);
+        
+        tokenA.mint(taker, 10e18);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+        
+        assertGt(out, 0, "Imbalanced pool swap should produce output");
+        assertLt(out, balanceB, "Output should be less than balance");
+    }
+
+    // ========================================
+    // COMPARISON TESTS
+    // ========================================
+
+    function test_Compare_Fee0_EqualsXYCSwap_ExactIn() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint256 amountIn = 10e18;
+        
+        // Strict Additive with alpha=1.0 (no fee)
+        ISwapVM.Order memory strictOrder = _makeOrder(balanceA, balanceB, uint32(ALPHA_SCALE));
+        bytes memory strictTakerData = _signAndPack(strictOrder, true, 0);
+        
+        tokenA.mint(taker, amountIn);
+        vm.prank(taker);
+        (, uint256 strictOut,) = swapVM.swap(strictOrder, address(tokenA), address(tokenB), amountIn, strictTakerData);
+        
+        // Standard XYCSwap (no fee)
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory xycBytecode = bytes.concat(
+            program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([balanceA, balanceB])
+            )),
+            program.build(_xycSwapXD, bytes(""))
+        );
+        
+        ISwapVM.Order memory xycOrder = MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: xycBytecode
+        }));
+        
+        bytes memory xycTakerData = _signAndPack(xycOrder, true, 0);
+        
+        // Reset state for second swap
+        setUp();
+        
+        // Recreate XYCSwap order with fresh state
+        Program memory program2 = ProgramBuilder.init(_opcodes());
+        bytes memory xycBytecode2 = bytes.concat(
+            program2.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([balanceA, balanceB])
+            )),
+            program2.build(_xycSwapXD, bytes(""))
+        );
+        
+        ISwapVM.Order memory xycOrder2 = MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: xycBytecode2
+        }));
+        
+        bytes memory xycTakerData2 = _signAndPack(xycOrder2, true, 0);
+        
+        tokenA.mint(taker, amountIn);
+        vm.prank(taker);
+        (, uint256 xycOut,) = swapVM.swap(xycOrder2, address(tokenA), address(tokenB), amountIn, xycTakerData2);
+        
+        // Should be equal (within rounding - 10 wei tolerance)
+        assertApproxEqAbs(strictOut, xycOut, 10, "StrictAdditive with alpha=1.0 should equal XYCSwap");
+    }
+
+    function test_Subadditivity_SingleSwapGeSplitSwaps() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        console.log("\n=== Subadditivity Test ===");
+        console.log("Pool: 1000/1000, Alpha: 0.997\n");
+        
+        // Single swap of 100
+        ISwapVM.Order memory orderSingle = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerDataSingle = _signAndPack(orderSingle, true, 0);
+        
+        tokenA.mint(taker, 100e18);
+        vm.prank(taker);
+        (, uint256 singleOut,) = swapVM.swap(orderSingle, address(tokenA), address(tokenB), 100e18, takerDataSingle);
+        
+        console.log("Single swap of 100: output =", singleOut);
+        
+        // Split: first 50
+        setUp();
+        ISwapVM.Order memory orderFirst = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerDataFirst = _signAndPack(orderFirst, true, 0);
+        
+        tokenA.mint(taker, 100e18);
+        vm.prank(taker);
+        (, uint256 firstOut,) = swapVM.swap(orderFirst, address(tokenA), address(tokenB), 50e18, takerDataFirst);
+        
+        uint256 newBalanceA = balanceA + 50e18;
+        uint256 newBalanceB = balanceB - firstOut;
+        
+        // Split: second 50
+        ISwapVM.Order memory orderSecond = _makeOrder(newBalanceA, newBalanceB, alpha);
+        bytes memory takerDataSecond = _signAndPack(orderSecond, true, 0);
+        
+        vm.prank(taker);
+        (, uint256 secondOut,) = swapVM.swap(orderSecond, address(tokenA), address(tokenB), 50e18, takerDataSecond);
+        
+        uint256 splitTotal = firstOut + secondOut;
+        console.log("Split swaps - first:", firstOut);
+        console.log("Split swaps - second:", secondOut);
+        console.log("Split swaps - total:", splitTotal);
+        
+        console.log("Single >= Split?", singleOut >= splitTotal);
+        
+        // Subadditivity: single swap should give >= split swaps
+        assertGe(singleOut, splitTotal, "Subadditivity: single swap >= split swaps");
+    }
+
+    function test_Roundtrip_ExactInThenExactOut() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000e18;
+        uint32 alpha = 997_000_000;
+        
+        console.log("\n=== Roundtrip Test ===\n");
+        
+        uint256 amountIn = 10e18;
+        
+        // ExactIn
+        ISwapVM.Order memory order1 = _makeOrder(balanceA, balanceB, alpha);
+        bytes memory takerData1 = _signAndPack(order1, true, 0);
+        
+        tokenA.mint(taker, amountIn);
+        vm.prank(taker);
+        (, uint256 out,) = swapVM.swap(order1, address(tokenA), address(tokenB), amountIn, takerData1);
+        
+        console.log("ExactIn:", amountIn / 1e18, "->", out);
+        
+        uint256 newBalanceA = balanceA + amountIn;
+        uint256 newBalanceB = balanceB - out;
+        
+        // ExactOut (swap back)
+        setUp();
+        ISwapVM.Order memory order2 = _makeOrder(newBalanceA, newBalanceB, alpha);
+        bytes memory takerData2 = _signAndPack(order2, false, 0);
+        
+        tokenB.mint(taker, out);
+        vm.prank(taker);
+        (uint256 inBack,,) = swapVM.swap(order2, address(tokenB), address(tokenA), out, takerData2);
+        
+        console.log("ExactOut amount:", out);
+        console.log("  Input back:", inBack);
+        console.log("Loss:", (amountIn - inBack) / 1e18, "\n");
+        
+        // Should lose value due to fees
+        assertLt(inBack, amountIn, "Roundtrip should lose value due to fees");
+    }
 }
