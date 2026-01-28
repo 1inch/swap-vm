@@ -45,10 +45,12 @@ library XYCSwapStrictAdditiveArgsBuilder {
 ///   - α = 1.0: No fee, standard x*y=k
 ///   - α < 1.0: Fee is reinvested, lowering output for same input
 ///   - Lower α = higher effective fee
-/// @dev Mathematical formulas:
-///   - Invariant: K = y * x^α (equivalently y * Ψ(x) where Ψ(x) = x^α)
-///   - ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)
-///   - ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)
+/// @dev Mathematical formulas (DISSIPATIVE design - single deterministic mapping):
+    ///   - Single rule: power α is always applied to the INPUT token's reserve
+    ///   - X→Y: K = y * x^α (power on input X)
+    ///   - Y→X: K = x * y^α (power on input Y)
+    ///   - ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)
+    ///   - ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same curve]
 contract XYCSwapStrictAdditive {
     using ContextLib for Context;
 
@@ -62,22 +64,20 @@ contract XYCSwapStrictAdditive {
     /// @dev Uses balanceIn and balanceOut from ctx.swap which should be set by Balances instruction
     ///
     /// ╔═══════════════════════════════════════════════════════════════════════════════════════╗
-    /// ║  STRICT ADDITIVE FEE WITH REINVESTMENT INSIDE PRICING                                 ║
+    /// ║  STRICT ADDITIVE FEE WITH REINVESTMENT INSIDE PRICING (DISSIPATIVE DESIGN)           ║
     /// ║                                                                                       ║
-    /// ║  Invariant: y * x^α = K   (power family AMM)                                          ║
+    /// ║  Single Deterministic Dissipative Mapping:                                           ║
+    /// ║    - ONE rule: power α is always applied to the INPUT token's reserve                ║
+    /// ║    - X→Y: K = y * x^α  |  Y→X: K = x * y^α                                           ║
     /// ║                                                                                       ║
-    /// ║  ExactIn formula:                                                                     ║
-    /// ║    y' = y * (x / (x + Δx))^α                                                          ║
-    /// ║    Δy = y * (1 - (x / (x + Δx))^α)                                                    ║
+    /// ║  ExactIn:  Δy = y * (1 - (x / (x + Δx))^α)                                           ║
+    /// ║  ExactOut: Δx = x * ((y / (y - Δy))^(1/α) - 1)  [inverse on same direction]         ║
     /// ║                                                                                       ║
-    /// ║  ExactOut formula:                                                                    ║
-    /// ║    Δx = x * ((y / (y - Δy))^(1/α) - 1)                                                ║
-    /// ║                                                                                       ║
-    /// ║  Benefits:                                                                            ║
-    /// ║    - Strict additivity: swap(a+b) = swap(b) ∘ swap(a)                                 ║
+    /// ║  Properties:                                                                          ║
+    /// ║    - BOTH ExactIn and ExactOut are strictly additive                                 ║
+    /// ║    - Non-conservative: round trips dissipate trader value into pool                  ║
+    /// ║    - Time-irreversible: creates real bid-ask spread for economic incentive           ║
     /// ║    - Full input credit (all input goes to reserve)                                   ║
-    /// ║    - Fee reinvested inside pricing (no external bucket)                              ║
-    /// ║    - Deterministic final state regardless of trade splitting                          ║
     /// ║                                                                                       ║
     /// ║  Alpha parameter guide:                                                               ║
     /// ║    - α = 1.000 (1e9): No fee, standard constant product                              ║
@@ -87,7 +87,7 @@ contract XYCSwapStrictAdditive {
     /// ╚═══════════════════════════════════════════════════════════════════════════════════════╝
     function _xycSwapStrictAdditiveXD(Context memory ctx, bytes calldata args) internal pure {
         require(
-            ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0, 
+            ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0,
             XYCSwapStrictAdditiveRequiresBothBalancesNonZero(ctx.swap.balanceIn, ctx.swap.balanceOut)
         );
 
@@ -95,7 +95,8 @@ contract XYCSwapStrictAdditive {
 
         if (ctx.query.isExactIn) {
             require(ctx.swap.amountOut == 0, XYCSwapStrictAdditiveRecomputeDetected());
-            
+
+            // 0 < α <= 1
             // Δy = y * (1 - (x / (x + Δx))^α)
             // Floor division for tokenOut is desired behavior (protects maker)
             ctx.swap.amountOut = StrictAdditiveMath.calcExactIn(
@@ -106,7 +107,8 @@ contract XYCSwapStrictAdditive {
             );
         } else {
             require(ctx.swap.amountIn == 0, XYCSwapStrictAdditiveRecomputeDetected());
-            
+
+            // ExactOut: use inverse formula on the SAME curve (strictly additive)
             // Δx = x * ((y / (y - Δy))^(1/α) - 1)
             // Ceiling division for tokenIn is desired behavior (protects maker)
             ctx.swap.amountIn = StrictAdditiveMath.calcExactOut(
