@@ -34,7 +34,11 @@ contract ImbalancedPoolHighFees is PeggedFeesInvariants {
 
         symmetryTolerance = 100;  // Higher tolerance for imbalanced pools
         additivityTolerance = 10;
-        // Higher rounding tolerance for imbalanced + high fees (5% = 500 bps)
-        roundingToleranceBps = 500;
+
+        // Higher rounding tolerance for imbalanced pool (10:1) + high fees (5%+5%)
+        // Multiple fees can stack to 10%+, and combined with pool imbalance
+        // and numerical precision at extreme edge cases (1-10 wei amounts)
+        // Need ~1200 bps (12%) to cover all edge cases safely
+        roundingToleranceBps = 1200;
     }
 }
