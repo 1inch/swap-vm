@@ -8,65 +8,107 @@ alwaysApply: false
 ## File Naming
 - Unit tests: `<Feature>.t.sol`
 - Aqua tests: `<Feature>Aqua.t.sol`
-- Invariant tests: `test/invariants/<Feature>Invariants.t.sol`
+- Base invariant tests: `test/invariants/<Feature>Invariants.t.sol`
+- Fee invariant tests: `test/invariants/<Feature>FeesInvariants.t.sol`
+- Scenario tests: `test/invariants/<swap_type>/<Scenario>.t.sol`
 - Gas benchmarks: `test/gas/<Feature>Gas.t.sol`
 
 ## Directory Structure
-- `test/base/` - Base test classes (`AquaSwapVMTest`, `AquaStrategyBuilders`, `TestConstants`)
-- `test/helpers/` - Helper contracts (`AquaSwapVMHelper`, `DirectSwapVMHelper`)
-- `test/mocks/` - Mock contracts (`MockTaker`, etc.)
-- `test/utils/` - Utilities (`Dynamic.sol`, `ProgramBuilder.sol`)
-- `test/invariants/` - Invariant test contracts
+- `test/base/` - Base test classes
+  - `AquaSwapVMTest.sol` - Main test base for Aqua strategies
+  - `AquaStrategyBuilders.sol` - Strategy building helpers
+  - `TestConstants.sol` - Common test constants
+- `test/helpers/` - Helper contracts
+  - `AquaSwapVMHelper.sol` - Aqua mode swap helper
+  - `DirectSwapVMHelper.sol` - Direct mode swap helper
+  - `DirectModeTaker.sol` - Taker for direct mode tests
+- `test/mocks/` - Mock contracts
+  - `MockTaker.sol`, `MockTakerBrokenCallback.sol`, `MockTakerFirstTransfer.sol`
+  - `MockMakerHooks.sol` - Maker hooks mock
+  - `TokenMockDecimals.sol` - Token with configurable decimals
+  - `WETHMock.sol` - WETH mock
+- `test/utils/` - Utilities
+  - `Dynamic.sol` - Dynamic array builder
+  - `ProgramBuilder.sol` - Bytecode program builder
+  - `FormatLib.sol` - Formatting utilities
+  - `OrderHasher.sol` - Order hash utilities
+- `test/invariants/` - Invariant tests
+  - `CoreInvariants.t.sol` - Base invariant assertions
+  - `RoundingInvariants.sol` - Rounding exploit protection library
+  - `ExactInOutSymmetry.t.sol` - Symmetry assertion library
+  - `ExampleInvariantUsage.t.sol` - Usage examples
+  - `XYCFeesInvariants.t.sol` - XYC with fees base
+  - `PeggedSwapInvariants.t.sol`, `PeggedFeesInvariants.t.sol`
+  - `xyc/` - XYC scenario tests (BalancedPoolEdgeFees, DustAmounts, HugeLiquidity, ImbalancedPool*, LargeAmounts, SmallAmounts, TinyLiquidity)
+  - `pegged/` - Pegged scenario tests (BalancedCurve, MostlyCurved, PureSquareRoot, VeryLinear, LargeDifferentDecimals, VeryImbalancedDifferentDecimals, ...)
+- `test/gas/` - Gas benchmarks
+  - `AMMGas.t.sol`, `LimitSwapGas.t.sol`
 
 ## Inheritance
 - **Aqua tests**: Inherit from `AquaSwapVMTest` (provides swapVM, taker, tokens, helpers)
 - **Direct tests**: Inherit from `Test` + `OpcodesDebug`
 - **Invariant tests**: Inherit from `CoreInvariants` + implement `_executeSwap()`
+- **Scenario tests**: Inherit from base invariant test (e.g., `XYCFeesInvariants`) + override config in setUp()
 
 ## Key Structs
 - `MakerSetup` - Order configuration (balances, fees, swapType)
 - `SwapProgram` - Swap parameters (amount, taker, tokens, zeroForOne, isExactIn)
-- `InvariantConfig` - Invariant test configuration (tolerances, skip flags)
+- `InvariantConfig` - Invariant test configuration (tolerances, skip flags, test amounts)
+- `FeeConfig` - Fee configuration (flat, progressive, protocol fees)
 
 ## Test Naming
-Pattern: `test_<Feature>_<Scenario>[_<Variation>]`
-- `test_Aqua_XYC_ExactIn_BalancesCorrect`
-- `test_Aqua_XYC_NoArbitrage_InThenOut`
-- `test_gas_XYCSwap_swap_exactIn`
+Pattern: `test_<Feature>[_<FeeType>]`
+- `test_XYC` - Basic invariants
+- `test_XYCFlatFeeIn` - With flat fee on input
+- `test_XYCProgressiveFeeOut` - With progressive fee on output
+- `test_XYCProtocolFee` - With protocol fee
+- `test_XYCMultipleFees` - Combined fee types
 
-## Test Organization
-Use section headers to group related tests:
-- Balance Consistency Tests
-- Arbitrage Protection Tests
-- K Invariant Tests
-- Economic Properties Tests
-- Overflow Protection Tests
+## Scenario Tests
+Tests in `test/invariants/xyc/` and `test/invariants/pegged/` cover:
+- Balanced vs imbalanced pool ratios
+- Edge case fees (extreme high/low)
+- Dust, small, medium, large amounts
+- Tiny vs huge liquidity
+- Different token decimals
 
-## Key Helpers (from AquaSwapVMTest)
-- `createStrategy(MakerSetup)` - Build order from config
-- `shipStrategy(order, tokenIn, tokenOut, balanceIn, balanceOut)` - Deploy to Aqua
-- `swap(SwapProgram, order)` - Execute swap
-- `quote(SwapProgram, order)` - Get quote
-- `mintTokenInToTaker(SwapProgram)` - Mint input tokens
-- `mintTokenOutToMaker(SwapProgram, amount)` - Mint output tokens
-- `getAquaBalances(strategyHash)` - Query Aqua balances
-- `getTakerBalances(taker)` - Query taker balances
+## Key Helpers
+**From AquaSwapVMTest**: createStrategy, shipStrategy, swap, quote, mint helpers, balance queries
 
-## Constants (from TestConstants)
-`ONE`, `INITIAL_BALANCE_A/B`, `DUST_AMOUNT`, `TINY_AMOUNT`, `SMALL_AMOUNT`, `MEDIUM_AMOUNT`, `LARGE_AMOUNT`, `MAX_REASONABLE_AMOUNT`, `OVERFLOW_AMOUNT`
+**From CoreInvariants**: assertAllInvariants, assertSymmetryInvariant, assertAdditivityInvariant, assertMonotonicityInvariant, assertQuoteSwapConsistencyInvariant, assertRoundingFavorsMakerInvariant
+
+**From RoundingInvariants**: assertNoAccumulationExploit, assertNoRoundTripProfit
+
+**From ExactInOutSymmetry**: assertSymmetry, assertSymmetryBatch
 
 ## Patterns
-- Use `vm.snapshot()` / `vm.revertTo()` for state isolation in comparisons
+- Use `vm.snapshot()` / `vm.revertTo()` for state isolation
 - Use `dynamic([...])` helper for building arrays
-- Use `assertApproxEqAbs` for rounding tolerance (1 wei)
-- Use `assertApproxEqRel` for percentage tolerance (1e15 = 0.1%)
+- Use `assertApproxEqAbs` for wei tolerance, `assertApproxEqRel` for percentage
+- Override storage variables in setUp() for scenario configuration
 
-## Test Categories Checklist
-1. Balance consistency after swaps
-2. Arbitrage protection (round-trip should not profit)
-3. K invariant (balanceA × balanceB should not decrease)
-4. Effective rate ≤ spot price
-5. Rounding favors protocol
-6. Single swap beats split swaps
-7. No rounding accumulation exploits
-8. Overflow protection (graceful reverts)
+## Security Test Categories
+1. **Round-Trip**: No arbitrage profit from A→B→A
+2. **Pool Drain**: K product increases after swaps
+3. **Sandwich**: Protected against sandwich attacks
+4. **Split Swap**: Single swap ≥ split swaps (additivity)
+5. **Overflow**: Large inputs gracefully revert
+6. **Boundaries**: Smooth transitions at mathematical boundaries
+7. **Monotonicity**: Larger trades get equal or worse prices
+8. **Symmetry**: exactIn(X)→Y ↔ exactOut(Y)→X
+9. **Quote/Swap Consistency**: Identical amounts
+10. **Rounding Favors Maker**: Small trades don't beat spot
+
+## Skip Flags
+- `skipAdditivity` - Progressive fees, limit orders
+- `skipMonotonicity` - Flat-rate orders, dust amounts
+- `skipSpotPrice` - Complex fee structures
+- `skipSymmetry` - Asymmetric fee structures
+
+## Tolerance Guidelines
+| Scenario | symmetryTolerance | additivityTolerance | roundingToleranceBps |
+|----------|-------------------|---------------------|----------------------|
+| Standard | 2 wei | 0 | 100 (1%) |
+| Imbalanced pools | 10+ wei | 0 | 200+ |
+| High fees | 2 wei | 1 wei | 500+ |
+| Protocol fees | 2 wei | 1 wei | 100 |
