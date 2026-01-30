@@ -15,6 +15,7 @@ import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperi
 import { Decay } from "../instructions/Decay.sol";
 import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
+import { SplineSwap } from "../instructions/SplineSwap.sol";
 
 contract AquaOpcodes is
     Controls,
@@ -23,14 +24,15 @@ contract AquaOpcodes is
     XYCConcentrateExperimental,
     Decay,
     Fee,
-    FeeExperimental
+    FeeExperimental,
+    SplineSwap
 {
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[35] memory instructions = [
+        function(Context memory, bytes calldata) internal[36] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -71,7 +73,9 @@ contract AquaOpcodes is
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            // SplineSwap - configurable liquidity curves (Spline AMM)
+            SplineSwap._splineSwapGrowPriceRange2D
         ];
 
         // Efficiently turning static memory array into dynamic memory array
