@@ -34,7 +34,11 @@ contract ImbalancedPoolHighFees is PeggedFeesInvariants {
 
         symmetryTolerance = 100;  // Higher tolerance for imbalanced pools
         additivityTolerance = 10;
-        // Higher rounding tolerance for imbalanced + high fees (5% = 500 bps)
-        roundingToleranceBps = 500;
+
+        // Higher rounding tolerance for imbalanced pool (10:1) + high fees (5%+5%)
+        // The stable formula w = 2R/(1+√D) divides by a larger denominator than
+        // the original w = (√D-1)/(2a), causing more truncation in edge cases.
+        // Need ~1200 bps (12%) to cover extreme edge cases (1-10 wei amounts).
+        roundingToleranceBps = 1200;
     }
 }
