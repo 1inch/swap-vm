@@ -50,8 +50,10 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         tokenB = new TokenMock("Token B", "TKB");
 
         // Setup tokens and approvals for maker
-        tokenA.mint(maker, 10000e18);
-        tokenB.mint(maker, 10000e18);
+        tokenA.mint(maker, 1000000e18);
+        tokenB.mint(maker, 1000000e18);
+        tokenA.mint(taker, 1000000e18);
+        tokenB.mint(taker, 1000000e18);
         vm.prank(maker);
         tokenA.approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
@@ -349,6 +351,120 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             order,
             address(tokenA),
             address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Test PeggedSwap reverse swap direction with all invariants
+     * @dev Ensures reverse swaps work correctly when using a mixed linear/sqrt curve (linearWidth = 0.8e27)
+     */
+    function test_PeggedSwap_ReverseDirection_Invariants() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000000e18;
+        (address tokenIn, address tokenOut) = address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
+        (uint256 balanceIn, uint256 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
+
+        uint256 linearWidth = 0.8e27; // A = 0.8
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([tokenOut, tokenIn]),
+                    dynamic([balanceOut, balanceIn])
+                )),
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: balanceIn,
+                    y0: balanceOut,
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
+                })))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test amounts
+        uint256[] memory testAmounts = new uint256[](3);
+        testAmounts[0] = balanceIn / 100;
+        testAmounts[1] = balanceIn / 20;
+        testAmounts[2] = balanceIn / 10;
+
+        uint256[] memory testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = balanceOut / 100;
+        testAmountsExactOut[1] = balanceOut / 20;
+        testAmountsExactOut[2] = balanceOut / 10;
+
+        // Create config for reverse direction test
+        InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15);
+        config.testAmountsExactOut = testAmountsExactOut;
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            tokenIn,
+            tokenOut,
+            config
+        );
+    }
+
+    /**
+     * Test PeggedSwap reverse swap direction with all invariants
+     * @dev Ensures reverse swaps work correctly
+     */
+    function test_PeggedSwap_ReverseDirection_Linear_Invariants() public {
+        uint256 balanceA = 1000e18;
+        uint256 balanceB = 1000000e18;
+        (address tokenIn, address tokenOut) = address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
+        (uint256 balanceIn, uint256 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
+
+        uint256 linearWidth = 0;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([tokenOut, tokenIn]),
+                    dynamic([balanceOut, balanceIn])
+                )),
+            program.build(_peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: balanceIn,
+                    y0: balanceOut,
+                    linearWidth: linearWidth,
+                        rateLt: 1,
+                        rateGt: 1
+                })))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test amounts
+        uint256[] memory testAmounts = new uint256[](3);
+        testAmounts[0] = balanceIn / 100;
+        testAmounts[1] = balanceIn / 20;
+        testAmounts[2] = balanceIn / 10;
+
+        uint256[] memory testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = balanceOut / 100;
+        testAmountsExactOut[1] = balanceOut / 20;
+        testAmountsExactOut[2] = balanceOut / 10;
+
+        // Create config for reverse direction test
+        InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15);
+        config.testAmountsExactOut = testAmountsExactOut;
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            tokenIn,
+            tokenOut,
             config
         );
     }
