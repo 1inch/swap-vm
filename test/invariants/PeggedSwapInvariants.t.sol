@@ -357,7 +357,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
     /**
      * Test PeggedSwap reverse swap direction with all invariants
-     * @dev Ensures reverse swaps work correctly
+     * @dev Ensures reverse swaps work correctly when using a mixed linear/sqrt curve (linearWidth = 0.8e27)
      */
     function test_PeggedSwap_ReverseDirection_Invariants() public {
         uint256 balanceA = 1000e18;
