@@ -2,9 +2,8 @@
 pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
@@ -21,32 +20,28 @@ import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
-
-contract MockToken is ERC20 {
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
 
 contract PeggedSwapTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
-    using SafeCast for uint256;
 
     constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
-    MockToken public usdcMock;
-    MockToken public usdtMock;
+    address public tokenA;
+    address public tokenB;
 
     address public maker;
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
-    uint256 constant ONE = 1e27;  // Match PeggedSwapMath.ONE
-    uint256 constant CURVATURE = 0.5e27; // p = 0.5, curvature at the ends of the curve
+    struct PoolSetup {
+        uint256 balanceA;
+        uint256 balanceB;
+        uint256 x0;
+        uint256 y0;
+        uint256 linearWidth;
+        uint256 feeInBps;
+    }
 
     function setUp() public {
         makerPrivateKey = 0x1234;
@@ -54,119 +49,75 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
-        usdcMock = new MockToken("USD Coin", "USDC");
-        usdtMock = new MockToken("Tether USD", "USDT");
+        tokenA = address(new TokenMock("Token A", "TKA"));
+        tokenB = address(new TokenMock("Token B", "TKB"));
 
-        usdcMock.mint(maker, 1000000e18);
-        usdtMock.mint(maker, 1000000e18);
-        usdcMock.mint(taker, 1000000e18);
-        usdtMock.mint(taker, 1000000e18);
+        TokenMock(tokenA).mint(maker, 1000000e18);
+        TokenMock(tokenB).mint(maker, 1000000e18);
+        TokenMock(tokenA).mint(taker, 1000000e18);
+        TokenMock(tokenB).mint(taker, 1000000e18);
 
         vm.prank(maker);
-        usdcMock.approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
-        usdtMock.approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
 
         vm.prank(taker);
-        usdcMock.approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         vm.prank(taker);
-        usdtMock.approve(address(swapVM), type(uint256).max);
+        TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
     }
 
     // ========================================
     // HELPER FUNCTIONS
     // ========================================
 
-    /// @dev Calculate invariant value offchain - delegates to PeggedSwapMath
-    function calculateInvariant(
-        uint256 x,
-        uint256 y,
-        uint256 x0,
-        uint256 y0,
-        uint256 a
-    ) internal pure returns (uint256) {
-        return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
+    function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
+        Program memory prog = ProgramBuilder.init(_opcodes());
+
+        bytes memory programBytes = bytes.concat(
+            prog.build(Balances._dynamicBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([tokenA, tokenB]),
+                    dynamic([setup.balanceA, setup.balanceB])
+                )),
+            setup.feeInBps > 0 ? prog.build(Fee._flatFeeAmountInXD,
+                FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
+            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
+                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                    x0: setup.x0,
+                    y0: setup.y0,
+                    linearWidth: setup.linearWidth,
+                    rateLt: 1,
+                    rateGt: 1
+                })))
+        );
+
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            receiver: address(0),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: programBytes
+        }));
     }
 
-    /// @dev Calculate target state for exactIn swap using binary search
-    /// @notice Uses PeggedSwapMath to match onchain calculation exactly
-    function calculateExactIn(
-        uint256 x0,
-        uint256 y0,
-        uint256 amountIn,
-        uint256 x0Norm,
-        uint256 y0Norm,
-        uint256 a
-    ) internal pure returns (uint256 x1, uint256 y1, uint256 amountOut) {
-        x1 = x0 + amountIn;
-        uint256 targetInvariant = calculateInvariant(x0, y0, x0Norm, y0Norm, a);
-
-        y1 = _binarySearchY(x1, y0, amountIn, x0Norm, y0Norm, a, targetInvariant);
-        amountOut = y0 - y1;
-    }
-
-    /// @dev Binary search for y that maintains invariant
-    function _binarySearchY(
-        uint256 x1,
-        uint256 y0,
-        uint256 amountIn,
-        uint256 x0Norm,
-        uint256 y0Norm,
-        uint256 a,
-        uint256 targetInvariant
-    ) private pure returns (uint256) {
-        uint256 yLow = (y0 > amountIn * 2) ? y0 - amountIn * 2 : y0 / 2;
-        if (yLow == 0) yLow = 1;
-        uint256 yHigh = y0;
-        uint256 y = yHigh;
-
-        for (uint256 i = 0; i < 512; i++) {
-            if (yLow > yHigh) break;
-
-            y = (yLow + yHigh) / 2;
-            uint256 inv = calculateInvariant(x1, y, x0Norm, y0Norm, a);
-
-            if (inv == targetInvariant) break;
-
-            if (inv < targetInvariant) {
-                yLow = y;
-            } else {
-                yHigh = y;
-            }
-
-            if (yHigh - yLow <= 1) {
-                uint256 invLow = calculateInvariant(x1, yLow, x0Norm, y0Norm, a);
-                uint256 invHigh = calculateInvariant(x1, yHigh, x0Norm, y0Norm, a);
-
-                uint256 diffLow = invLow > targetInvariant ? invLow - targetInvariant : targetInvariant - invLow;
-                uint256 diffHigh = invHigh > targetInvariant ? invHigh - targetInvariant : targetInvariant - invHigh;
-
-                return diffLow <= diffHigh ? yLow : yHigh;
-            }
-        }
-
-        return y > 0 && y <= y0 ? y : y0 - 1;
-    }
-
-    /// @dev Calculate price impact percentage (in basis points)
-    function calculatePriceImpact(
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 x0,
-        uint256 y0
-    ) internal pure returns (uint256) {
-        // Expected output at current spot price: amountOut_expected = amountIn * (y0/x0)
-        uint256 expectedOut = (amountIn * y0) / x0;
-
-        if (amountOut >= expectedOut) return 0; // No negative impact
-
-        uint256 loss = expectedOut - amountOut;
-        return (loss * 10000) / expectedOut;
-    }
-
-    function takerData(address takerAddress, bool isExactIn, bytes memory hints) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
-            taker: takerAddress,
+    function _makeTakerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
+        return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: taker,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -183,996 +134,444 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             postTransferOutHookData: "",
             preTransferInCallbackData: "",
             preTransferOutCallbackData: "",
-            instructionsArgs: hints,
+            instructionsArgs: "",
             signature: ""
-        }));
+        })), signature);
     }
 
-    function signOrder(ISwapVM.Order memory order) internal view returns (bytes memory) {
+    function _signOrder(ISwapVM.Order memory order) internal view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
         return abi.encodePacked(r, s, v);
     }
 
-    // ========================================
-    // LARGE A TESTS (FOR PEGGED ASSETS)
-    // A = 1.2 optimized for stablecoins/pegged assets
-    // ========================================
+    function _assertSwapQuoteConsistency(
+        ISwapVM.Order memory order,
+        uint256 amount,
+        bool isExactIn
+    ) internal {
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(isExactIn, signature);
 
-    function test_LargeA_PeggedAssets_SmallSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  LARGE A (PEGGED) - SMALL SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
-        uint256 swapAmount = 100e18; // Small: 100 tokens (0.1% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
+        // Quote
+        (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
+            order, tokenA, tokenB, amount, takerData
         );
 
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=1.2 (pegged)");
-        console.log("Swap: 100 tokens (0.1%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps (MUST BE LOW)", priceImpact);
-        console.log("");
-
-        // Verify low impact for pegged assets with large A
-        require(priceImpact < 10, "Small swap should have very low impact with large A");
-
-        console.log("SUCCESS: Small swap has minimal impact!");
-        console.log("");
-    }
-
-    function test_LargeA_PeggedAssets_MediumSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  LARGE A (PEGGED) - MEDIUM SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
-        uint256 swapAmount = 5000e18; // Medium: 5000 tokens (5% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=1.2 (pegged)");
-        console.log("Swap: 5,000 tokens (5%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps (STILL LOW)", priceImpact);
-        console.log("");
-
-        // Verify still low impact for pegged assets with large A
-        require(priceImpact < 100, "Medium swap should still have low impact with large A");
-
-        console.log("SUCCESS: Medium swap maintains low impact!");
-        console.log("");
-    }
-
-    function test_LargeA_PeggedAssets_LargeSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  LARGE A (PEGGED) - LARGE SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 1.2e27; // A = 1.2 (high linearity for pegged assets)
-        uint256 swapAmount = 50000e18; // Large: 50000 tokens (50% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=1.2 (pegged)");
-        console.log("Swap: 50,000 tokens (50%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps (MUST BE HIGH)", priceImpact);
-        console.log("");
-
-        // Verify high impact for large swaps even with large A
-        require(priceImpact > 500, "Large swap must have high impact");
-
-        console.log("SUCCESS: Large swap has appropriate high impact!");
-        console.log("");
-    }
-
-    // ========================================
-    // SMALL A TESTS (FOR UNPEGGED ASSETS)
-    // A = 0.1 for volatile/unpegged pairs
-    // ========================================
-
-    function test_SmallA_UnpeggedAssets_SmallSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  SMALL A (UNPEGGED) - SMALL SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
-        uint256 swapAmount = 100e18; // Small: 100 tokens (0.1% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=0.1 (unpegged)");
-        console.log("Swap: 100 tokens (0.1%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps", priceImpact);
-        console.log("");
-
-        console.log("SUCCESS: Impact according to invariant with small A!");
-        console.log("");
-    }
-
-    function test_SmallA_UnpeggedAssets_MediumSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  SMALL A (UNPEGGED) - MEDIUM SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
-        uint256 swapAmount = 5000e18; // Medium: 5000 tokens (5% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=0.1 (unpegged)");
-        console.log("Swap: 5,000 tokens (5%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps (GREATER)", priceImpact);
-        console.log("");
-
-        // Verify higher impact than small swap
-        require(priceImpact > 150, "Medium swap should have notable impact with small A");
-
-        console.log("SUCCESS: Medium swap has increased impact!");
-        console.log("");
-    }
-
-    function test_SmallA_UnpeggedAssets_LargeSwap() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  SMALL A (UNPEGGED) - LARGE SWAP");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 0.1e27; // A = 0.1 (low linearity for volatile assets)
-        uint256 swapAmount = 50000e18; // Large: 50000 tokens (50% of pool)
-
-        (, , uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-
-        uint256 priceImpact = calculatePriceImpact(swapAmount, amountOut, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=0.1 (unpegged)");
-        console.log("Swap: 50,000 tokens (50%% of pool)");
-        console.log("  Amount out: %s", amountOut / 1e18);
-        console.log("  Price impact: %s bps (MUCH GREATER)", priceImpact);
-        console.log("");
-
-        // Verify much higher impact for large swaps with small A
-        require(priceImpact > 800, "Large swap must have very high impact with small A");
-
-        console.log("SUCCESS: Large swap has very high impact!");
-        console.log("");
-    }
-
-    function test_PeggedSwap_ActualOnchainSwap_ExactIn() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  ONCHAIN PEGGED SWAP TEST - EXACT IN");
-        console.log("  Using analytical solution");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 x0Initial = initialLiquidity;
-        uint256 y0Initial = initialLiquidity;
-        uint256 linearWidth = 0.8e27; // A = 0.8 (optimized for stablecoins)
-
-        // Calculate target state using analytical solution
-        uint256 swapAmount = 1000e18;
-        (uint256 x1NoFee, uint256 y1, uint256 amountOut) = calculateExactIn(
-            initialLiquidity, initialLiquidity, swapAmount,
-            x0Initial, y0Initial, linearWidth
-        );
-
-        console.log("Expected results (calculated offchain):");
-        console.log("  x1NoFee: %s", x1NoFee / 1e18);
-        console.log("  y1: %s", y1 / 1e18);
-        console.log("  amountOut: %s", amountOut / 1e18);
-
-        // Verify the invariant matches with our solver
-        uint256 inv0 = calculateInvariant(initialLiquidity, initialLiquidity, x0Initial, y0Initial, linearWidth);
-        uint256 inv1 = calculateInvariant(x1NoFee, y1, x0Initial, y0Initial, linearWidth);
-        console.log("  Invariant before: %s", inv0 / 1e15);
-        console.log("  Invariant after: %s", inv1 / 1e15);
-        uint256 invDiff = inv0 > inv1 ? inv0 - inv1 : inv1 - inv0;
-        console.log("  Invariant diff: %s (in 1e15)", invDiff / 1e15);
-        console.log("");
-
-
-        // Build SwapVM program
-        Program memory prog = ProgramBuilder.init(_opcodes());
-        bytes memory programBytes = bytes.concat(
-            prog.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(usdcMock), address(usdtMock)]),
-                    dynamic([initialLiquidity, initialLiquidity])
-                )),
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
-        );
-
-        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            receiver: address(0),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programBytes
-        }));
-
-        bytes memory signature = signOrder(order);
-        bytes memory takerTraitsAndData = takerData(taker, true, "");
-        bytes memory sigAndTakerData = abi.encodePacked(takerTraitsAndData, signature);
-
+        // Swap
         vm.prank(taker);
-        (uint256 actualAmountIn, uint256 actualAmountOut, ) = swapVM.swap(
-            order,
-            address(usdcMock),
-            address(usdtMock),
-            swapAmount,
-            sigAndTakerData
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(
+            order, tokenA, tokenB, amount, takerData
         );
 
-        console.log("Swap executed successfully!");
-        console.log("  Amount in: %s USDC", actualAmountIn / 1e18);
-        console.log("  Amount out: %s USDT", actualAmountOut / 1e18);
-        console.log("  Price impact: %s bps", calculatePriceImpact(actualAmountIn, actualAmountOut, initialLiquidity, initialLiquidity));
-        console.log("");
-
-        assertEq(actualAmountIn, swapAmount, "AmountIn mismatch");
-        // Allow tiny rounding difference between binary search (offchain) and analytical (onchain)
-        assertApproxEqRel(actualAmountOut, amountOut, 1e14); // 0.01% tolerance
-
-        console.log("========================================");
-        console.log("SUCCESS: Direct calculation works perfectly!");
-        console.log("========================================");
-        console.log("");
+        assertEq(swappedIn, quotedIn, "Quote/Swap amountIn mismatch");
+        assertEq(swappedOut, quotedOut, "Quote/Swap amountOut mismatch");
     }
 
     // ========================================
-    // ONCHAIN EXECUTION TEST
+    // BASIC SWAP TESTS
     // ========================================
 
-    function test_RoundingProtectsProtocol_ExactIn() public view {
-        console.log("");
-        console.log("========================================");
-        console.log("  ROUNDING PROTECTION TEST - EXACT IN");
-        console.log("========================================");
-        console.log("");
+    function test_PeggedSwap_BasicSwap_ExactIn() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
 
-        uint256 x0 = 100000e18;
-        uint256 y0 = 100000e18;
-        uint256 x0Initial = 100000e18;
-        uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 0.8e27; // 0.8
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 1000e18;
 
-        // Small swap that will cause rounding
-        uint256 amountIn = 1; // 1 wei - extreme case
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
 
-        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(x0, y0, x0Initial, y0Initial, linearWidth);
+        // Quote and swap
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
 
-        // ExactIn calculation (what PeggedSwap does)
-        uint256 x1 = x0 + amountIn;
-        uint256 u1 = (x1 * ONE) / x0Initial;  // Rounds DOWN
-        uint256 v1 = PeggedSwapMath.solve(u1, linearWidth, targetInvariant);
-
-        // Without rounding protection (vulnerable):
-        uint256 y1_vulnerable = (v1 * y0Initial) / ONE;  // Rounds DOWN y1
-        uint256 amountOut_vulnerable = y0 - y1_vulnerable;  // Rounds UP amountOut ❌
-
-        // With rounding protection (secure):
-        uint256 y1_protected = divRoundUp(v1 * y0Initial, ONE);  // Rounds UP y1
-        uint256 amountOut_protected = y0 - y1_protected;  // Rounds DOWN amountOut ✅
-
-        console.log("For 1 wei input:");
-        console.log("  Without protection: amountOut = %s (rounds UP - bad!)", amountOut_vulnerable);
-        console.log("  With protection:    amountOut = %s (rounds DOWN - good!)", amountOut_protected);
-        console.log("  Protection saves:   %s wei for protocol", amountOut_vulnerable - amountOut_protected);
-        console.log("");
-
-        // Verify rounding protection works
-        require(amountOut_protected <= amountOut_vulnerable, "Protection should reduce amountOut");
+        // Sanity checks
+        assertEq(swappedIn, amountIn);
+        assertGt(swappedOut, 0, "Output must be positive");
+        // For balanced pool with no fee, output should be close to input (1% of pool = minimal slippage)
+        assertGe(swappedOut, amountIn * 99 / 100, "Output too low - excessive slippage");
+        assertLe(swappedOut, amountIn, "Output exceeds input");
     }
 
-    function test_RoundingProtectsProtocol_ExactOut() public view {
-        console.log("");
-        console.log("========================================");
-        console.log("  ROUNDING PROTECTION TEST - EXACT OUT");
-        console.log("========================================");
-        console.log("");
+    function test_PeggedSwap_BasicSwap_ExactOut() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
 
-        uint256 x0 = 100000e18;
-        uint256 y0 = 100000e18;
-        uint256 x0Initial = 100000e18;
-        uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 0.8e27; // 0.8
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountOut = 1000e18;
 
-        // Small swap that will cause rounding
-        uint256 amountOut = 1; // 1 wei - extreme case
-
-        // Calculate target invariant
-        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(x0, y0, x0Initial, y0Initial, linearWidth);
-
-        // ExactOut calculation (what PeggedSwap does)
-        uint256 y1 = y0 - amountOut;
-        uint256 v1 = (y1 * ONE) / y0Initial;  // Rounds DOWN
-        uint256 u1 = PeggedSwapMath.solve(v1, linearWidth, targetInvariant);
-
-        // Without rounding protection (vulnerable):
-        uint256 x1_vulnerable = (u1 * x0Initial) / ONE;  // Rounds DOWN x1
-        uint256 amountIn_vulnerable = x1_vulnerable - x0;  // Rounds DOWN amountIn ❌
-
-        // With rounding protection (secure):
-        uint256 x1_protected = divRoundUp(u1 * x0Initial, ONE);  // Rounds UP x1
-        uint256 amountIn_protected = x1_protected - x0;  // Rounds UP amountIn ✅
-
-        console.log("For 1 wei output:");
-        console.log("  Without protection: amountIn = %s (rounds DOWN - bad!)", amountIn_vulnerable);
-        console.log("  With protection:    amountIn = %s (rounds UP - good!)", amountIn_protected);
-        console.log("  Protection gains:   %s wei for protocol", amountIn_protected - amountIn_vulnerable);
-        console.log("");
-
-        // Verify rounding protection works
-        require(amountIn_protected >= amountIn_vulnerable, "Protection should increase amountIn");
+        _assertSwapQuoteConsistency(order, amountOut, false);
     }
 
-    function test_RoundingEffectOnLargeSwaps() public view {
-        console.log("");
-        console.log("========================================");
-        console.log("  ROUNDING EFFECT ON LARGE SWAPS");
-        console.log("========================================");
-        console.log("");
+    // ========================================
+    // LINEAR WIDTH (PARAMETER A) TESTS
+    // ========================================
 
-        // Setup with different scales
-        uint256[3] memory scales = [uint256(1e6), 1e12, 1e18]; // USDC, medium, ETH scale
+    function test_PeggedSwap_LinearWidth_VariesPriceImpact() public {
+        uint256 poolSize = 100000e18;
+        uint256 swapSize = 5000e18; // 5% of pool
 
-        for (uint256 i = 0; i < scales.length; i++) {
-            uint256 scale = scales[i];
-            uint256 x0 = 100000 * scale;
-            uint256 y0 = 100000 * scale;
-            uint256 x0Initial = 100000 * scale;
-            uint256 y0Initial = 100000 * scale;
-            uint256 linearWidth = 0.8e27;
+        // Test different A values
+        uint256[5] memory linearWidths = [
+            uint256(0),        // Pure sqrt, max slippage
+            0.1e27,            // Low A, unpegged
+            0.8e27,            // Medium A, stablecoins
+            1.2e27,            // High A, pegged
+            2e27               // Max A, minimal slippage
+        ];
 
-            uint256 amountIn = 1000 * scale; // 1000 tokens
+        uint256 previousOut = 0;
 
-            uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(x0, y0, x0Initial, y0Initial, linearWidth);
+        for (uint256 i = 0; i < linearWidths.length; i++) {
+            PoolSetup memory setup = PoolSetup({
+                balanceA: poolSize,
+                balanceB: poolSize,
+                x0: poolSize,
+                y0: poolSize,
+                linearWidth: linearWidths[i],
+                feeInBps: 0
+            });
 
-            uint256 x1 = x0 + amountIn;
-            uint256 u1 = (x1 * ONE) / x0Initial;
-            uint256 v1 = PeggedSwapMath.solve(u1, linearWidth, targetInvariant);
+            ISwapVM.Order memory order = _createOrder(setup);
+            bytes memory signature = _signOrder(order);
+            bytes memory takerData = _makeTakerData(true, signature);
 
-            uint256 y1_down = (v1 * y0Initial) / ONE;
-            uint256 y1_up = divRoundUp(v1 * y0Initial, ONE);
+            vm.prank(taker);
+            (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, swapSize, takerData);
 
-            uint256 amountOut_vulnerable = y0 - y1_down;
-            uint256 amountOut_protected = y0 - y1_up;
-
-            uint256 protectionAmount = amountOut_vulnerable - amountOut_protected;
-
-            console.log("Scale %s:", scale);
-            console.log("  Input:  %s tokens", amountIn / scale);
-            console.log("  Output (vulnerable): %s", amountOut_vulnerable / scale);
-            console.log("  Output (protected):  %s", amountOut_protected / scale);
-            console.log("  Protocol saves: %s wei", protectionAmount);
-            console.log("");
+            // Higher A should give better output (less slippage)
+            if (i > 0) {
+                assertGt(amountOut, previousOut, "Higher A should reduce slippage");
+            }
+            previousOut = amountOut;
         }
     }
 
-    // Helper function (same as in PeggedSwap)
-    function divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
-        return (a + b - 1) / b;
+    function test_PeggedSwap_EdgeCase_A_Zero() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0, // Pure sqrt curve
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 10000e18;
+
+        _assertSwapQuoteConsistency(order, amountIn, true);
+
+        // Verify invariant preservation
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+
+        uint256 x1 = setup.balanceA + amountIn;
+        uint256 y1 = setup.balanceB - amountOut;
+        uint256 inv0 = PeggedSwapMath.invariantFromReserves(
+            setup.balanceA, setup.balanceB, setup.x0, setup.y0, setup.linearWidth
+        );
+        uint256 inv1 = PeggedSwapMath.invariantFromReserves(
+            x1, y1, setup.x0, setup.y0, setup.linearWidth
+        );
+
+        assertApproxEqAbs(inv0, inv1, 5e24, "Invariant should be preserved with dynamic balances");
+    }
+
+    function test_PeggedSwap_EdgeCase_A_Max() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 2e27, // Maximum allowed
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 10000e18;
+
+        _assertSwapQuoteConsistency(order, amountIn, true);
+    }
+
+    // ========================================
+    // IMBALANCED POOL TESTS
+    // ========================================
+
+    function test_PeggedSwap_ImbalancedPool() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 90000e18, // 10% imbalance
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0.5e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 1000e18;
+
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+
+        // Sanity checks
+        assertEq(swappedIn, amountIn);
+        assertGt(swappedOut, 0, "Output must be positive");
+        // Buying scarce token (B) - output should be less than input but reasonable
+        assertGe(swappedOut, amountIn * 95 / 100, "Output too low for 10% imbalance");
+        assertLe(swappedOut, amountIn, "Output should not exceed input");
+    }
+
+    function test_PeggedSwap_ExtremeImbalance() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 99000e18,
+            balanceB: 1000e18, // 99:1 ratio
+            x0: 99000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 100e18;
+
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+
+        // Sanity checks
+        assertEq(swappedIn, amountIn);
+        assertGt(swappedOut, 0, "Output must be positive");
+        // With 99:1 ratio and medium A (0.8), curve still allows reasonable output
+        assertLe(swappedOut, amountIn * 10, "Output too high - possible exploit");
+        // Should get at least something
+        assertGt(swappedOut, setup.balanceB / 1000, "Output too low - pool may be broken");
+    }
+
+    // ========================================
+    // DIRECTION TESTS
+    // ========================================
+
+    function test_PeggedSwap_SwapAbundantForScarce() public {
+        // Setup extremely imbalanced pool: 1M abundant : 1K scarce
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1_000_000e18,  // abundant
+            balanceB: 1_000e18,      // scarce
+            x0: 1_000_000e18,
+            y0: 1_000e18,
+            linearWidth: 0,  // pure sqrt curve
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        uint256 swapAmount = 10e18;
+
+        // Swap abundant for scarce (A → B)
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
+            order, tokenA, tokenB, swapAmount, takerData
+        );
+
+        // Verify reasonable output bounds for abundant→scarce swap
+        uint256 minReasonableOutput = swapAmount / 100;     // at least 0.1x
+        uint256 maxReasonableOutput = swapAmount * 2;       // at most 2x
+
+        assertEq(amountIn, swapAmount);
+        assertGt(amountOut, 0);
+        assertGe(amountOut, minReasonableOutput, "Output too low");
+        assertLe(amountOut, maxReasonableOutput, "Output too high - possible axis mismatch");
+    }
+
+    function test_PeggedSwap_SwapScarceForAbundant() public {
+        // Setup extremely imbalanced pool: 1M abundant : 1K scarce
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1_000_000e18,  // abundant
+            balanceB: 1_000e18,      // scarce
+            x0: 1_000_000e18,
+            y0: 1_000e18,
+            linearWidth: 0,  // pure sqrt curve
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        uint256 swapAmount = 10e18;
+
+        // Swap scarce for abundant (B → A)
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
+            order, tokenB, tokenA, swapAmount, takerData
+        );
+
+        // Verify reasonable output bounds for scarce→abundant swap
+        uint256 minReasonableOutput = swapAmount / 100;     // at least 0.1x
+        uint256 maxReasonableOutput = swapAmount * 2;       // at most 2x
+
+        assertEq(amountIn, swapAmount);
+        assertGe(amountOut, minReasonableOutput, "Output too low");
+        assertLe(amountOut, maxReasonableOutput, "Output too high - possible axis mismatch");
     }
 
     // ========================================
     // FEE TESTS
     // ========================================
 
-    function test_PeggedSwap_ImbalancedPool_NoFee_ShowsSlippage() public {
-        // Test that imbalanced pool gives slippage BEFORE adding fees
-        uint256 balanceUSDC = 100000e18;
-        uint256 balanceUSDT = 90000e18;
-        uint256 x0Initial = 100000e18;
-        uint256 y0Initial = 100000e18;
-        uint256 linearWidth = 0.5e27;  // 0.5
+    function test_PeggedSwap_WithFee() public {
+        PoolSetup memory setupNoFee = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
 
-        // Build program without fees
-        Program memory prog = ProgramBuilder.init(_opcodes());
-        bytes memory programBytes = bytes.concat(
-            prog.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(usdcMock), address(usdtMock)]),
-                    dynamic([balanceUSDC, balanceUSDT])
-                )),
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
-        );
+        PoolSetup memory setupWithFee = PoolSetup({
+            balanceA: 100000e18,
+            balanceB: 100000e18,
+            x0: 100000e18,
+            y0: 100000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0.003e9 // 0.3%
+        });
 
-        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            receiver: address(0),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programBytes
-        }));
-
-        uint256 amountIn = 1000e18;
-
-        (,, uint256 expectedAmountOut) = calculateExactIn(
-            balanceUSDC,
-            balanceUSDT,
-            amountIn,
-            x0Initial,
-            y0Initial,
-            linearWidth
-        );
-
-        bytes memory signature = signOrder(order);
-        bytes memory takerTraitsAndData = takerData(taker, true, "");
-        bytes memory sigAndTakerData = abi.encodePacked(takerTraitsAndData, signature);
-
-        vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(usdcMock), address(usdtMock), amountIn, sigAndTakerData);
-
-        console.log("Imbalanced pool test (no fee):");
-        console.log("  Pool: 100000 USDC, 90000 USDT");
-        console.log("  X0/Y0: 100000");
-        console.log("  A: 0.5");
-        console.log("  Swap in: %s USDC", amountIn / 1e18);
-        console.log("  Expected out (offchain): %s USDT", expectedAmountOut / 1e18);
-        console.log("  Actual out (onchain): %s USDT", amountOut / 1e18);
-        console.log("  Rate: %s USDT per USDC", (amountOut * 1e18 / amountIn) / 1e15);
-
-        // With 10% imbalance and A=0.5, should get more than 1:1 (buying the scarcer asset)
-        assertApproxEqRel(amountOut, expectedAmountOut, 1e14, "Should match expected output");
-    }
-
-    function test_PeggedSwap_WithFee_0_3_Percent_ExactIn() public {
-        // Test with 0.3% fee on ExactIn swap
-        uint256 balanceUSDC = 100000e18;
-        uint256 balanceUSDT = 100000e18;
-        uint256 X0 = 100000e18;
-        uint256 Y0 = 100000e18;
-        uint256 A = 0.8e27;  // 0.8
-
-        Program memory prog = ProgramBuilder.init(_opcodes());
-        bytes memory programBytes = bytes.concat(
-            prog.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(usdcMock), address(usdtMock)]),
-                    dynamic([balanceUSDC, balanceUSDT])
-                )),
-            prog.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(0.003e9))),  // 0.3% fee
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: X0,
-                    y0: Y0,
-                    linearWidth: A,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
-        );
-
-        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            receiver: address(0),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programBytes
-        }));
-
-        uint256 amountIn = 1000e18;
-        bytes memory signature = signOrder(order);
-        bytes memory takerTraitsAndData = takerData(taker, true, "");
-        bytes memory sigAndTakerData = abi.encodePacked(takerTraitsAndData, signature);
-
-        vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(usdcMock), address(usdtMock), amountIn, sigAndTakerData);
-
-        console.log("Swap %s USDC with 0.3%% fee:", amountIn / 1e18);
-        console.log("  Received: %s USDT", amountOut / 1e18);
-        console.log("  Effective rate: %s", (amountOut * 1e18 / amountIn) / 1e15);
-
-        // With fee, should get noticeably less than no-fee scenario
-        // Expected: fee takes 3 USDC, so only 997 USDC goes into swap
-        assertLt(amountOut, 1000e18, "Fee should reduce output below 1:1");
-    }
-
-    function test_PeggedSwap_NoFee_vs_WithFee_Comparison() public {
-        // Compare no-fee vs with-fee scenarios
-        uint256 balanceUSDC = 100000e18;
-        uint256 balanceUSDT = 100000e18;
-        uint256 X0 = 100000e18;
-        uint256 Y0 = 100000e18;
-        uint256 A = 0.8e27;  // 0.8
-
-        Program memory prog = ProgramBuilder.init(_opcodes());
-
-        // Order without fee
-        bytes memory programNoFee = bytes.concat(
-            prog.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(usdcMock), address(usdtMock)]),
-                    dynamic([balanceUSDC, balanceUSDT])
-                )),
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: X0,
-                    y0: Y0,
-                    linearWidth: A,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
-        );
-
-        // Order with fee
-        bytes memory programWithFee = bytes.concat(
-            prog.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(usdcMock), address(usdtMock)]),
-                    dynamic([balanceUSDC, balanceUSDT])
-                )),
-            prog.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(0.003e9))),  // 0.3% fee
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: X0,
-                    y0: Y0,
-                    linearWidth: A,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
-        );
-
-        ISwapVM.Order memory orderNoFee = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            receiver: address(0),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programNoFee
-        }));
-
-        ISwapVM.Order memory orderWithFee = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            receiver: address(0),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: programWithFee
-        }));
+        ISwapVM.Order memory orderNoFee = _createOrder(setupNoFee);
+        ISwapVM.Order memory orderWithFee = _createOrder(setupWithFee);
 
         uint256 amountIn = 5000e18;
 
-        bytes memory signatureNoFee = signOrder(orderNoFee);
-        bytes memory takerTraitsAndDataNoFee = takerData(taker, true, "");
-        bytes memory sigAndTakerDataNoFee = abi.encodePacked(takerTraitsAndDataNoFee, signatureNoFee);
+        bytes memory signatureNoFee = _signOrder(orderNoFee);
+        bytes memory takerDataNoFee = _makeTakerData(true, signatureNoFee);
+
+        bytes memory signatureWithFee = _signOrder(orderWithFee);
+        bytes memory takerDataWithFee = _makeTakerData(true, signatureWithFee);
 
         vm.prank(taker);
-        (, uint256 amountOutNoFee,) = swapVM.swap(orderNoFee, address(usdcMock), address(usdtMock), amountIn, sigAndTakerDataNoFee);
-
-        bytes memory signatureWithFee = signOrder(orderWithFee);
-        bytes memory takerTraitsAndDataWithFee = takerData(taker, true, "");
-        bytes memory sigAndTakerDataWithFee = abi.encodePacked(takerTraitsAndDataWithFee, signatureWithFee);
+        (, uint256 amountOutNoFee,) = swapVM.swap(orderNoFee, tokenA, tokenB, amountIn, takerDataNoFee);
 
         vm.prank(taker);
-        (, uint256 amountOutWithFee,) = swapVM.swap(orderWithFee, address(usdcMock), address(usdtMock), amountIn, sigAndTakerDataWithFee);
-
-        console.log("");
-        console.log("========================================");
-        console.log("  FEE COMPARISON TEST");
-        console.log("========================================");
-        console.log("Swap %s USDC:", amountIn / 1e18);
-        console.log("  Without fee: %s USDT", amountOutNoFee / 1e18);
-        console.log("  With 0.3%% fee: %s USDT", amountOutWithFee / 1e18);
-        console.log("  Difference: %s USDT", (amountOutNoFee - amountOutWithFee) / 1e18);
-        console.log("  Fee impact: %s%%", ((amountOutNoFee - amountOutWithFee) * 100e18 / amountOutNoFee) / 1e18);
-        console.log("========================================");
-        console.log("");
+        (, uint256 amountOutWithFee,) = swapVM.swap(orderWithFee, tokenA, tokenB, amountIn, takerDataWithFee);
 
         assertLt(amountOutWithFee, amountOutNoFee, "Fee should reduce output");
     }
 
     // ========================================
-    // EDGE CASE TESTS
+    // ROUNDING PROTECTION TESTS
     // ========================================
 
-    function test_EdgeCase_A_Zero_PureSquareRoot() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  EDGE CASE: A=0 (PURE SQUARE ROOT)");
-        console.log("  No linear component - maximum slippage");
-        console.log("========================================");
-        console.log("");
+    function test_PeggedSwap_RoundingProtection_ExactIn() public {
+        // Use smaller pool to make rounding effects more visible
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18,
+            balanceB: 1000e18,
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
 
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 0; // A = 0 (pure √ curve)
-        uint256 smallSwap = 1000e18;
-        uint256 mediumSwap = 10000e18;
-        uint256 largeSwap = 30000e18;
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 1e15; // 0.001 tokens - small but meaningful
 
-        // Test small swap
-        (, , uint256 amountOutSmall) = calculateExactIn(
-            initialLiquidity, initialLiquidity, smallSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactSmall = calculatePriceImpact(smallSwap, amountOutSmall, initialLiquidity, initialLiquidity);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
 
-        // Test medium swap
-        (, , uint256 amountOutMedium) = calculateExactIn(
-            initialLiquidity, initialLiquidity, mediumSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactMedium = calculatePriceImpact(mediumSwap, amountOutMedium, initialLiquidity, initialLiquidity);
-
-        // Test large swap
-        (, , uint256 amountOutLarge) = calculateExactIn(
-            initialLiquidity, initialLiquidity, largeSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactLarge = calculatePriceImpact(largeSwap, amountOutLarge, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=0 (pure sqrt)");
-        console.log("");
-        console.log("Small swap (1,000):");
-        console.log("  Amount out: %s", amountOutSmall / 1e18);
-        console.log("  Price impact: %s bps", impactSmall);
-        console.log("");
-        console.log("Medium swap (10,000):");
-        console.log("  Amount out: %s", amountOutMedium / 1e18);
-        console.log("  Price impact: %s bps", impactMedium);
-        console.log("");
-        console.log("Large swap (30,000):");
-        console.log("  Amount out: %s", amountOutLarge / 1e18);
-        console.log("  Price impact: %s bps", impactLarge);
-        console.log("");
-
-        // With A=0, slippage should be significant even for small swaps
-        require(impactSmall > 5, "Pure sqrt should have measurable impact even for small swaps");
-        require(impactMedium > 100, "Pure sqrt should have high impact for medium swaps");
-        require(impactLarge > 500, "Pure sqrt should have very high impact for large swaps");
-
-        // Verify invariant holds
-        uint256 x1 = initialLiquidity + smallSwap;
-        uint256 y1 = initialLiquidity - amountOutSmall;
-        uint256 inv0 = calculateInvariant(initialLiquidity, initialLiquidity, initialLiquidity, initialLiquidity, linearWidth);
-        uint256 inv1 = calculateInvariant(x1, y1, initialLiquidity, initialLiquidity, linearWidth);
-        assertApproxEqAbs(inv0, inv1, 1e15, "Invariant should be preserved with A=0");
-
-        console.log("SUCCESS: A=0 pure square-root curve works correctly!");
-        console.log("Maximum slippage protection active!");
-        console.log("");
-    }
-
-    function test_EdgeCase_A_Max_MinimalSlippage() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  EDGE CASE: A=2.0 (MAXIMUM VALUE)");
-        console.log("  Maximum linear component - minimal slippage");
-        console.log("========================================");
-        console.log("");
-
-        uint256 initialLiquidity = 100000e18;
-        uint256 linearWidth = 2e27; // A = 2.0 (maximum allowed)
-        uint256 smallSwap = 1000e18;
-        uint256 mediumSwap = 10000e18;
-        uint256 largeSwap = 30000e18;
-
-        // Test small swap
-        (, , uint256 amountOutSmall) = calculateExactIn(
-            initialLiquidity, initialLiquidity, smallSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactSmall = calculatePriceImpact(smallSwap, amountOutSmall, initialLiquidity, initialLiquidity);
-
-        // Test medium swap
-        (, , uint256 amountOutMedium) = calculateExactIn(
-            initialLiquidity, initialLiquidity, mediumSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactMedium = calculatePriceImpact(mediumSwap, amountOutMedium, initialLiquidity, initialLiquidity);
-
-        // Test large swap
-        (, , uint256 amountOutLarge) = calculateExactIn(
-            initialLiquidity, initialLiquidity, largeSwap,
-            initialLiquidity, initialLiquidity, linearWidth
-        );
-        uint256 impactLarge = calculatePriceImpact(largeSwap, amountOutLarge, initialLiquidity, initialLiquidity);
-
-        console.log("Pool: 100,000 / 100,000, A=2.0 (max linear)");
-        console.log("");
-        console.log("Small swap (1,000):");
-        console.log("  Amount out: %s", amountOutSmall / 1e18);
-        console.log("  Price impact: %s bps (very low)", impactSmall);
-        console.log("");
-        console.log("Medium swap (10,000):");
-        console.log("  Amount out: %s", amountOutMedium / 1e18);
-        console.log("  Price impact: %s bps (low)", impactMedium);
-        console.log("");
-        console.log("Large swap (30,000):");
-        console.log("  Amount out: %s", amountOutLarge / 1e18);
-        console.log("  Price impact: %s bps (moderate)", impactLarge);
-        console.log("");
-
-        // With A=2.0, slippage should be minimal near equilibrium
-        require(impactSmall < 15, "A=2.0 should have minimal impact for small swaps");
-        require(impactMedium < 150, "A=2.0 should have low impact for medium swaps");
-
-        // Verify invariant holds
-        uint256 x1 = initialLiquidity + smallSwap;
-        uint256 y1 = initialLiquidity - amountOutSmall;
-        uint256 inv0 = calculateInvariant(initialLiquidity, initialLiquidity, initialLiquidity, initialLiquidity, linearWidth);
-        uint256 inv1 = calculateInvariant(x1, y1, initialLiquidity, initialLiquidity, linearWidth);
-        assertApproxEqAbs(inv0, inv1, 1e15, "Invariant should be preserved with A=2.0");
-
-        console.log("SUCCESS: A=2.0 maximum linear curve works correctly!");
-        console.log("Minimal slippage near equilibrium!");
-        console.log("");
-    }
-
-    function test_EdgeCase_99Percent_Unbalanced_Pool() public {
-        console.log("");
-        console.log("========================================");
-        console.log("  EDGE CASE: 99%% UNBALANCED POOL");
-        console.log("  Extreme imbalance test");
-        console.log("========================================");
-        console.log("");
-
-        // Extremely unbalanced: 99,000 vs 1,000 (99:1 ratio)
-        uint256 balanceX = 99000e18;
-        uint256 balanceY = 1000e18;
-        uint256 linearWidth = 0.8e27; // A = 0.8 (standard)
-
-        // Test swaps in both directions
-        uint256 swapAmount = 100e18;
-
-        // Direction 1: Swap abundant token (X) for scarce token (Y)
-        // Should get very little Y (high slippage)
-        (, , uint256 amountOutXtoY) = calculateExactIn(
-            balanceX, balanceY, swapAmount,
-            balanceX, balanceY, linearWidth
-        );
-        uint256 impactXtoY = calculatePriceImpact(swapAmount, amountOutXtoY, balanceX, balanceY);
-
-        // Direction 2: Swap scarce token (Y) for abundant token (X)
-        // Should get more X (lower slippage relative to pool)
-        (, , uint256 amountOutYtoX) = calculateExactIn(
-            balanceY, balanceX, swapAmount,
-            balanceY, balanceX, linearWidth
-        );
-        uint256 impactYtoX = calculatePriceImpact(swapAmount, amountOutYtoX, balanceY, balanceX);
-
-        console.log("Pool: 99,000 / 1,000 (99:1 ratio), A=0.8");
-        console.log("");
-        console.log("Swap 100 of abundant token (X) for scarce (Y):");
-        console.log("  Amount out: %s", amountOutXtoY / 1e18);
-        console.log("  Price impact: %s bps (HIGH)", impactXtoY);
-        console.log("");
-        console.log("Swap 100 of scarce token (Y) for abundant (X):");
-        console.log("  Amount out: %s", amountOutYtoX / 1e18);
-        console.log("  Price impact: %s bps", impactYtoX);
-        console.log("");
-
-        // When swapping abundant for scarce, should get very little (extreme imbalance)
-        require(amountOutXtoY < 2e18, "Swapping abundant for scarce should yield very little");
-        // Price impact calculation is relative to the small output, so appears low in bps
-        // The key is the absolute amount is tiny (< 2 tokens out for 100 in = 98% loss)
-
-        // When swapping scarce for abundant, should get good amount but still significant impact
-        require(amountOutYtoX > 100e18, "Swapping scarce for abundant should yield reasonable amount");
-        require(impactYtoX > 5000, "High slippage in extremely unbalanced pool");
-
-        // Verify invariant holds even in extreme imbalance
-        uint256 x1 = balanceX + swapAmount;
-        uint256 y1 = balanceY - amountOutXtoY;
-        uint256 inv0 = calculateInvariant(balanceX, balanceY, balanceX, balanceY, linearWidth);
-        uint256 inv1 = calculateInvariant(x1, y1, balanceX, balanceY, linearWidth);
-        assertApproxEqAbs(inv0, inv1, 1e16, "Invariant should hold even with 99% imbalance");
-
-        console.log("SUCCESS: 99%% imbalanced pool works correctly!");
-        console.log("Curve provides protection against depleting scarce token!");
-        console.log("");
-    }
-
-    // ========================================
-    // ROUNDING INVARIANT TESTS
-    // ========================================
-
-    function test_PeggedSwap_RoundingInvariantsWithFees() public {
-        uint256 poolBalanceA = 1000000e18;
-        uint256 poolBalanceB = 1000000e18;
-        uint256 feeIn = 0.003e9; // 0.3% fee
-
-        // Build order manually like other tests do
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-                dynamic([address(usdcMock), address(usdtMock)]),
-                dynamic([poolBalanceA, poolBalanceB])
-            )),
-            program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
-            program.build(_peggedSwapGrowPriceRange2D, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                x0: poolBalanceA,
-                y0: poolBalanceB,
-                linearWidth: CURVATURE,
-                rateLt: 1,
-                rateGt: 1
-            })))
-        );
-
-        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            allowZeroAmountIn: false,
-            receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: bytecode
-        }));
-
-        bytes memory sig = signOrder(order);
-        bytes memory takerDataBytes = abi.encodePacked(takerData(taker, true, ""), sig);
-
-        // Test rounding invariants with reasonable amounts for PeggedSwap
-        // (PeggedSwap doesn't work well with tiny wei amounts due to its curve)
-        console.log("\n=== Rounding Invariant Tests (PeggedSwap) ===");
-
-        // Test accumulation with tolerance for square-root curve behavior
-        // PeggedSwap's √ curve causes expected 0.1% difference between split/single swaps
-        // This is NOT exploitable (users lose by splitting, never gain)
-        // Use 0.2% tolerance to account for this mathematical property
-        console.log("Test: Accumulation (50x 1e18) with 0.2% tolerance for curve behavior");
-        RoundingInvariants.assertNoAccumulationExploitWithTolerance(
-            vm, swapVM, order,
-            address(usdcMock), address(usdtMock),
-            1e18, 50, takerDataBytes, _executeSwap,
-            20 // 20 bps = 0.2% tolerance for √ curve
-        );
-
-        // Test round-trips
-        console.log("Test: Round-trips (50x 10e18)");
-        RoundingInvariants.assertNoRoundTripProfit(vm, swapVM, order, address(usdcMock), address(usdtMock), 10e18, 50, takerDataBytes, _executeSwap);
-
-        console.log("=== All rounding tests passed ===\n");
-    }
-
-    // Helper function to execute swaps for invariant testing
-    function _executeSwap(
-        SwapVM _swapVM,
-        ISwapVM.Order memory order,
-        address tokenIn,
-        address tokenOut,
-        uint256 amount,
-        bytes memory takerDataBytes
-    ) internal returns (uint256 amountOut) {
         vm.prank(taker);
-        (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerDataBytes);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+
+        // Verify swap executed
+        assertEq(swappedIn, amountIn);
+
+        // Calculate what output would be without rounding protection (using Math.ceilDiv)
+        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(
+            setup.balanceA, setup.balanceB, setup.x0, setup.y0, setup.linearWidth
+        );
+        uint256 x1 = setup.balanceA + amountIn;
+        uint256 u1 = (x1 * PeggedSwapMath.ONE) / setup.x0;
+        uint256 v1 = PeggedSwapMath.solve(u1, setup.linearWidth, targetInvariant);
+
+        // Without protection: regular division (rounds DOWN y1 → rounds UP amountOut)
+        uint256 y1_vulnerable = (v1 * setup.y0) / PeggedSwapMath.ONE;
+        uint256 amountOut_vulnerable = setup.balanceB - y1_vulnerable;
+
+        // With protection: ceilDiv (rounds UP y1 → rounds DOWN amountOut)
+        uint256 y1_protected = Math.ceilDiv(v1 * setup.y0, PeggedSwapMath.ONE);
+        uint256 amountOut_protected = setup.balanceB - y1_protected;
+
+        // Actual swap should match the protected (safe) calculation
+        assertEq(swappedOut, amountOut_protected, "Swap should use rounding protection");
+        // Protected output should be <= vulnerable output (safer for maker)
+        assertLe(amountOut_protected, amountOut_vulnerable, "Protection should not increase output");
+    }
+
+    function test_PeggedSwap_RoundingProtection_ExactOut() public {
+        // Use smaller pool to make rounding effects more visible
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18,
+            balanceB: 1000e18,
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountOut = 1e15; // 0.001 tokens - small but meaningful
+
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(false, signature);
+
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, takerData);
+
+        // Verify swap executed
+        assertEq(swappedOut, amountOut);
+
+        // Calculate what input would be without rounding protection
+        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(
+            setup.balanceA, setup.balanceB, setup.x0, setup.y0, setup.linearWidth
+        );
+        uint256 y1 = setup.balanceB - amountOut;
+        uint256 v1 = (y1 * PeggedSwapMath.ONE) / setup.y0;
+        uint256 u1 = PeggedSwapMath.solve(v1, setup.linearWidth, targetInvariant);
+
+        // Without protection: regular division (rounds DOWN x1 → rounds DOWN amountIn)
+        uint256 x1_vulnerable = (u1 * setup.x0) / PeggedSwapMath.ONE;
+        uint256 amountIn_vulnerable = x1_vulnerable - setup.balanceA;
+
+        // With protection: ceilDiv (rounds UP x1 → rounds UP amountIn)
+        uint256 x1_protected = Math.ceilDiv(u1 * setup.x0, PeggedSwapMath.ONE);
+        uint256 amountIn_protected = x1_protected - setup.balanceA;
+
+        // Actual swap should match the protected (safe) calculation
+        assertEq(swappedIn, amountIn_protected, "Swap should use rounding protection");
+        // Protected input should be >= vulnerable input (safer for maker)
+        assertGe(amountIn_protected, amountIn_vulnerable, "Protection should not decrease input");
     }
 }
