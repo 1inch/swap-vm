@@ -93,7 +93,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
      * @dev Before the fix, reverse swaps in asymmetric pools with different decimals
      *      would result in wildly incorrect exchange rates due to axis swap misalignment
      */
-    function test_AsymmetricPool_ReverseSwap_NoAxisMismatch() public view {
+    function test_AsymmetricPool_ReverseSwap_NoAxisMismatch() public {
         // Create an asymmetric pool setup to test the vulnerability
         // Token A (18 dec): abundant asset - 100,000 tokens
         // Token B (6 dec): scarce asset - 10 tokens
