@@ -21,6 +21,13 @@ import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
+// Helper contract to test internal library functions
+contract PeggedSwapMathWrapper {
+    function solve(uint256 u, uint256 a, uint256 invariantC) external pure returns (uint256) {
+        return PeggedSwapMath.solve(u, a, invariantC);
+    }
+}
+
 contract PeggedSwapTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
@@ -573,5 +580,104 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         assertEq(swappedIn, amountIn_protected, "Swap should use rounding protection");
         // Protected input should be >= vulnerable input (safer for maker)
         assertGe(amountIn_protected, amountIn_vulnerable, "Protection should not decrease input");
+    }
+
+    // ========================================
+    // NEGATIVE TESTS (REVERTS)
+    // ========================================
+
+    function test_PeggedSwap_Revert_ZeroBalanceIn() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 0,  // Zero balance
+            balanceB: 1000e18,
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PeggedSwap.PeggedSwapRequiresBothBalancesNonZero.selector,
+                0,
+                setup.balanceB
+            )
+        );
+        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+    }
+
+    function test_PeggedSwap_Revert_ZeroBalanceOut() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18,
+            balanceB: 0,  // Zero balance
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PeggedSwap.PeggedSwapRequiresBothBalancesNonZero.selector,
+                setup.balanceA,
+                0
+            )
+        );
+        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+    }
+
+    function test_PeggedSwap_Revert_ExcessiveAmountOut() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18,
+            balanceB: 1000e18,
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(false, signature);
+
+        // Try to swap out more than available
+        uint256 excessiveAmount = setup.balanceB + 1;
+
+        vm.prank(taker);
+        vm.expectRevert();  // Arithmetic underflow in y1 = y0 - amountOut * rateOut
+        swapVM.swap(order, tokenA, tokenB, excessiveAmount, takerData);
+    }
+
+    // ========================================
+    // PEGGEDSWAPMATH UNIT TESTS
+    // ========================================
+
+    function test_PeggedSwapMath_Revert_InvalidInput() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        // Create a situation where invariantC < sqrtU + au
+        uint256 u = 2e27;  // u = 2.0
+        uint256 a = 1e27;  // A = 1.0
+
+        // Calculate minimum valid invariant
+        uint256 sqrtU = Math.sqrt(u * PeggedSwapMath.ONE);
+        uint256 au = (a * u) / PeggedSwapMath.ONE;
+        uint256 minInvariant = sqrtU + au;
+
+        // Use invariant that is too low (below minimum)
+        uint256 invalidInvariant = minInvariant - 1;
+
+        vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
+        wrapper.solve(u, a, invalidInvariant);
     }
 }
