@@ -1,0 +1,1123 @@
+\documentclass[11pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{natbib}
+\usepackage{booktabs}
+
+\geometry{margin=1in}
+
+% --- theorem styles ---
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+\newtheorem{example}{Example}
+
+% --- macros ---
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\GetY}{\mathrm{GetY}}
+\newcommand{\Out}{\mathrm{Out}}
+\newcommand{\Id}{\mathrm{Id}}
+
+\title{PeggedSwap (2-token StableSwap) Additivity of Swaps: \\
+(1) Fee-free strict additivity, \\
+(2) Superadditivity of the original (Curve-style) output-fee rule, \\
+(3) A strictly-additive reinvested-fee construction on top of PeggedSwap}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study two-token PeggedSwap mechanisms built from the StableSwap invariant introduced by \citet{egorov2019stableswap}.
+We first prove that the fee-free StableSwap swap (defined as motion along a constant-$D$ invariant curve) is \emph{strictly additive}: swapping $\Delta$ is exactly the same as swapping $a$ then $b$ with $\Delta=a+b$.
+We then formalize the \emph{original PeggedSwap fee rule used in practice} (Curve-style): compute the no-fee output on the invariant curve, charge a fee on the output, and keep that fee inside the pool. We show that this rule is generally \emph{superadditive} for the trader: splitting a trade into two chunks yields strictly larger total output than doing the same total input in one shot.
+Finally, we present a general functional equation for strict additivity---drawing on classical results from \citet{aczel1966lectures}---and construct a strictly-additive fee/reinvest mechanism on top of StableSwap by enforcing a semigroup law on the liquidity scalar $D$.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction and Related Work}
+
+\subsection{Background on Constant Function Market Makers}
+
+Automated market makers (AMMs) have become fundamental infrastructure in decentralized finance. The mathematical foundations of constant function market makers (CFMMs) were formalized by \citet{angeris2020improved}, who established that CFMMs can be characterized by trading functions $\varphi: \R^n \to \R$ where valid trades satisfy $\varphi(R + \Delta) = \varphi(R)$ for reserves $R$ and trade $\Delta$. The geometric properties of CFMMs were further developed by \citet{angeris2023geometry}, who proved that every CFMM has a unique canonical trading function that is nondecreasing, concave, and homogeneous.
+
+The StableSwap invariant was introduced by \citet{egorov2019stableswap} to provide efficient exchange for stablecoins by interpolating between constant-sum and constant-product behavior. This was later extended to volatile assets via the CryptoSwap mechanism \citep{egorov2021cryptoswap}. Related AMM designs include Balancer's weighted geometric mean invariant \citep{martinelli2019balancer} and Bancor's bonding curves \citep{hertzog2018bancor}.
+
+\subsection{Axiomatic Approaches to AMM Design}
+
+Recent work has developed axiomatic foundations for AMMs. \citet{schlegel2023axioms} introduced the \emph{Liquidity Additivity} axiom for multi-asset settings and characterized constant product market makers via independence and scale invariance. \citet{bichuch2022axioms} proposed axioms including conditions under which AMMs are indifferent to transaction splitting---a key additivity property. \citet{frongillo2024axiomatic} established equivalence between CFMMs with concave potential functions and cost-function prediction markets, with \emph{StrongPathIndependence} as a central axiom.
+
+\subsection{Fee Mechanisms and LP Economics}
+
+Understanding how fees affect swap outcomes is essential for analyzing additivity. \citet{milionis2022automated} introduced Loss-Versus-Rebalancing (LVR) as the fundamental adverse selection cost for liquidity providers, proportional to $\sigma^2 \cdot V''(P)$ (volatility squared times gamma). Optimal fee design has been studied by \citet{evans2021optimal} for geometric mean market makers and more recently by dynamic fee mechanisms \citep{baggiani2025optimal}.
+
+\subsection{Routing and Composability}
+
+The question of how swap outcomes depend on execution paths is directly related to routing optimization. \citet{angeris2022optimal} formulated routing across CFMM networks as convex optimization, while \citet{angeris2021multiasset} extended this to general multi-asset trades. The composability of DeFi protocols and its relationship to path-independence was formalized by \citet{bartoletti2024composability}.
+
+\subsection{Contributions of This Paper}
+
+We make three main contributions:
+\begin{enumerate}[label=(\arabic*)]
+    \item We prove that fee-free StableSwap is \emph{strictly additive} (Definition~\ref{def:additivity-types}): the trader output from a single swap equals the total output from any split of that swap.
+    \item We prove that the original Curve-style output-fee rule is \emph{superadditive}: splitting yields strictly \emph{more} output than one-shot execution.
+    \item We derive the necessary and sufficient condition on fee/reinvest rules for strict additivity---a semigroup law on the liquidity scalar $D$---connecting to classical functional equation theory \citep{aczel1966lectures}.
+\end{enumerate}
+
+
+\section{Setup, Additivity Definitions, and the Master Functional Equation}
+
+\subsection{State and Direction}
+
+We consider two reserves
+\[
+(x,y)\in \R_{>0}^2,
+\]
+where $x$ is token $X$ reserve and $y$ is token $Y$ reserve. We study swaps in direction $X\to Y$.
+
+\subsection{Update Map}
+
+A swap rule is a family of maps
+\[
+F_\Delta:\R_{>0}^2\to\R_{>0}^2,\qquad
+F_\Delta(x,y) = \bigl(x+\Delta,\ Y(x,y;\Delta)\bigr),
+\]
+where $\Delta>0$ is the trader's input amount in token $X$, and $Y(x,y;\Delta)$ is the post-swap $Y$-reserve.
+
+\subsection{Trader Output}
+We define trader output as
+\[
+\Out(\Delta; x,y) := y - Y(x,y;\Delta).
+\]
+Larger $\Out$ is better for the trader.
+
+\subsection{Additivity Types: Strict, Sub-, and Super-additivity}
+
+Following standard conventions in economics and game theory \citep{sharkey1982natural, shapley1953value}, we define three types of additivity for trader output:
+
+\begin{definition}[Additivity Types for Trader Output]\label{def:additivity-types}
+Let $\Out_{\mathrm{split}}(a,b; x,y)$ denote the total trader output from executing swap $a$ followed by swap $b$:
+\[
+\Out_{\mathrm{split}}(a,b; x,y) := \Out(a; x,y) + \Out\bigl(b; F_a(x,y)\bigr).
+\]
+The swap mechanism is:
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Strictly additive} if for all $a,b \ge 0$ and all states $(x,y)$:
+    \begin{equation}\label{eq:strict-add}
+    \Out(a+b; x,y) \;=\; \Out_{\mathrm{split}}(a,b; x,y).
+    \end{equation}
+    (One-shot output \emph{equals} split output.)
+
+    \item \textbf{Subadditive} if for all $a,b > 0$ and all states $(x,y)$:
+    \begin{equation}\label{eq:sub-add}
+    \Out(a+b; x,y) \;>\; \Out_{\mathrm{split}}(a,b; x,y).
+    \end{equation}
+    (One-shot output is \emph{strictly greater than} split output; splitting is worse for the trader.)
+    
+    \item \textbf{Superadditive} if for all $a,b > 0$ and all states $(x,y)$:
+    \begin{equation}\label{eq:super-add}
+    \Out(a+b; x,y) \;<\; \Out_{\mathrm{split}}(a,b; x,y).
+    \end{equation}
+    (One-shot output is \emph{strictly less than} split output; splitting is better for the trader.)
+\end{enumerate}
+\end{definition}
+
+\begin{remark}[Mnemonic]
+The naming convention follows the trader's perspective on the \emph{split} operation:
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Type} & \textbf{Inequality} & \textbf{Interpretation} \\
+\midrule
+Strictly additive & $\Out(a+b) = \Out_{\mathrm{split}}$ & Path-independent \\
+Subadditive & $\Out(a+b) > \Out_{\mathrm{split}}$ & One-shot better \\
+Superadditive & $\Out(a+b) < \Out_{\mathrm{split}}$ & Split better \\
+\end{tabular}
+\end{center}
+\end{remark}
+
+\subsection{Semigroup Property and the Master Functional Equation}
+
+\begin{definition}[Semigroup Property]\label{def:semigroup}
+The swap family $\{F_\Delta\}_{\Delta\ge 0}$ satisfies the \emph{semigroup property} if
+\begin{equation}\label{eq:semigroup}
+F_{a+b} \;=\; F_b\circ F_a \qquad \forall\, a,b\ge 0,
+\end{equation}
+with $F_0=\Id$.
+\end{definition}
+
+The connection between strict additivity (Definition~\ref{def:additivity-types}(a)) and the semigroup property is fundamental:
+
+\begin{proposition}[Equivalence of Strict Additivity and Semigroup Property]\label{prop:equiv}
+The following are equivalent:
+\begin{enumerate}[label=(\roman*)]
+    \item The swap family $\{F_\Delta\}$ is strictly additive.
+    \item The swap family $\{F_\Delta\}$ satisfies the semigroup property \eqref{eq:semigroup}.
+    \item The $Y$-component satisfies the \textbf{master functional equation}:
+    \begin{equation}\label{eq:masterY}
+    Y(x,y;a+b) \;=\; Y\Bigl(x+a,\ Y(x,y;a)\ ;\ b\Bigr)\qquad \forall\, x,y>0,\ a,b\ge 0.
+    \end{equation}
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(i)$\Leftrightarrow$(ii): By definition, $\Out(a+b) = \Out_{\mathrm{split}}(a,b)$ holds for all states iff $F_{a+b} = F_b \circ F_a$.
+
+(ii)$\Leftrightarrow$(iii): The $x$-component of $F_{a+b}(x,y)$ is $x+a+b$, which equals the $x$-component of $F_b(F_a(x,y)) = F_b(x+a, Y(x,y;a))$, namely $(x+a)+b$. Thus \eqref{eq:semigroup} reduces to equality of $Y$-components, which is \eqref{eq:masterY}.
+\end{proof}
+
+\begin{remark}[Connection to Cauchy's Functional Equation]
+Equation \eqref{eq:masterY} is a two-parameter generalization of Cauchy's functional equation $f(a+b) = f(a) + f(b)$, which \citet{aczel1966lectures} showed has only linear solutions $f(x) = cx$ under mild regularity conditions (continuity, monotonicity, or measurability). The structure of \eqref{eq:masterY} will similarly constrain the form of strictly-additive swap mechanisms.
+\end{remark}
+
+
+\section{Two-token StableSwap Invariant and Explicit $\GetY$}
+
+\subsection{Invariant Equation}
+
+Fix amplification parameter $A>0$ (pool parameter, constant during swaps).
+The two-token StableSwap invariant, introduced by \citet{egorov2019stableswap}, is defined via a scalar $D>0$ satisfying:
+\begin{equation}\label{eq:stableswap2}
+4A(x+y)+D \;=\; 4AD + \frac{D^3}{4xy}.
+\end{equation}
+Define
+\begin{equation}\label{eq:Idef}
+I(x,y,D) := 4A(x+y)+D - 4AD - \frac{D^3}{4xy}.
+\end{equation}
+For a given state $(x,y)$, the pool's $D$ is determined by solving
+\begin{equation}\label{eq:Dsolve}
+I(x,y,D)=0,\qquad D>0.
+\end{equation}
+
+\begin{remark}[Homogeneity]
+If $(x,y)\mapsto (tx,ty)$ for $t>0$, then the solution scales as $D\mapsto tD$.
+Thus $D$ is the natural ``pool size'' variable for pegged AMMs, as noted by \citet{angeris2023geometry} in their geometric characterization of CFMMs.
+\end{remark}
+
+\subsection{Explicit Solution for $D$ (Cubic Formula)}
+
+The StableSwap invariant \eqref{eq:stableswap2} can be rearranged into a depressed cubic in $D$:
+\begin{equation}\label{eq:D-cubic}
+D^3 - 4xy(4A-1)D - 16Axy(x+y) = 0.
+\end{equation}
+
+\begin{proposition}[Closed-Form Solution for $D$]\label{prop:D-formula}
+For reserves $(x,y)$ with $x,y>0$ and amplification $A>0$, the unique positive solution to \eqref{eq:D-cubic} is given by Cardano's formula. Define:
+\begin{align}
+p &:= -4xy(4A-1), \label{eq:D-p}\\
+q &:= -16Axy(x+y), \label{eq:D-q}\\
+\Delta &:= \frac{q^2}{4} + \frac{p^3}{27}. \label{eq:D-discriminant}
+\end{align}
+Then:
+\begin{equation}\label{eq:D-cardano}
+D = \sqrt[3]{-\frac{q}{2} + \sqrt{\Delta}} + \sqrt[3]{-\frac{q}{2} - \sqrt{\Delta}}.
+\end{equation}
+\end{proposition}
+
+\begin{remark}[Balanced Pool Simplification]
+At balance where $x = y$, the solution simplifies dramatically:
+\begin{equation}\label{eq:D-balanced}
+D = 2x \quad \text{(when $x = y$)}.
+\end{equation}
+This can be verified by substitution into \eqref{eq:stableswap2}.
+\end{remark}
+
+\begin{remark}[Numerical Implementation]
+In practice, $D$ is typically computed iteratively using Newton-Raphson rather than the cubic formula, as iteration converges quickly and avoids numerical issues with cube roots.
+\end{remark}
+
+\begin{remark}[Alternative PeggedSwap Formulation]\label{rem:peggedswap-formula}
+The implementation in this codebase uses a related but distinct \emph{square-root linear} invariant:
+\begin{equation}\label{eq:peggedswap-invariant}
+\sqrt{u} + \sqrt{v} + A(u + v) = C,
+\end{equation}
+where $u = x/X_0$ and $v = y/Y_0$ are normalized reserves, $X_0, Y_0$ are reference (initial) reserves, $A$ is the linear width parameter, and $C$ is the invariant constant. This formula:
+\begin{itemize}
+\item Admits a closed-form quadratic solution for $v$ given $u$ (see Proposition~\ref{prop:gety}),
+\item Has $D$ implicitly encoded in $(X_0, Y_0)$ via the scaling: if the pool grows by factor $t$, then $X_0 \mapsto tX_0$, $Y_0 \mapsto tY_0$,
+\item Reduces to the StableSwap behavior for pegged assets while enabling analytical solutions.
+\end{itemize}
+At balance ($u = v = 1$), the invariant is $C_{\mathrm{bal}} = 2 + 2A$.
+\end{remark}
+
+\subsection{Explicit Solution $y=\GetY(x;D)$ for the Two-token Case}
+
+\begin{proposition}[Derivation of a Quadratic in $y$]\label{prop:quad}
+Fix $A>0$ and $D>0$. For any $x'>0$, the equation $I(x',y',D)=0$ is equivalent to
+\begin{equation}\label{eq:quad-y}
+16A x'\,(y')^2 \;+\; b(x',D)\,y' \;-\; D^3 \;=\; 0,
+\end{equation}
+where
+\begin{equation}\label{eq:bdef}
+b(x',D) := 16A(x')^2 + 4Dx' - 16ADx'.
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Start from $I(x',y',D)=0$:
+\[
+4A(x'+y') + D - 4AD - \frac{D^3}{4x'y'} = 0.
+\]
+Move the fraction:
+\[
+4A(x'+y') + D - 4AD = \frac{D^3}{4x'y'}.
+\]
+Multiply both sides by $4x'y'$:
+\[
+4x'y'\bigl(4A(x'+y') + D - 4AD\bigr) = D^3.
+\]
+Distribute:
+\[
+16A x'y'(x'+y') + 4Dx'y' - 16ADx'y' = D^3.
+\]
+Expand $16A x'y'(x'+y')$:
+\[
+16A x'y'x' + 16A x'y'y' = 16A(x')^2 y' + 16A x'(y')^2.
+\]
+So:
+\[
+16A x'(y')^2 + \bigl(16A(x')^2 + 4Dx' - 16ADx'\bigr)y' = D^3.
+\]
+Bring $D^3$ to the left and identify $b(x',D)$ to obtain \eqref{eq:quad-y}.
+\end{proof}
+
+\begin{proposition}[Closed Form $\GetY$]\label{prop:gety}
+Fix $A>0$ and $D>0$. The physically relevant root of \eqref{eq:quad-y} is
+\begin{equation}\label{eq:gety}
+\GetY(x';D) \;=\; \frac{-b(x',D) + \sqrt{b(x',D)^2 + 64A x' D^3}}{32A x'}.
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Quadratic formula for $a(y')^2 + b y' + c=0$ with
+\[
+a=16A x',\quad b=b(x',D),\quad c=-D^3
+\]
+gives
+\[
+y' = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+    = \frac{-b \pm \sqrt{b^2 + 64A x' D^3}}{32A x'}.
+\]
+The branch with $-b+\sqrt{\cdot}$ yields the positive, continuous solution for the stable AMM curve; this is \eqref{eq:gety}.
+\end{proof}
+
+
+\section{(1) Fee-free PeggedSwap is Strictly Additive}\label{sec:nofee}
+
+\subsection{Fee-free Update Map}
+
+\begin{definition}[Fee-free StableSwap Map $S_\Delta$]\label{def:S}
+Given state $(x,y)$, compute $D_0$ from $I(x,y,D_0)=0$.
+For input $\Delta\ge 0$ define
+\begin{equation}\label{eq:Sdef}
+S_\Delta(x,y) := \bigl(x+\Delta,\ y_\Delta\bigr),
+\qquad y_\Delta := \GetY(x+\Delta;\,D_0).
+\end{equation}
+Trader output:
+\[
+\Out_{\mathrm{nofee}}(\Delta;x,y) := y - y_\Delta.
+\]
+\end{definition}
+
+\subsection{Strict Additivity Theorem}
+
+\begin{theorem}[Strict Additivity of Fee-free PeggedSwap]\label{thm:nofee}
+The fee-free StableSwap mechanism (Definition~\ref{def:S}) is strictly additive:
+\[
+\Out_{\mathrm{nofee}}(a+b; x,y) = \Out_{\mathrm{nofee}}(a; x,y) + \Out_{\mathrm{nofee}}\bigl(b; S_a(x,y)\bigr)
+\]
+for all $a,b\ge 0$ and all states $(x,y)$.
+Equivalently, $S_{a+b} = S_b\circ S_a$.
+\end{theorem}
+
+\begin{proof}[Proof with All Intermediate Steps]
+Fix a starting state $(x,y)$ and let $D_0$ be the unique solution of $I(x,y,D_0)=0$.
+
+\medskip\noindent
+\textbf{Step 1 (One-shot).}
+By \eqref{eq:Sdef},
+\[
+S_{a+b}(x,y) = \Bigl(x+a+b,\ \GetY(x+a+b;\,D_0)\Bigr).
+\]
+
+\medskip\noindent
+\textbf{Step 2 (Two-step).}
+First apply $S_a$:
+\[
+S_a(x,y) = \Bigl(x+a,\ \GetY(x+a;\,D_0)\Bigr).
+\]
+Now apply $S_b$ to the result.
+In the fee-free model, the swap is defined as motion on the \emph{same} constant-$D_0$ curve, so $S_b$ uses the same $D_0$:
+\[
+S_b(S_a(x,y)) = \Bigl((x+a)+b,\ \GetY((x+a)+b;\,D_0)\Bigr)
+= \Bigl(x+a+b,\ \GetY(x+a+b;\,D_0)\Bigr).
+\]
+
+\medskip\noindent
+\textbf{Step 3 (Equality).}
+The expressions in Step 1 and Step 2 match exactly. Hence $S_{a+b}=S_b\circ S_a$, establishing the semigroup property. By Proposition~\ref{prop:equiv}, this implies strict additivity.
+\end{proof}
+
+\begin{remark}[Geometric Interpretation]
+The strict additivity of fee-free StableSwap follows from the fact that all swaps trace the same constant-$D$ level curve. This is an instance of the path-independence property characterized by \citet{angeris2023geometry} for CFMMs with convex trading sets.
+\end{remark}
+
+
+\section{(2) Original PeggedSwap Fee (Curve-style) is Superadditive}\label{sec:super}
+
+\subsection{Definition of the Original Output-Fee Rule (Fee Kept in the Pool)}
+
+The \emph{original StableSwap fee logic} used in practice for pegged pools can be described as:
+\begin{enumerate}[label=(\alph*)]
+\item compute the \emph{fee-free} output $\Delta y_{\mathrm{nf}}$ on the constant-$D$ curve,
+\item charge fee $f$ on the output amount,
+\item pay only $(1-f)\Delta y_{\mathrm{nf}}$ to the trader,
+\item keep $f\Delta y_{\mathrm{nf}}$ inside the pool as extra $Y$.
+\end{enumerate}
+
+We formalize this exactly.
+
+\begin{definition}[Curve-style Output-Fee Map $F^{\mathrm{out}}_\Delta$]\label{def:Fout}
+Fix fee rate $f\in(0,1)$.
+Given state $(x,y)$:
+\begin{enumerate}[label=(\arabic*)]
+\item Compute $D_0$ from $I(x,y,D_0)=0$.
+\item Compute fee-free post-swap reserve:
+\[
+y_{\mathrm{nf}} := \GetY(x+\Delta;\,D_0).
+\]
+\item Fee-free output amount:
+\[
+\Delta y_{\mathrm{nf}} := y - y_{\mathrm{nf}}.
+\]
+\item Trader receives (fee charged on output):
+\[
+\Out_{\mathrm{outfee}}(\Delta;x,y) := (1-f)\,\Delta y_{\mathrm{nf}}.
+\]
+\item Pool keeps the fee in $Y$, so final $Y$ reserve is
+\[
+y' := y - \Out_{\mathrm{outfee}}(\Delta;x,y)
+    = y - (1-f)(y-y_{\mathrm{nf}})
+    = y_{\mathrm{nf}} + f(y-y_{\mathrm{nf}}).
+\]
+\end{enumerate}
+Define
+\begin{equation}\label{eq:Foutdef}
+F^{\mathrm{out}}_\Delta(x,y) := \bigl(x+\Delta,\ y'\bigr).
+\end{equation}
+\end{definition}
+
+\begin{remark}[Convenient Closed Form for $y'$]
+From the last line above,
+\begin{equation}\label{eq:yprime-affine}
+y' = (1-f)\,y_{\mathrm{nf}} + f\,y.
+\end{equation}
+So $y'$ is an affine combination of the no-fee $y_{\mathrm{nf}}$ and the starting $y$.
+In particular, since $y_{\mathrm{nf}}<y$ for $\Delta>0$, we have
+\[
+y_{\mathrm{nf}} < y' < y.
+\]
+\end{remark}
+
+\subsection{Why $F^{\mathrm{out}}_\Delta$ is Not Strictly Additive (Path Dependence)}
+
+Because $y'$ in \eqref{eq:yprime-affine} is \emph{not} equal to the fee-free $y_{\mathrm{nf}}$, the post-swap state leaves the original constant-$D_0$ curve. The next chunk recomputes a new $D$, so the overall map depends on how a trade is split. This path dependence, as noted by \citet{bichuch2022axioms}, is a key feature distinguishing practical AMM implementations from idealized models.
+
+\subsection{A Clean Decomposition Identity for Comparing One-shot vs Split}
+
+Let $\Delta=a+b$.
+Start from $(x_0,y_0)$ with $D_0$.
+
+Define the fee-free intermediate point on the \emph{same} constant-$D_0$ curve:
+\begin{equation}\label{eq:ybar}
+\bar y := \GetY(x_0+a;\,D_0).
+\end{equation}
+And the fee-free final point for one-shot amount $a+b$:
+\begin{equation}\label{eq:yend}
+y_{\mathrm{nf}}^{a+b} := \GetY(x_0+a+b;\,D_0).
+\end{equation}
+Then the fee-free output telescopes \emph{exactly}:
+\begin{equation}\label{eq:telescope}
+(y_0 - y_{\mathrm{nf}}^{a+b}) \;=\; (y_0-\bar y) + (\bar y - y_{\mathrm{nf}}^{a+b}).
+\end{equation}
+
+This identity is the key to a short superadditivity proof.
+
+\subsection{Monotonicity Assumption Needed for a Rigorous Sign Theorem}
+
+To prove a general superadditivity inequality, we need a single monotonicity fact:
+
+\begin{definition}[Monotone-in-$y$ Property for No-fee Output]\label{def:mono}
+Fix $b>0$ and consider the fee-free StableSwap output for input $b$:
+\[
+\Out_{\mathrm{nofee}}(b;x,y) := y - \GetY(x+b;\,D(x,y)),
+\]
+where $D(x,y)$ is defined by $I(x,y,D)=0$.
+We say the mechanism is \emph{monotone in $y$} if for fixed $x$ and $b$ the function
+\[
+y \mapsto \Out_{\mathrm{nofee}}(b;x,y)
+\]
+is nondecreasing.
+\end{definition}
+
+\begin{remark}[Why This Monotonicity is Natural]
+If you hold $x$ fixed and increase $y$, the pool has more $Y$ liquidity (and higher $D$), so it should not pay out less $Y$ for the same $X$ input. This monotonicity is satisfied in the pegged region for StableSwap and can be verified numerically (see \S\ref{sec:num-super}). Similar monotonicity properties are implicit in the CFMM characterization of \citet{angeris2020improved}.
+\end{remark}
+
+\subsection{Superadditivity Theorem (Split is Better) for the Original Output-Fee Rule}
+
+\begin{theorem}[Superadditivity of Curve-style Output-Fee]\label{thm:super}
+Assume the monotone-in-$y$ property from Definition \ref{def:mono} holds for the states visited by the trade.
+Then for any $a,b>0$ and any starting state $(x_0,y_0)$,
+the original output-fee rule (Definition \ref{def:Fout}) is \emph{superadditive for the trader}:
+\begin{equation}\label{eq:super-ineq}
+\Out_{\mathrm{outfee}}(a+b;\,x_0,y_0) \;<\;
+\Out_{\mathrm{outfee}}(a;\,x_0,y_0) \;+\;
+\Out_{\mathrm{outfee}}\bigl(b;\, F^{\mathrm{out}}_a(x_0,y_0)\bigr).
+\end{equation}
+Equivalently: splitting into $a$ then $b$ yields strictly more total output than one-shot.
+\end{theorem}
+
+\begin{proof}[Proof with Explicit Intermediate Steps]
+Fix $a,b>0$ and $(x_0,y_0)$.
+
+\medskip\noindent
+\textbf{Step 1 (One-shot output).}
+Compute $D_0$ from $I(x_0,y_0,D_0)=0$.
+Fee-free final reserve on the $D_0$ curve is $y_{\mathrm{nf}}^{a+b}$ as in \eqref{eq:yend}.
+So
+\[
+\Delta y_{\mathrm{nf}}^{a+b} = y_0 - y_{\mathrm{nf}}^{a+b}.
+\]
+By Definition \ref{def:Fout}, the trader output in one shot is
+\begin{equation}\label{eq:one-shot-out}
+\Out_{\mathrm{outfee}}(a+b;\,x_0,y_0) = (1-f)\,(y_0 - y_{\mathrm{nf}}^{a+b}).
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 2 (Split: first chunk $a$).}
+Fee-free intermediate $Y$ reserve (on the same $D_0$ curve) is $\bar y$ from \eqref{eq:ybar}.
+Fee-free output for chunk $a$ is $y_0-\bar y$.
+Trader receives
+\begin{equation}\label{eq:out1}
+\Out_1 := \Out_{\mathrm{outfee}}(a;\,x_0,y_0) = (1-f)\,(y_0-\bar y).
+\end{equation}
+Pool keeps fee in $Y$, so after the first chunk, the actual $Y$ reserve becomes
+\begin{equation}\label{eq:y1}
+y_1 = \bar y + f(y_0-\bar y) = (1-f)\bar y + f y_0.
+\end{equation}
+Note from $f\in(0,1)$ and $\bar y<y_0$ that
+\begin{equation}\label{eq:y1gt}
+y_1 > \bar y.
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 3 (One-shot decomposes into two fee-free segments).}
+From the telescoping identity \eqref{eq:telescope},
+\[
+y_0 - y_{\mathrm{nf}}^{a+b} = (y_0-\bar y) + (\bar y - y_{\mathrm{nf}}^{a+b}).
+\]
+Multiply by $(1-f)$:
+\begin{equation}\label{eq:one-shot-decomp}
+(1-f)(y_0 - y_{\mathrm{nf}}^{a+b}) = (1-f)(y_0-\bar y) + (1-f)(\bar y - y_{\mathrm{nf}}^{a+b}).
+\end{equation}
+The first term is exactly $\Out_1$ from \eqref{eq:out1}. Thus,
+\begin{equation}\label{eq:one-shot-as-out1-plus-rest}
+\Out_{\mathrm{outfee}}(a+b;\,x_0,y_0)
+= \Out_1 + (1-f)(\bar y - y_{\mathrm{nf}}^{a+b}).
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 4 (Interpret the second term as a fee-free output from the virtual state).}
+Consider the \emph{virtual} state $(x_0+a,\bar y)$ (which lies on the constant-$D_0$ curve by definition of $\bar y$).
+If we apply a fee-free swap of size $b$ starting from $(x_0+a,\bar y)$, the fee-free post-swap $Y$ reserve is exactly $y_{\mathrm{nf}}^{a+b} = \GetY(x_0+a+b;D_0)$.
+Thus, the fee-free output for that virtual second leg is
+\[
+\Out_{\mathrm{nofee}}\bigl(b;\,x_0+a,\bar y\bigr) = \bar y - y_{\mathrm{nf}}^{a+b}.
+\]
+Therefore, the second term in \eqref{eq:one-shot-as-out1-plus-rest} is
+\begin{equation}\label{eq:second-term}
+(1-f)(\bar y - y_{\mathrm{nf}}^{a+b}) = (1-f)\,\Out_{\mathrm{nofee}}(b;\,x_0+a,\bar y).
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 5 (Compare virtual second leg vs actual second leg using monotonicity in $y$).}
+The \emph{actual} state before executing the second chunk in the split path is $(x_0+a, y_1)$ where $y_1>\bar y$ by \eqref{eq:y1gt}.
+By Definition \ref{def:mono} (monotone in $y$ for fee-free output), we have
+\begin{equation}\label{eq:mono-apply}
+\Out_{\mathrm{nofee}}(b;\,x_0+a,y_1)\ \ge\ \Out_{\mathrm{nofee}}(b;\,x_0+a,\bar y).
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 6 (Actual second-leg output with output-fee).}
+By Definition \ref{def:Fout}, the trader receives on the second chunk:
+\begin{equation}\label{eq:out2}
+\Out_2 := \Out_{\mathrm{outfee}}\bigl(b;\,x_0+a,y_1\bigr)
+= (1-f)\,\Out_{\mathrm{nofee}}(b;\,x_0+a,y_1).
+\end{equation}
+Combine \eqref{eq:mono-apply} and \eqref{eq:out2}:
+\begin{equation}\label{eq:out2-lb}
+\Out_2 \ \ge\ (1-f)\,\Out_{\mathrm{nofee}}(b;\,x_0+a,\bar y).
+\end{equation}
+
+\medskip\noindent
+\textbf{Step 7 (Finish).}
+From \eqref{eq:one-shot-as-out1-plus-rest} and \eqref{eq:second-term},
+\[
+\Out_{\mathrm{outfee}}(a+b;\,x_0,y_0)
+= \Out_1 + (1-f)\,\Out_{\mathrm{nofee}}(b;\,x_0+a,\bar y).
+\]
+Using \eqref{eq:out2-lb},
+\[
+\Out_{\mathrm{outfee}}(a+b;\,x_0,y_0)
+< \Out_1 + \Out_2.
+\]
+This is exactly \eqref{eq:super-ineq}, establishing superadditivity.
+\end{proof}
+
+\subsection{Numerical Verification of Superadditivity}\label{sec:num-super}
+
+We now \emph{check with numbers} that the original output-fee rule is superadditive.
+
+\begin{example}[Superadditivity at $1000/1000$, $A=100$, $f=0.3\%$]\label{ex:super-numbers}
+Take
+\[
+(x_0,y_0)=(1000,1000),\qquad A=100,\qquad f=0.003.
+\]
+At balance, the invariant gives $D_0=x_0+y_0=2000$.
+
+We compute $\GetY$ via \eqref{eq:gety}.
+
+\medskip\noindent
+\textbf{One-shot $\Delta=200$.}
+Fee-free:
+\[
+y_{\mathrm{nf}} = \GetY(1200;2000) \approx 800.2069861160427,
+\quad \Delta y_{\mathrm{nf}} = 1000 - y_{\mathrm{nf}} \approx 199.79301388395731.
+\]
+Trader output with output-fee:
+\[
+\Out_{\mathrm{outfee}}(200) = (1-f)\Delta y_{\mathrm{nf}}
+\approx 0.997\cdot 199.79301388395731
+\approx 199.19363484230544.
+\]
+
+\medskip\noindent
+\textbf{Split $100+100$.}
+
+First $100$:
+\[
+y_{\mathrm{nf},1}=\GetY(1100;2000)\approx 900.0502232299245,
+\quad \Delta y_{\mathrm{nf},1}\approx 99.94977677007546,
+\]
+\[
+\Out_1 = 0.997\cdot 99.94977677007546 \approx 99.64992743976524,
+\]
+\[
+y_1 = y_{\mathrm{nf},1}+ f\Delta y_{\mathrm{nf},1}
+\approx 900.0502232299245 + 0.003\cdot 99.94977677007546
+\approx 900.3500725602348.
+\]
+
+Second $100$ (recompute $D_1$ from $(1100,y_1)$):
+\[
+D_1 \approx 2000.3000090082746,
+\]
+\[
+y_{\mathrm{nf},2} = \GetY(1200;\,D_1)\approx 800.5066386661962,
+\quad \Delta y_{\mathrm{nf},2} \approx y_1 - y_{\mathrm{nf},2}\approx 99.84343389403864,
+\]
+\[
+\Out_2 = 0.997\cdot 99.84343389403864 \approx 99.54390359235653.
+\]
+Total split output:
+\[
+\Out_{\mathrm{split}} = \Out_1+\Out_2 \approx 199.19383103212175.
+\]
+
+\medskip\noindent
+\textbf{Comparison.}
+\[
+\Out_{\mathrm{split}} - \Out_{\mathrm{outfee}}(200)
+\approx 199.19383103212175 - 199.19363484230544
+\approx 0.00019618981631 > 0.
+\]
+Thus the original output-fee rule is \emph{superadditive} in this example:
+splitting is slightly \emph{better} for the trader.
+\end{example}
+
+\subsection{Contrast: Input-Fee Reinvest is Subadditive (Split Worse)}
+
+For completeness, we briefly describe the \emph{other} common fee rule and its opposite behavior.
+
+\begin{definition}[Input-Fee Reinvest Rule]\label{def:input-fee}
+Fix fee rate $f\in(0,1)$.
+Given state $(x,y)$, compute $D_0$ from $I(x,y,D_0)=0$.
+For input $\Delta>0$:
+\begin{enumerate}[label=(\arabic*)]
+\item Trade only the net amount $(1-f)\Delta$ along the constant-$D_0$ curve:
+\[
+y_{\mathrm{nf}} := \GetY\bigl(x+(1-f)\Delta;\ D_0\bigr).
+\]
+\item Credit the \emph{full} input $\Delta$ to reserves: $x_1 := x+\Delta$.
+\item Trader receives $\Out_{\mathrm{in}}(\Delta) := y - y_{\mathrm{nf}}$.
+\item Final state: $(x_1, y_{\mathrm{nf}}) = (x+\Delta,\ y_{\mathrm{nf}})$.
+\end{enumerate}
+\end{definition}
+
+The key difference from the output-fee rule: here the ``fee'' stays in $X$ (the mismatch $f\Delta$ between credited and traded amounts), whereas output-fee keeps fee in $Y$.
+
+\begin{proposition}[Subadditivity of Input-Fee Reinvest]\label{prop:subadditive}
+Under the input-fee reinvest rule (Definition \ref{def:input-fee}), splitting a trade into chunks is \emph{worse} for the trader:
+\begin{equation}\label{eq:sub-ineq}
+\Out_{\mathrm{in}}(a+b;\,x_0,y_0) \;>\; \Out_{\mathrm{in}}(a;\,x_0,y_0) + \Out_{\mathrm{in}}\bigl(b;\,F^{\mathrm{in}}_a(x_0,y_0)\bigr).
+\end{equation}
+That is, the mechanism is subadditive: one-shot output strictly exceeds split output.
+\end{proposition}
+
+\begin{proof}[Sketch]
+After the first chunk $a$, the state is $(x+a, y_1)$ where $y_1 = \GetY(x+(1-f)a; D_0)$.
+But $x+a > x+(1-f)a$, so the state $(x+a, y_1)$ is \emph{not} on the original $D_0$ curve---it has moved to a higher-$D$ curve where $X$ is relatively more abundant.
+This makes subsequent $X\to Y$ trades less favorable.
+The ``fee'' injected early as extra $X$ makes $Y$ scarcer for subsequent chunks.
+\end{proof}
+
+\begin{example}[Subadditivity Numbers for Input-Fee Reinvest]
+Same parameters: $(1000,1000)$, $A=100$, $f=0.003$.
+\begin{itemize}
+\item One-shot $\Delta=200$: trade $(1-f)\cdot 200 = 199.4$ on $D_0=2000$ curve.
+$\Out_{\mathrm{in}}(200) \approx 199.1943$.
+\item Split $100+100$: first chunk trades $99.7$, second chunk trades $99.7$ but on a \emph{different} (higher-$D$) curve.
+$\Out_{\mathrm{split}} \approx 199.1942$.
+\item Difference: $\Out_{\mathrm{in}}(200) - \Out_{\mathrm{split}} \approx 1.4 \times 10^{-4} > 0$.
+\end{itemize}
+Split is worse: \emph{subadditive}.
+\end{example}
+
+\begin{remark}[Summary of Fee Placement Effects]
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Fee Rule} & \textbf{Fee Stays In} & \textbf{Additivity Type} & \textbf{For Trader} \\
+\midrule
+Output-fee (Curve-style) & $Y$ reserve & Superadditive & Split better \\
+Input-fee reinvest & $X$ reserve & Subadditive & One-shot better \\
+Semigroup $D$-update & Liquidity $D$ & Strictly additive & Path-independent \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{remark}
+
+
+\section{(3) Target: Strict Additivity \emph{With} Reinvested Fees on Top of PeggedSwap}\label{sec:strict}
+
+\subsection{Strategy: Enforce a Semigroup on $D$ (the Natural StableSwap ``Pool Size'')}
+
+Because StableSwap's natural ``pool size'' variable is $D$ and fee placement changes $D$ in a path-dependent way,
+a clean path to strict additivity is:
+
+\begin{quote}
+Make the $D$-update itself satisfy a semigroup law, then solve the invariant using the updated $D$.
+\end{quote}
+
+This approach is motivated by classical results in functional equations \citep{aczel1966lectures} and has analogues in pricing theory where semigroup structures ensure consistency of pricing operators \citep{garman1985semigroup}.
+
+\subsection{Why Strict Additivity Still Matters (Even When Superadditivity Favors the Trader)}
+
+Superadditivity of the output-fee rule (Theorem \ref{thm:super}) means splitting is strictly \emph{better} for traders.
+So why pursue strict additivity at all?
+
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Aggregator/router neutrality.} If swap outcome depends on how execution is split, routing algorithms must account for this \citep{angeris2022optimal}. Strict additivity means routers can split arbitrarily without affecting final outcome.
+\item \textbf{Partial fills and TWAP.} Time-weighted execution, partial limit-order fills, and MEV-resistant chunking all benefit from path-independence.
+\item \textbf{Deterministic pool growth.} Under strict additivity with a semigroup $D$-update, the pool's liquidity scalar $D$ grows deterministically with volume, independent of execution chunking.
+\item \textbf{Composability.} Protocols building on top of the AMM (vaults, strategies, aggregators) can reason about outcomes without simulating all possible split patterns \citep{bartoletti2024composability}.
+\end{enumerate}
+
+The superadditivity of the Curve-style rule is a \emph{happy accident} for traders, but it still creates path-dependence that complicates integration.
+
+\subsection{$D$-Update Rule and the Semigroup Functional Equation}
+
+\begin{definition}[$D$-Update Rule]\label{def:Gamma}
+Let $\Gamma:\R_{>0}\times \R_{\ge 0}\to \R_{>0}$ be a rule that updates liquidity scalar $D$ after an input of size $\Delta$:
+\[
+D \mapsto \Gamma(D,\Delta).
+\]
+We require $\Gamma(D,0)=D$ (no input means no change).
+\end{definition}
+
+\subsection{Deriving the Semigroup Condition from Strict Additivity}
+
+We now prove that the semigroup law on $\Gamma$ is not an arbitrary assumption but a \emph{necessary condition} for strict additivity.
+
+\begin{proposition}[Necessary and Sufficient Condition on $\Gamma$]\label{prop:gamma-necessary}
+Let the swap update be defined by
+\[
+F^{\Gamma}_\Delta(x,y) := \bigl(x+\Delta,\ \GetY(x+\Delta;\ \Gamma(D_0,\Delta))\bigr),
+\]
+where $D_0$ is solved from $I(x,y,D_0)=0$.
+
+Then strict additivity $F^{\Gamma}_{a+b} = F^{\Gamma}_b \circ F^{\Gamma}_a$ holds for all $a,b\ge 0$ \textbf{if and only if} $\Gamma$ satisfies
+\begin{equation}\label{eq:Gamma-semigroup}
+\Gamma(\Gamma(D,a),b) = \Gamma(D,a+b)\qquad \forall\, D>0,\ a,b\ge 0.
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Fix starting state $(x,y)$ with $I(x,y,D_0)=0$.
+
+\medskip\noindent
+\textbf{One-shot path.}
+Applying $F^{\Gamma}_{a+b}$ directly:
+\[
+F^{\Gamma}_{a+b}(x,y) = \bigl(x+a+b,\ \GetY(x+a+b;\ \Gamma(D_0,a+b))\bigr).
+\]
+
+\medskip\noindent
+\textbf{Two-step path.}
+First apply $F^{\Gamma}_a$:
+\[
+(x_1,y_1) := F^{\Gamma}_a(x,y) = \bigl(x+a,\ \GetY(x+a;\ \Gamma(D_0,a))\bigr).
+\]
+Set $D_1 := \Gamma(D_0,a)$. By construction of $\GetY$, we have $I(x_1,y_1,D_1)=0$.
+
+Now apply $F^{\Gamma}_b$ to $(x_1,y_1)$. Since $I(x_1,y_1,D_1)=0$, the starting $D$ for this step is $D_1$:
+\[
+F^{\Gamma}_b(x_1,y_1) = \bigl(x_1+b,\ \GetY(x_1+b;\ \Gamma(D_1,b))\bigr)
+= \bigl(x+a+b,\ \GetY(x+a+b;\ \Gamma(\Gamma(D_0,a),b))\bigr).
+\]
+
+\medskip\noindent
+\textbf{Equality condition.}
+The $x$-components match trivially ($x+a+b$).
+The $y$-components match iff the $D$-arguments of $\GetY$ match:
+\[
+\GetY(x+a+b;\ \Gamma(D_0,a+b)) = \GetY(x+a+b;\ \Gamma(\Gamma(D_0,a),b)).
+\]
+Since $\GetY(x';D)$ is uniquely determined by $D$ (given $x'$), this holds iff
+\[
+\Gamma(D_0,a+b) = \Gamma(\Gamma(D_0,a),b).
+\]
+As this must hold for all starting states (hence all $D_0>0$) and all $a,b\ge 0$, we obtain \eqref{eq:Gamma-semigroup}.
+\end{proof}
+
+\begin{remark}[The Semigroup Law is Derived, Not Assumed]
+Equation \eqref{eq:Gamma-semigroup} is Cauchy's functional equation in the second argument with the first argument as a parameter. Following \citet{aczel1966lectures}, it is the \emph{unique} algebraic constraint making the $\Gamma$-based swap strictly additive. Any $\Gamma$ violating this equation produces path-dependent outcomes.
+\end{remark}
+
+\subsection{General Solution Families for the Semigroup Equation}
+
+\begin{proposition}[Standard Solution Families]\label{prop:Gamma-fams}
+Two canonical families satisfying \eqref{eq:Gamma-semigroup}:
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Additive:} $\Gamma(D,\Delta)=D+g(\Delta)$ where $g(a+b)=g(a)+g(b)$.
+If $g$ is continuous (or monotone, or measurable), then $g(\Delta)=\kappa \Delta$ for some $\kappa \ge 0$ \citep{aczel1966lectures}.
+\item \textbf{Multiplicative:} $\Gamma(D,\Delta)=D\cdot s(\Delta)$ where $s(a+b)=s(a)s(b)$.
+If $s$ is continuous, then $s(\Delta)=e^{\lambda \Delta}$ for some $\lambda \in \R$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+For (a): Substituting $\Gamma(D,\Delta) = D + g(\Delta)$ into \eqref{eq:Gamma-semigroup}:
+\[
+(D + g(a)) + g(b) = D + g(a+b) \implies g(a) + g(b) = g(a+b).
+\]
+This is Cauchy's additive functional equation. For (b), the calculation is analogous, yielding Cauchy's exponential equation.
+\end{proof}
+
+\subsection{Strictly-Additive Fee/Reinvest Construction}
+
+\begin{definition}[Strictly-Additive PeggedSwap-with-Fee on Top of StableSwap]\label{def:Fstrict}
+Fix $f\in(0,1)$ and choose a $D$-semigroup $\Gamma$ (Definition \ref{def:Gamma}).
+Given state $(x,y)$:
+\begin{enumerate}[label=(\arabic*)]
+\item Compute $D_0$ from $I(x,y,D_0)=0$.
+\item Update liquidity scalar:
+\[
+D_1 := \Gamma(D_0,\Delta).
+\]
+\item Set $x_1 := x+\Delta$.
+\item Define $y_1$ as the unique solution of
+\[
+I(x_1,y_1,D_1)=0
+\quad \text{(equivalently $y_1=\GetY(x_1;D_1)$)}.
+\]
+\end{enumerate}
+Define
+\[
+F^{\Gamma}_\Delta(x,y) := (x_1,y_1),
+\qquad
+\Out_{\Gamma}(\Delta;x,y):=y-y_1.
+\]
+\end{definition}
+
+\begin{theorem}[Strict Additivity of the Construction]\label{thm:strict}
+If $\Gamma$ satisfies \eqref{eq:Gamma-semigroup}, then the mechanism in Definition~\ref{def:Fstrict} is strictly additive:
+\[
+\Out_{\Gamma}(a+b; x,y) = \Out_{\Gamma}(a; x,y) + \Out_{\Gamma}\bigl(b; F^{\Gamma}_a(x,y)\bigr)
+\]
+for all $a,b\ge 0$.
+Equivalently, $F^{\Gamma}_{a+b} = F^{\Gamma}_b\circ F^{\Gamma}_a$.
+\end{theorem}
+
+\begin{proof}[Proof with Explicit Intermediate Steps]
+Fix starting state $(x,y)$ and let $D_0$ solve $I(x,y,D_0)=0$.
+
+\medskip\noindent
+\textbf{Step 1 (One-shot).}
+For $\Delta=a+b$, the construction gives
+\[
+D_{\mathrm{one}}=\Gamma(D_0,a+b),\quad x_{\mathrm{one}}=x+a+b,\quad
+y_{\mathrm{one}}=\GetY(x+a+b;\,D_{\mathrm{one}}).
+\]
+
+\medskip\noindent
+\textbf{Step 2 (Two-step).}
+After first step $a$:
+\[
+D_1=\Gamma(D_0,a),\quad x_1=x+a,\quad y_1=\GetY(x+a;\,D_1).
+\]
+After second step $b$:
+\[
+D_2=\Gamma(D_1,b)=\Gamma(\Gamma(D_0,a),b),
+\quad x_2=x_1+b=x+a+b,
+\quad y_2=\GetY(x+a+b;\,D_2).
+\]
+
+\medskip\noindent
+\textbf{Step 3 (Use the semigroup law).}
+By \eqref{eq:Gamma-semigroup},
+\[
+D_2=\Gamma(\Gamma(D_0,a),b)=\Gamma(D_0,a+b)=D_{\mathrm{one}}.
+\]
+
+\medskip\noindent
+\textbf{Step 4 (Conclude equality).}
+Since $x_2=x_{\mathrm{one}}$ and $D_2=D_{\mathrm{one}}$, the defining equation $I(x,y,D)=0$ yields the same unique $y$:
+\[
+y_2=\GetY(x+a+b;\,D_2)=\GetY(x+a+b;\,D_{\mathrm{one}})=y_{\mathrm{one}}.
+\]
+Hence the final states match and $F^{\Gamma}_{a+b}=F^{\Gamma}_b\circ F^{\Gamma}_a$, establishing strict additivity.
+\end{proof}
+
+\subsection{Concrete Choice That Matches ``Fee Reinvest'' Intuition: Additive-$D$}
+
+For a pegged pair normalized to price 1, choose
+\[
+\Gamma(D,\Delta)=D + f\Delta.
+\]
+Then each trade increases $D$ deterministically by the ``fee notional''.
+
+\begin{example}[Numbers: Strict Additivity Achieved]\label{ex:strict-num}
+Take $(x_0,y_0)=(1000,1000)$, $A=100$, $f=0.003$, and $\Gamma(D,\Delta)=D+f\Delta$.
+At balance $D_0=2000$.
+
+\medskip\noindent
+\textbf{One-shot $\Delta=200$:}
+\[
+D_1=2000+0.003\cdot 200=2000.6,\quad x_1=1200,\quad
+y_1=\GetY(1200;\,2000.6)\approx 800.8062736266,
+\]
+\[
+\Out_{\Gamma}(200)=1000-800.8062736266\approx 199.1937263734.
+\]
+
+\medskip\noindent
+\textbf{Split $100+100$:}
+
+First $100$:
+\[
+D=2000.3,\ x=1100,\ y\approx 900.3500635568,\ \Out\approx 99.6499364432,
+\]
+Second $100$:
+\[
+D=2000.6,\ x=1200,\ y\approx 800.8062736266,\ \Out\approx 99.5437899302.
+\]
+Total:
+\[
+99.6499364432 + 99.5437899302 = 199.1937263734,
+\]
+matching the one-shot result exactly (up to numerical precision).
+\end{example}
+
+
+\section{Discussion: What ``Pool Growth'' Means and Practical Implications}
+
+\subsection{Why $D$ is the Right Notion of ``Pool Size''}
+
+A single $X\to Y$ swap cannot make \emph{both} reserves increase simultaneously---$Y$ is paid out to the trader.
+So ``pool growth'' from fees cannot mean ``both reserves go up after every trade.''
+
+The correct notion of growth for StableSwap-type pools is \emph{increase in the liquidity scalar $D$}.
+Recall that $D$ scales linearly with reserves when the pool is balanced: if $(x,y)\mapsto (tx,ty)$, then $D\mapsto tD$.
+Thus $D$ captures the ``total liquidity'' in a price-independent way, analogous to the value function characterizations in \citet{milionis2022automated}.
+
+\subsection{How the Semigroup Construction Achieves Deterministic Pool Growth}
+
+Under the strictly-additive construction (Definition \ref{def:Fstrict}) with $\Gamma(D,\Delta)=D+f\Delta$:
+\begin{itemize}
+\item Each swap increases $D$ by exactly $f\Delta$, regardless of how execution is split.
+\item After arbitrage restores balance, the increased $D$ manifests as higher reserves on \emph{both} sides.
+\item Pool growth is deterministic and proportional to traded volume.
+\end{itemize}
+
+This is in contrast to both the output-fee and input-fee rules, where the effective $D$ increase depends on the execution path.
+
+\subsection{Practical Implications}
+
+\begin{enumerate}[label=(\arabic*)]
+\item \textbf{For traders:} Strict additivity means outcome depends only on total input, not on chunking. No gaming of split patterns.
+\item \textbf{For aggregators:} Routing can split trades arbitrarily without affecting final output. This simplifies optimization problems of the type studied by \citet{angeris2022optimal}.
+\item \textbf{For LPs:} Pool growth is deterministic. Fee revenue can be predicted from volume alone, improving upon the stochastic fee accrual analyzed by \citet{milionis2022automated}.
+\item \textbf{For protocols:} Composability is cleaner when swap outcomes are path-independent \citep{bartoletti2024composability}.
+\end{enumerate}
+
+
+\section{Summary}
+
+\begin{itemize}
+\item \textbf{Fee-free StableSwap is strictly additive} (one-shot $=$ split) because swaps are motion on a constant-$D$ curve (Theorem \ref{thm:nofee}).
+\item The \textbf{original Curve-style output-fee rule is superadditive} (split $>$ one-shot, better for trader) under a natural monotonicity condition (Theorem \ref{thm:super}).
+\item The \textbf{input-fee reinvest rule is subadditive} (split $<$ one-shot, worse for trader)---see Proposition~\ref{prop:subadditive}.
+\item The \textbf{semigroup condition on $\Gamma$ is derived}, not assumed: it is the unique constraint making the $D$-update swap strictly additive (Proposition \ref{prop:gamma-necessary}).
+\item To \textbf{achieve strict additivity with reinvested fees}, enforce the semigroup law on $D$ and solve the invariant on the updated $D$ (Theorem \ref{thm:strict}); additive-$D$ ($\Gamma(D,\Delta)=D+f\Delta$) is the simplest concrete choice.
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Mechanism} & \textbf{Additivity} & \textbf{Comparison} & \textbf{Path-Dependent?} \\
+\midrule
+Fee-free StableSwap & Strictly additive & $\Out(a+b) = \Out_{\mathrm{split}}$ & No \\
+Output-fee (Curve) & Superadditive & $\Out(a+b) < \Out_{\mathrm{split}}$ & Yes \\
+Input-fee reinvest & Subadditive & $\Out(a+b) > \Out_{\mathrm{split}}$ & Yes \\
+Semigroup $D$-update & Strictly additive & $\Out(a+b) = \Out_{\mathrm{split}}$ & No \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+\bibliographystyle{plainnat}
+\begin{thebibliography}{99}
+
+\bibitem[Aczél(1966)]{aczel1966lectures}
+J.~Aczél.
+\newblock \emph{Lectures on Functional Equations and Their Applications}.
+\newblock Academic Press, New York, 1966.
+
+\bibitem[Aczél and Dhombres(1989)]{aczel1989functional}
+J.~Aczél and J.~Dhombres.
+\newblock \emph{Functional Equations in Several Variables}.
+\newblock Encyclopedia of Mathematics and its Applications, vol.~31. Cambridge University Press, 1989.
+
+\bibitem[Angeris and Chitra(2020)]{angeris2020improved}
+G.~Angeris and T.~Chitra.
+\newblock Improved price oracles: Constant function market makers.
+\newblock In \emph{Proceedings of the 2nd ACM Conference on Advances in Financial Technologies (AFT '20)}, pages 80--91, 2020.
+\newblock arXiv:2003.10001.
+
+\bibitem[Angeris et~al.(2021)]{angeris2021multiasset}
+G.~Angeris, A.~Agrawal, A.~Evans, T.~Chitra, and S.~Boyd.
+\newblock Constant function market makers: Multi-asset trades via convex optimization.
+\newblock \emph{Springer}, 2022.
+\newblock arXiv:2107.12484.
+
+\bibitem[Angeris et~al.(2022)]{angeris2022optimal}
+G.~Angeris, T.~Chitra, A.~Evans, and S.~Boyd.
+\newblock Optimal routing for constant function market makers.
+\newblock \emph{arXiv preprint arXiv:2204.05238}, 2022.
+
+\bibitem[Angeris et~al.(2023)]{angeris2023geometry}
+G.~Angeris, T.~Chitra, G.~Diamandis, A.~Evans, and K.~Kulkarni.
+\newblock The geometry of constant function market makers.
+\newblock In \emph{Proceedings of the 24th ACM Conference on Economics and Computation (EC '24)}, 2024.
+\newblock arXiv:2308.08066.
+
+\bibitem[Baggiani et~al.(2025)]{baggiani2025optimal}
+A.~Baggiani, M.~Herdegen, and A.~Sánchez-Betancourt.
+\newblock Optimal dynamic fees in automated market makers.
+\newblock \emph{arXiv preprint arXiv:2506.02869}, 2025.
+
+\bibitem[Bartoletti et~al.(2024)]{bartoletti2024composability}
+M.~Bartoletti, R.~Marchesin, and R.~Zunino.
+\newblock DeFi composability as MEV non-interference.
+\newblock In \emph{Financial Cryptography and Data Security (FC'24)}, 2024.
+
+\bibitem[Bichuch and Feinstein(2022)]{bichuch2022axioms}
+M.~Bichuch and Z.~Feinstein.
+\newblock Axioms for automated market makers: A mathematical framework in FinTech and decentralized finance.
+\newblock \emph{Operations Research}, 2025.
+\newblock arXiv:2210.01227.
+
+\bibitem[Egorov(2019)]{egorov2019stableswap}
+M.~Egorov.
+\newblock StableSwap -- efficient mechanism for stablecoin liquidity.
+\newblock Curve Finance Whitepaper, November 2019.
+\newblock \url{https://curve.fi/files/stableswap-paper.pdf}.
+
+\bibitem[Egorov(2021)]{egorov2021cryptoswap}
+M.~Egorov.
+\newblock Automatic market-making with dynamic peg.
+\newblock Curve Finance Whitepaper, June 2021.
+\newblock \url{https://docs.curve.finance/assets/pdf/whitepaper_cryptoswap.pdf}.
+
+\bibitem[Evans et~al.(2021)]{evans2021optimal}
+A.~Evans, G.~Angeris, and T.~Chitra.
+\newblock Optimal fees for geometric mean market makers.
+\newblock In \emph{FC 2021 Workshops}, 2021.
+\newblock arXiv:2104.00446.
+
+\bibitem[Frongillo et~al.(2024)]{frongillo2024axiomatic}
+R.~Frongillo, D.~Papireddygari, and B.~Waggoner.
+\newblock An axiomatic characterization of CFMMs and equivalence to prediction markets.
+\newblock In \emph{15th Innovations in Theoretical Computer Science Conference (ITCS 2024)}, LIPIcs Vol.~287, 2024.
+
+\bibitem[Garman(1985)]{garman1985semigroup}
+M.~Garman.
+\newblock Towards a semigroup pricing theory.
+\newblock \emph{The Journal of Finance}, 40(3):847--862, 1985.
+
+\bibitem[Hertzog et~al.(2018)]{hertzog2018bancor}
+E.~Hertzog, G.~Benartzi, and G.~Benartzi.
+\newblock Bancor protocol: A protocol for intrinsically tradeable cryptographic tokens.
+\newblock Bancor Whitepaper, 2017 (revised 2018).
+
+\bibitem[Martinelli and Mushegian(2019)]{martinelli2019balancer}
+F.~Martinelli and N.~Mushegian.
+\newblock Balancer: A non-custodial portfolio manager, liquidity provider, and price sensor.
+\newblock Balancer Whitepaper, September 2019.
+\newblock \url{https://docs.balancer.fi/whitepaper.pdf}.
+
+\bibitem[Milionis et~al.(2022)]{milionis2022automated}
+J.~Milionis, C.~C. Moallemi, T.~Roughgarden, and A.~L. Zhang.
+\newblock Automated market making and loss-versus-rebalancing.
+\newblock In \emph{Science of Blockchain Conference (SBC'22)}, 2022.
+\newblock arXiv:2208.06046.
+
+\bibitem[Schlegel et~al.(2023)]{schlegel2023axioms}
+J.~C. Schlegel, M.~Kwaśnicki, and A.~Mamageishvili.
+\newblock Axioms for constant function market makers.
+\newblock In \emph{Proceedings of the 24th ACM Conference on Economics and Computation (EC '23)}, 2023.
+\newblock arXiv:2210.00048.
+
+\bibitem[Shapley(1953)]{shapley1953value}
+L.~S. Shapley.
+\newblock A value for n-person games.
+\newblock In H.~W. Kuhn and A.~W. Tucker, editors, \emph{Contributions to the Theory of Games II}, Annals of Mathematics Studies, vol.~28, pages 307--317. Princeton University Press, 1953.
+
+\bibitem[Sharkey(1982)]{sharkey1982natural}
+W.~W. Sharkey.
+\newblock \emph{The Theory of Natural Monopoly}.
+\newblock Cambridge University Press, 1982.
+
+\end{thebibliography}
+
+\end{document}

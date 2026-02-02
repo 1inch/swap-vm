@@ -24,6 +24,7 @@ import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
+import { PeggedSwapReinvest } from "../instructions/PeggedSwapReinvest.sol";
 
 contract Opcodes is
     Controls,
@@ -41,14 +42,15 @@ contract Opcodes is
     Fee,
     FeeExperimental,
     Extruction,
-    PeggedSwap
+    PeggedSwap,
+    PeggedSwapReinvest
 {
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[50] memory instructions = [
+        function(Context memory, bytes calldata) internal[51] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -111,7 +113,9 @@ contract Opcodes is
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            // PeggedSwapReinvest - strictly-additive fee mechanism via semigroup D-update
+            PeggedSwapReinvest._peggedSwapReinvestXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array
