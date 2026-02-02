@@ -202,6 +202,52 @@ If $(x,y)\mapsto (tx,ty)$ for $t>0$, then the solution scales as $D\mapsto tD$.
 Thus $D$ is the natural ``pool size'' variable for pegged AMMs, as noted by \citet{angeris2023geometry} in their geometric characterization of CFMMs.
 \end{remark}
 
+\subsection{Explicit Solution for $D$ (Cubic Formula)}
+
+The StableSwap invariant \eqref{eq:stableswap2} can be rearranged into a depressed cubic in $D$:
+\begin{equation}\label{eq:D-cubic}
+D^3 - 4xy(4A-1)D - 16Axy(x+y) = 0.
+\end{equation}
+
+\begin{proposition}[Closed-Form Solution for $D$]\label{prop:D-formula}
+For reserves $(x,y)$ with $x,y>0$ and amplification $A>0$, the unique positive solution to \eqref{eq:D-cubic} is given by Cardano's formula. Define:
+\begin{align}
+p &:= -4xy(4A-1), \label{eq:D-p}\\
+q &:= -16Axy(x+y), \label{eq:D-q}\\
+\Delta &:= \frac{q^2}{4} + \frac{p^3}{27}. \label{eq:D-discriminant}
+\end{align}
+Then:
+\begin{equation}\label{eq:D-cardano}
+D = \sqrt[3]{-\frac{q}{2} + \sqrt{\Delta}} + \sqrt[3]{-\frac{q}{2} - \sqrt{\Delta}}.
+\end{equation}
+\end{proposition}
+
+\begin{remark}[Balanced Pool Simplification]
+At balance where $x = y$, the solution simplifies dramatically:
+\begin{equation}\label{eq:D-balanced}
+D = 2x \quad \text{(when $x = y$)}.
+\end{equation}
+This can be verified by substitution into \eqref{eq:stableswap2}.
+\end{remark}
+
+\begin{remark}[Numerical Implementation]
+In practice, $D$ is typically computed iteratively using Newton-Raphson rather than the cubic formula, as iteration converges quickly and avoids numerical issues with cube roots.
+\end{remark}
+
+\begin{remark}[Alternative PeggedSwap Formulation]\label{rem:peggedswap-formula}
+The implementation in this codebase uses a related but distinct \emph{square-root linear} invariant:
+\begin{equation}\label{eq:peggedswap-invariant}
+\sqrt{u} + \sqrt{v} + A(u + v) = C,
+\end{equation}
+where $u = x/X_0$ and $v = y/Y_0$ are normalized reserves, $X_0, Y_0$ are reference (initial) reserves, $A$ is the linear width parameter, and $C$ is the invariant constant. This formula:
+\begin{itemize}
+\item Admits a closed-form quadratic solution for $v$ given $u$ (see Proposition~\ref{prop:gety}),
+\item Has $D$ implicitly encoded in $(X_0, Y_0)$ via the scaling: if the pool grows by factor $t$, then $X_0 \mapsto tX_0$, $Y_0 \mapsto tY_0$,
+\item Reduces to the StableSwap behavior for pegged assets while enabling analytical solutions.
+\end{itemize}
+At balance ($u = v = 1$), the invariant is $C_{\mathrm{bal}} = 2 + 2A$.
+\end{remark}
+
 \subsection{Explicit Solution $y=\GetY(x;D)$ for the Two-token Case}
 
 \begin{proposition}[Derivation of a Quadratic in $y$]\label{prop:quad}
