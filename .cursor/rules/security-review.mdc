@@ -1,0 +1,143 @@
+---
+alwaysApply: true
+---
+
+# Security Review Guidelines
+
+## Security Test Categories
+
+All swap instructions must be tested for these security properties:
+
+1. **Round-Trip**: No arbitrage profit from A→B→A
+2. **Pool Drain**: K product (or invariant) increases after swaps
+3. **Sandwich**: Protected against sandwich attacks
+4. **Split Swap**: Single swap ≥ split swaps (additivity)
+5. **Overflow**: Large inputs gracefully revert
+6. **Boundaries**: Smooth transitions at mathematical boundaries
+7. **Monotonicity**: Larger trades get equal or worse prices
+8. **Symmetry**: exactIn(X)→Y ↔ exactOut(Y)→X
+9. **Quote/Swap Consistency**: Identical amounts
+10. **Rounding Favors Maker**: Small trades don't beat spot price
+
+## Critical Vulnerabilities to Check
+
+### Direction-Dependent Parameters
+
+When instructions have parameters that depend on token ordering (Lt/Gt), ensure:
+- Parameters are correctly swapped based on `tokenIn < tokenOut`
+- Both forward and reverse swaps use correct normalization
+- Asymmetric configurations don't create arbitrage
+
+```solidity
+// CORRECT: Swap parameters based on direction
+(uint256 normIn, uint256 normOut) = tokenIn < tokenOut
+    ? (config.x0, config.y0)
+    : (config.y0, config.x0);
+```
+
+### Invariant Cross-Wiring
+
+For swap curves with normalization factors (capacities, rates):
+- Verify invariant is calculated identically regardless of swap direction
+- Test with asymmetric pools (different capacities per token)
+- Ensure normalized values match their corresponding capacities
+
+### Fee Additivity
+
+Different fee mechanisms have different additivity properties:
+- **Output-fee (Curve-style)**: Superadditive (split better for trader)
+- **Input-fee reinvest**: Subadditive (one-shot better for trader)
+- **Semigroup D-update**: Strictly additive (path-independent)
+
+### Rounding Direction
+
+- **ExactIn**: Round output DOWN (maker keeps extra)
+- **ExactOut**: Round input UP (maker receives extra)
+- Use `Math.ceilDiv` for rounding up
+- Use integer division for rounding down
+
+## Security Checklist for New Instructions
+
+1. [ ] Validate all inputs (balances > 0, amounts within bounds)
+2. [ ] Check for division by zero
+3. [ ] Handle both `isExactIn` true and false
+4. [ ] Prevent recompute attacks (`require(ctx.swap.amountOut == 0)`)
+5. [ ] Round in favor of maker (protocol)
+6. [ ] Test with asymmetric configurations
+7. [ ] Test boundary conditions (0, max, near-zero)
+8. [ ] Verify no overflow in intermediate calculations
+9. [ ] Test with different token decimals
+10. [ ] Verify quote and swap return identical values
+
+## Common Attack Vectors
+
+### Price Manipulation
+- Flash loan attacks on price oracles
+- Sandwich attacks around large swaps
+- Front-running order execution
+
+### Arithmetic Exploits
+- Rounding errors that drain pool over many swaps
+- Overflow/underflow in fee calculations
+- Loss of precision in normalized calculations
+
+### Logic Exploits
+- State inconsistency between quote and swap
+- Order replay attacks (check invalidators)
+- Cross-function reentrancy
+
+## Testing Asymmetric Configurations
+
+Always test with asymmetric pools:
+
+```solidity
+// Asymmetric capacities
+uint256 capacityA = 1000000e18;  // 1M tokens
+uint256 capacityB = 1000e18;     // 1k tokens
+
+// Test both directions
+test_Forward_A_to_B();
+test_Reverse_B_to_A();
+
+// Verify invariant consistency
+assertEq(invariantForward, invariantReverse, "Invariant mismatch");
+```
+
+## Static Analysis
+
+Run before committing:
+```bash
+# Slither analysis
+slither .
+
+# Mythril (if configured)
+myth analyze src/SwapVM.sol
+```
+
+## Audit Preparation
+
+- Document all external calls and their trust assumptions
+- List all state-changing functions and their access controls
+- Identify all math operations and their overflow potential
+- Map all user inputs to their validation points
+
+## External Resources
+
+### DeFiHackLabs
+
+Reference repository of 680+ real DeFi hack reproductions using Foundry:
+https://github.com/SunWeb3Sec/DeFiHackLabs
+
+Study relevant past incidents before implementing new features:
+- Price oracle manipulation attacks
+- Reentrancy patterns
+- Flash loan exploits
+- Business logic flaws
+- Fee calculation errors
+
+### Solodit Security Checklist
+
+Comprehensive blockchain security audit checklist:
+https://solodit.cyfrin.io/checklist
+
+Use during code review to ensure coverage of common vulnerability classes.

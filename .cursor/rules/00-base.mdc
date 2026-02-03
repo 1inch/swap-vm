@@ -1,0 +1,104 @@
+---
+alwaysApply: true
+---
+
+# SwapVM Architecture
+
+SwapVM is a VM-based swap protocol where orders are bytecode programs executed by the VM.
+
+## Directory Structure
+
+```
+src/
+├── SwapVM.sol              # Base contract: order execution, transfers, hooks, signatures
+├── instructions/           # Individual instruction implementations
+│   ├── Balances.sol        # Balance management (static/dynamic)
+│   ├── Controls.sol        # Flow control (jump, deadline, conditionals)
+│   ├── Fee.sol             # Fee calculation instructions
+│   ├── XYCSwap.sol         # XY=K constant product swap
+│   ├── PeggedSwap.sol      # Pegged asset swap (stablecoins)
+│   ├── PeggedSwapReinvest.sol # Strictly-additive pegged swap with fee reinvestment
+│   ├── LimitSwap.sol       # Limit order swap logic
+│   ├── Invalidators.sol    # Order invalidation
+│   ├── MinRate.sol         # Minimum rate validation
+│   ├── Decay.sol           # Time-based decay
+│   ├── DutchAuction.sol    # Dutch auction pricing
+│   └── ...
+├── interfaces/             # Contract interfaces
+│   ├── ISwapVM.sol         # SwapVM interface
+│   ├── IMakerHooks.sol     # Maker hook callbacks
+│   └── ITakerCallbacks.sol # Taker callback interface
+├── libs/                   # Libraries
+│   ├── VM.sol              # VM implementation (execution loop, context)
+│   ├── MakerTraits.sol     # Order traits encoding
+│   ├── TakerTraits.sol     # Taker preferences encoding
+│   ├── PeggedSwapMath.sol  # Math for pegged swap curves
+│   └── ...
+├── opcodes/                # Opcode registries (instruction arrays)
+│   ├── Opcodes.sol         # Full instruction set
+│   ├── LimitOpcodes.sol    # Limit order instruction set
+│   └── AquaOpcodes.sol     # Aqua-specific instruction set
+├── routers/                # Router implementations
+│   ├── SwapVMRouter.sol    # Full instruction router
+│   ├── LimitSwapVMRouter.sol
+│   └── AquaSwapVMRouter.sol
+└── strategies/             # Program builders
+    └── AquaAMM.sol         # Example AMM strategy
+```
+
+## Inheritance Hierarchy
+
+```
+SwapVM (abstract base)
+├── SwapVMRouter
+│   └── inherits Opcodes
+│       └── inherits instruction contracts (XYCSwap, Balances, Controls, ...)
+├── LimitSwapVMRouter
+│   └── inherits LimitOpcodes
+└── AquaSwapVMRouter
+    └── inherits AquaOpcodes
+```
+
+## Core Concepts
+
+### VM Execution
+
+Programs are bytecode where each instruction is encoded as:
+```
+[opcode: 1 byte][argsLength: 1 byte][args: argsLength bytes]
+```
+
+The VM executes instructions in sequence. Key structures:
+- `VM`: VM state (program counter, opcodes array, static context flag)
+- `Context`: Full execution context (VM, query, swap registers)
+- `SwapRegisters`: Mutable state (balanceIn/Out, amountIn/Out)
+
+### Swap Flow
+
+1. User calls `router.swap(order, tokenIn, tokenOut, amount, takerData)`
+2. SwapVM extracts program from `order.traits.program(order.data)`
+3. SwapVM creates VM context with `_instructions()` array
+4. VM executes program bytecode
+5. SwapVM handles token transfers and hooks
+
+## Key Files Reference
+
+| File | Purpose |
+|------|---------|
+| `src/SwapVM.sol` | Base contract: order execution, token transfers, hooks |
+| `src/libs/VM.sol` | VM execution loop, Context/SwapRegisters structs |
+| `src/libs/MakerTraits.sol` | Order traits encoding (flags, hooks, program) |
+| `src/libs/TakerTraits.sol` | Taker preferences (exactIn, threshold, callbacks) |
+| `src/opcodes/Opcodes.sol` | Full instruction set registry |
+| `src/opcodes/OpcodesDebug.sol` | Debug version with logging |
+| `src/routers/SwapVMRouter.sol` | Main router connecting SwapVM + Opcodes |
+| `src/strategies/AquaAMM.sol` | Example strategy (program builder) |
+| `test/utils/ProgramBuilder.sol` | Helper for building bytecode programs |
+
+## Design Patterns
+
+- **Composition over Inheritance**: Instructions are composed into opcode sets
+- **Separation of Concerns**: VM execution, instruction logic, and routing are separate
+- **Extensibility**: New instructions added without modifying existing code
+- **Gas Efficiency**: Compact bytecode encoding, efficient storage patterns
+- **Static Context**: `ctx.vm.isStaticContext` prevents state changes during `quote()`
