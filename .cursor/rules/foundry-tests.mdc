@@ -26,3 +26,12 @@ Specify exact error type:
 vm.expectRevert(Contract.ErrorName.selector);
 // NOT: vm.expectRevert();
 ```
+
+## Fixing Tests
+
+When asked to fix failing tests:
+- **Minimal changes only** - fix the existing test, don't rewrite it
+- **Never create new test files** unless explicitly requested
+- **Never add new test functions** unless explicitly requested
+- Preserve the original test structure and intent
+- Update assertions/expectations to match new behavior if needed
