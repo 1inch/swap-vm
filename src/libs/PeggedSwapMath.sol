@@ -58,7 +58,6 @@ library PeggedSwapMath {
     /// @param invariantC Target invariant constant scaled by 1e18
     /// @return v Normalized y value (y/Y₀) scaled by 1e18
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        // Calculate √u with safe handling
         uint256 sqrtU = Math.sqrt(u * ONE);
 
         // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
@@ -72,38 +71,39 @@ library PeggedSwapMath {
         uint256 rightSide = invariantC - sqrtUPlusAu;
 
         if (a == 0) {
-            // Special case: a = 0
-            // Equation becomes: √v = rightSide
-            // So: v = rightSide²
+            // Equation becomes: √v = rightSide, so v = rightSide²
             v = (rightSide * rightSide) / ONE;
             return v;
         }
 
         // General case: aw² + w - rightSide = 0
-        // Quadratic formula: w = (-1 ± √(1 + 4a·rightSide)) / (2a)
-        // We want the positive root
+        // Quadratic formula: w = (-1 + √(1 + 4a·rightSide)) / (2a)
+        // (we want the positive root)
+        //
+        // NUMERICAL STABILITY FIX:
+        // The standard formula w = (-1 + √D) / (2a) suffers from catastrophic cancellation
+        // when a is small: D = 1 + 4aR/ONE ≈ 1, so √D ≈ 1, and numerator √D - 1 ≈ 0.
+        //
+        // We use the algebraically equivalent formula derived by rationalizing:
+        // w = (-1 + √D) / (2a) * (1 + √D) / (1 + √D)
+        //   = (D - 1) / (2a * (1 + √D))
+        //   = (4aR/ONE) / (2a * (1 + √D))
+        //   = 2R / (1 + √D)
+        //
+        // This form is stable for all values of a, including when a → 0.
 
         // 4 * a * rightSide / ONE - safe: 4a ≤ 8e27, rightSide ≤ 2e27 → 16e54 < 1e77
         uint256 fourARightSide = 4 * a * rightSide / ONE;
 
-        // Calculate discriminant: 1 + 4a * rightSide
         uint256 discriminant = ONE + fourARightSide;
 
-        // Calculate √discriminant with round UP (key for symmetry)
         uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Ceil);
 
-        // w = (-1 + √discriminant) / (2a)
-        // sqrtDiscriminant should always be >= 1 since discriminant >= 1
         require(sqrtDiscriminant >= ONE, PeggedSwapMathNoSolution());
 
-        // numerator = sqrtDiscriminant - 1 (in 1e27 scale)
-        uint256 numerator = sqrtDiscriminant - ONE;
+        uint256 denominator = ONE + sqrtDiscriminant;
 
-        // denominator = 2a (in 1e27 scale)
-        uint256 denominator = 2 * a;
-
-        // numerator * ONE / denominator - safe: numerator ≤ 2e27, ONE = 1e27 → 2e54
-        uint256 w = numerator * ONE / denominator;
+        uint256 w = 2 * rightSide * ONE / denominator;
 
         // w² / ONE - safe: w ≤ 2e27 → 4e54 < 1e77
         v = w * w / ONE;
