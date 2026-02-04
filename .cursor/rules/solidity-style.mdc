@@ -63,7 +63,7 @@ Solidity Best Practices
 - Use OpenZeppelin's Address library for safe interactions with external contracts.
 
 1inch Libraries (use instead of OpenZeppelin equivalents)
-- Use `@1inch/solidity-utils/contracts/libraries/SafeERC20.sol` for ERC20 interactions (not OZ SafeERC20)
+- Use `import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol"` for ERC20 interactions (exports IERC20 and IWETH - do NOT import IERC20 from OpenZeppelin separately)
 - Use `@1inch/solidity-utils/contracts/libraries/ECDSA.sol` for signature verification (not OZ ECDSA)
 - Use `@1inch/solidity-utils/contracts/libraries/TransientLock.sol` for reentrancy protection (not OZ ReentrancyGuard)
 - Use `@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol` for ETH/WETH handling
@@ -76,7 +76,6 @@ OpenZeppelin (still used for)
 - `@openzeppelin/contracts/utils/cryptography/EIP712.sol` for EIP712 typed signing
 - `@openzeppelin/contracts/utils/math/Math.sol` for math utilities (mulDiv, etc.)
 - `@openzeppelin/contracts/utils/math/SafeCast.sol` for safe type casting
-- `@openzeppelin/contracts/token/ERC20/IERC20.sol` for ERC20 interface only
 
 Testing and Quality Assurance
 - Implement a comprehensive testing strategy including unit, integration, and end-to-end tests.
