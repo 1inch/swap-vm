@@ -1,0 +1,41 @@
+---
+alwaysApply: true
+---
+
+# SwapVM
+
+VM-based swap protocol where orders are bytecode programs.
+
+## Program Encoding
+
+```
+[opcode: 1 byte][argsLength: 1 byte][args: argsLength bytes]
+```
+
+## Key Structures
+
+- `VM` - program counter, opcodes array, static context flag
+- `Context` - VM + query + swap registers
+- `SwapRegisters` - balanceIn/Out, amountIn/Out
+
+## Inheritance
+
+```
+SwapVM (abstract)
+├── SwapVMRouter      ← inherits Opcodes
+├── LimitSwapVMRouter ← inherits LimitOpcodes
+└── AquaSwapVMRouter  ← inherits AquaOpcodes
+```
+
+## Swap Flow
+
+1. `router.swap(order, tokenIn, tokenOut, amount, takerData)`
+2. Extract program from `order.traits.program(order.data)`
+3. VM executes bytecode
+4. Handle transfers and hooks
+
+## Key Locations
+
+- Instructions: `src/instructions/`
+- Libraries: `src/libs/` (VM.sol, MakerTraits.sol, TakerTraits.sol)
+- Routers: `src/routers/`
