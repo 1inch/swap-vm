@@ -3,153 +3,26 @@ globs: test/**/*
 alwaysApply: false
 ---
 
-# SwapVM Test Guidelines
+# Test Rules
 
-Use Foundry (forge) for testing and debugging.
+## Mocks
 
-## File Naming
-
-- Unit tests: `<Feature>.t.sol`
-- Aqua tests: `<Feature>Aqua.t.sol`
-- Base invariant tests: `test/invariants/<Feature>Invariants.t.sol`
-- Fee invariant tests: `test/invariants/<Feature>FeesInvariants.t.sol`
-- Scenario tests: `test/invariants/<swap_type>/<Scenario>.t.sol`
-- Gas benchmarks: `test/gas/<Feature>Gas.t.sol`
-
-## Directory Structure
-
-- `test/base/` - Base test classes
-  - `AquaSwapVMTest.sol` - Main test base for Aqua strategies
-  - `AquaStrategyBuilders.sol` - Strategy building helpers
-  - `TestConstants.sol` - Common test constants
-- `test/helpers/` - Helper contracts
-  - `AquaSwapVMHelper.sol` - Aqua mode swap helper
-  - `DirectSwapVMHelper.sol` - Direct mode swap helper
-  - `DirectModeTaker.sol` - Taker for direct mode tests
-- `test/mocks/` - Mock contracts (ALL mocks go here, NEVER inline in test files)
-  - `MockTaker.sol`, `MockTakerBrokenCallback.sol`, `MockTakerFirstTransfer.sol`
-  - `MockMakerHooks.sol` - Maker hooks mock
-  - `TokenMockDecimals.sol` - Token with configurable decimals
-  - `WETHMock.sol` - WETH mock
-- `test/utils/` - Utilities
-  - `Dynamic.sol` - Dynamic array builder
-  - `ProgramBuilder.sol` - Bytecode program builder
-  - `FormatLib.sol` - Formatting utilities
-  - `OrderHasher.sol` - Order hash utilities
-- `test/invariants/` - Invariant tests
-  - `CoreInvariants.t.sol` - Base invariant assertions
-  - `RoundingInvariants.sol` - Rounding exploit protection library
-  - `ExactInOutSymmetry.t.sol` - Symmetry assertion library
-  - `ExampleInvariantUsage.t.sol` - Usage examples
-  - `xyc/` - XYC scenario tests
-  - `pegged/` - Pegged scenario tests
-- `test/gas/` - Gas benchmarks
-  - `AMMGas.t.sol`, `LimitSwapGas.t.sol`
+**NEVER define mock contracts inline.** Use:
+- `TokenMock` (see solidity-style.mdc for import)
+- Existing mocks in `test/mocks/`
+- New mocks go in `test/mocks/<Name>.sol`
 
 ## Inheritance
 
-- **Aqua tests**: Inherit from `AquaSwapVMTest` (provides swapVM, taker, tokens, helpers)
-- **Direct tests**: Inherit from `Test` + `OpcodesDebug`
-- **Invariant tests**: Inherit from `CoreInvariants` + implement `_executeSwap()`
-- **Scenario tests**: Inherit from base invariant test (e.g., `XYCFeesInvariants`) + override config in setUp()
-
-## Key Structs
-
-- `MakerSetup` - Order configuration (balances, fees, swapType)
-- `SwapProgram` - Swap parameters (amount, taker, tokens, zeroForOne, isExactIn)
-- `InvariantConfig` - Invariant test configuration (tolerances, skip flags, test amounts)
-- `FeeConfig` - Fee configuration (flat, progressive, protocol fees)
-
-## Test Naming
-
-Pattern: `test_<Feature>[_<Variant>]`
-- `test_XYC` - Basic invariants
-- `test_XYCFlatFeeIn` - With flat fee on input
-- `test_XYCProgressiveFeeOut` - With progressive fee on output
-- `test_XYCProtocolFee` - With protocol fee
-- `test_XYCMultipleFees` - Combined fee types
-- `test_AsymmetricCapacity_AttackScenario` - Security scenario
-
-## Key Helpers
-
-**From AquaSwapVMTest**: createStrategy, shipStrategy, swap, quote, mint helpers, balance queries
-
-**From CoreInvariants**: assertAllInvariants, assertSymmetryInvariant, assertAdditivityInvariant, assertMonotonicityInvariant, assertQuoteSwapConsistencyInvariant, assertRoundingFavorsMakerInvariant
-
-**From RoundingInvariants**: assertNoAccumulationExploit, assertNoRoundTripProfit
-
-**From ExactInOutSymmetry**: assertSymmetry, assertSymmetryBatch
-
-## Mock Contracts
-
-**NEVER define mock contracts inline in test files.** Always use existing mocks or create new ones in `test/mocks/`.
-
-Before creating a test:
-1. Check `test/mocks/` for existing mocks
-2. Check 1inch libraries for standard mocks:
-   - `TokenMock` from `@1inch/solidity-utils/contracts/mocks/TokenMock.sol`
-3. If a new mock is needed, create it in `test/mocks/<MockName>.sol`
-
-Available mocks:
-- `TokenMockDecimals` - ERC20 with configurable decimals
-- `MockTaker` - Taker contract for swap tests
-- `MockMakerHooks` - Maker hooks implementation
-- `WETHMock` - WETH mock for ETH/WETH tests
-
-## Patterns
-
-- Use `vm.snapshot()` / `vm.revertTo()` for state isolation
-- Use `dynamic([...])` helper for building arrays
-- Use `assertApproxEqAbs` for wei tolerance, `assertApproxEqRel` for percentage
-- Override storage variables in setUp() for scenario configuration
-- Use `console.log` for debugging (from forge-std)
+- **Aqua tests**: `AquaSwapVMTest`
+- **Direct tests**: `Test` + `OpcodesDebug`
+- **Invariant tests**: `CoreInvariants`
 
 ## Error Handling
 
-Always specify the exact error type when testing reverts:
+Specify exact error type:
 
 ```solidity
-// CORRECT: Specify exact error type
-vm.expectRevert(PeggedSwapMath.PeggedSwapMathNoSolution.selector);
-vm.expectRevert(abi.encodeWithSelector(MinRate.MinRateFailed.selector, actualRate, minRate));
-
-// WRONG: Generic revert without type
-vm.expectRevert();
-vm.expectRevert("some string");
-```
-
-## Skip Flags
-
-- `skipAdditivity` - Progressive fees, limit orders
-- `skipMonotonicity` - Flat-rate orders, dust amounts
-- `skipSpotPrice` - Complex fee structures
-- `skipSymmetry` - Asymmetric fee structures
-
-## Tolerance Guidelines
-
-| Scenario | symmetryTolerance | additivityTolerance | roundingToleranceBps |
-|----------|-------------------|---------------------|----------------------|
-| Standard | 2 wei | 0 | 100 (1%) |
-| Imbalanced pools | 10+ wei | 0 | 200+ |
-| High fees | 2 wei | 1 wei | 500+ |
-| Protocol fees | 2 wei | 1 wei | 100 |
-| Different decimals | 1e12 wei | 1000 | 400+ |
-
-## Running Tests
-
-```bash
-# Run all tests
-forge test
-
-# Run specific test file
-forge test --match-path test/PeggedSwapReinvest.t.sol
-
-# Run specific test
-forge test --match-test test_AsymmetricCapacity
-
-# Run with verbosity
-forge test --match-test test_AsymmetricCapacity -vvv
-
-# Run gas report
-forge test --gas-report
+vm.expectRevert(Contract.ErrorName.selector);
+// NOT: vm.expectRevert();
 ```
