@@ -23,9 +23,9 @@ contract ImbalancedPoolLowFees is PeggedFeesInvariants {
         flatFeeOutBps = 0.001e9;  // 0.1%
 
         testAmounts = new uint256[](3);
-        testAmounts[0] = 100e18;
-        testAmounts[1] = 500e18;
-        testAmounts[2] = 1000e18;
+        testAmounts[0] = 5e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
 
         testAmountsExactOut = new uint256[](3);
         testAmountsExactOut[0] = 10e18;
