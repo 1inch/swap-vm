@@ -19,7 +19,6 @@ import { AquaOpcodesDebug } from "../src/opcodes/AquaOpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Controls } from "../src/instructions/Controls.sol";
 import { SplineSwap, SplineSwapArgsBuilder } from "../src/instructions/SplineSwap.sol";
-import { SplineSwapMath } from "../src/libs/SplineSwapMath.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
@@ -83,41 +82,28 @@ contract SplineSwapTest is Test, AquaOpcodesDebug {
         }));
     }
 
-    function buildSplineSwapProgram(
-        bytes4 densitySelector,
-        bytes4 priceFormulaSelector
-    ) internal view returns (bytes memory) {
-        return buildSplineSwapProgramAsymmetric(
-            densitySelector,
-            densitySelector,
-            priceFormulaSelector,
-            priceFormulaSelector
-        );
+    function buildSplineSwapProgram() internal view returns (bytes memory) {
+        return buildSplineSwapProgramWithParams(INITIAL_PRICE, 2500, 30);
     }
 
-    function buildSplineSwapProgramAsymmetric(
-        bytes4 sellDensitySelector,
-        bytes4 buyDensitySelector,
-        bytes4 sellPriceFormulaSelector,
-        bytes4 buyPriceFormulaSelector
+    function buildSplineSwapProgramWithParams(
+        uint256 price,
+        uint16 rangeBps,
+        uint16 spreadBps
     ) internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(SplineSwap._splineSwapGrowPriceRange2D,
                 SplineSwapArgsBuilder.build(SplineSwapArgsBuilder.Args({
-                    initialPrice: INITIAL_PRICE,
+                    initialPrice: price,
                     token0ToSell: INITIAL_BALANCE,
                     token0ToBuy: INITIAL_BALANCE,
-                    sellRangeBps: 2500, // 25% range
-                    buyRangeBps: 2500,
-                    sellAskBps: 30, // 0.3% spread
-                    sellBidBps: 30,
-                    buyAskBps: 30,
-                    buyBidBps: 30,
-                    sellDensitySelector: sellDensitySelector,
-                    buyDensitySelector: buyDensitySelector,
-                    sellPriceFormulaSelector: sellPriceFormulaSelector,
-                    buyPriceFormulaSelector: buyPriceFormulaSelector
+                    sellRangeBps: rangeBps,
+                    buyRangeBps: rangeBps,
+                    sellAskBps: spreadBps,
+                    sellBidBps: spreadBps,
+                    buyAskBps: spreadBps,
+                    buyBidBps: spreadBps
                 }))),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
@@ -194,16 +180,13 @@ contract SplineSwapTest is Test, AquaOpcodesDebug {
     }
 
     // ========================================
-    // DENSITY STRATEGY TESTS
+    // BASIC TESTS
     // ========================================
 
-    function test_Density_Uniform() public {
-        console.log("\n=== Testing UNIFORM Density ===");
+    function test_BasicSwap_ExactIn() public {
+        console.log("\n=== Testing Basic ExactIn Swap ===");
 
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
+        bytes memory program = buildSplineSwapProgram();
         ISwapVM.Order memory order = createStrategy(program);
         shipStrategy(order);
 
@@ -215,381 +198,10 @@ contract SplineSwapTest is Test, AquaOpcodesDebug {
         assertGt(amountOut, 0, "Should receive tokens");
     }
 
-    function test_Density_Quadratic() public {
-        console.log("\n=== Testing QUADRATIC Density ===");
+    function test_BasicSwap_ExactOut() public {
+        console.log("\n=== Testing Basic ExactOut Swap ===");
 
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.QUADRATIC_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_Stable() public {
-        console.log("\n=== Testing STABLE Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.STABLE_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_ExponentialDecay() public {
-        console.log("\n=== Testing EXPONENTIAL_DECAY Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.EXP_DECAY_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_ExponentialGrowth() public {
-        console.log("\n=== Testing EXPONENTIAL_GROWTH Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.EXP_GROWTH_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_Concentrated() public {
-        console.log("\n=== Testing CONCENTRATED Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.CONCENTRATED_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_SquareRoot() public {
-        console.log("\n=== Testing SQUARE_ROOT Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.SQRT_DENSITY_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_QuarticDecay() public {
-        console.log("\n=== Testing QUARTIC_DECAY Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.QUARTIC_DECAY_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_QuarticGrowth() public {
-        console.log("\n=== Testing QUARTIC_GROWTH Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.QUARTIC_GROWTH_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_AntiConcentrated() public {
-        console.log("\n=== Testing ANTI_CONCENTRATED Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.ANTI_CONCENTRATED_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_Plateau() public {
-        console.log("\n=== Testing PLATEAU Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.PLATEAU_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_Density_Sigmoid() public {
-        console.log("\n=== Testing SIGMOID Density ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.SIGMOID_DENSITY_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    // ========================================
-    // PRICE FORMULA TESTS
-    // ========================================
-
-    function test_PriceFormula_Spline() public {
-        console.log("\n=== Testing SPLINE Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_ConstantProduct() public {
-        console.log("\n=== Testing CONSTANT_PRODUCT Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.CONSTANT_PRODUCT_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Exponential() public {
-        console.log("\n=== Testing EXPONENTIAL Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.EXPONENTIAL_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_StableSwap() public {
-        console.log("\n=== Testing STABLESWAP Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.STABLESWAP_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Sqrt() public {
-        console.log("\n=== Testing SQRT Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.SQRT_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Cubic() public {
-        console.log("\n=== Testing CUBIC Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.CUBIC_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Log() public {
-        console.log("\n=== Testing LOG Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.LOG_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Sigmoid() public {
-        console.log("\n=== Testing SIGMOID Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.SIGMOID_PRICE_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    function test_PriceFormula_Hyperbolic() public {
-        console.log("\n=== Testing HYPERBOLIC Price Formula ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.HYPERBOLIC_SELECTOR
-        );
-        ISwapVM.Order memory order = createStrategy(program);
-        shipStrategy(order);
-
-        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
-
-        console.log("  Swap %s tokenA", amountIn / 1e18);
-        console.log("  Received %s tokenB", amountOut / 1e18);
-
-        assertGt(amountOut, 0, "Should receive tokens");
-    }
-
-    // ========================================
-    // EXACT OUT MODE TEST
-    // ========================================
-
-    function test_ExactOut_Uniform() public {
-        console.log("\n=== Testing ExactOut Mode ===");
-
-        bytes memory program = buildSplineSwapProgram(
-            SplineSwapMath.UNIFORM_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR
-        );
+        bytes memory program = buildSplineSwapProgram();
         ISwapVM.Order memory order = createStrategy(program);
         shipStrategy(order);
 
@@ -605,20 +217,47 @@ contract SplineSwapTest is Test, AquaOpcodesDebug {
     }
 
     // ========================================
-    // ASYMMETRIC CONFIGURATION TEST
+    // PRICE RANGE TESTS
     // ========================================
 
-    function test_AsymmetricConfiguration() public {
-        console.log("\n=== Testing Asymmetric Configuration ===");
-        console.log("  Sell side: ExponentialDecay density + Spline price");
-        console.log("  Buy side: ExponentialGrowth density + ConstantProduct price");
+    function test_PriceRange_SmallRange() public {
+        console.log("\n=== Testing Small Price Range (5%) ===");
 
-        bytes memory program = buildSplineSwapProgramAsymmetric(
-            SplineSwapMath.EXP_DECAY_SELECTOR,
-            SplineSwapMath.EXP_GROWTH_SELECTOR,
-            SplineSwapMath.SPLINE_PRICE_SELECTOR,
-            SplineSwapMath.CONSTANT_PRODUCT_SELECTOR
-        );
+        bytes memory program = buildSplineSwapProgramWithParams(INITIAL_PRICE, 500, 30);
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 10000e18, true, true);
+
+        console.log("  Swap %s tokenA", amountIn / 1e18);
+        console.log("  Received %s tokenB", amountOut / 1e18);
+
+        assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    function test_PriceRange_LargeRange() public {
+        console.log("\n=== Testing Large Price Range (50%) ===");
+
+        bytes memory program = buildSplineSwapProgramWithParams(INITIAL_PRICE, 5000, 30);
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 10000e18, true, true);
+
+        console.log("  Swap %s tokenA", amountIn / 1e18);
+        console.log("  Received %s tokenB", amountOut / 1e18);
+
+        assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    // ========================================
+    // SPREAD TESTS
+    // ========================================
+
+    function test_Spread_Zero() public {
+        console.log("\n=== Testing Zero Spread ===");
+
+        bytes memory program = buildSplineSwapProgramWithParams(INITIAL_PRICE, 2500, 0);
         ISwapVM.Order memory order = createStrategy(program);
         shipStrategy(order);
 
@@ -628,5 +267,82 @@ contract SplineSwapTest is Test, AquaOpcodesDebug {
         console.log("  Received %s tokenB", amountOut / 1e18);
 
         assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    function test_Spread_Large() public {
+        console.log("\n=== Testing Large Spread (1%) ===");
+
+        bytes memory program = buildSplineSwapProgramWithParams(INITIAL_PRICE, 2500, 100);
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1000e18, true, true);
+
+        console.log("  Swap %s tokenA", amountIn / 1e18);
+        console.log("  Received %s tokenB", amountOut / 1e18);
+
+        assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    // ========================================
+    // PRICE TESTS
+    // ========================================
+
+    function test_Price_HighPrice() public {
+        console.log("\n=== Testing High Initial Price (2000:1) ===");
+
+        bytes memory program = buildSplineSwapProgramWithParams(2000e18, 2500, 30);
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 2000000e18, true, true);
+
+        console.log("  Swap %s tokenA", amountIn / 1e18);
+        console.log("  Received %s tokenB", amountOut / 1e18);
+
+        assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    function test_Price_LowPrice() public {
+        console.log("\n=== Testing Low Initial Price (1:2000) ===");
+
+        bytes memory program = buildSplineSwapProgramWithParams(1e18 / 2000, 2500, 30);
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(order, 1e18, true, true);
+
+        console.log("  Swap %s tokenA", amountIn / 1e18);
+        console.log("  Received %s tokenB", amountOut / 1e18);
+
+        assertGt(amountOut, 0, "Should receive tokens");
+    }
+
+    // ========================================
+    // MULTIPLE SWAPS TEST
+    // ========================================
+
+    function test_MultipleSwaps() public {
+        console.log("\n=== Testing Multiple Swaps (Price Movement) ===");
+
+        bytes memory program = buildSplineSwapProgram();
+        ISwapVM.Order memory order = createStrategy(program);
+        shipStrategy(order);
+
+        // First swap
+        (uint256 amountIn1, uint256 amountOut1) = executeSwap(order, 10000e18, true, true);
+        console.log("  Swap 1: %s tokenA -> %s tokenB", amountIn1 / 1e18, amountOut1 / 1e18);
+
+        // Second swap (price should be higher now)
+        (uint256 amountIn2, uint256 amountOut2) = executeSwap(order, 10000e18, true, true);
+        console.log("  Swap 2: %s tokenA -> %s tokenB", amountIn2 / 1e18, amountOut2 / 1e18);
+
+        // Third swap
+        (uint256 amountIn3, uint256 amountOut3) = executeSwap(order, 10000e18, true, true);
+        console.log("  Swap 3: %s tokenA -> %s tokenB", amountIn3 / 1e18, amountOut3 / 1e18);
+
+        // Due to price increase, we should get less tokens for the same input
+        assertGt(amountOut1, amountOut2, "Second swap should give less due to price increase");
+        assertGt(amountOut2, amountOut3, "Third swap should give less due to price increase");
     }
 }
