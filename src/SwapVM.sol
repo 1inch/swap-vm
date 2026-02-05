@@ -167,35 +167,45 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
             require(order.maker.recoverOrIsValidSignature(orderHash, signature), BadSignature(order.maker, orderHash, signature));
         }
 
-        uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
         (amountIn, amountOut) = ctx.runLoop();
         order.traits.validate(tokenIn, tokenOut, amountIn);
         takerTraits.validate(takerData, amount, amountIn, amountOut);
 
         if (takerTraits.isFirstTransferFromTaker()) {
-            _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
+            _transferIn(ctx, order, takerTraits, takerData);
             _transferOut(ctx, order, takerTraits, takerData);
         } else {
             _transferOut(ctx, order, takerTraits, takerData);
-            _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
+            _transferIn(ctx, order, takerTraits, takerData);
         }
 
         _reentrancyGuards[orderHash].unlock();
         emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
     }
 
-    function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {
+    function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData) private {
+        // 1. Maker's preTransferIn hook runs first (may claim yield and push to Aqua)
         if (order.traits.hasPreTransferInHook()) {
             (IMakerHooks target, bytes calldata makerHookData) = order.traits.preTransferInHook(order.maker, order.data);
             bytes calldata takerHookData = takerTraits.preTransferInHookData(takerData);
             target.preTransferIn(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, makerHookData, takerHookData);
         }
 
+        // 2. Capture Aqua balance AFTER maker's hook but BEFORE taker's callback
+        //    This prevents taker from exploiting maker's yield by pushing fewer tokens
+        uint256 aquaBalanceAfterMakerHook;
+        bool needsAquaBalanceCheck = order.traits.useAquaInsteadOfSignature() && !takerTraits.useTransferFromAndAquaPush() && ctx.swap.amountIn > 0;
+        if (needsAquaBalanceCheck) {
+            (aquaBalanceAfterMakerHook,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
+        }
+
+        // 3. Taker's preTransferIn callback runs (must push full amountIn)
         if (takerTraits.hasPreTransferInCallback()) {
             bytes calldata callbackData = takerTraits.preTransferInCallbackData(takerData);
             ITakerCallbacks(ctx.query.taker).preTransferInCallback(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, callbackData);
         }
 
+        // 4. Validate transfer
         if (ctx.swap.amountIn > 0) {
             if (order.traits.useAquaInsteadOfSignature()) {
                 require(!order.traits.shouldUnwrapWeth(), MakerTraitsUnwrapIsIncompatibleWithAqua());
@@ -206,8 +216,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
                     IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn);
                     AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn);
                 } else {
+                    // Check that taker pushed the full amountIn (using balance captured after maker's hook)
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
-                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
+                    require(balanceIn >= aquaBalanceAfterMakerHook + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, aquaBalanceAfterMakerHook, ctx.swap.amountIn));
                 }
             } else {
                 _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
