@@ -2,3 +2,4 @@ forge-std/=node_modules/forge-std/src/
 @openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
 @1inch/solidity-utils/=node_modules/@1inch/solidity-utils/
 @1inch/aqua/=node_modules/@1inch/aqua/
+solady/=node_modules/solady/

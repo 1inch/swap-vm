@@ -32,5 +32,8 @@
   "bugs": {
     "url": "https://github.com/1inch/swap-vm/issues"
   },
-  "homepage": "https://github.com/1inch/swap-vm#readme"
+  "homepage": "https://github.com/1inch/swap-vm#readme",
+  "devDependencies": {
+    "solady": "^0.1.26"
+  }
 }

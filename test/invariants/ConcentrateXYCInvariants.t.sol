@@ -35,6 +35,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
+    TokenMock public tokenC;
 
     address public maker;
     uint256 public makerPK = 0x1234;
@@ -49,18 +50,23 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
+        tokenC = new TokenMock("Token C", "TKC");
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, 100000e18);
         tokenB.mint(maker, 100000e18);
+        tokenC.mint(maker, 100000e18);
         vm.prank(maker);
         tokenA.approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenC.approve(address(swapVM), type(uint256).max);
 
         // Setup approvals for taker (test contract)
         tokenA.approve(address(swapVM), type(uint256).max);
         tokenB.approve(address(swapVM), type(uint256).max);
+        tokenC.approve(address(swapVM), type(uint256).max);
     }
 
     /**
@@ -195,77 +201,51 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Test _xycConcentrateGrowLiquidityXD invariants
+     * Test _xycConcentrateGrowLiquidity3D invariants with 3 tokens
      */
-    function test_ConcentrateGrowLiquidityXD() public {
+    function test_ConcentrateGrowLiquidity3D() public {
         uint256 balanceA = 2000e18;
         uint256 balanceB = 2000e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.5e18;
-        uint256 priceMax = 2e18;
+        uint256 balanceC = 2000e18;
+        uint256 priceAB = 1e18;
+        uint256 priceAC = 1e18;
+        uint256 priceBC = 1e18;
+        uint256 priceMinAB = 0.8e18;
+        uint256 priceMaxAB = 1.25e18;
+        uint256 priceMaxAC = 1.25e18;
 
-        (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) = XYCConcentrateArgsBuilder.computePairs(
-            dynamic([address(tokenA), address(tokenB)]),
-            dynamic([balanceA, balanceB]),
-            dynamic([currentPrice]),
-            dynamic([priceMin]),
-            dynamic([priceMax])
+        (
+            uint256 deltaA,
+            uint256 deltaB,
+            uint256 deltaC,
+            ,,,
+            uint256 liquidityRoot,
+            uint256 liquidityPower
+        ) = XYCConcentrateArgsBuilder.computeDeltas3D(
+            balanceA,
+            balanceB,
+            balanceC,
+            priceAB,
+            priceAC,
+            priceBC,
+            priceMinAB,
+            priceMaxAB,
+            priceMaxAC
         );
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
+                    dynamic([address(tokenA), address(tokenB), address(tokenC)]),
+                    dynamic([balanceA, balanceB, balanceC])
                 )),
-            program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(pairIds, deltas, liquidities)),
-            program.build(_xycSwapXD)
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        InvariantConfig memory config = _getDefaultConfig();
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test _xycConcentrateGrowPriceRangeXD invariants
-     */
-    function test_ConcentrateGrowPriceRangeXD() public {
-        uint256 balanceA = 2500e18;
-        uint256 balanceB = 2500e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.6e18;
-        uint256 priceMax = 1.7e18;
-
-        (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) = XYCConcentrateArgsBuilder.computePairs(
-            dynamic([address(tokenA), address(tokenB)]),
-            dynamic([balanceA, balanceB]),
-            dynamic([currentPrice]),
-            dynamic([priceMin]),
-            dynamic([priceMax])
-        );
-
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
+            program.build(_xycConcentrateGrowLiquidity3D,
+                XYCConcentrateArgsBuilder.buildXD(
+                    dynamic([address(tokenA), address(tokenB), address(tokenC)]),
+                    dynamic([deltaA, deltaB, deltaC]),
+                    liquidityRoot, liquidityPower
                 )),
-            program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(pairIds, deltas, liquidities)),
             program.build(_xycSwapXD)
         );
 

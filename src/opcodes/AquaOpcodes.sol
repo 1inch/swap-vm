@@ -30,7 +30,7 @@ contract AquaOpcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[35] memory instructions = [
+        function(Context memory, bytes calldata) internal[36] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -54,7 +54,8 @@ contract AquaOpcodes is
             // XYCSwap - basic swap (most common swap type)
             XYCSwap._xycSwapXD,
             // XYCConcentrate - liquidity concentration (common AMM feature)
-            XYCConcentrate._xycConcentrateGrowLiquidityXD,
+            XYCConcentrate._xycConcentrateGrowLiquidity4D,
+            XYCConcentrate._xycConcentrateGrowLiquidity3D,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
             XYCConcentrateExperimental._xycConcentrateGrowPriceRangeXD,
             XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,

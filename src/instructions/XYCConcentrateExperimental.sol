@@ -21,7 +21,7 @@ contract XYCConcentrateExperimental is XYCConcentrate {
     function _xycConcentrateGrowPriceRangeXD(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas,) = XYCConcentrateArgsBuilder.parseXD(args);
+        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas,,) = XYCConcentrateArgsBuilder.parseXD(args);
         for (uint256 i = 0; i < tokensCount; i++) {
             address token = address(bytes20(tokens.slice(i * 20)));
             uint256 delta = uint256(bytes32(deltas.slice(i * 32)));
