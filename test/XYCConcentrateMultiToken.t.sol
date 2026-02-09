@@ -5,59 +5,68 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { dynamic } from "./utils/Dynamic.sol";
-import { Vm } from "forge-std/Vm.sol";
-
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
-import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
+import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 
-/**
- * @title XYCConcentrateMultiTokenTest
- * @notice Tests for XYCConcentrate with multi-token orders (>2 tokens)
- * @dev This test suite verifies that liquidity storage is correctly isolated per token pair
- *      to prevent storage collisions when makers create orders supporting swaps between
- *      more than 2 tokens.
- */
+/// @title XYCConcentrate Multi-Token Liquidity Tests
+/// @notice Tests for liquidity and price updates in multi-token concentrated pools
 contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
-    using SafeCast for uint256;
     using ProgramBuilder for Program;
 
     constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
-    XYCConcentrate public concentrate;
-
     address public tokenA;
     address public tokenB;
     address public tokenC;
+    address public tokenD;
 
     address public maker;
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
+
+    function assertNotApproxEqRel(uint256 left, uint256 right, uint256 maxDelta, string memory err) internal {
+        if (left > right * (1e18 - maxDelta) / 1e18 && left < right * (1e18 + maxDelta) / 1e18) {
+            // Value IS within range, but we expect it NOT to be
+            fail(err);
+        }
+    }
+
+    struct MakerSetup {
+        address[] tokens;
+        uint256[] balances;
+        uint256[] currentPrice;
+        uint256[] priceMin;
+        uint256[] priceMax;
+        uint32 flatFee; // 0.003e9 = 0.3% flat fee
+    }
+
+    struct TakerSetup {
+        bool isExactIn;
+    }
 
     function setUp() public {
         // Setup maker with known private key for signing
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        // Deploy SwapVM router and get concentrate instance
+        // Deploy custom SwapVM router
         swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
-        concentrate = XYCConcentrate(address(swapVM));
 
-        // Deploy 3 mock tokens
+        // Deploy mock tokens
         tokenA = address(new TokenMock("Token A", "TKA"));
         tokenB = address(new TokenMock("Token B", "TKB"));
         tokenC = address(new TokenMock("Token C", "TKC"));
@@ -70,13 +79,14 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         TokenMock(tokenB).mint(taker, 1_000_000_000e18);
         TokenMock(tokenC).mint(taker, 1_000_000_000e18);
 
-        // Approve SwapVM
+        // Approve SwapVM to spend tokens by maker
         vm.startPrank(maker);
         TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
         TokenMock(tokenC).approve(address(swapVM), type(uint256).max);
         vm.stopPrank();
 
+        // Approve SwapVM to spend tokens by taker
         vm.startPrank(taker);
         TokenMock(tokenA).approve(address(swapVM), type(uint256).max);
         TokenMock(tokenB).approve(address(swapVM), type(uint256).max);
@@ -84,50 +94,29 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         vm.stopPrank();
     }
 
-    struct ThreeTokenSetup {
-        uint256 balanceA;
-        uint256 balanceB;
-        uint256 balanceC;
-        uint256 flatFee;
+    function _getPairId(address token0, address token1) internal pure returns (bytes32) {
+        (address tokenLt, address tokenGt) = token0 < token1 ? (token0, token1) : (token1, token0);
+        return XYCConcentrateArgsBuilder.getPairId(tokenLt, tokenGt);
     }
 
-    function _createThreeTokenOrder(ThreeTokenSetup memory setup)
-        internal
-        view
-        returns (ISwapVM.Order memory order, bytes memory signature)
-    {
-        // Use chain calculation for consistent deltas across all pairs
-        // Compute current price for base pair A-B
-        uint256 basePairPrice = (setup.balanceB * 1e18) / setup.balanceA;
+    function _createMultiTokenOrder(
+        address[] memory tokens,
+        uint256[] memory balances,
+        uint256[] memory currentPrice,
+        uint256[] memory priceMin,
+        uint256[] memory priceMax,
+        uint32 feeBps
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        require(tokens.length == balances.length, "Length mismatch");
+        require(tokens.length >= 2, "Need at least 2 tokens");
 
-        // Compute deltas for base pair and get concentration ratio
-        (uint256 deltaA, uint256 deltaB, uint256 concentrationRatio) =
-            XYCConcentrateArgsBuilder.computeDeltasChain(
-                setup.balanceA,    // balance of token A
-                setup.balanceB,    // balance of token B
-                basePairPrice,     // current price A-B
-                0.01e18,           // min price = 0.01 (very wide range)
-                25e18              // max price = 25.0
-            );
-
-        // Apply concentration ratio to token C
-        uint256 deltaC = (setup.balanceC * (concentrationRatio - 1e18)) / 1e18;
-
-        // Build arrays for XD format
-        address[] memory tokens = new address[](3);
-        tokens[0] = tokenA;
-        tokens[1] = tokenB;
-        tokens[2] = tokenC;
-
-        uint256[] memory deltas = new uint256[](3);
-        deltas[0] = deltaA;
-        deltas[1] = deltaB;
-        deltas[2] = deltaC;
-
-        uint256[] memory initialBalances = new uint256[](3);
-        initialBalances[0] = setup.balanceA + deltaA;
-        initialBalances[1] = setup.balanceB + deltaB;
-        initialBalances[2] = setup.balanceC + deltaC;
+        (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) = XYCConcentrateArgsBuilder.computePairs(
+            tokens,
+            balances,
+            currentPrice,
+            priceMin,
+            priceMax
+        );
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -149,14 +138,13 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
-                    tokens,
-                    dynamic([setup.balanceA, setup.balanceB, setup.balanceC])
-                )),
+                program.build(Balances._dynamicBalancesXD,
+                    BalancesArgsBuilder.build(tokens, balances)),
+                feeBps > 0 ? program.build(Fee._flatFeeAmountInXD,
+                    FeeArgsBuilder.buildFlatFee(feeBps)) : bytes(""),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidityXD,
-                    XYCConcentrateArgsBuilder.buildXD(tokens, deltas, initialBalances)
+                    XYCConcentrateArgsBuilder.buildXD(pairIds, deltas, liquidities)
                 ),
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
                 program.build(XYCSwap._xycSwapXD)
             )
         }));
@@ -166,19 +154,30 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
         signature = abi.encodePacked(r, s, v);
     }
 
-    function _buildTakerData(bool isExactIn, bytes memory sig) internal view returns (bytes memory) {
+    // Overload without fee parameter (defaults to 0.3% = 0.003e9)
+    function _createMultiTokenOrder(
+        address[] memory tokens,
+        uint256[] memory balances,
+        uint256[] memory currentPrice,
+        uint256[] memory priceMin,
+        uint256[] memory priceMax
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        return _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax, uint32(0.003e9));
+    }
+
+    function _takerData(bytes memory signature, bool isExactIn) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             threshold: "",
             to: address(0),
             deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
             preTransferInHookData: "",
             postTransferInHookData: "",
             preTransferOutHookData: "",
@@ -186,216 +185,442 @@ contract XYCConcentrateMultiTokenTest is Test, OpcodesDebug {
             preTransferInCallbackData: "",
             preTransferOutCallbackData: "",
             instructionsArgs: "",
-            signature: sig
+            signature: signature
         }));
     }
 
-    function test_ThreeTokens_IndependentLiquidityStorage() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 10000e18,
-            balanceB: 5000e18,
-            balanceC: 2000e18,
-            flatFee: 0.001e9  // 0.1% fee
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
+    function _takerData(bytes memory signature) internal view returns (bytes memory) {
+        return _takerData(signature, true);  // Default to exactIn
+    }
+
+    function _getPrice(ISwapVM.Order memory order, address tokenIn, address tokenOut, uint256 amount) internal view returns (uint256) {
+        (uint256 amountIn, uint256 amountOut,) = swapVM.asView().quote(order, tokenIn, tokenOut, amount, _takerData(""));
+        return amountOut * 1e18 / amountIn;
+    }
+
+    // Helper to create standard 3-token setup
+    // Auto-calculates prices based on balances
+    // Override returned prices if needed for custom tests
+    function _createThreeTokenSetup(
+        uint256 balanceA,
+        uint256 balanceB,
+        uint256 balanceC
+    ) internal view returns (
+        address[] memory tokens,
+        uint256[] memory balances,
+        uint256[] memory currentPrice,
+        uint256[] memory priceMin,
+        uint256[] memory priceMax
+    ) {
+        tokens = new address[](3);
+        tokens[0] = tokenA;
+        tokens[1] = tokenB;
+        tokens[2] = tokenC;
+
+        balances = new uint256[](3);
+        balances[0] = balanceA;
+        balances[1] = balanceB;
+        balances[2] = balanceC;
+
+        // Auto-calculate prices based on balances
+        currentPrice = new uint256[](3);
+        currentPrice[0] = (balanceB * 1e18) / balanceA; // B/A
+        currentPrice[1] = (balanceC * 1e18) / balanceA; // C/A
+        currentPrice[2] = (balanceC * 1e18) / balanceB; // C/B
+
+        priceMin = new uint256[](3);
+        priceMin[0] = currentPrice[0] / 2;
+        priceMin[1] = currentPrice[1] / 2;
+        priceMin[2] = currentPrice[2] / 2;
+
+        priceMax = new uint256[](3);
+        priceMax[0] = currentPrice[0] * 2;
+        priceMax[1] = currentPrice[1] * 2;
+        priceMax[2] = currentPrice[2] * 2;
+    }
+
+    // ========== 2-TOKEN POOL TESTS ==========
+
+    function test_TwoTokenPool_LiquidityUpdate() public {
+        // Setup: A=100e18, B=200e18
+        address[] memory tokens = new address[](2);
+        tokens[0] = tokenA;
+        tokens[1] = tokenB;
+
+        uint256[] memory balances = new uint256[](2);
+        balances[0] = 100e18;
+        balances[1] = 200e18;
+
+        uint256[] memory currentPrice = new uint256[](1);
+        currentPrice[0] = 1e18;
+        uint256[] memory priceMin = new uint256[](1);
+        priceMin[0] = 0.5e18;
+        uint256[] memory priceMax = new uint256[](1);
+        priceMax[0] = 2e18;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
         bytes32 orderHash = swapVM.hash(order);
-        bytes memory takerData = _buildTakerData(false, signature);
+        bytes32 pairId = _getPairId(tokenA, tokenB);
+        uint256 liquidity = swapVM.liquidity(orderHash, pairId);
+        uint256 amountIn = 10e18;
 
-        // Perform swap A -> B (half of B)
-        vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, setup.balanceB / 2, takerData);
-
-        // Check concentrated balances - A and B were used, C was not
-        uint256 concentratedA = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concentratedB = concentrate.concentratedBalances(orderHash, tokenB);
-        uint256 concentratedC = concentrate.concentratedBalances(orderHash, tokenC);
-
-        assertTrue(concentratedA > 0, "Token A concentrated balance should be updated");
-        assertTrue(concentratedB > 0, "Token B concentrated balance should be updated");
-        assertEq(concentratedC, 0, "Token C concentrated balance should still be 0");
-    }
-
-    function test_ThreeTokens_SequentialSwapsAcrossPairs() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 10000e18,
-            balanceB: 5000e18,
-            balanceC: 2000e18,
-            flatFee: 0.001e9
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
-        bytes32 orderHash = swapVM.hash(order);
-        bytes memory takerData = _buildTakerData(false, signature);
-
-        // Swap 1: A -> B
-        vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
-
-        uint256 concA_1 = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB_1 = concentrate.concentratedBalances(orderHash, tokenB);
-        uint256 concC_1 = concentrate.concentratedBalances(orderHash, tokenC);
-
-        assertTrue(concA_1 > 0, "Token A should be updated after first swap");
-        assertTrue(concB_1 > 0, "Token B should be updated after first swap");
-        assertEq(concC_1, 0, "Token C should still be 0");
-
-        // Swap 2: A -> C
-        vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenC, 500e18, takerData);
-
-        uint256 concA_2 = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB_2 = concentrate.concentratedBalances(orderHash, tokenB);
-        uint256 concC_2 = concentrate.concentratedBalances(orderHash, tokenC);
-
-        assertTrue(concA_2 > concA_1, "Token A should increase (used in both swaps)");
-        assertEq(concB_2, concB_1, "Token B should not change");
-        assertTrue(concC_2 > 0, "Token C should be set after second swap");
-
-        // Swap 3: B -> C
-        vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenC, 300e18, takerData);
-
-        uint256 concA_3 = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB_3 = concentrate.concentratedBalances(orderHash, tokenB);
-        uint256 concC_3 = concentrate.concentratedBalances(orderHash, tokenC);
-
-        assertEq(concA_3, concA_2, "Token A should not change");
-        assertTrue(concB_3 != concB_2, "Token B should update");
-        assertTrue(concC_3 < concC_2, "Token C balance should decrease");
-    }
-
-    function test_ThreeTokens_PairIndependenceAfterExhaustion() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 10000e18,
-            balanceB: 5000e18,
-            balanceC: 2000e18,
-            flatFee: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
-        bytes memory takerData = _buildTakerData(false, signature);
-
-        // Exhaust pair A-B completely
-        vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, setup.balanceB, takerData);
-        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Token B should be exhausted");
-
-        // Verify A-C pair still works
-        vm.prank(taker);
-        (uint256 amountIn,,) = swapVM.swap(order, tokenA, tokenC, 500e18, takerData);
-        assertTrue(amountIn > 0, "A-C swap should still work after A-B exhaustion");
-
-        // Verify B-C pair still works (buying C with B)
-        vm.prank(taker);
-        (uint256 amountIn2,,) = swapVM.swap(order, tokenB, tokenC, 200e18, takerData);
-        assertTrue(amountIn2 > 0, "B-C swap should still work after A-B exhaustion");
-    }
-
-    function test_ThreeTokens_CircularSwaps() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 10000e18,
-            balanceB: 10000e18,
-            balanceC: 10000e18,
-            flatFee: 0.001e9
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
-        bytes memory takerData = _buildTakerData(false, signature);
-
-        uint256 takerBalanceA_init = TokenMock(tokenA).balanceOf(taker);
-
-        // Circular swap: A -> B -> C -> A
         vm.startPrank(taker);
+        for (uint256 i = 0; i < 10; i++) {
+            swapVM.swap(order, tokenA, tokenB, amountIn, _takerData(signature));
+            uint256 liquidityAfterSwap = swapVM.liquidity(orderHash, pairId);
+            assertGe(liquidityAfterSwap, liquidity, "Liquidity should remain constant or increase after swaps");
+        }
+        for (uint256 i = 0; i < 10; i++) {
+            swapVM.swap(order, tokenB, tokenA, amountIn, _takerData(signature));
+            uint256 liquidityAfterSwap = swapVM.liquidity(orderHash, pairId);
+            assertGe(liquidityAfterSwap, liquidity, "Liquidity should remain constant or increase after swaps");
+        }
+        vm.stopPrank();
+    }
 
-        // A -> B
-        (uint256 amountInAB, uint256 amountOutAB,) = swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
+    // ========== 3-TOKEN POOL TESTS ==========
 
-        // B -> C (use all received B tokens)
-        (uint256 amountInBC, uint256 amountOutBC,) = swapVM.swap(order, tokenB, tokenC, amountOutAB, takerData);
+    function test_ThreeTokenPool_AdjacentPairsUpdate() public {
+        (
+            address[] memory tokens,
+            uint256[] memory balances,
+            uint256[] memory currentPrice,
+            uint256[] memory priceMin,
+            uint256[] memory priceMax
+        ) = _createThreeTokenSetup(1e18, 2e18, 3e18);
 
-        // C -> A (use all received C tokens)
-        (uint256 amountInCA, uint256 amountOutCA,) = swapVM.swap(order, tokenC, tokenA, amountOutBC, takerData);
+        // Override with custom price ranges for this test
+        priceMin[0] = 1e18; priceMin[1] = 1.5e18; priceMin[2] = 0.75e18;
+        priceMax[0] = 4e18; priceMax[1] = 6e18; priceMax[2] = 3e18;
 
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
+        bytes32 orderHash = swapVM.hash(order);
+
+        bytes32 pairAB = _getPairId(tokenA, tokenB);
+        bytes32 pairAC = _getPairId(tokenA, tokenC);
+        bytes32 pairBC = _getPairId(tokenB, tokenC);
+
+        // Execute swap A→B
+        uint256 amountIn = 1e18;
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, amountIn, _takerData(signature));
+
+        // Check all three pairs were updated
+        uint256 liquidityAB = swapVM.liquidity(orderHash, pairAB);
+        uint256 liquidityAC = swapVM.liquidity(orderHash, pairAC);
+        uint256 liquidityBC = swapVM.liquidity(orderHash, pairBC);
+
+        // All liquidities should be non-zero after swap
+        assertTrue(liquidityAB > 0, "Liquidity A/B should be updated");
+        assertTrue(liquidityAC > 0, "Liquidity A/C should be updated");
+        assertTrue(liquidityBC > 0, "Liquidity B/C should be updated");
+    }
+
+    function test_ThreeTokenPool_PriceConsistency() public {
+        (
+            address[] memory tokens,
+            uint256[] memory balances,
+            uint256[] memory currentPrice,
+            uint256[] memory priceMin,
+            uint256[] memory priceMax
+        ) = _createThreeTokenSetup(100e18, 200e18, 300e18);
+
+        // Override with custom price ranges for this test
+        priceMin[0] = 1e18; priceMin[1] = 1.5e18; priceMin[2] = 0.75e18;
+        priceMax[0] = 4e18; priceMax[1] = 6e18; priceMax[2] = 3e18;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
+
+        bytes32 orderHash = swapVM.hash(order);
+        bytes32 pairAB = _getPairId(tokenA, tokenB);
+        bytes32 pairAC = _getPairId(tokenA, tokenC);
+        bytes32 pairBC = _getPairId(tokenB, tokenC);
+
+        // ===== BEFORE SWAP =====
+        uint256 priceAB_before = _getPrice(order, tokenA, tokenB, 0.01e18);
+        uint256 priceBC_before = _getPrice(order, tokenB, tokenC, 0.01e18);
+        uint256 priceAC_direct_before = _getPrice(order, tokenA, tokenC, 0.01e18);
+        uint256 priceAC_via_B_before = priceAB_before * priceBC_before / 1e18;
+
+        // Price transitivity BEFORE swap
+        assertApproxEqRel(
+            priceAC_direct_before,
+            priceAC_via_B_before,
+            0.02e18,
+            "Prices should be transitive before swap"
+        );
+
+        // initializes liquidity
+        uint256 swapAmount = 10e18;
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, swapAmount, _takerData(signature));
+
+        uint256 priceAB_after = _getPrice(order, tokenA, tokenB, 0.01e18);
+        uint256 priceBC_after = _getPrice(order, tokenB, tokenC, 0.01e18);
+        uint256 priceAC_direct_after = _getPrice(order, tokenA, tokenC, 0.01e18);
+        uint256 priceAC_via_B_after = priceAB_after * priceBC_after / 1e18;
+
+        uint256 liquidityAB_after = swapVM.liquidity(orderHash, pairAB);
+        uint256 liquidityAC_after = swapVM.liquidity(orderHash, pairAC);
+        uint256 liquidityBC_after = swapVM.liquidity(orderHash, pairBC);
+
+        // Price transitivity AFTER swap
+        assertApproxEqRel(
+            priceAC_direct_after,
+            priceAC_via_B_after,
+            0.02e18,
+            "Prices should remain transitive after swap"
+        );
+
+        // Price direction changes are correct
+        // After selling A for B: A should become cheaper
+        assertLt(priceAB_after, priceAB_before, "A should be cheaper after selling A for B");
+        assertLt(priceAC_direct_after, priceAC_direct_before, "A should be cheaper relative to C");
+        assertGt(priceBC_after, priceBC_before, "B should be more expensive relative to C");
+
+        // test liquidity changes
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, swapAmount, _takerData(signature));
+
+        uint256 liquidityAB_after2 = swapVM.liquidity(orderHash, pairAB);
+        uint256 liquidityAC_after2 = swapVM.liquidity(orderHash, pairAC);
+        uint256 liquidityBC_after2 = swapVM.liquidity(orderHash, pairBC);
+
+        // Expected behavior in shared liquidity model:
+        // Active pair A/B: liquidity increases
+        // Pair A/C: liquidity increases (A increased in pool)
+        // Pair B/C: liquidity decreases (B decreased in pool)
+        assertGt(liquidityAB_after2, liquidityAB_after, "Liquidity A/B should increase (active pair)");
+        assertGt(liquidityAC_after2, liquidityAC_after, "Liquidity A/C should increase (A increased)");
+        assertLt(liquidityBC_after2, liquidityBC_after, "Liquidity B/C should decrease (B decreased)");
+    }
+
+    function test_ThreeTokenPool_NoArbitrageInCircularSwaps() public {
+        (
+            address[] memory tokens,
+            uint256[] memory balances,
+            uint256[] memory currentPrice,
+            uint256[] memory priceMin,
+            uint256[] memory priceMax
+        ) = _createThreeTokenSetup(100e18, 200e18, 300e18);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
+
+        // Initialize liquidity with first swap
+        vm.startPrank(taker);
+        swapVM.swap(order, tokenA, tokenB, 1e18, _takerData(signature));
+
+        uint256 startAmount = 10e18;
+
+        // Step 1: A -> B
+        (, uint256 amountOut1,) = swapVM.swap(order, tokenA, tokenB, startAmount, _takerData(signature));
+        // Step 2: B -> C
+        (, uint256 amountOut2,) = swapVM.swap(order, tokenB, tokenC, amountOut1, _takerData(signature));
+        // Step 3: C -> A
+        (, uint256 amountOut3,) = swapVM.swap(order, tokenC, tokenA, amountOut2, _takerData(signature));
         vm.stopPrank();
 
-        // Due to fees and price impact, we should end up with less A than we started with
-        uint256 takerBalanceA_final = TokenMock(tokenA).balanceOf(taker);
-        uint256 netChange = takerBalanceA_init > takerBalanceA_final
-            ? takerBalanceA_init - takerBalanceA_final
-            : takerBalanceA_final - takerBalanceA_init;
+        // Calculate loss
+        uint256 loss = startAmount > amountOut3 ? startAmount - amountOut3 : 0;
+        uint256 lossPercent = loss * 100e18 / startAmount;
 
-        // Check that the circular path completed and we got some A back
-        assertTrue(amountOutCA > 0, "Should receive some A tokens back");
-        assertTrue(netChange < amountInAB, "Net loss should be less than initial input (got something back)");
+        // Should not create profit (no arbitrage)
+        // Small loss is expected due to slippage and fees
+        assertLe(amountOut3, startAmount, "Circular swap should not create profit");
+
+        // Loss should be reasonable (< 10% for this size of swap)
+        assertLt(lossPercent, 10e18, "Loss from circular swap should be reasonable");
     }
 
-    function test_ThreeTokens_StressTestMultipleSwaps() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 100000e18,
-            balanceB: 100000e18,
-            balanceC: 100000e18,
-            flatFee: 0.001e9
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
+    // ========== EDGE CASE TESTS ==========
+
+    function test_ThreeTokenPool_ReservesDepletion() public {
+        (
+            address[] memory tokens,
+            uint256[] memory balances,
+            uint256[] memory currentPrice,
+            uint256[] memory priceMin,
+            uint256[] memory priceMax
+        ) = _createThreeTokenSetup(100e18, 200e18, 300e18);
+
+        // Override with uniform prices for this test
+        currentPrice[0] = 1e18; currentPrice[1] = 1e18; currentPrice[2] = 1e18;
+        priceMin[0] = 0.5e18; priceMin[1] = 0.5e18; priceMin[2] = 0.5e18;
+        priceMax[0] = 2e18; priceMax[1] = 2e18; priceMax[2] = 2e18;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
         bytes32 orderHash = swapVM.hash(order);
-        bytes memory takerData = _buildTakerData(false, signature);
 
-        // Perform 30 swaps across different pairs
-        for (uint256 i = 0; i < 30; i++) {
-            uint256 pairSelector = i % 3;
+        // Fully deplete tokenA using exactOut to get precise amount
+        uint256 allTokenA = balances[0];  // 100e18
 
-            vm.prank(taker);
-            if (pairSelector == 0) {
-                // A -> B
-                swapVM.swap(order, tokenA, tokenB, 100e18, takerData);
-            } else if (pairSelector == 1) {
-                // B -> C
-                swapVM.swap(order, tokenB, tokenC, 100e18, takerData);
-            } else {
-                // C -> A
-                swapVM.swap(order, tokenC, tokenA, 100e18, takerData);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(
+            order,
+            tokenB,        // tokenIn
+            tokenA,        // tokenOut - want to receive all tokenA
+            allTokenA,     // Exact amount to receive
+            _takerData(signature, false)  // isExactIn = false (exactOut)
+        );
+
+        // Check that tokenA is completely depleted
+        uint256 balanceA = swapVM.balances(orderHash, tokenA);
+        assertEq(balanceA, 0, "Token A should be completely depleted");
+
+        // Verify we received exact amount requested
+        assertEq(amountOut, allTokenA, "Should receive exact amount of tokenA");
+
+        // Check that we cannot swap B->A anymore (no A available)
+        vm.prank(taker);
+        vm.expectRevert(); // Should revert because no A tokens available
+        swapVM.swap(order, tokenB, tokenA, 1e18, _takerData(signature));
+
+        // Check that we cannot swap C->A anymore (no A available)
+        vm.prank(taker);
+        vm.expectRevert(); // Should revert because no A tokens available
+        swapVM.swap(order, tokenC, tokenA, 1e18, _takerData(signature));
+
+        // But we should still be able to swap B<->C (those tokens are still available)
+        uint256 balanceB = swapVM.balances(orderHash, tokenB);
+        uint256 balanceC = swapVM.balances(orderHash, tokenC);
+
+        assertTrue(balanceB > 0, "Token B should still be available");
+        assertTrue(balanceC > 0, "Token C should still be available");
+
+        // Verify we can still swap B->C
+        vm.prank(taker);
+        (, uint256 amountOutBC,) = swapVM.swap(order, tokenB, tokenC, 1e18, _takerData(signature));
+        assertTrue(amountOutBC > 0, "Should be able to swap B->C when A is depleted");
+
+        balanceB = swapVM.balances(orderHash, tokenB);
+        vm.prank(taker);
+        swapVM.swap(order, tokenC, tokenB, balanceB, _takerData(signature, false));
+        balanceB = swapVM.balances(orderHash, tokenB);
+        assertEq(balanceB, 0, "Token B should be completely depleted");
+
+        // Now tokenB is also depleted, check we cannot swap A->B or C->B
+        vm.prank(taker);
+        vm.expectRevert(); // Should revert because no B tokens available
+        swapVM.swap(order, tokenA, tokenB, 1e18, _takerData(signature));
+        vm.prank(taker);
+        vm.expectRevert(); // Should revert because no B tokens available
+        swapVM.swap(order, tokenC, tokenB, 1e18, _takerData(signature));
+
+        balanceA = swapVM.balances(orderHash, tokenA);
+        balanceB = swapVM.balances(orderHash, tokenB);
+        balanceC = swapVM.balances(orderHash, tokenC);
+
+        assertEq(balanceB, 0, "Token B should be completely depleted");
+        assertEq(balanceA, 0, "Token A should be completely depleted");
+        assertGt(balanceC, 0, "Token C should still have balance");
+    }
+
+    function test_ThreeTokenPool_KeepsPriceRangeForAllTokensWithFee() public {
+        // Use balanced balances so all pairs have ~1:1 price
+        (
+            address[] memory tokens,
+            uint256[] memory balances,
+            uint256[] memory currentPrice,
+            uint256[] memory priceMin,
+            uint256[] memory priceMax
+        ) = _createThreeTokenSetup(10000e18, 10000e18, 10000e18);
+
+        // Price bounds like in original test
+        priceMin[0] = 0.01e18; // B/A can go down to 0.01x (100x concentration)
+        priceMin[1] = 0.01e18; // C/A can go down to 0.01x
+        priceMin[2] = 0.01e18; // C/B can go down to 0.01x
+        priceMax[0] = 25e18;   // B/A can go up to 25x
+        priceMax[1] = 25e18;   // C/A can go up to 25x
+        priceMax[2] = 25e18;   // C/B can go up to 25x
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createMultiTokenOrder(tokens, balances, currentPrice, priceMin, priceMax);
+        bytes32 orderHash = swapVM.hash(order);
+
+        // Check tokenA and tokenB prices before (like original test)
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, _takerData("", false));
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, _takerData("", false));
+
+        uint256 postAmountInA;
+        uint256 postAmountOutA;
+        uint256 postAmountInB;
+        uint256 postAmountOutB;
+
+        // Cycle 1: Test A/B pair with 100 iterations (lower than 2-token to account for shared liquidity)
+        for (uint256 i = 0; i < 100; i++) {
+            // Buy all tokenA
+            uint256 balanceA = swapVM.balances(orderHash, tokenA);
+            if (i == 0) {
+                balanceA = balances[0]; // First iteration doesn't have balances in state yet
             }
+            vm.prank(taker);
+            swapVM.swap(order, tokenB, tokenA, balanceA, _takerData(signature, false));
+            (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, _takerData("", false));
+
+            // Buy all tokenB
+            uint256 balanceB = swapVM.balances(orderHash, tokenB);
+            vm.prank(taker);
+            swapVM.swap(order, tokenA, tokenB, balanceB, _takerData(signature, false));
+            (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, _takerData("", false));
         }
 
-        // Verify all tokens have concentrated balances tracked
-        uint256 concA = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB = concentrate.concentratedBalances(orderHash, tokenB);
-        uint256 concC = concentrate.concentratedBalances(orderHash, tokenC);
+        // Compute and compare rate change for tokenA (after A/B cycle)
+        uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
+        uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
+        uint256 rateChangeA = preRateA * 1e18 / postRateA;
+        assertNotApproxEqRel(rateChangeA, priceMin[0], 0.001e18, "Quote should not be within 0.1% range for tokenA");
+        assertApproxEqRel(rateChangeA, priceMin[0], 0.006e18, "Quote should be within 0.6% range for tokenA in 3-token pool");
 
-        assertTrue(concA > 0, "Token A concentrated balance should be tracked");
-        assertTrue(concB > 0, "Token B concentrated balance should be tracked");
-        assertTrue(concC > 0, "Token C concentrated balance should be tracked");
+        // Compute and compare rate change for tokenB (after A/B cycle)
+        uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
+        uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
+        uint256 rateChangeB = postRateB * 1e18 / preRateB;
+        assertNotApproxEqRel(rateChangeB, priceMax[0], 0.001e18, "Quote should not be within 0.1% range for tokenB");
+        assertApproxEqRel(rateChangeB, priceMax[0], 0.007e18, "Quote should be within 0.7% range for tokenB in 3-token pool");
 
-        // All should be different (statistical impossibility they're equal after different swap patterns)
-        assertTrue(concA != concB || concB != concC, "All token balances should be independently tracked");
-    }
+        (uint256 preAmountInA_AC, uint256 preAmountOutA_AC,) = swapVM.asView().quote(order, tokenC, tokenA, 0.001e18, _takerData("", false));
+        (uint256 preAmountInC, uint256 preAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.001e18, _takerData("", false));
 
-    function test_ThreeTokens_ReverseDirectionSamePair() public {
-        ThreeTokenSetup memory setup = ThreeTokenSetup({
-            balanceA: 10000e18,
-            balanceB: 10000e18,
-            balanceC: 10000e18,
-            flatFee: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createThreeTokenOrder(setup);
-        bytes32 orderHash = swapVM.hash(order);
-        bytes memory takerData = _buildTakerData(false, signature);
+        uint256 postAmountInA_AC;
+        uint256 postAmountOutA_AC;
+        uint256 postAmountInC;
+        uint256 postAmountOutC;
 
-        // Forward: A -> B
-        vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
+        // Cycle 2: Test A/C pair with 100 iterations
+        for (uint256 i = 0; i < 1; i++) {
+            // Buy all tokenA
+            uint256 balanceA = swapVM.balances(orderHash, tokenA);
+            emit log_named_uint("Balance A before A/C swap", balanceA);
+            vm.prank(taker);
+            swapVM.swap(order, tokenC, tokenA, balanceA, _takerData(signature, false));
+            (postAmountInA_AC, postAmountOutA_AC,) = swapVM.asView().quote(order, tokenC, tokenA, 0.001e18, _takerData("", false));
 
-        uint256 concA_forward = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB_forward = concentrate.concentratedBalances(orderHash, tokenB);
+            balanceA = swapVM.balances(orderHash, tokenA);
+            emit log_named_uint("Balance A after A/C swap", balanceA);
 
-        // Reverse: B -> A (should update same token balances)
-        vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, 500e18, takerData);
+            // Buy all tokenC
+            uint256 balanceC = swapVM.balances(orderHash, tokenC);
+            vm.prank(taker);
+            swapVM.swap(order, tokenA, tokenC, balanceC, _takerData(signature, false));
+            (postAmountInC, postAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.001e18, _takerData("", false));
 
-        uint256 concA_reverse = concentrate.concentratedBalances(orderHash, tokenA);
-        uint256 concB_reverse = concentrate.concentratedBalances(orderHash, tokenB);
+            balanceC = swapVM.balances(orderHash, tokenC);
+            balanceA = swapVM.balances(orderHash, tokenA);
+            emit log_named_uint("Balance A after C/A swap", balanceA);
+            emit log_named_uint("Balance C after C/A swap", balanceC);
+        }
 
-        // Both directions should update the same token tracking
-        assertTrue(concA_forward > 0, "Token A should be set after forward swap");
-        assertTrue(concB_forward > 0, "Token B should be set after forward swap");
-        assertTrue(concA_reverse < concA_forward, "Token A should decrease after reverse swap");
-        assertTrue(concB_reverse > concB_forward, "Token B should increase after reverse swap");
+        // Compute and compare rate change for tokenA (after A/C cycle)
+        uint256 preRateA_AC = preAmountInA_AC * 1e18 / preAmountOutA_AC;
+        uint256 postRateA_AC = postAmountInA_AC * 1e18 / postAmountOutA_AC;
+        uint256 rateChangeA_AC = preRateA_AC * 1e18 / postRateA_AC;
+        assertNotApproxEqRel(rateChangeA_AC, priceMin[1], 0.001e18, "Quote should not be within 0.1% range for tokenA (A/C cycle)");
+        assertApproxEqRel(rateChangeA_AC, priceMin[1], 0.006e18, "Quote should be within 0.5% range for tokenA in 3-token pool (A/C cycle)");
+
+        // Compute and compare rate change for tokenC (after A/C cycle)
+        uint256 preRateC = preAmountInC * 1e18 / preAmountOutC;
+        uint256 postRateC = postAmountInC * 1e18 / postAmountOutC;
+        uint256 rateChangeC = postRateC * 1e18 / preRateC;
+        assertNotApproxEqRel(rateChangeC, priceMax[1], 0.001e18, "Quote should not be within 0.1% range for tokenC");
+        assertApproxEqRel(rateChangeC, priceMax[1], 0.007e18, "Quote should be within 0.5% range for tokenC in 3-token pool");
     }
 }

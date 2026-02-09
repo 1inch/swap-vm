@@ -204,12 +204,12 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.5e18;
         uint256 priceMax = 2e18;
 
-        (uint256 deltaA, uint256 deltaB,) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
+        (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) = XYCConcentrateArgsBuilder.computePairs(
+            dynamic([address(tokenA), address(tokenB)]),
+            dynamic([balanceA, balanceB]),
+            dynamic([currentPrice]),
+            dynamic([priceMin]),
+            dynamic([priceMax])
         );
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -220,10 +220,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB]),
-                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
+                XYCConcentrateArgsBuilder.buildXD(pairIds, deltas, liquidities)),
             program.build(_xycSwapXD)
         );
 
@@ -252,12 +249,12 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 priceMin = 0.6e18;
         uint256 priceMax = 1.7e18;
 
-        (uint256 deltaA, uint256 deltaB,) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
+        (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) = XYCConcentrateArgsBuilder.computePairs(
+            dynamic([address(tokenA), address(tokenB)]),
+            dynamic([balanceA, balanceB]),
+            dynamic([currentPrice]),
+            dynamic([priceMin]),
+            dynamic([priceMax])
         );
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -268,10 +265,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB]),
-                    dynamic([balanceA + deltaA, balanceB + deltaB]))),
+                XYCConcentrateArgsBuilder.buildXD(pairIds, deltas, liquidities)),
             program.build(_xycSwapXD)
         );
 

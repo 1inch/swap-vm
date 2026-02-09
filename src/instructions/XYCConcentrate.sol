@@ -25,7 +25,7 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingTokensCount();
     error ConcentrateParsingMissingTokenAddresses();
     error ConcentrateParsingMissingDeltas();
-    error ConcentrateParsingMissingBalances();
+    error ConcentrateParsingMissingLiquidities();
     error ConcentrateParsingMissingLiquidity();
 
     /// @notice Compute initial balance adjustments to achieve concentration within price bounds
@@ -62,52 +62,61 @@ library XYCConcentrateArgsBuilder {
         liquidity = Math.sqrt((balanceA + deltaA) * (balanceB + deltaB));
     }
 
-    /// @notice Compute concentration ratio for multi-token pool using chain calculation
-    /// @dev Computes deltas for base pair and returns concentration ratio that can be applied to any number of additional tokens.
-    ///      The concentration ratio is derived from token1's concentrated balance.
-    /// @param balance0 Balance of token 0 (base pair)
-    /// @param balance1 Balance of token 1 (base pair)
-    /// @param basePairPrice Current price for base pair (token1/token0 with 1e18 precision)
-    /// @param basePairPriceMin Minimum price for base pair concentration range
-    /// @param basePairPriceMax Maximum price for base pair concentration range
-    /// @return delta0 Delta for token 0
-    /// @return delta1 Delta for token 1
-    /// @return concentrationRatio Ratio to apply to any additional token: delta_i = balance_i * (concentrationRatio - 1e18) / 1e18
-    function computeDeltasChain(
-        uint256 balance0,
-        uint256 balance1,
-        uint256 basePairPrice,
-        uint256 basePairPriceMin,
-        uint256 basePairPriceMax
-    ) public pure returns (
-        uint256 delta0,
-        uint256 delta1,
-        uint256 concentrationRatio
-    ) {
-        // Step 1: Compute deltas for base pair (tokens 0 and 1)
-        (delta0, delta1,) = computeDeltas(
-            balance0,
-            balance1,
-            basePairPrice,
-            basePairPriceMin,
-            basePairPriceMax
-        );
+    function computePairs(address[] memory tokens, uint256[] memory balances, uint256[] memory prices, uint256[] memory priceMins, uint256[] memory priceMaxs) internal pure returns (bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) {
+        uint256 n = tokens.length;
+        uint256 pairsCount = n * (n - 1) / 2;
 
-        // Step 2: Compute concentration ratio from token1's concentrated balance
-        // concentrationRatio = (balance1 + delta1) / balance1
-        // This ratio can be applied to any number of additional tokens
-        concentrationRatio = ((balance1 + delta1) * ONE) / balance1;
+        pairIds = new bytes32[](pairsCount);
+        deltas = new uint256[](2 * pairsCount);
+        liquidities = new uint256[](pairsCount);
 
-        return (delta0, delta1, concentrationRatio);
+        uint256 pairIndex = 0;
+        for (uint256 i = 0; i < n; i++) {
+            for (uint256 j = i + 1; j < n; j++) {
+                address tokenA = tokens[i];
+                address tokenB = tokens[j];
+
+                (address tokenLt, address tokenGt) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+
+                (uint256 deltaA, uint256 deltaB, uint256 liquidity) = computeDeltas(
+                    balances[i],
+                    balances[j],
+                    prices[pairIndex],
+                    priceMins[pairIndex],
+                    priceMaxs[pairIndex]
+                );
+
+                pairIds[pairIndex] = getPairId(tokenLt, tokenGt);
+
+                (uint256 deltaLt, uint256 deltaGt) = tokenA < tokenB ? (deltaA, deltaB) : (deltaB, deltaA);
+                deltas[2 * pairIndex] = deltaLt;
+                deltas[2 * pairIndex + 1] = deltaGt;
+
+                liquidities[pairIndex] = liquidity;
+                pairIndex++;
+            }
+        }
     }
 
-    function buildXD(address[] memory tokens, uint256[] memory deltas, uint256[] memory balances) internal pure returns (bytes memory) {
-        require(tokens.length == deltas.length && tokens.length == balances.length, ConcentrateArraysLengthMismatch(tokens.length, deltas.length, balances.length));
-        bytes memory packed = abi.encodePacked((tokens.length).toUint16());
-        for (uint256 i = 0; i < tokens.length; i++) {
-            packed = abi.encodePacked(packed, tokens[i]);
+    function getPairId(address tokenLt, address tokenGt) internal pure returns (bytes32) {
+        return bytes32(uint256(uint128(uint160(tokenLt))) << 128 | uint256(uint128(uint160(tokenGt))));
+    }
+
+    function buildXD(bytes32[] memory pairIds, uint256[] memory deltas, uint256[] memory liquidities) internal pure returns (bytes memory) {
+        require(2 * pairIds.length == deltas.length && pairIds.length == liquidities.length, ConcentrateArraysLengthMismatch(pairIds.length, deltas.length, liquidities.length));
+        bytes memory packed = abi.encodePacked((pairIds.length).toUint16());
+        for (uint256 i = 0; i < pairIds.length; i++) {
+            packed = abi.encodePacked(packed, pairIds[i]);
         }
-        return abi.encodePacked(packed, deltas, balances);
+        // Pack deltas as uint128 to save space
+        for (uint256 i = 0; i < deltas.length; i++) {
+            packed = abi.encodePacked(packed, deltas[i].toUint128());
+        }
+        // Pack liquidities as uint128 to save space
+        for (uint256 i = 0; i < liquidities.length; i++) {
+            packed = abi.encodePacked(packed, liquidities[i].toUint128());
+        }
+        return packed;
     }
 
     function build2D(address tokenA, address tokenB, uint256 deltaA, uint256 deltaB, uint256 liquidity) internal pure returns (bytes memory) {
@@ -115,18 +124,19 @@ library XYCConcentrateArgsBuilder {
         return abi.encodePacked(deltaLt, deltaGt, liquidity);
     }
 
-    function parseXD(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas, bytes calldata balances) {
+    function parseXD(bytes calldata args) internal pure returns (uint256 pairsCount, bytes calldata pairIds, bytes calldata deltas, bytes calldata liquidities) {
         unchecked {
-            tokensCount = uint16(bytes2(args.slice(0, 2, ConcentrateParsingMissingTokensCount.selector)));
-            uint256 deltasOffset = 2 + 20 * tokensCount;
-            uint256 subargsOffset = deltasOffset + 32 * tokensCount;
-            uint256 balancesOffset = subargsOffset + 32 * tokensCount;
+            pairsCount = uint16(bytes2(args.slice(0, 2, ConcentrateParsingMissingTokensCount.selector)));
+            uint256 deltasOffset = 2 + 32 * pairsCount;
+            uint256 liquiditiesOffset = deltasOffset + 16 * pairsCount * 2; // 2 deltas per pair
+            uint256 endOffset = liquiditiesOffset + 16 * pairsCount;
 
-            tokens = args.slice(2, deltasOffset, ConcentrateParsingMissingTokenAddresses.selector);
-            deltas = args.slice(deltasOffset, subargsOffset, ConcentrateParsingMissingDeltas.selector);
-            balances = args.slice(subargsOffset, balancesOffset, ConcentrateParsingMissingBalances.selector);
+            pairIds = args.slice(2, deltasOffset, ConcentrateParsingMissingTokenAddresses.selector);
+            deltas = args.slice(deltasOffset, liquiditiesOffset, ConcentrateParsingMissingDeltas.selector);
+            liquidities = args.slice(liquiditiesOffset, endOffset, ConcentrateParsingMissingLiquidities.selector);
         }
     }
+
 
     function parse2D(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint256 deltaIn, uint256 deltaOut, uint256 liquidity) {
         uint256 deltaLt = uint256(bytes32(args.slice(0, 32, ConcentrateTwoTokensMissingDeltaLt.selector)));
@@ -147,70 +157,205 @@ contract XYCConcentrate {
     error ConcentrateShouldBeUsedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error ConcentrateExpectedSwapAmountComputationAfterRunLoop(uint256 amountIn, uint256 amountOut);
 
-    mapping(bytes32 => mapping(address => uint256)) public concentratedBalances;
-
-    function _getLiquidity(bytes32 orderHash, address tokenIn, address tokenOut) internal view returns (uint256) {
-        return Math.sqrt(concentratedBalances[orderHash][tokenIn] * concentratedBalances[orderHash][tokenOut]);
-    }
+    mapping(bytes32 => mapping(bytes32 => uint256)) public liquidity;
+    mapping(bytes32 => mapping(bytes32 => mapping(bytes16 => uint256))) public deltas;
 
     function concentratedBalance(uint256 balance, uint256 delta, uint256 initialLiquidity, uint256 currentLiquidity) public pure returns (uint256) {
         return currentLiquidity == 0 ? balance + delta : balance + delta * currentLiquidity / initialLiquidity;
     }
 
-    /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokens[]  | 20 bytes * args.tokensCount
-    /// @param args.initialBalances[] | 32 bytes * args.tokensCount
+    /// @dev Extracts bytes16 token identifier from address
+    /// @param token The token address
+    /// @return Token identifier (lower 16 bytes of address)
+    function _getTokenId(address token) internal pure returns (bytes16) {
+        return bytes16(uint128(uint160(token)));
+    }
+
+    /// @dev Gets delta from storage if available, otherwise from calldata
+    /// @param orderHash The order hash
+    /// @param pairId The pair identifier
+    /// @param token The token address
+    /// @param deltaFromCalldata Delta value from calldata as fallback
+    /// @return Actual delta to use (from storage or calldata)
+    function _getDelta(
+        bytes32 orderHash,
+        bytes32 pairId,
+        address token,
+        uint256 deltaFromCalldata
+    ) internal view returns (uint256) {
+        bytes16 tokenId = _getTokenId(token);
+        uint256 storedDelta = deltas[orderHash][pairId][tokenId];
+        return storedDelta > 0 ? storedDelta : deltaFromCalldata;
+    }
+
+    /// @dev Stores delta in storage for future use
+    /// @param orderHash The order hash
+    /// @param pairId The pair identifier
+    /// @param token The token address
+    /// @param delta The delta value to store
+    function _setDelta(
+        bytes32 orderHash,
+        bytes32 pairId,
+        address token,
+        uint256 delta
+    ) internal {
+        bytes16 tokenId = _getTokenId(token);
+        deltas[orderHash][pairId][tokenId] = delta;
+    }
+
+    /// @dev Returns positions of the tokenIn and tokenOut in the pair (1 for first token, 2 for second token, 0 if not in pair)
+    /// @param tokenIn The input token address to check
+    /// @param tokenOut The output token address to check
+    /// @param pairId The pairId encoding the two tokens in the pair
+    /// @return tokenInPosition Position of tokenIn in the pair
+    /// @return tokenOutPosition Position of tokenOut in the pair
+    function _tokenPositionInPair(address tokenIn, address tokenOut,bytes32 pairId) internal pure returns (uint256, uint256) {
+        bytes16 tokenFirstInPair = bytes16(pairId);
+        bytes16 tokenLastInPair = bytes16(uint128(uint256(pairId)));
+        bytes16 tokenInTail = bytes16(uint128(uint160(tokenIn)));
+        bytes16 tokenOutTail = bytes16(uint128(uint160(tokenOut)));
+        return (
+            tokenFirstInPair == tokenInTail ? 1 : tokenLastInPair == tokenInTail ? 2 : 0,
+            tokenFirstInPair == tokenOutTail ? 1 : tokenLastInPair == tokenOutTail ? 2 : 0
+        );
+    }
+
+    /// @param args.pairsCount | 2 bytes
+    /// @param args.pairIds[]  | 32 bytes * args.pairsCount
+    /// @param args.deltas[]   | 16 bytes * args.pairsCount * 2
+    /// @param args.liquidities[] | 16 bytes * args.pairsCount
     function _xycConcentrateGrowLiquidityXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        uint256 currentLiquidity = _getLiquidity(ctx.query.orderHash, ctx.query.tokenIn, ctx.query.tokenOut);
-        uint256 initialLiquidity = 1;
-        uint256 deltaIn;
-        uint256 deltaOut;
+        (address tokenLt, address tokenGt) = ctx.query.tokenIn < ctx.query.tokenOut ? (ctx.query.tokenIn, ctx.query.tokenOut) : (ctx.query.tokenOut, ctx.query.tokenIn);
+        bytes32 currentPairId = XYCConcentrateArgsBuilder.getPairId(tokenLt, tokenGt);
 
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata deltas, bytes calldata balances) = XYCConcentrateArgsBuilder.parseXD(args);
-        for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokens.slice(i * 20)));
+        (uint256 pairsCount, bytes calldata pairIds, bytes calldata deltasCd, bytes calldata liquidities) = XYCConcentrateArgsBuilder.parseXD(args);
+        for (uint256 i = 0; i < pairsCount; i++) {
+            bytes32 pairId = bytes32(pairIds.slice(i * 32));
+            if (currentPairId == pairId) {
+                uint256 initialLiquidity = uint128(bytes16(liquidities.slice(i * 16)));
+                uint256 currentLiquidity = Math.sqrt(liquidity[ctx.query.orderHash][currentPairId]);
 
-            if (ctx.query.tokenIn == token) {
-                initialLiquidity *= uint256(bytes32(balances.slice(i * 32)));
-                deltaIn = uint256(bytes32(deltas.slice(i * 32)));
-            } else if (ctx.query.tokenOut == token) {
-                initialLiquidity *= uint256(bytes32(balances.slice(i * 32)));
-                deltaOut = uint256(bytes32(deltas.slice(i * 32)));
+                uint256 deltaLtCd = uint128(bytes16(deltasCd.slice(i * 32)));
+                uint256 deltaGtCd = uint128(bytes16(deltasCd.slice(i * 32 + 16)));
+
+                // Get actual deltas (from storage if updated, otherwise from calldata)
+                uint256 deltaLt = _getDelta(ctx.query.orderHash, currentPairId, tokenLt, deltaLtCd);
+                uint256 deltaGt = _getDelta(ctx.query.orderHash, currentPairId, tokenGt, deltaGtCd);
+                uint256 balanceInBefore = ctx.swap.balanceIn;
+                uint256 balanceOutBefore = ctx.swap.balanceOut;
+
+                ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, ctx.query.tokenIn == tokenLt ? deltaLt : deltaGt, initialLiquidity, currentLiquidity);
+                ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, ctx.query.tokenOut == tokenLt ? deltaLt : deltaGt, initialLiquidity, currentLiquidity);
+                ctx.runLoop();
+                _updateLiquidity(ctx, balanceInBefore, balanceOutBefore, pairId, pairsCount, pairIds, deltasCd, liquidities);
+
+                break;
             }
         }
-
-        initialLiquidity = Math.sqrt(initialLiquidity);
-
-        ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, deltaIn, initialLiquidity, currentLiquidity);
-        ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, deltaOut, initialLiquidity, currentLiquidity);
-
-        ctx.runLoop();
-        _updateScales(ctx);
     }
 
     /// @param args.deltaLt | 32 bytes
     /// @param args.deltaGt | 32 bytes
+    /// @param args.liquidity | 32 bytes
     function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
-        uint256 currentLiquidity = _getLiquidity(ctx.query.orderHash, ctx.query.tokenIn, ctx.query.tokenOut);
+        (address tokenLt, address tokenGt) = ctx.query.tokenIn < ctx.query.tokenOut ? (ctx.query.tokenIn, ctx.query.tokenOut) : (ctx.query.tokenOut, ctx.query.tokenIn);
+        bytes32 pairId = XYCConcentrateArgsBuilder.getPairId(tokenLt, tokenGt);
+        uint256 currentLiquidity = Math.sqrt(liquidity[ctx.query.orderHash][pairId]);
 
-        (uint256 deltaIn, uint256 deltaOut, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
-        ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, deltaIn, initialLiquidity, currentLiquidity);
-        ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, deltaOut, initialLiquidity, currentLiquidity);
+        (uint256 deltaInCd, uint256 deltaOutCd, uint256 initialLiquidity) = XYCConcentrateArgsBuilder.parse2D(args, ctx.query.tokenIn, ctx.query.tokenOut);
+        ctx.swap.balanceIn = concentratedBalance(ctx.swap.balanceIn, deltaInCd, initialLiquidity, currentLiquidity);
+        ctx.swap.balanceOut = concentratedBalance(ctx.swap.balanceOut, deltaOutCd, initialLiquidity, currentLiquidity);
 
         ctx.runLoop();
-        _updateScales(ctx);
+        _updateLiquidity(ctx, pairId);
     }
 
-    function _updateScales(Context memory ctx) private {
+    function _updateLiquidity(Context memory ctx, bytes32 pairId) internal {
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, ConcentrateExpectedSwapAmountComputationAfterRunLoop(ctx.swap.amountIn, ctx.swap.amountOut));
 
         if (!ctx.vm.isStaticContext) {
-            concentratedBalances[ctx.query.orderHash][ctx.query.tokenIn] = ctx.swap.balanceIn + ctx.swap.amountIn;
-            concentratedBalances[ctx.query.orderHash][ctx.query.tokenOut] = ctx.swap.balanceOut - ctx.swap.amountOut;
+            liquidity[ctx.query.orderHash][pairId] = (ctx.swap.balanceIn + ctx.swap.amountIn) * (ctx.swap.balanceOut - ctx.swap.amountOut);
         }
+    }
+
+    function _updateLiquidity(
+        Context memory ctx,
+        uint256 balanceInBefore,
+        uint256 balanceOutBefore,
+        bytes32 pairId,
+        uint256 pairsCount,
+        bytes calldata pairIds,
+        bytes calldata deltasCd,
+        bytes calldata liquidities
+    ) private {
+        require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, ConcentrateExpectedSwapAmountComputationAfterRunLoop(ctx.swap.amountIn, ctx.swap.amountOut));
+
+        if (!ctx.vm.isStaticContext) {
+            liquidity[ctx.query.orderHash][pairId] = (ctx.swap.balanceIn + ctx.swap.amountIn) * (ctx.swap.balanceOut - ctx.swap.amountOut);
+
+            for (uint256 i = 0; i < pairsCount; i++) {
+                bytes32 pairIdAffected = bytes32(pairIds.slice(i * 32));
+                if (pairIdAffected == pairId) continue;
+
+                (uint256 tokenInPosition, uint256 tokenOutPosition) = _tokenPositionInPair(ctx.query.tokenIn, ctx.query.tokenOut, pairIdAffected);
+
+                if (tokenInPosition > 0) {
+                    _updateLiquidityForPair(
+                        ctx,
+                        ctx.query.tokenIn,
+                        pairIdAffected,
+                        balanceInBefore,
+                        uint128(bytes16(deltasCd.slice(tokenInPosition == 1 ? i * 32 : i * 32 + 16))),
+                        uint128(bytes16(liquidities.slice(i * 16))),
+                        ctx.swap.amountIn
+                    );
+                } else if (tokenOutPosition > 0) {
+                    _updateLiquidityForPair(
+                        ctx,
+                        ctx.query.tokenOut,
+                        pairIdAffected,
+                        balanceOutBefore,
+                        uint128(bytes16(deltasCd.slice(tokenOutPosition == 1 ? i * 32 : i * 32 + 16))),
+                        uint128(bytes16(liquidities.slice(i * 16))),
+                        ctx.swap.amountOut
+                    );
+                }
+            }
+        }
+    }
+
+    /// @dev Updates liquidity for a specific pair when one of its tokens' balance changes.
+    /// This is necessary to maintain accurate liquidity values across multiple pairs sharing tokens.
+    /// Recalculates delta as if the pool was initialized with the new balance
+    function _updateLiquidityForPair(
+        Context memory ctx,
+        address tokenChanged,
+        bytes32 pairId,
+        uint256 balanceBefore,
+        uint256 deltaFromCalldata,
+        uint256 initialLiquidity,
+        uint256 amount
+    ) internal {
+        // Calculate new physical balance after swap
+        uint256 balanceAfter = ctx.query.tokenIn == tokenChanged ? balanceBefore + amount : balanceBefore - amount;
+
+        // Recalculate delta as if pool initialized with new balance
+        // delta_new = delta_old * (balance_after / balance_before)
+        // This maintains: delta_old / balance_before = delta_new / balance_after
+        uint256 newDelta = balanceBefore > 0 ? deltaFromCalldata * balanceAfter / balanceBefore : deltaFromCalldata;
+
+        // Store updated delta in storage for future use
+        _setDelta(ctx.query.orderHash, pairId, tokenChanged, newDelta);
+
+        // Update liquidity using the NEW delta
+        uint256 currentLiquidity = liquidity[ctx.query.orderHash][pairId];
+        uint256 balanceConcentratedBefore = concentratedBalance(balanceBefore, deltaFromCalldata, initialLiquidity, Math.sqrt(currentLiquidity));
+        uint256 balanceConcentratedAfter = concentratedBalance(balanceAfter, newDelta, initialLiquidity, Math.sqrt(currentLiquidity));
+        currentLiquidity = currentLiquidity == 0 ? initialLiquidity * initialLiquidity : currentLiquidity;
+        liquidity[ctx.query.orderHash][pairId] = currentLiquidity * balanceConcentratedAfter / balanceConcentratedBefore;
     }
 }
