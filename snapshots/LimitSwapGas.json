@@ -31,8 +31,8 @@
   "MinRate_LimitSwap_swap_exactOut": "95792",
   "Salt_LimitSwap_quote_exactIn": "33677",
   "Salt_LimitSwap_swap_exactIn": "91994",
-  "TWAP_LimitSwap_quote_exactIn": "49246",
-  "TWAP_LimitSwap_quote_exactOut": "50038",
-  "TWAP_LimitSwap_swap_exactIn": "168532",
-  "TWAP_LimitSwap_swap_exactOut": "169323"
+  "TWAP_LimitSwap_quote_exactIn": "48578",
+  "TWAP_LimitSwap_quote_exactOut": "49370",
+  "TWAP_LimitSwap_swap_exactIn": "167885",
+  "TWAP_LimitSwap_swap_exactOut": "168676"
 }

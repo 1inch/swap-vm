@@ -27,7 +27,7 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingTokenAddresses();
     error ConcentrateParsingMissingDeltas();
     error ConcentrateParsingMissingLiquidityRoots();
-    error ConcentrateParsingMissingLiquidityPowers();
+    error ConcentrateParsingMissingInitialBalances();
 
     /// @notice Compute initial balance adjustments to achieve concentration within price bounds
     /// @dev JavaScript implementation:
@@ -178,7 +178,7 @@ library XYCConcentrateArgsBuilder {
 
             tokens = args.slice(2, deltasOffset, ConcentrateParsingMissingTokenAddresses.selector);
             deltas = args.slice(deltasOffset, concentratedOffset, ConcentrateParsingMissingDeltas.selector);
-            initialConcentrated = args.slice(concentratedOffset, liquidityRootOffset, ConcentrateParsingMissingDeltas.selector);
+            initialConcentrated = args.slice(concentratedOffset, liquidityRootOffset, ConcentrateParsingMissingInitialBalances.selector);
             liquidityRoot = uint256(bytes32(args.slice(liquidityRootOffset, liquidityRootOffset+32, ConcentrateParsingMissingLiquidityRoots.selector)));
         }
     }
