@@ -92,7 +92,9 @@ contract BaseFeeAdjuster {
 
             if (ctx.query.isExactIn) {
                 // exactIn: Increase amountOut (taker gets more token0)
-                uint256 priceIncrease = 1e18 + (extraCostInToken1 * 1e18 / ctx.swap.amountOut);
+                // To calculate extraCostInToken0 we would need the swap price and extraCostInToken1,
+                // but we can avoid division by adjusting amountOut directly: extraCostInToken1 * amountOut/amountIn
+                uint256 priceIncrease = 1e18 + extraCostInToken1 * 1e18 / ctx.swap.amountIn;
                 uint256 maxIncrease = (2e18 - maxPriceDecay); // Mirror of decay for increase
                 priceIncrease = Math.min(priceIncrease, maxIncrease);
                 ctx.swap.amountOut = (ctx.swap.amountOut * priceIncrease) / 1e18;

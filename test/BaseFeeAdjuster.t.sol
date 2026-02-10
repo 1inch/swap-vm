@@ -117,65 +117,12 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             );
 
             expectedOutputs[i] = quotedOut;
-
-            console.log("Gas price (gwei):", gasPrices[i] / 1e9);
-            console.log("Output amount:", quotedOut);
         }
 
         // Verify outputs increase with gas price (or stay same if capped)
         for (uint256 i = 1; i < expectedOutputs.length; i++) {
             assertGe(expectedOutputs[i], expectedOutputs[i-1], "Higher gas should improve or maintain price");
         }
-    }
-
-    /**
-     * Test BaseFeeAdjuster with exactOut mode
-     */
-    function test_BaseFeeAdjusterExactOut() public {
-        uint64 baseGasPrice = 30 gwei;
-        uint96 ethToTokenPrice = 2000e18;
-        uint24 gasAmount = 150_000;  // Reduced gas amount
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
-
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenB), address(tokenA)]), // Swap B to A
-                    dynamic([uint256(2000000e18), uint256(1000e18)]) // 2000:1 rate
-                )),
-            program.build(_limitSwap1D,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            program.build(_baseFeeAdjuster1D,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Test exactOut at moderately high gas price
-        vm.fee(80 gwei);  // Reduced gas price for more realistic scenario
-
-        bytes memory exactOutData = _signAndPackTakerData(order, false, 0); // No threshold for exactOut
-
-        (uint256 quotedIn,,) = swapVM.asView().quote(
-            order,
-            address(tokenB),
-            address(tokenA),
-            1e18, // Want this much output - 100x larger swap
-            exactOutData
-        );
-
-        console.log("ExactOut - Input required:", quotedIn);
-
-        // At base rate, 1 tokenA would require 2000 tokenB
-        // With gas adjustment, should require slightly less
-        assertLe(quotedIn, 2000e18, "Should require less or equal input at high gas");
-        assertGt(quotedIn, 1980e18, "Should not be too low"); // Within 1% discount
     }
 
     /**
@@ -244,10 +191,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
                 // Ensure we have valid output
                 assertGt(quotedOut, 0, "Should get positive output");
-
-                console.log("Time offset:", timeOffsets[t]);
-                console.log("Gas (gwei):", gasPrices[g] / 1e9);
-                console.log("Output:", quotedOut);
 
                 vm.revertTo(snapshot);
             }
@@ -360,57 +303,127 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
     }
 
     /**
-     * Test different ETH price configurations
+     * @notice Test exact compensation calculation for exactIn mode
+     * @dev This test would have caught the original bug where amountOut was used instead of amountIn
      */
-    function test_BaseFeeAdjusterDifferentEthPrices() public {
-        uint64 baseGasPrice = 30 gwei;
+    function test_BaseFeeAdjusterExactCompensation() public {
+        uint64 baseGasPrice = 20 gwei;
+        uint96 ethToToken1Price = 3000e18; // 1 ETH = 3000 USDC
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
+        uint64 maxPriceDecay = 90e16; // 10% max (high to not interfere with test)
 
-        uint96[] memory ethPrices = new uint96[](4);
-        ethPrices[0] = 1000e18;  // 1 ETH = 1000 tokens
-        ethPrices[1] = 2000e18;  // 1 ETH = 2000 tokens
-        ethPrices[2] = 3000e18;  // 1 ETH = 3000 tokens
-        ethPrices[3] = 5000e18;  // 1 ETH = 5000 tokens
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenB), address(tokenA)]),
+                    dynamic([uint256(300000e18), uint256(100e18)]) // 3000:1 rate
+                )),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            program.build(_baseFeeAdjuster1D,
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+        );
 
-        // High gas price for testing
-        vm.fee(150 gwei);
+        ISwapVM.Order memory order = _createOrder(bytecode);
 
-        for (uint256 i = 0; i < ethPrices.length; i++) {
-            Program memory program = ProgramBuilder.init(_opcodes());
-            bytes memory bytecode = bytes.concat(
-                program.build(_staticBalancesXD,
-                    BalancesArgsBuilder.build(
-                        dynamic([address(tokenB), address(tokenA)]), // Swap B to A
-                        dynamic([uint256(100000e18), uint256(100e18)])
-                    )),
-                program.build(_limitSwap1D,
-                    LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-                program.build(_baseFeeAdjuster1D,
-                    BaseFeeAdjusterArgsBuilder.build(
-                        baseGasPrice,
-                        ethPrices[i],
-                        gasAmount,
-                        maxPriceDecay
-                    ))
-            );
+        // Base case
+        vm.fee(20 gwei);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        (, uint256 baseOutput,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
 
-            ISwapVM.Order memory order = _createOrder(bytecode);
-            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        // High gas
+        vm.fee(100 gwei);
+        (, uint256 adjustedOutput,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
 
-            (, uint256 quotedOut,) = swapVM.asView().quote(
-                order,
-                address(tokenB),
-                address(tokenA),
-                1000e18,
-                exactInData
-            );
+        // Expected: 0.012 ETH gas cost = 1.2% of 1 ETH = 1.2% compensation
+        uint256 expectedCompensation = 0.012e18;
+        uint256 actualCompensation = adjustedOutput - baseOutput;
 
-            console.log("ETH price:", ethPrices[i] / 1e18, "Output:", quotedOut);
+        assertEq(baseOutput, 1e18, "Base should be 1.0");
+        assertApproxEqAbs(actualCompensation, expectedCompensation, 0.001e18, "Should compensate ~1.2%");
+    }
 
-            // Higher ETH price should result in more adjustment
-            assertGt(quotedOut, 0, "Should get positive output");
-        }
+    /**
+     * @notice Test compensation scales inversely with swap size
+     */
+    function test_BaseFeeAdjusterCompensationScaling() public {
+        uint64 baseGasPrice = 20 gwei;
+        uint96 ethToToken1Price = 3000e18;
+        uint24 gasAmount = 150_000;
+        uint64 maxPriceDecay = 90e16; // 10% max
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenB), address(tokenA)]),
+                    dynamic([uint256(300000e18), uint256(100e18)]) // 3000:1 rate
+                )),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            program.build(_baseFeeAdjuster1D,
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        vm.fee(20 gwei);
+        (, uint256 smallBase,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 300e18, exactInData);
+        (, uint256 largeBase,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+
+        vm.fee(100 gwei);
+        (, uint256 smallAdjusted,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 300e18, exactInData);
+        (, uint256 largeAdjusted,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+
+        uint256 smallPct = ((smallAdjusted - smallBase) * 100e18) / smallBase;
+        uint256 largePct = ((largeAdjusted - largeBase) * 100e18) / largeBase;
+
+        // Small swap (0.1 ETH): 12% theoretical → capped at 10%
+        // Large swap (1 ETH): 1.2% theoretical
+        assertEq(smallPct / 1e18, 10, "Small swap hits 10% cap");
+        assertApproxEqAbs(largePct, 1.2e18, 0.01e18, "Large swap ~1.2%");
+    }
+
+    /**
+     * @notice Test exactOut mode provides correct discount
+     */
+    function test_BaseFeeAdjusterExactOutDiscount() public {
+        uint64 baseGasPrice = 20 gwei;
+        uint96 ethToToken1Price = 3000e18;
+        uint24 gasAmount = 150_000;
+        uint64 maxPriceDecay = 90e16; // 10% max
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenB), address(tokenA)]),
+                    dynamic([uint256(300000e18), uint256(100e18)]) // 3000:1 rate
+                )),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            program.build(_baseFeeAdjuster1D,
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, 0);
+
+        vm.fee(20 gwei);
+        (uint256 baseInput,,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 1e18, exactOutData);
+
+        vm.fee(100 gwei);
+        (uint256 adjustedInput,,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 1e18, exactOutData);
+
+        // Expected: 36 USDC discount on 3000 USDC = 1.2%
+        uint256 expectedDiscount = 36e18;
+        uint256 actualDiscount = baseInput - adjustedInput;
+
+        assertEq(baseInput, 3000e18, "Base should be 3000");
+        assertLt(adjustedInput, baseInput, "Should pay less at high gas");
+        assertApproxEqAbs(actualDiscount, expectedDiscount, 1e18, "Discount ~36 USDC");
     }
 
     // Helper functions
