@@ -133,14 +133,14 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([setup.balanceA, setup.balanceB, setup.balanceC])
                 )),
+                // Add flat fee instruction
+                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(FEE_BPS))),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity3D, XYCConcentrateArgsBuilder.buildXD(
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([deltaA, deltaB, deltaC]),
                     dynamic([concentratedA, concentratedB, concentratedC]),
                     liquidityRoot
                 )),
-                // Add flat fee instruction
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(FEE_BPS))),
                 program.build(XYCSwap._xycSwapXD)
             )
         }));
