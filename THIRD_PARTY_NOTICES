@@ -22,6 +22,15 @@ License: /LICENSES/MIT-OpenZeppelin.txt
 
 ================================================================================
 
+Component: solady
+Repo: https://github.com/Vectorized/solady
+Version: v0.1.26
+License: MIT
+Copyright: © Solady
+License: /LICENSES/MIT-Solady.txt
+
+================================================================================
+
 Component: @1inch/solidity-utils
 Repo: https://github.com/1inch/solidity-utils
 Version: v6.9.2
