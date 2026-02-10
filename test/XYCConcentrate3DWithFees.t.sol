@@ -88,17 +88,21 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         uint256 deltaA;
         uint256 deltaB;
         uint256 deltaC;
+        uint256 concentratedA;
+        uint256 concentratedB;
+        uint256 concentratedC;
         uint256 liquidityRoot;
-        uint256 liquidityPower;
         (
             deltaA,
             deltaB,
             deltaC,
+            concentratedA,
+            concentratedB,
+            concentratedC,
             setup.priceMin_AC,
             setup.priceMin_BC,
             setup.priceMax_BC,
-            liquidityRoot,
-            liquidityPower
+            liquidityRoot
         ) = XYCConcentrateArgsBuilder.computeDeltas3D(
             setup.balanceA, setup.balanceB, setup.balanceC,
             price_AB, price_AC, price_BC,
@@ -129,13 +133,14 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([setup.balanceA, setup.balanceB, setup.balanceC])
                 )),
-                // Add flat fee instruction
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(FEE_BPS))),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity3D, XYCConcentrateArgsBuilder.buildXD(
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([deltaA, deltaB, deltaC]),
-                    liquidityRoot, liquidityPower
+                    dynamic([concentratedA, concentratedB, concentratedC]),
+                    liquidityRoot
                 )),
+                // Add flat fee instruction
+                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(FEE_BPS))),
                 program.build(XYCSwap._xycSwapXD)
             )
         }));
@@ -201,7 +206,8 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         uint256 postAmountOut,
         uint256 expectedRate,
         string memory label,
-        bool isReverseDirection
+        bool isReverseDirection,
+        uint256 tolerance
     ) internal {
         uint256 preRate = preAmountIn * ONE / preAmountOut;
         uint256 postRate = postAmountIn * ONE / postAmountOut;
@@ -215,7 +221,7 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         emit log_named_decimal_uint("rateChange", rateChange, 18);
         emit log_named_decimal_uint("expected", expectedRate, 18);
 
-        assertApproxEqRel(rateChange, expectedRate, 0.01e18, string(abi.encodePacked("Rate change should match for ", label)));
+        assertApproxEqRel(rateChange, expectedRate, tolerance, string(abi.encodePacked("Rate change should match for ", label)));
     }
 
     function _printSetup(MakerSetup memory setup) internal {
@@ -265,7 +271,7 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapData);
 
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB, "Token A", false);
+        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB, "Token A", false, 0.006e18);
 
         (uint256 preAmountInA_CA, uint256 preAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
 
@@ -273,20 +279,20 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         emit log_string("\n\n=== SWAP 2: A -> B (drain all B) ===");
         swapVM.swap(order, tokenA, tokenB, swapVM.balances(orderHash, tokenB), swapData);
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB, "Token B", true);
+        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB, "Token B", true, 0.006e18);
 
         // ====== SWAP 3: A -> C (fully drain C) ======
         emit log_string("\n\n=== SWAP 3: A -> C (drain all C) ===");
         (uint256 preAmountInC, uint256 preAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
         swapVM.swap(order, tokenA, tokenC, swapVM.balances(orderHash, tokenC), swapData);
         (uint256 postAmountInC, uint256 postAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC, "Token C", true);
+        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC, "Token C", true, 0.006e18);
 
         // ====== SWAP 4: C -> A (fully drain A again) ======
         emit log_string("\n\n=== SWAP 4: C -> A (drain all A again) ===");
         swapVM.swap(order, tokenC, tokenA, swapVM.balances(orderHash, tokenA), swapData);
         (uint256 postAmountInA_CA, uint256 postAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC, "Token A", false);
+        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC, "Token A", false, 0.006e18);
 
         vm.stopPrank();
     }
@@ -334,7 +340,7 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapData);
 
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB * ONE / price_AB, "Token A (relative)", false);
+        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB * ONE / price_AB, "Token A (relative)", false, 0.006e18);
 
         (uint256 preAmountInA_CA, uint256 preAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
 
@@ -342,94 +348,205 @@ contract XYCConcentrate3DWithFeesTest is Test, OpcodesDebug {
         emit log_string("\n\n=== SWAP 2: A -> B (drain all B) ===");
         swapVM.swap(order, tokenA, tokenB, swapVM.balances(orderHash, tokenB), swapData);
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB * ONE / price_AB, "Token B (relative)", true);
+        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB * ONE / price_AB, "Token B (relative)", true, 0.006e18);
 
         // ====== SWAP 3: A -> C (fully drain C) ======
         emit log_string("\n\n=== SWAP 3: A -> C (drain all C) ===");
         (uint256 preAmountInC, uint256 preAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
         swapVM.swap(order, tokenA, tokenC, swapVM.balances(orderHash, tokenC), swapData);
         (uint256 postAmountInC, uint256 postAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC * ONE / price_AC, "Token C (relative)", true);
+        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC * ONE / price_AC, "Token C (relative)", true, 0.006e18);
 
         // ====== SWAP 4: C -> A (fully drain A again) ======
         emit log_string("\n\n=== SWAP 4: C -> A (drain all A again) ===");
         swapVM.swap(order, tokenC, tokenA, swapVM.balances(orderHash, tokenA), swapData);
         (uint256 postAmountInA_CA, uint256 postAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
-        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC * ONE / price_AC, "Token A (relative)", false);
+        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC * ONE / price_AC, "Token A (relative)", false, 0.006e18);
 
         vm.stopPrank();
     }
 
-    /// @notice Test multiple swaps with fee accumulation
-    function test_MultipleSwaps_FeeAccumulation() public {
-        emit log_string("=== Test: Multiple Swaps with Fee Accumulation ===");
+    /// @notice Test multiple swaps (100x each direction) with 0.3% fee and current prices
+    function test_MultipleSwaps_WithFee_GrowLiquidity() public {
+        emit log_string("=== Test: 3D Multiple Swaps (100x each) with 0.3% Fee ===");
 
-        // Setup: balanced pool for clearer testing
         MakerSetup memory setup = MakerSetup({
             balanceA: 100 * ONE,
-            balanceB: 100 * ONE,
-            balanceC: 100 * ONE,
-            priceMin_AB: ONE / 2,
-            priceMax_AB: 2 * ONE,
-            priceMax_AC: 2 * ONE,
+            balanceB: 150 * ONE,
+            balanceC: 200 * ONE,
+            priceMin_AB: 0,
+            priceMax_AB: 0,
+            priceMax_AC: 0,
             priceMin_AC: 0,
             priceMin_BC: 0,
             priceMax_BC: 0
         });
 
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFee(setup, ONE, ONE, ONE);
+        // Calculate current prices
+        uint256 price_AB = setup.balanceB * ONE / setup.balanceA;  // 1.5
+        uint256 price_AC = setup.balanceC * ONE / setup.balanceA;  // 2.0
+        uint256 price_BC = setup.balanceC * ONE / setup.balanceB;  // 1.333...
+
+        // Define relative ranges
+        setup.priceMin_AB = price_AB / 4;  // 0.375
+        setup.priceMax_AB = price_AB * 4;  // 6.0
+        setup.priceMax_AC = price_AC * 6;  // 12.0
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFee(setup, price_AB, price_AC, price_BC);
         bytes32 orderHash = swapVM.hash(order);
+        bytes memory quoteData = _quotingTakerData();
         bytes memory swapData = _swappingTakerData(signature);
 
         _printSetup(setup);
 
         vm.startPrank(taker);
 
-        uint256 liquidity0 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("\nInitial liquidity", liquidity0, 18);
+        // ====== SWAP PAIR 1: B <-> A (100 times) ======
+        emit log_string("\n\n=== SWAP PAIR 1: B <-> A x 100 ===");
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
+        uint256 postAmountInA; uint256 postAmountOutA;
+        uint256 postAmountInB; uint256 postAmountOutB;
+        uint256 preAmountInA_CA; uint256 preAmountOutA_CA;
 
-        // Perform 5 small swaps
-        emit log_string("\n=== SWAP 1: B -> A (10 tokens) ===");
-        swapVM.swap(order, tokenB, tokenA, 10e18, swapData);
-        uint256 liquidity1 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("Liquidity after swap 1", liquidity1, 18);
+        (preAmountInA_CA, preAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
 
-        emit log_string("\n=== SWAP 2: A -> C (5 tokens) ===");
-        swapVM.swap(order, tokenA, tokenC, 5e18, swapData);
-        uint256 liquidity2 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("Liquidity after swap 2", liquidity2, 18);
+        for (uint256 i = 0; i < 100; i++) {
+            // Buy all tokenA (B -> A)
+            uint256 balanceTokenA = swapVM.balances(orderHash, tokenA);
+            if (i == 0) {
+                balanceTokenA = setup.balanceA; // First iteration doesn't have balances in state yet
+            }
+            swapVM.swap(order, tokenB, tokenA, balanceTokenA, swapData);
+            (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
 
-        emit log_string("\n=== SWAP 3: C -> B (7 tokens) ===");
-        swapVM.swap(order, tokenC, tokenB, 7e18, swapData);
-        uint256 liquidity3 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("Liquidity after swap 3", liquidity3, 18);
+            (preAmountInA_CA, preAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
 
-        emit log_string("\n=== SWAP 4: B -> A (3 tokens) ===");
-        swapVM.swap(order, tokenB, tokenA, 3e18, swapData);
-        uint256 liquidity4 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("Liquidity after swap 4", liquidity4, 18);
-
-        emit log_string("\n=== SWAP 5: A -> C (8 tokens) ===");
-        swapVM.swap(order, tokenA, tokenC, 8e18, swapData);
-        uint256 liquidity5 = swapVM.liquidity(orderHash);
-        emit log_named_decimal_uint("Liquidity after swap 5", liquidity5, 18);
-
-        // Verify liquidity grows after first swap (from 0) and then stays relatively stable
-        assertGt(liquidity1, 0, "Liquidity should be > 0 after first swap");
-        assertGe(liquidity2, liquidity1 * 99 / 100, "Liquidity should not decrease significantly after swap 2");
-        assertGe(liquidity3, liquidity2 * 99 / 100, "Liquidity should not decrease significantly after swap 3");
-        assertGe(liquidity4, liquidity3 * 99 / 100, "Liquidity should not decrease significantly after swap 4");
-        assertGe(liquidity5, liquidity4 * 99 / 100, "Liquidity should not decrease significantly after swap 5");
-
-        emit log_string("\n=== Liquidity Analysis ===");
-        emit log_named_decimal_uint("Initial liquidity", liquidity0, 18);
-        emit log_named_decimal_uint("Final liquidity", liquidity5, 18);
-
-        // Calculate percentage change relative to liquidity after first swap
-        if (liquidity1 > 0) {
-            uint256 changePercent = (liquidity5 * 100 / liquidity1);
-            emit log_named_decimal_uint("Liquidity change % (vs swap1)", changePercent, 0);
+            // Buy all tokenB (A -> B)
+            uint256 balanceTokenB = swapVM.balances(orderHash, tokenB);
+            swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapData);
+            (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
         }
+
+        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB * ONE / price_AB, "Token A (relative) after 100 swap pairs", false, 0.4e18);
+        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB * ONE / price_AB, "Token B (relative) after 100 swap pairs", true, 0.4e18);
+
+        // ====== SWAP PAIR 2: A <-> C (100 times) ======
+        emit log_string("\n\n=== SWAP PAIR 2: A <-> C x 100 ===");
+        (uint256 preAmountInC, uint256 preAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
+        uint256 postAmountInC; uint256 postAmountOutC;
+        uint256 postAmountInA_CA; uint256 postAmountOutA_CA;
+
+        for (uint256 i = 0; i < 100; i++) {
+            // Buy all tokenC (A -> C)
+            uint256 balanceTokenC = swapVM.balances(orderHash, tokenC);
+            // if (i == 0) {
+            //     balanceTokenC = setup.balanceC; // First iteration doesn't have balances in state yet
+            // }
+            swapVM.swap(order, tokenA, tokenC, balanceTokenC, swapData);
+            (postAmountInC, postAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
+
+            // Buy all tokenA (C -> A)
+            uint256 balanceTokenA = swapVM.balances(orderHash, tokenA);
+            swapVM.swap(order, tokenC, tokenA, balanceTokenA, swapData);
+            (postAmountInA_CA, postAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
+        }
+
+        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC * ONE / price_AC, "Token C (relative) after 100 swap pairs", true, 0.4e18);
+        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC * ONE / price_AC, "Token A (relative) after 100 swap pairs", false, 0.4e18);
+
+        vm.stopPrank();
+    }
+
+    /// @notice Test realistic scenario: 1000 small swaps (5% volume) followed by full drains
+    /// @dev This simulates realistic trading activity before testing price bounds
+    function test_RealisticSwaps_SmallVolume_ThenFullDrain() public {
+        emit log_string("=== Test: 3D Realistic Swaps (1000x 5% volume) + Full Drains ===");
+
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100 * ONE,
+            balanceB: 150 * ONE,
+            balanceC: 200 * ONE,
+            priceMin_AB: 0,
+            priceMax_AB: 0,
+            priceMax_AC: 0,
+            priceMin_AC: 0,
+            priceMin_BC: 0,
+            priceMax_BC: 0
+        });
+
+        // Calculate current prices
+        uint256 price_AB = setup.balanceB * ONE / setup.balanceA;  // 1.5
+        uint256 price_AC = setup.balanceC * ONE / setup.balanceA;  // 2.0
+        uint256 price_BC = setup.balanceC * ONE / setup.balanceB;  // 1.333...
+
+        // Define relative ranges
+        setup.priceMin_AB = price_AB / 4;  // 0.375
+        setup.priceMax_AB = price_AB * 4;  // 6.0
+        setup.priceMax_AC = price_AC * 6;  // 12.0
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFee(setup, price_AB, price_AC, price_BC);
+        bytes32 orderHash = swapVM.hash(order);
+        bytes memory quoteData = _quotingTakerData();
+        bytes memory swapData = _swappingTakerData(signature);
+
+        _printSetup(setup);
+
+        vm.startPrank(taker);
+
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
+
+        // ====== PHASE 1: 1000 small swaps (5% volume each) B <-> A ======
+        emit log_string("\n\n=== PHASE 1: 1000x small swaps (5% volume) B <-> A ===");
+
+        for (uint256 i = 0; i < 1000; i++) {
+            uint256 balanceTokenA = swapVM.balances(orderHash, tokenA);
+            balanceTokenA = balanceTokenA == 0 ? setup.balanceA : balanceTokenA;
+            (uint256 amountIn0, uint256 amountOut0,) = swapVM.swap(order, tokenB, tokenA, balanceTokenA * 5 / 100, swapData);
+            (uint256 amountIn1, uint256 amountOut1,) = swapVM.swap(order, tokenA, tokenB, amountIn0, swapData);
+            (uint256 amountIn2, uint256 amountOut2,) = swapVM.swap(order, tokenB, tokenC, amountOut1, swapData);
+            (uint256 amountIn3, uint256 amountOut3,) = swapVM.swap(order, tokenC, tokenB, amountIn2, swapData);
+        }
+
+        emit log_string("\n--- After 1000 small swaps ---");
+        emit log_named_decimal_uint("balanceA", swapVM.balances(orderHash, tokenA), 18);
+        emit log_named_decimal_uint("balanceB", swapVM.balances(orderHash, tokenB), 18);
+        emit log_named_decimal_uint("balanceC", swapVM.balances(orderHash, tokenC), 18);
+
+        // ====== PHASE 2: Full drain swaps to test price bounds ======
+        emit log_string("\n\n=== PHASE 2: Full Drain Swaps to Test Price Bounds ===");
+
+        // Test Token A price bound (B -> A full drain)
+        emit log_string("\n--- Drain Token A (B -> A) ---");
+        uint256 balanceTokenA = swapVM.balances(orderHash, tokenA);
+        swapVM.swap(order, tokenB, tokenA, balanceTokenA, swapData);
+        (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.000001e18, quoteData);
+        _verifyRateChange(preAmountInA, preAmountOutA, postAmountInA, postAmountOutA, setup.priceMin_AB * ONE / price_AB, "Token A1 (relative) after small swaps + drain", false, 0.03e18);
+
+        (uint256 preAmountInA_CA, uint256 preAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
+
+        // Test Token B price bound (A -> B full drain)
+        emit log_string("\n--- Drain Token B (A -> B) ---");
+        uint256 balanceTokenB = swapVM.balances(orderHash, tokenB);
+        swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapData);
+        (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.000001e18, quoteData);
+        _verifyRateChange(preAmountInB, preAmountOutB, postAmountInB, postAmountOutB, setup.priceMax_AB * ONE / price_AB, "Token B (relative) after small swaps + drain", true, 0.03e18);
+
+        // Test Token C price bound (A -> C full drain)
+        emit log_string("\n--- Drain Token C (A -> C) ---");
+        (uint256 preAmountInC, uint256 preAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
+        uint256 balanceTokenC = swapVM.balances(orderHash, tokenC);
+        swapVM.swap(order, tokenA, tokenC, balanceTokenC, swapData);
+        (uint256 postAmountInC, uint256 postAmountOutC,) = swapVM.asView().quote(order, tokenA, tokenC, 0.000001e18, quoteData);
+        _verifyRateChange(preAmountInC, preAmountOutC, postAmountInC, postAmountOutC, setup.priceMax_AC * ONE / price_AC, "Token C (relative) after small swaps + drain", true, 0.06e18);
+
+        // Test Token A price bound again (C -> A full drain)
+        emit log_string("\n--- Drain Token A again (C -> A) ---");
+        balanceTokenA = swapVM.balances(orderHash, tokenA);
+        swapVM.swap(order, tokenC, tokenA, balanceTokenA, swapData);
+        (uint256 postAmountInA_CA, uint256 postAmountOutA_CA,) = swapVM.asView().quote(order, tokenC, tokenA, 0.000001e18, quoteData);
+        _verifyRateChange(preAmountInA_CA, preAmountOutA_CA, postAmountInA_CA, postAmountOutA_CA, setup.priceMin_AC * ONE / price_AC, "Token A4 (relative) after small swaps + drain", false, 0.03e18);
 
         vm.stopPrank();
     }

@@ -226,9 +226,11 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
             uint256 deltaA,
             uint256 deltaB,
             uint256 deltaC,
+            uint256 concentratedA,
+            uint256 concentratedB,
+            uint256 concentratedC,
             ,,,
-            uint256 liquidityRoot,
-            uint256 liquidityPower
+            uint256 liquidityRoot
         ) = XYCConcentrateArgsBuilder.computeDeltas3D(
             balanceA, balanceB, balanceC,
             priceAB, priceAC, priceBC,
@@ -246,7 +248,8 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
                 XYCConcentrateArgsBuilder.buildXD(
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([deltaA, deltaB, deltaC]),
-                    liquidityRoot, liquidityPower
+                    dynamic([concentratedA, concentratedB, concentratedC]),
+                    liquidityRoot
                 )),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),

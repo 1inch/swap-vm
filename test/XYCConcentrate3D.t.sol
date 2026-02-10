@@ -86,17 +86,21 @@ contract XYCConcentrate3DTest is Test, OpcodesDebug {
         uint256 deltaA;
         uint256 deltaB;
         uint256 deltaC;
+        uint256 concentratedA;
+        uint256 concentratedB;
+        uint256 concentratedC;
         uint256 liquidityRoot;
-        uint256 liquidityPower;
         (
             deltaA,
             deltaB,
             deltaC,
+            concentratedA,
+            concentratedB,
+            concentratedC,
             setup.priceMin_AC,
             setup.priceMin_BC,
             setup.priceMax_BC,
-            liquidityRoot,
-            liquidityPower
+            liquidityRoot
         ) = XYCConcentrateArgsBuilder.computeDeltas3D(
             setup.balanceA, setup.balanceB, setup.balanceC,
             price_AB, price_AC, price_BC,
@@ -130,7 +134,8 @@ contract XYCConcentrate3DTest is Test, OpcodesDebug {
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity3D, XYCConcentrateArgsBuilder.buildXD(
                     dynamic([address(tokenA), address(tokenB), address(tokenC)]),
                     dynamic([deltaA, deltaB, deltaC]),
-                    liquidityRoot, liquidityPower
+                    dynamic([concentratedA, concentratedB, concentratedC]),
+                    liquidityRoot
                 )),
                 program.build(XYCSwap._xycSwapXD)
             )
