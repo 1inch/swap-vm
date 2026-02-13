@@ -29,12 +29,12 @@ contract AquaAMM is OpcodesDebug {
         uint40 expiration,
         address token0,
         address token1,
-        uint16 feeBpsIn,
+        uint32 feeBpsIn,
         uint256 delta0,
         uint256 delta1,
         uint256 liquidity,
         uint16 decayPeriod,
-        uint16 protocolFeeBpsIn,
+        uint32 protocolFeeBpsIn,
         address feeReceiver,
         uint64 salt
     ) external pure returns (ISwapVM.Order memory) {
@@ -42,10 +42,10 @@ contract AquaAMM is OpcodesDebug {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
-            (delta0 != 0 || delta1 != 0) ? program.build(_xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(token0, token1, delta0, delta1, liquidity)) : bytes(""),
+            (protocolFeeBpsIn > 0) ? program.build(_aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBpsIn, feeReceiver)) : bytes(""),
             (decayPeriod > 0) ? program.build(_decayXD, DecayArgsBuilder.build(decayPeriod)) : bytes(""),
+            (delta0 != 0 || delta1 != 0) ? program.build(_xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(token0, token1, delta0, delta1, liquidity)) : bytes(""),
             (feeBpsIn > 0) ? program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBpsIn)) : bytes(""),
-            (protocolFeeBpsIn > 0) ? program.build(_aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBpsIn, feeReceiver)) : bytes(""),
             program.build(_xycSwapXD),
             program.build(_printContext),
             program.build(_deadline, ControlsArgsBuilder.buildDeadline(expiration)),

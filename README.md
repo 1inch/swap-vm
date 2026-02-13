@@ -23,6 +23,7 @@
 - [For Developers](#-for-developers)
 - [Security Model](#-security-model)
 - [Advanced Topics](#-advanced-topics)
+  - [AMM Instruction Ordering (Canonical)](#amm-instruction-ordering-canonical)
 
 ---
 
@@ -1065,6 +1066,84 @@ The protocol provides these built-in protections:
 ---
 
 ## 🔬 Advanced Topics
+
+### AMM Instruction Ordering (Canonical)
+
+The order in which instructions appear in an AMM program is critical for correct accounting — specifically for protocol fee isolation, liquidity growth, and conservation laws. The canonical orderings below are validated by `AquaAccounting.t.sol` and `SwapVmAccounting.t.sol`.
+
+#### Aqua Protocol (balance managed by Aqua)
+
+```
+aquaProtocolFeeAmountIn → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
+```
+
+```solidity
+// XYC AMM with protocol fee + flat fee + MEV protection
+bytes memory program = bytes.concat(
+    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(XYCSwap._xycSwapXD),
+    p.build(Controls._salt, saltArgs)
+);
+
+// Pegged swap variant (replaces concentrate + xycSwap)
+bytes memory program = bytes.concat(
+    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
+    p.build(Controls._salt, saltArgs)
+);
+```
+
+#### Dynamic Balances (SwapVM internal, no Aqua)
+
+```
+protocolFeeAmountIn → dynamicBalances → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
+```
+
+```solidity
+// XYC AMM with protocol fee + flat fee + MEV protection
+bytes memory program = bytes.concat(
+    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(XYCSwap._xycSwapXD),
+    p.build(Controls._salt, saltArgs)
+);
+
+// Pegged swap variant
+bytes memory program = bytes.concat(
+    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
+    p.build(Controls._salt, saltArgs)
+);
+```
+
+#### Why This Order Matters
+
+| Position | Instruction | Reason |
+|----------|-------------|--------|
+| 1st | **Protocol Fee** | Extracted from `amountIn` **before** balances are touched — ensures fee is isolated from pool reserves and does not inflate liquidity |
+| 2nd | **Dynamic Balances** (non-Aqua only) | Loads/initializes maker's isolated reserves; wraps all subsequent instructions via `runLoop()` |
+| 3rd | **Decay** | Applies virtual reserve adjustment based on time since last trade — must see real balances |
+| 4th | **Concentrate** | Shifts reserves into concentrated range — must happen before the swap but after decay |
+| 5th | **Flat Fee** | Reduces effective `amountIn` before swap calculation — fee amount stays in the pool, growing liquidity |
+| 6th | **Swap / PeggedSwap** | Core AMM calculation using final adjusted registers |
+| Last | **Salt** | Order uniqueness — pure hash modifier, no effect on computation |
+
+**Key invariant:** `pool_balance + protocol_fee = initial_balance + total_amountIn` (Token A conservation). Placing protocol fee first guarantees it is cleanly separated from pool accounting. Placing flat fee after concentrate ensures the retained fee grows liquidity correctly.
+
+See `test/AquaAccounting.t.sol` and `test/SwapVmAccounting.t.sol` for comprehensive conservation law tests.
+
+---
 
 ### Concentrated Liquidity
 

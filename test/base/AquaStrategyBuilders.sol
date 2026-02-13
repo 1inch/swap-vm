@@ -106,11 +106,11 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         }
 
         return bytes.concat(
+            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
+            concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
             setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
-            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             setup.progressiveFeeBps > 0 ? p.build(FeeExperimental._progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)) : bytes(""),
-            concentrateProgram,
             p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
