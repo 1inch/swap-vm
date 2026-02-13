@@ -44,11 +44,13 @@ struct SwapQuery {
 /// @param balanceOut The current balance of the output token
 /// @param amountIn The amount of input token being swapped
 /// @param amountOut The amount of output token being swapped
+/// @param amountNetPulled The net amount pulled from the maker during the swap, used for fee calculations
 struct SwapRegisters {
     uint256 balanceIn;
     uint256 balanceOut;
     uint256 amountIn;
     uint256 amountOut;
+    uint256 amountNetPulled;
 }
 
 /// @title SwapVM context

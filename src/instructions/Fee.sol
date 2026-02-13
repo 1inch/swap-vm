@@ -90,6 +90,7 @@ contract Fee {
     function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+        ctx.swap.amountNetPulled += feeAmountIn;
 
         if (!ctx.vm.isStaticContext) {
             _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
@@ -171,6 +172,7 @@ contract Fee {
             require(to != address(0), FeeDynamicProtocolInvalidRecipient());
 
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+            ctx.swap.amountNetPulled += feeAmountIn;
 
             if (!ctx.vm.isStaticContext) {
                 _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
