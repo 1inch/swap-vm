@@ -32,7 +32,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
     using TakerTraitsLib for TakerTraits;
 
     error BadSignature(address maker, bytes32 orderHash, bytes signature);
-    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
+    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount, uint256 amountNetPulled);
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
     error MakerTraitsCustomReceiverIsIncompatibleWithAqua();
 
@@ -209,7 +209,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
                     AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn);
                 } else {
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
-                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn - ctx.swap.amountNetPulled, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
+                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn - ctx.swap.amountNetPulled, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn, ctx.swap.amountNetPulled));
                 }
             } else {
                 _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
