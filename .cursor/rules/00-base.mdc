@@ -18,15 +18,6 @@ VM-based swap protocol where orders are bytecode programs.
 - `Context` - VM + query + swap registers
 - `SwapRegisters` - balanceIn/Out, amountIn/Out
 
-## Inheritance
-
-```
-SwapVM (abstract)
-├── SwapVMRouter      ← inherits Opcodes
-├── LimitSwapVMRouter ← inherits LimitOpcodes
-└── AquaSwapVMRouter  ← inherits AquaOpcodes
-```
-
 ## Swap Flow
 
 1. `router.swap(order, tokenIn, tokenOut, amount, takerData)`

@@ -53,9 +53,7 @@ Solidity Best Practices
 - Use assembly sparingly and only when necessary for optimizations, with thorough documentation.
 - Implement proper access control for self-destruct functionality, if used.
 - Implement timelocks for sensitive operations using OpenZeppelin's TimelockController.
-- Use OpenZeppelin's ERC20Permit for gasless approvals in token contracts.
-- Use OpenZeppelin's ERC20Votes for governance token implementations.
-- Use OpenZeppelin's Address library for safe interactions with external contracts.
+- Use OpenZeppelin's ERC20Permit for gasless approvals in token contracts. // check solidity utils
 
 1inch Libraries (use instead of OpenZeppelin equivalents)
 - Use `import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol"` for ERC20 interactions (exports IERC20 and IWETH - do NOT import IERC20 from OpenZeppelin separately)
