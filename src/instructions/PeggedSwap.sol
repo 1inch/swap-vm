@@ -123,9 +123,12 @@ contract PeggedSwap {
         // ║    - Analytical solution - no iterative solving needed                    ║
         // ║                                                                           ║
         // ║  Parameters guide:                                                        ║
-        // ║    - For stablecoins (USDC/USDT): A ≈ 0.8e+27-1.5e+27                     ║
-        // ║    - For wrapped tokens (WETH/stETH): A ≈ 0.3e+27-0.6e+27                 ║
-        // ║    - For volatile pairs: A ≈ 0.0-0.2e+27                                  ║
+        // ║    - For pegged pairs (USDC/USDT, WETH/stETH, WBTC/cbBTC):               ║
+        // ║      A ≈ 0.8e+27-1.5e+27                                                  ║
+        // ║    - For looser pegs: A ≈ 0.3e+27-0.6e+27                                 ║
+        // ║    - WARNING: This curve has finite reserves (hard price boundary).        ║
+        // ║      NOT suitable for volatile/uncorrelated pairs or drifting-peg          ║
+        // ║      assets (e.g. WETH/wstETH where the ratio changes over time).         ║
         // ╚═══════════════════════════════════════════════════════════════════════════╝
 
         // Get rate multipliers based on token addresses

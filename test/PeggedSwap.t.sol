@@ -26,6 +26,14 @@ contract PeggedSwapMathWrapper {
     function solve(uint256 u, uint256 a, uint256 invariantC) external pure returns (uint256) {
         return PeggedSwapMath.solve(u, a, invariantC);
     }
+
+    function computeInvariant(uint256 u, uint256 v, uint256 a) external pure returns (uint256) {
+        return PeggedSwapMath.invariant(u, v, a);
+    }
+
+    function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
+        return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
+    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
@@ -692,6 +700,239 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
         wrapper.solve(u, a, invalidInvariant);
+    }
+
+    /// @notice Invariant symmetry: invariant(u, v, a) == invariant(v, u, a)
+    function test_PeggedSwapMath_InvariantSymmetry() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // Highly asymmetric pairs
+        uint256[5] memory us = [uint256(1), 1e15, 1e24, ONE, 2 * ONE];
+        uint256[5] memory vs = [2 * ONE, ONE, 1e15, 1e24, uint256(1)];
+        uint256[3] memory as_ = [uint256(0), 0.01e27, 2e27];
+
+        for (uint256 i = 0; i < us.length; i++) {
+            for (uint256 j = 0; j < as_.length; j++) {
+                uint256 inv_uv = wrapper.computeInvariant(us[i], vs[i], as_[j]);
+                uint256 inv_vu = wrapper.computeInvariant(vs[i], us[i], as_[j]);
+                assertEq(inv_uv, inv_vu, "Invariant must be symmetric in u,v");
+            }
+        }
+    }
+
+    /// @notice solve(u, a, C) round-trips: compute C from (u,v), solve back, get v' >= v
+    ///         Tests highly asymmetric, extra large, and extra small reserves
+    function test_PeggedSwapMath_SolveRoundTrip_AsymmetricReserves() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // (u, v) pairs — intentionally extreme and asymmetric
+        uint256[2][10] memory pairs = [
+            [ONE / 1e18, ONE],           // u tiny, v = 1.0
+            [ONE, ONE / 1e18],           // u = 1.0, v tiny
+            [ONE / 1e9, ONE / 1e9],      // both very small
+            [2 * ONE, 2 * ONE],          // both at 2x equilibrium
+            [ONE / 100, 2 * ONE],        // 100:1 asymmetry
+            [2 * ONE, ONE / 100],        // 1:100 asymmetry
+            [uint256(1), ONE],           // 1 wei vs full
+            [ONE, uint256(1)],           // full vs 1 wei
+            [ONE / 1e6, ONE / 1e6],      // both micro
+            [uint256(1), uint256(1)]     // both 1 wei
+        ];
+
+        uint256[4] memory as_ = [uint256(0), 0.01e27, 0.8e27, 2e27];
+
+        for (uint256 i = 0; i < pairs.length; i++) {
+            uint256 u = pairs[i][0];
+            uint256 v = pairs[i][1];
+
+            for (uint256 j = 0; j < as_.length; j++) {
+                uint256 a = as_[j];
+                uint256 C = wrapper.computeInvariant(u, v, a);
+
+                // Solve for v given u and C — should give v' such that invariant(u, v', a) <= C
+                uint256 vSolved = wrapper.solve(u, a, C);
+
+                // v' should be close to v (rounding may make it slightly smaller to protect maker)
+                assertLe(vSolved, v + 1, "Solved v should not significantly exceed original v");
+
+                // Re-compute invariant with solved v — it must not exceed C (maker protection)
+                uint256 CSolved = wrapper.computeInvariant(u, vSolved, a);
+                assertLe(CSolved, C + 1, "Round-trip invariant must not exceed original (maker safety)");
+            }
+        }
+    }
+
+    /// @notice Test solve with one coordinate at zero — depletion edge
+    function test_PeggedSwapMath_Solve_ZeroCoordinate() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+
+        for (uint256 j = 0; j < as_.length; j++) {
+            uint256 a = as_[j];
+
+            // u=0, v=ONE → C = √0 + √1 + a(0+1) = ONE^(1/2) + a
+            uint256 C = wrapper.computeInvariant(0, ONE, a);
+
+            // Solve for v when u=0 — should give back ~ONE
+            uint256 vSolved = wrapper.solve(0, a, C);
+            assertLe(vSolved, ONE + 1, "v from u=0 should be <= ONE");
+            assertGe(vSolved, ONE - 1e9, "v from u=0 should be close to ONE");
+
+            // Solve for v when u is at max (v should be ~0)
+            uint256 CFromMax = wrapper.computeInvariant(ONE, 0, a);
+            uint256 vFromMax = wrapper.solve(ONE, a, CFromMax);
+            assertLe(vFromMax, 1e9, "v should be ~0 when u occupies all invariant");
+        }
+    }
+
+    /// @notice Extra large reserves: invariantFromReserves with big numbers, verify no overflow
+    function test_PeggedSwapMath_InvariantFromReserves_ExtraLarge() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        _checkLargeReserves(wrapper, 1e24, 0);
+        _checkLargeReserves(wrapper, 1e24, 0.8e27);
+        _checkLargeReserves(wrapper, 1e24, 2e27);
+        _checkLargeReserves(wrapper, 1e27, 0);
+        _checkLargeReserves(wrapper, 1e27, 0.8e27);
+        _checkLargeReserves(wrapper, 1e27, 2e27);
+        _checkLargeReserves(wrapper, 1e30, 0);
+        _checkLargeReserves(wrapper, 1e30, 0.8e27);
+        _checkLargeReserves(wrapper, 1e30, 2e27);
+    }
+
+    function _checkLargeReserves(PeggedSwapMathWrapper wrapper, uint256 x0, uint256 a) private {
+        uint256 C = wrapper.computeInvariantFromReserves(x0, x0, x0, x0, a);
+        assertTrue(C > 0, "Invariant at equilibrium must be positive");
+
+        uint256 C2 = wrapper.computeInvariantFromReserves(2 * x0, x0 / 2, x0, x0, a);
+        assertTrue(C2 > 0, "Invariant at 2:0.5 must be positive");
+
+        uint256 u = 2 * PeggedSwapMath.ONE; // u = 2.0
+        uint256 v = PeggedSwapMath.ONE / 2; // v = 0.5
+        uint256 vSolved = wrapper.solve(u, a, C2);
+        assertLe(vSolved, v + 1e9, "Large-scale solve should be close to v");
+    }
+
+    /// @notice Extra small reserves: 1 wei to a few hundred wei
+    function test_PeggedSwapMath_InvariantFromReserves_ExtraSmall() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        _checkSmallReserves(wrapper, 1, 0);
+        _checkSmallReserves(wrapper, 1, 0.8e27);
+        _checkSmallReserves(wrapper, 1, 2e27);
+        _checkSmallReserves(wrapper, 10, 0);
+        _checkSmallReserves(wrapper, 10, 0.8e27);
+        _checkSmallReserves(wrapper, 10, 2e27);
+        _checkSmallReserves(wrapper, 100, 0);
+        _checkSmallReserves(wrapper, 100, 0.8e27);
+        _checkSmallReserves(wrapper, 100, 2e27);
+        _checkSmallReserves(wrapper, 1e6, 0);
+        _checkSmallReserves(wrapper, 1e6, 0.8e27);
+        _checkSmallReserves(wrapper, 1e6, 2e27);
+    }
+
+    function _checkSmallReserves(PeggedSwapMathWrapper wrapper, uint256 x, uint256 a) private {
+        uint256 x0 = 1000e18;
+        uint256 y0 = 1000e18;
+
+        uint256 C = wrapper.computeInvariantFromReserves(x, x, x0, y0, a);
+        assertTrue(C > 0, "Invariant with tiny reserves must be positive");
+
+        uint256 u = x * PeggedSwapMath.ONE / x0;
+        uint256 vSolved = wrapper.solve(u, a, C);
+        uint256 ySolved = vSolved * y0 / PeggedSwapMath.ONE;
+        assertLe(ySolved, x + 1, "Tiny reserves: solved y should not exceed original");
+    }
+
+    /// @notice Highly asymmetric equilibrium reserves (different x0, y0)
+    function test_PeggedSwapMath_AsymmetricEquilibrium() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        // e.g., WBTC/USDC pool: x0 = 10e8 (10 BTC), y0 = 400_000e6 (400k USDC)
+        _checkAsymmetricEquilibrium(wrapper, 1e8, 1e24, 0.8e27);   // 1:1e16 ratio
+        _checkAsymmetricEquilibrium(wrapper, 1e24, 1e8, 0.8e27);   // 1e16:1 ratio
+        _checkAsymmetricEquilibrium(wrapper, 1e18, 1e18, 2e27);    // 1:1, high A
+    }
+
+    function _checkAsymmetricEquilibrium(PeggedSwapMathWrapper wrapper, uint256 x0, uint256 y0, uint256 a) private {
+        uint256 C = wrapper.computeInvariantFromReserves(x0, y0, x0, y0, a);
+        assertTrue(C > 0, "Asymmetric equilibrium invariant must be positive");
+
+        // Drain x to 10%, solve for v
+        uint256 u_drained = PeggedSwapMath.ONE / 10; // 0.1
+        uint256 v_solved = wrapper.solve(u_drained, a, C);
+        assertTrue(v_solved > PeggedSwapMath.ONE, "Draining x should push v above 1.0");
+
+        // Drain y to 10%, solve for u
+        uint256 v_drained = PeggedSwapMath.ONE / 10;
+        uint256 u_solved = wrapper.solve(v_drained, a, C);
+        assertTrue(u_solved > PeggedSwapMath.ONE, "Draining y should push u above 1.0");
+    }
+
+    /// @notice Monotonicity: increasing u should decrease v (and vice versa) on the same curve
+    function test_PeggedSwapMath_SolveMonotonicity() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+
+        for (uint256 j = 0; j < as_.length; j++) {
+            uint256 a = as_[j];
+            // Compute C at equilibrium (u=1, v=1)
+            uint256 C = wrapper.computeInvariant(ONE, ONE, a);
+
+            uint256 prevV = type(uint256).max;
+
+            // Walk u from tiny to large — v must strictly decrease (or stay if rounding)
+            uint256[8] memory uValues = [
+                ONE / 1000,  // 0.001
+                ONE / 100,   // 0.01
+                ONE / 10,    // 0.1
+                ONE / 2,     // 0.5
+                ONE,         // 1.0
+                ONE + ONE / 2, // 1.5
+                ONE * 2 - ONE / 10, // 1.9
+                ONE * 2      // 2.0 (near curve limit for C ~ 3.6 at a=0.8)
+            ];
+
+            for (uint256 i = 0; i < uValues.length; i++) {
+                // Skip values where sqrtU + au > C (beyond curve capacity)
+                uint256 sqrtU = Math.sqrt(uValues[i] * ONE);
+                uint256 au = a * uValues[i] / ONE;
+                if (sqrtU + au >= C) break;
+
+                uint256 vNow = wrapper.solve(uValues[i], a, C);
+                assertLe(vNow, prevV, "v must decrease as u increases (monotonicity)");
+                prevV = vNow;
+            }
+        }
+    }
+
+    /// @notice A=0 special case: pure square-root curve √u + √v = C
+    function test_PeggedSwapMath_PureSqrtCurve() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // At equilibrium u=v=ONE: C = 2 * √ONE = 2 * ONE^(1/2)
+        uint256 C = wrapper.computeInvariant(ONE, ONE, 0);
+        uint256 expectedC = 2 * Math.sqrt(ONE * ONE); // 2 * ONE
+        assertEq(C, expectedC, "Pure sqrt: C = 2*sqrt(ONE)");
+
+        // u=0 → v should satisfy √v = C → v = C²/ONE
+        uint256 vAtZero = wrapper.solve(0, 0, C);
+        uint256 expectedV = C * C / ONE;
+        assertEq(vAtZero, expectedV, "Pure sqrt: u=0 should give v = C^2/ONE");
+
+        // Asymmetric: u = ONE/4 → √(ONE/4) = ONE/2 → √v = C - ONE/2 → v = (C-ONE/2)²/ONE
+        uint256 uQuarter = ONE / 4;
+        uint256 vQuarter = wrapper.solve(uQuarter, 0, C);
+        uint256 sqrtUq = Math.sqrt(uQuarter * ONE);
+        uint256 expectedVq = (C - sqrtUq) * (C - sqrtUq) / ONE;
+        assertEq(vQuarter, expectedVq, "Pure sqrt: analytical solution for u=ONE/4");
     }
 
     // ========================================
