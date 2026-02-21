@@ -28,37 +28,77 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingLiquidity();
 
     /// @notice Compute initial balance adjustments to achieve concentration within price bounds
-    /// @dev JavaScript implementation:
-    ///      ```js
-    ///      function computeDeltas(balanceA, balanceB, price, priceMin, priceMax) {
-    ///         const sqrtRatioA = Math.sqrt(priceMax * 1e18 / price);
-    ///         const sqrtRatioB = Math.sqrt(price * 1e18 / priceMin);
-    ///         return {
-    ///             deltaA: (price == priceMax) ? 0 : (balanceA * 1e18 / (sqrtRatioA - 1e18)),
-    ///             deltaB: (price == priceMin) ? 0 : (balanceB * 1e18 / (sqrtRatioB - 1e18)),
-    ///         };
-    ///      }
-    ///      ```
-    /// @param balanceA Initial balance of tokenA
-    /// @param balanceB Initial balance of tokenB
-    /// @param price Current price (tokenB/tokenA with 1e18 precision)
+    /// @dev Derives the implied spot price from (balanceA, balanceB, priceMin, priceMax) via
+    ///      the concentrated-liquidity quadratic, then computes deltas as L/√priceMax and L·√priceMin.
+    ///      This ensures exact price-boundary compliance: real balances deplete exactly at priceMin/priceMax.
+    ///
+    ///      The quadratic solved is:  bx·u² + u·(by/√Phi - bx·√Plo) - by = 0,  where u = √Pspot.
+    ///      Then:  L = by/(u - √Plo),  deltaA = L/√Phi,  deltaB = L·√Plo.
+    /// @param balanceA Initial balance of tokenA (base token)
+    /// @param balanceB Initial balance of tokenB (quote token)
     /// @param priceMin Minimum price for concentration range (tokenB/tokenA with 1e18 precision)
     /// @param priceMax Maximum price for concentration range (tokenB/tokenA with 1e18 precision)
-    /// @return deltaA Initial balance adjustment for tokenA during A=>B swaps
-    /// @return deltaB Initial balance adjustment for tokenB during B=>A swaps
+    /// @return deltaA Virtual offset for tokenA
+    /// @return deltaB Virtual offset for tokenB
+    /// @return liquidity Concentrated liquidity L
+    /// @return impliedPrice The spot price implied by the balances and bounds (1e18 precision)
     function computeDeltas(
         uint256 balanceA,
         uint256 balanceB,
-        uint256 price,
+        uint256 priceMin,
+        uint256 priceMax
+    ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity, uint256 impliedPrice) {
+        require(priceMin < priceMax, ConcentrateInconsistentPrices(0, priceMin, priceMax));
+
+        uint256 sqrtPlo = Math.sqrt(priceMin * ONE);
+        uint256 sqrtPhi = Math.sqrt(priceMax * ONE);
+
+        uint256 sqrtP;
+        if (balanceA == 0) {
+            sqrtP = sqrtPhi;
+        } else if (balanceB == 0) {
+            sqrtP = sqrtPlo;
+        } else {
+            uint256 term1 = Math.mulDiv(balanceA, sqrtPlo, ONE);
+            uint256 term2 = Math.mulDiv(balanceB, ONE, sqrtPhi);
+
+            uint256 sqrtDisc;
+            if (term1 >= term2) {
+                uint256 diff = term1 - term2;
+                sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
+                sqrtP = Math.mulDiv(ONE, diff + sqrtDisc, 2 * balanceA);
+            } else {
+                uint256 diff = term2 - term1;
+                sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
+                sqrtP = Math.mulDiv(ONE, sqrtDisc - diff, 2 * balanceA);
+            }
+        }
+
+        impliedPrice = Math.mulDiv(sqrtP, sqrtP, ONE);
+
+        uint256 L;
+        if (sqrtP > sqrtPlo && balanceB > 0) {
+            L = Math.mulDiv(balanceB, ONE, sqrtP - sqrtPlo);
+        } else if (sqrtP < sqrtPhi && balanceA > 0) {
+            uint256 sqrtProduct = Math.mulDiv(sqrtP, sqrtPhi, ONE);
+            L = Math.mulDiv(balanceA, sqrtProduct, sqrtPhi - sqrtP);
+        }
+
+        deltaA = Math.mulDiv(L, ONE, sqrtPhi);
+        deltaB = Math.mulDiv(L, sqrtPlo, ONE);
+        liquidity = L;
+    }
+
+    /// @notice Backward-compatible wrapper that ignores the price parameter and derives it instead
+    /// @dev Existing callers can continue using this signature; price is silently discarded.
+    function computeDeltas(
+        uint256 balanceA,
+        uint256 balanceB,
+        uint256, /* price — ignored, derived from balances and bounds */
         uint256 priceMin,
         uint256 priceMax
     ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity) {
-        require(priceMin <= price && price <= priceMax, ConcentrateInconsistentPrices(price, priceMin, priceMax));
-        uint256 sqrtPriceRatioA = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
-        uint256 sqrtPriceRatioB = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
-        deltaA = (price == priceMax) ? 0 : (balanceA * ONE / (sqrtPriceRatioA - ONE));
-        deltaB = (price == priceMin) ? 0 : (balanceB * ONE / (sqrtPriceRatioB - ONE));
-        liquidity = Math.sqrt((balanceA + deltaA) * (balanceB + deltaB));
+        (deltaA, deltaB, liquidity, ) = computeDeltas(balanceA, balanceB, priceMin, priceMax);
     }
 
     function buildXD(address[] memory tokens, uint256[] memory deltas, uint256 liquidity) internal pure returns (bytes memory) {
