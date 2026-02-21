@@ -4,8 +4,8 @@
 \usepackage{geometry}
 \usepackage{hyperref}
 \usepackage{enumitem}
-\usepackage{natbib}
 \usepackage{booktabs}
+\usepackage{xcolor}
 
 \geometry{margin=1in}
 
@@ -23,598 +23,668 @@
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\Out}{\mathrm{Out}}
 \newcommand{\Id}{\mathrm{Id}}
+\newcommand{\bug}[1]{\textcolor{red}{\textbf{[BUG]} #1}}
+\newcommand{\fix}[1]{\textcolor{blue}{\textbf{[FIX]} #1}}
 
-\title{XYCConcentrate GrowLiquidity: Additivity Analysis \\
-for Concentrated Constant-Product Pools \\
-(2D, 3D, 4D variants)}
-\author{}
+\title{XYCConcentrate GrowLiquidity:\\
+How It Works, What Is Broken, and How to Fix It}
 \date{}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We analyze the additivity properties of the \texttt{XYCConcentrate} liquidity-growth mechanism used in the 1inch SwapVM.
-The mechanism scales virtual concentration offsets (``deltas'') proportionally to a liquidity scalar $L$, then executes a constant-product swap on the concentrated balances and updates $L$ from the post-swap reserves.
-We prove three results:
-(1)~without fees the mechanism is \emph{strictly additive} (path-independent);
-(2)~with input fees it is \emph{subadditive} (one-shot output $\ge$ split output, safe);
-(3)~with output fees it is \emph{superadditive} (split output $>$ one-shot output, exploitable by trade splitting).
-We compare with the semigroup $D$-update construction from the companion PeggedSwap paper and show that the current implementation does \emph{not} satisfy the semigroup law when fees are present, though it is safe under the standard input-fee configuration.
+This document explains the \texttt{XYCConcentrate} GrowLiquidity mechanism
+used in the 1inch SwapVM, starting from first principles with worked numerical
+examples.
+We then identify two critical bugs found during the Bail Security audit---swapped
+delta formulas and a fundamentally broken 3D/4D generalization---and show
+exactly how to fix each one.
+Finally, we analyze the additivity (path-independence) properties under
+different fee configurations.
 \end{abstract}
 
 \tableofcontents
 
 
-\section{Introduction}
+%=============================================================================
+\part{How the Mechanism Works}
+%=============================================================================
 
-The \texttt{XYCConcentrate} contract implements concentrated liquidity for constant-product pools by adding virtual offsets (``deltas'') to real token balances before executing swaps.
-After each swap the mechanism stores updated liquidity and uses it to scale deltas for subsequent swaps, allowing the pool's effective liquidity to grow over time.
+\section{The Idea: Concentrated Liquidity on a Constant-Product Curve}
 
-Three variants exist, distinguished by the number of tokens and the root used for the liquidity scalar:
+A plain constant-product AMM holds two tokens with reserves $(x, y)$ satisfying
+$xy = k$.  Liquidity is spread across all prices from~$0$ to~$\infty$,
+which is capital-inefficient.
+
+\textbf{Concentrated liquidity} restricts trading to a chosen price range
+$[P_{\mathrm{lo}},\, P_{\mathrm{hi}}]$.
+The trick is to add \emph{virtual offsets} (``deltas'') to the real balances
+so that the constant-product formula acts on larger \emph{virtual reserves}:
+\[
+X = b_x + \delta_x, \qquad Y = b_y + \delta_y,
+\]
+where $b_x, b_y$ are the real token balances and $\delta_x, \delta_y$ are the
+offsets.  Swaps use the virtual reserves $(X, Y)$, but the pool only actually
+holds $(b_x, b_y)$.
+
+\begin{example}[Why this helps]\label{ex:why-concentrate}
+Suppose a maker deploys $b_x = b_y = 1{,}000$ tokens at price~$1$
+and concentrates between $P_{\mathrm{lo}} = 0.5$ and $P_{\mathrm{hi}} = 2.0$.
+
+Without concentration the pool would be $(1000, 1000)$ with $k = 10^6$.
+
+With concentration the virtual reserves are much larger (say $X = Y = 3{,}000$),
+giving $k = 9 \times 10^6$---nine times the effective liquidity.
+The trade $\Delta = 100$ of token~$X$ yields:
+\begin{itemize}
+\item Without concentration:
+  $\mathrm{out} = 100 \times 1000 / 1100 \approx 90.9$.
+\item With concentration:
+  $\mathrm{out} = 100 \times 3000 / 3100 \approx 96.8$.
+\end{itemize}
+The concentrated pool gives a better price because liquidity is deeper around
+the current price.
+\end{example}
+
+
+\section{The Standard Math (Uniswap V3 Style)}\label{sec:standard-math}
+
+Define the \emph{spot price} $P = Y/X$ and \emph{liquidity}
+$L = \sqrt{XY}$.  Then:
+
+\begin{align}
+X &= \frac{L}{\sqrt{P}}, &  Y &= L\sqrt{P},  \label{eq:virtual} \\[4pt]
+\delta_x &= \frac{L}{\sqrt{P_{\mathrm{hi}}}}, &
+\delta_y &= L\sqrt{P_{\mathrm{lo}}},  \label{eq:offsets} \\[4pt]
+b_x &= X - \delta_x = L\!\left(\frac{1}{\sqrt{P}}
+      - \frac{1}{\sqrt{P_{\mathrm{hi}}}}\right), &
+b_y &= Y - \delta_y = L\!\left(\sqrt{P}
+      - \sqrt{P_{\mathrm{lo}}}\right).  \label{eq:real}
+\end{align}
+
+\begin{remark}[Boundary conditions]
+At $P = P_{\mathrm{lo}}$: $b_y = 0$ (all capital in token~$X$).
+At $P = P_{\mathrm{hi}}$: $b_x = 0$ (all capital in token~$Y$).
+\end{remark}
+
+\begin{example}[Computing deltas from scratch]\label{ex:deltas-from-scratch}
+Take $P_{\mathrm{lo}} = 0.25$, $P_{\mathrm{hi}} = 4.0$, $P = 1.0$, $L = 1000$.
+\begin{align*}
+X &= 1000 / \sqrt{1} = 1000, & Y &= 1000 \times \sqrt{1} = 1000,\\
+\delta_x &= 1000 / \sqrt{4} = 500, & \delta_y &= 1000 \times \sqrt{0.25} = 500,\\
+b_x &= 1000 - 500 = 500, & b_y &= 1000 - 500 = 500.
+\end{align*}
+So a maker depositing $b_x = b_y = 500$ real tokens gets virtual reserves of
+$(1000, 1000)$---double the effective liquidity.
+\end{example}
+
+
+\section{How \texttt{XYCConcentrate} Works in Practice}\label{sec:impl-overview}
+
+The implementation stores three pieces of data per token pair:
+$\delta_x,\; \delta_y,\; L_0$ (the initial liquidity).
+On every swap it runs these steps:
+
+\begin{enumerate}[label=\textbf{Step \arabic*},leftmargin=3em]
+\item \textbf{Read the current liquidity $L_{\mathrm{cur}}$.}
+  For 2D this is $L_{\mathrm{cur}} = \sqrt{K_{\mathrm{stored}}}$, where $K$ was
+  saved from the previous swap.
+
+\item \textbf{Build concentrated balances.}
+  Scale the deltas proportionally to how much $L$ has grown:
+  \begin{equation}\label{eq:concentrate}
+  X = b_x + \delta_x \cdot \frac{L_{\mathrm{cur}}}{L_0}, \qquad
+  Y = b_y + \delta_y \cdot \frac{L_{\mathrm{cur}}}{L_0}.
+  \end{equation}
+
+\item \textbf{Execute a constant-product swap} on $(X, Y)$:
+  \begin{equation}\label{eq:swap}
+  \mathrm{amtOut} = \frac{\Delta_{\mathrm{eff}} \cdot Y}{X + \Delta_{\mathrm{eff}}},
+  \end{equation}
+  where $\Delta_{\mathrm{eff}}$ is the input after any fee.
+
+\item \textbf{Update and store $L$.}
+  \begin{equation}\label{eq:L-update}
+  K_{\mathrm{new}} = (X + \mathrm{amtIn}) \cdot (Y - \mathrm{amtOut}),
+  \quad
+  L_{\mathrm{new}} = \sqrt{K_{\mathrm{new}}}.
+  \end{equation}
+\end{enumerate}
+
+\begin{example}[A full swap walkthrough]\label{ex:walkthrough}
+Start with $b_x = b_y = 500$, $\delta_x = \delta_y = 500$,
+$L_0 = 1000$, and $L_{\mathrm{cur}} = L_0 = 1000$ (first swap, no growth yet).
+No fee ($f = 0$).  Trader sends $\Delta = 100$ of token~$X$.
+
+\textbf{Step 2.}
+$X = 500 + 500 \times 1000/1000 = 1000$, \;
+$Y = 500 + 500 \times 1000/1000 = 1000$.
+
+\textbf{Step 3.}
+$\mathrm{amtOut} = 100 \times 1000 / 1100 \approx 90.91$.
+
+\textbf{Step 4.}
+$K = 1100 \times 909.09 = 1{,}000{,}000$ (unchanged---no fee), \;
+$L = 1000$ (unchanged).
+
+Trader receives $\approx 90.91$ of token~$Y$.
+\end{example}
+
+\begin{example}[Swap with input-fee]\label{ex:walkthrough-fee}
+Same pool as above.  Fee $f = 1\%$.  Trader sends $\Delta = 100$.
+
+\textbf{Step 2.}  Same: $(X, Y) = (1000, 1000)$.
+
+\textbf{Step 3.}
+Effective input $\Delta_{\mathrm{eff}} = 0.99 \times 100 = 99$.
+$\mathrm{amtOut} = 99 \times 1000 / 1099 \approx 90.08$.
+
+\textbf{Step 4.}
+$X' = 1000 + 100 = 1100$ (full $\Delta$ credited).
+$Y' = 1000 - 90.08 = 909.92$.
+$K = 1100 \times 909.92 = 1{,}000{,}912 > 10^6$.
+$L = \sqrt{1{,}000{,}912} \approx 1000.46$.
+
+The product \emph{grew} because the fee ($1$ token) stayed in the pool.
+Next swap, the deltas scale up by $1000.46/1000 = 1.00046$, making the pool
+slightly deeper.
+\end{example}
+
+
+\section{How \texttt{computeDeltas} Constructs the Pool}\label{sec:computeDeltas}
+
+The function \texttt{computeDeltas(balanceA, balanceB, price, priceMin, priceMax)}
+computes the initial deltas and liquidity.  Its formulas are:
+\begin{align}
+\texttt{sqrtMin} &= \sqrt{\frac{P}{P_{\mathrm{lo}}}}, &
+\texttt{sqrtMax} &= \sqrt{\frac{P_{\mathrm{hi}}}{P}}, \label{eq:impl-sqrts}\\[4pt]
+\texttt{deltaA} &= \frac{b_x}{\texttt{sqrtMin} - 1}, &
+\texttt{deltaB} &= \frac{b_y}{\texttt{sqrtMax} - 1}, \label{eq:impl-deltas}\\[4pt]
+\texttt{liquidity} &= \sqrt{(b_x + \texttt{deltaA})(b_y + \texttt{deltaB})}.
+\label{eq:impl-L}
+\end{align}
+
+\begin{example}[Running \texttt{computeDeltas}]\label{ex:computeDeltas}
+Inputs: $b_x = b_y = 1000$, $P = 1.0$, $P_{\mathrm{lo}} = 0.25$,
+$P_{\mathrm{hi}} = 4.0$.
+\begin{align*}
+\texttt{sqrtMin} &= \sqrt{1.0/0.25} = 2.0, &
+\texttt{sqrtMax} &= \sqrt{4.0/1.0} = 2.0,\\
+\texttt{deltaA} &= 1000 / (2 - 1) = 1000, &
+\texttt{deltaB} &= 1000 / (2 - 1) = 1000,\\
+\texttt{liquidity} &= \sqrt{2000 \times 2000} = 2000.
+\end{align*}
+Virtual reserves: $(X, Y) = (2000, 2000)$.
+\end{example}
+
+\begin{example}[Away from the geometric mean]\label{ex:computeDeltas-off}
+Same bounds, but now $P = 0.5$ (not the geometric mean $\sqrt{0.25 \times 4} = 1$):
+\begin{align*}
+\texttt{sqrtMin} &= \sqrt{0.5/0.25} = \sqrt{2} \approx 1.414, &
+\texttt{sqrtMax} &= \sqrt{4.0/0.5} = \sqrt{8} \approx 2.828,\\
+\texttt{deltaA} &= 1000 / 0.414 \approx 2414, &
+\texttt{deltaB} &= 1000 / 1.828 \approx 547.
+\end{align*}
+We will see in \S\ref{sec:bug-deltas} that these values are \emph{wrong}---the
+formulas for A and B are swapped.
+\end{example}
+
+
+%=============================================================================
+\part{What Is Broken and How to Fix It}
+%=============================================================================
+
+\section{Bug 1: The Delta Formulas Are Swapped}\label{sec:bug-deltas}
+
+\noindent\textit{Audit references:}
+\begin{itemize}[nosep,leftmargin=2em]
+\item \textbf{[H]} \textit{computeDeltas does not obey price limits}
+\item \textbf{[M]} \textit{computeDeltas --- ratio of square roots of prices is not meaningful}
+\item \textbf{[H]} \textit{computeDeltas --- inconsistent rounding direction}
+\end{itemize}
+
+\subsection{The correct formulas}
+
+From the standard math (\S\ref{sec:standard-math}), expressing the offsets
+in terms of real balances:
+\begin{align}
+\delta_x &= \frac{b_x}{\sqrt{P_{\mathrm{hi}}/P} - 1}
+\quad\bigl(= b_x\,\sqrt{P}\,/\,(\sqrt{P_{\mathrm{hi}}} - \sqrt{P})\bigr),
+\label{eq:delta-x-correct} \\
+\delta_y &= \frac{b_y}{\sqrt{P/P_{\mathrm{lo}}} - 1}
+\quad\bigl(= b_y\,\sqrt{P_{\mathrm{lo}}}\,/\,(\sqrt{P} - \sqrt{P_{\mathrm{lo}}})\bigr).
+\label{eq:delta-y-correct}
+\end{align}
+
+\subsection{What the implementation does}
+
 \begin{center}
-\begin{tabular}{@{}lll@{}}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{@{}lcc@{}}
 \toprule
-\textbf{Variant} & \textbf{Tokens} & \textbf{Liquidity root} \\
+& \textbf{Correct} & \textbf{Implementation} \\
 \midrule
-\texttt{GrowLiquidity2D} & 2 & $L = \sqrt{X \cdot Y}$ \\
-\texttt{GrowLiquidity3D} & 3 & $L = \sqrt[3]{X \cdot Y \cdot Z}$ \\
-\texttt{GrowLiquidity4D} & 4 & $L = \sqrt[4]{X \cdot Y \cdot Z \cdot W}$ \\
+$\delta_x$ (tokenA) &
+  $\dfrac{b_x}{\sqrt{P_{\mathrm{hi}}/P} - 1}$ &
+  $\dfrac{b_x}{\sqrt{P/P_{\mathrm{lo}}} - 1}$ \\[10pt]
+$\delta_y$ (tokenB) &
+  $\dfrac{b_y}{\sqrt{P/P_{\mathrm{lo}}} - 1}$ &
+  $\dfrac{b_y}{\sqrt{P_{\mathrm{hi}}/P} - 1}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The mathematical structure is identical across all three; only the arity and root degree change.
-We therefore carry out the analysis for a generic $n$-token variant and specialize where needed.
+\bug{The sqrt ratio arguments are swapped between tokenA and tokenB.}
 
-This analysis uses the additivity framework and notation established in the companion paper
-on PeggedSwap~\citep{peggedswap2026}.
+\subsection{When the bug is invisible}
 
+The two formulas coincide when $\sqrt{P_{\mathrm{hi}}/P} = \sqrt{P/P_{\mathrm{lo}}}$,
+i.e.\ $P = \sqrt{P_{\mathrm{lo}} \cdot P_{\mathrm{hi}}}$ (the geometric mean of the
+bounds).  This is why tests at symmetric prices may not catch the bug.
 
-\section{Mechanism Description}
+\subsection{Numerical comparison}
 
-\subsection{State}
+\begin{example}[Correct vs.\ implementation at $P = 0.5$]\label{ex:bug-deltas}
+$b_x = b_y = 1000$, $P_{\mathrm{lo}} = 0.25$, $P_{\mathrm{hi}} = 4.0$, $P = 0.5$.
 
-For an $n$-token pool the \emph{concentrated balances} are
+\medskip
+\textbf{Correct:}
 \[
-X_i = x_i + \delta_i \cdot \frac{L_{\mathrm{cur}}}{L_0}, \qquad i=1,\dots,n,
+\delta_x = \frac{1000}{\sqrt{4/0.5} - 1}
+        = \frac{1000}{\sqrt{8} - 1}
+        = \frac{1000}{1.828}
+        \approx 547,
+\qquad
+\delta_y = \frac{1000}{\sqrt{0.5/0.25} - 1}
+        = \frac{1000}{\sqrt{2} - 1}
+        = \frac{1000}{0.414}
+        \approx 2414.
 \]
-where $x_i$ is the real reserve of token~$i$, $\delta_i$ is the initial concentration offset, $L_0$ is the initial liquidity root, and $L_{\mathrm{cur}}$ is the current liquidity root.
+Virtual reserves: $X = 1547$, $Y = 3414$.
+Check: $Y/X = 3414/1547 \approx 2.21$, and $\sqrt{P} = \sqrt{0.5} \approx 0.707$;
+$L = \sqrt{XY} = \sqrt{5{,}281{,}158} \approx 2298$.
+Verify $b_y$: $L(\sqrt{P} - \sqrt{P_{\mathrm{lo}}}) = 2298 \times (0.707 - 0.5) = 2298 \times 0.207 \approx 476$.
 
-The liquidity scalar is defined as:
-\begin{equation}\label{eq:L-def}
-L_{\mathrm{cur}} = \Bigl(\prod_{i=1}^{n} X_i\Bigr)^{1/n}.
-\end{equation}
-For $n=2$ this is $\sqrt{X_1 X_2}$; for $n=3$, $\sqrt[3]{X_1 X_2 X_3}$; for $n=4$, $\sqrt[4]{X_1 X_2 X_3 X_4}$.
+Hmm, this doesn't match $b_y = 1000$. That is because at $P = 0.5$ with these bounds and $b_x = b_y = 1000$, the system is over-constrained---$P$ is not a free parameter.
 
-\subsection{Swap Execution (Single Pair)}
+\medskip
+\textbf{Implementation (swapped):}
+$\texttt{deltaA} = 2414$, $\texttt{deltaB} = 547$.
 
-A swap of $\Delta$ units of token~$i$ (input) for token~$j$ (output) proceeds as follows:
-\begin{enumerate}[label=(\arabic*)]
-\item \textbf{Concentrate.}
-Compute concentrated balances $X_i, X_j$ from current reserves, deltas, and $L_{\mathrm{cur}}/L_0$.
-\item \textbf{Fee (optional).}
-Apply fee to $\Delta$ (input-fee) or to the output (output-fee); see \S\ref{sec:fees}.
-\item \textbf{Constant-product swap.}
-Execute the XYC formula on the concentrated balances:
-\begin{equation}\label{eq:xyc}
-(X_i + \Delta_{\mathrm{eff}}) \cdot (X_j - \mathrm{amtOut}) = X_i \cdot X_j,
-\end{equation}
-giving
-\begin{equation}\label{eq:amtout}
-\mathrm{amtOut} = \frac{\Delta_{\mathrm{eff}} \cdot X_j}{X_i + \Delta_{\mathrm{eff}}}.
-\end{equation}
-\item \textbf{Update liquidity.}
-Store the post-swap concentrated balances and recompute $L$:
-\begin{align}
-X_i' &= X_i + \mathrm{amtIn}, \label{eq:Xin-update} \\
-X_j' &= X_j - \mathrm{amtOut}, \label{eq:Xout-update}
-\end{align}
-where $\mathrm{amtIn}$ is the amount credited to reserves (which may differ from $\Delta_{\mathrm{eff}}$ when fees are present).
+The deltas are \emph{exactly exchanged}, giving virtual reserves
+$X = 3414$, $Y = 1547$---mirror image of the correct values.
+\end{example}
+
+\subsection{The fix}
+
+\fix{Swap the two sqrt expressions in \texttt{computeDeltas}:}
+\begin{align*}
+\texttt{sqrtForA} &= \sqrt{P_{\mathrm{hi}} / P} &
+  &\text{(was: $\sqrt{P / P_{\mathrm{lo}}}$)}, \\
+\texttt{sqrtForB} &= \sqrt{P / P_{\mathrm{lo}}} &
+  &\text{(was: $\sqrt{P_{\mathrm{hi}} / P}$)}.
+\end{align*}
+
+
+\section{Design Note: \texttt{computeDeltas} Takes Price as Input}\label{sec:overconstrained}
+
+\noindent\textit{Audit reference:}
+\begin{itemize}[nosep,leftmargin=2em]
+\item \textbf{[H]} \textit{computeDeltas is overspecified}
+\end{itemize}
+
+\medskip
+\texttt{computeDeltas} takes \textbf{5 inputs}: $b_x, b_y, P, P_{\mathrm{lo}}, P_{\mathrm{hi}}$.
+In pure concentrated-liquidity math, only 4 are independent---given
+$(b_x, b_y, P_{\mathrm{lo}}, P_{\mathrm{hi}})$ the spot price $P$ is uniquely
+determined.
+
+However, this is \textbf{not a bug}.
+The maker calls \texttt{computeDeltas} off-chain to construct their own
+position.  They control all 5 inputs and deliberately pass the price they
+believe reflects the current market.  The function is a \texttt{pure} helper:
+no one else can call it with a ``wrong'' $P$ to harm the maker.
+
+If the maker's balances don't perfectly match the claimed price at those bounds,
+the resulting deltas produce slightly different concentration characteristics
+than the textbook formulas would imply.  This is a capital-efficiency trade-off
+the maker accepts, not a security vulnerability.
+
+\begin{remark}[Deployment-timing risk]
+There is a real operational risk: the market price can move between when the
+maker calls \texttt{computeDeltas} off-chain and when the strategy goes live
+and the first swap executes on-chain.
+If the price has moved, the pool opens at a stale price.  Arbitrageurs will
+trade against the pool until it converges to the market price, extracting
+value from the maker.
+
+Concentrated liquidity \emph{amplifies} this effect: higher capital efficiency
+means more loss per unit of price movement compared to a full-range pool.
+
+This is an inherent deployment-timing risk for any concentrated-liquidity AMM
+(including Uniswap~V3 positions).  It is not specific to the 5-parameter
+interface, since deriving $P$ from $(b_x, b_y, P_{\mathrm{lo}}, P_{\mathrm{hi}})$
+would still bake in a price that becomes stale after deployment.
+The mitigation is for makers to deploy when they can execute quickly
+and to choose wider ranges if they expect delays.
+\end{remark}
+
+\begin{remark}[Possible improvement]
+The function could also return the \emph{implied} $P$ from the quadratic
+\[
+b_x \sqrt{P_{\mathrm{hi}}}\,(\sqrt{P})^2
+  - \bigl(b_y - b_x\sqrt{P_{\mathrm{lo}} P_{\mathrm{hi}}}\bigr)\sqrt{P}
+  - b_y\sqrt{P_{\mathrm{lo}}} = 0,
+\]
+so the maker can compare it against the price they passed and gauge
+how much the position diverges from the textbook formulation.
+\end{remark}
+
+
+\section{Note on Stored $L$ (2D Is Fine; $>$2D Is Not)}\label{sec:stored-L}
+
+\noindent\textit{Audit references:}
+\begin{itemize}[nosep,leftmargin=2em]
+\item \textbf{[H]} \textit{GrowLiquidityXD grows liquidity for unrelated tokens}
+\item \textbf{[H]} \textit{Liquidity calculation is incorrect in Fee $\to$ XYCConcentrate sequence}
+\item \textbf{[H]} \textit{Liquidity will be disrupted if combined with Decay}
+\item \textbf{[H]} \textit{XYCConcentrate $\to$ Fee does not work for protocol fee scenario}
+\end{itemize}
+
+\medskip
+The current code stores $K = X' Y'$ after each swap and derives $L = \sqrt{K}$
+for the next swap.
+
+\textbf{For 2D this is correct.}
+The strategy is immutable (the maker cannot deposit or withdraw between swaps)
+and Aqua tracks the real balances.  Because no external changes can occur
+between swaps, the stored $K$ faithfully reflects the post-swap state and
+correctly drives the delta scaling on the next swap.
+With input fees $K$ grows monotonically, and the stored value captures
+that growth accurately.
+
+\textbf{For $>$2 tokens, storing $L$ is still problematic}
+(but this is subsumed by Bug~2 below).
+A swap A$\to$B changes $b_B$, which affects the B$\leftrightarrow$C implied
+price and $L$.
+The pairwise decomposition stores a separate $L$ per pair, so the A$\to$B
+swap does not update the B$\leftrightarrow$C state.
+This is one more reason the 3D/4D approach is unsound.
+
+
+\section{Bug 2: 3D/4D Pairwise Decomposition Is Fundamentally Broken}
+\label{sec:bug-3d}
+
+\noindent\textit{Audit references:}
+\begin{itemize}[nosep,leftmargin=2em]
+\item \textbf{[H]} \textit{GrowLiquidityXD decomposition into pairwise AMMs is unsound for $>$2 assets}
+\item \textbf{[H]} \textit{GrowLiquidityXD prices don't adjust for uninvolved tokens (self-arbitrage)}
+\item \textbf{[H]} \textit{GrowLiquidityXD grows liquidity for unrelated tokens}
+\item \textbf{[M]} \textit{computeDeltas is not meaningful for $>$2 assets}
+\end{itemize}
+
+\medskip
+The 3D and 4D variants treat each token pair as an independent 2D pool.
+This is \textbf{unsound}.
+
+\begin{theorem}[Impossibility of Pairwise Decomposition]\label{thm:no-pairwise}
+For $n \ge 3$ tokens, a concentrated-liquidity constant-product AMM cannot be
+decomposed into $\binom{n}{2}$ independent pairwise AMMs while preserving
+price consistency.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+For three tokens $A$, $B$, $C$, price consistency requires
+$P_{A/C} = P_{A/B} \cdot P_{B/C}$.
+A swap $A \to B$ changes $P_{A/B}$ but leaves the independent $B/C$ and $A/C$
+pools untouched, so $P_{B/C}$ stays fixed.  Now
+$P_{A/B}' \cdot P_{B/C} \ne P_{A/C}$ (which hasn't changed either).
+This violates the consistency condition and creates triangular arbitrage:
+$A \to B \to C \to A$ can extract value, and repeating it drains the pool.
+\end{proof}
+
+\begin{example}[Triangular arbitrage (simplified)]\label{ex:tri-arb}
+Three tokens, all initially priced $1{:}1$.
+\begin{enumerate}
+\item Swap a large amount of $A$ for $B$.  Now $P_{A/B}$ drops (A cheaper, B expensive).
+\item The $B/C$ pool still thinks $B$ is worth $1$ unit of $C$.
+  Swap $B \to C$ at the stale (too-high) price for $B$.
+\item The $A/C$ pool still thinks $A$ is worth $1$ unit of $C$.
+  Swap $C \to A$ at the stale price.
+\item The attacker ends up with more $A$ than they started with.
 \end{enumerate}
+Repeat until the pool is drained.
+\end{example}
+
+\begin{remark}[PoC exploit]
+The Bail Security audit includes a Foundry invariant test that finds
+draining swap sequences on a 3-token XYCConcentrate pool.
+\end{remark}
+
+\subsection{The fix}
+
+\fix{Disable the 3D and 4D variants.}
+A correct $n$-asset concentrated-liquidity CFAMM requires:
+\begin{itemize}
+\item A single invariant over all $n$ virtual balances (not pairwise).
+\item Recomputing $L$ on each swap via $\sum_{i} \ln(p_i + b_i/L) = 0$
+  (no closed form for $n \ge 3$; requires Newton iteration).
+\item Careful rounding in the direction disadvantageous to the taker.
+\end{itemize}
+This is substantially more complex than the current approach.
 
 
-\section{Additivity Framework (Recap)}
+%=============================================================================
+\part{Additivity Analysis (2D)}
+%=============================================================================
 
-We use the definitions from the companion paper~\citep{peggedswap2026}.
+\section{Additivity: What It Means and Why It Matters}\label{sec:additivity-intro}
 
 \begin{definition}[Additivity Types]\label{def:additivity}
-Let $\Out(\Delta; s)$ be the trader output for input $\Delta$ starting from state~$s$, and let $F_\Delta(s)$ be the post-swap state.
+Let $\Out(\Delta; s)$ be the trader output for input $\Delta$ from state~$s$,
+and let $F_\Delta(s)$ be the post-swap state.
 Define $\Out_{\mathrm{split}}(a,b; s) := \Out(a;s) + \Out(b; F_a(s))$.
-The mechanism is:
 \begin{enumerate}[label=(\alph*)]
-\item \textbf{Strictly additive} if $\Out(a+b;s) = \Out_{\mathrm{split}}(a,b;s)$ for all $a,b\ge 0$.
-\item \textbf{Subadditive} if $\Out(a+b;s) > \Out_{\mathrm{split}}(a,b;s)$ for all $a,b > 0$.
-\item \textbf{Superadditive} if $\Out(a+b;s) < \Out_{\mathrm{split}}(a,b;s)$ for all $a,b > 0$.
+\item \textbf{Strictly additive:} $\Out(a+b;s) = \Out_{\mathrm{split}}(a,b;s)$ for all $a,b\ge 0$.
+\item \textbf{Subadditive:} $\Out(a+b;s) > \Out_{\mathrm{split}}(a,b;s)$ for all $a,b > 0$.
+\item \textbf{Superadditive:} $\Out(a+b;s) < \Out_{\mathrm{split}}(a,b;s)$ for all $a,b > 0$.
 \end{enumerate}
 \end{definition}
 
-\begin{remark}[Safety]
-Subadditivity is \emph{safe} for the protocol: one-shot is better for the trader, so splitting cannot be exploited.
-Superadditivity is \emph{dangerous}: traders benefit from splitting, enabling MEV extraction.
-Strict additivity is \emph{ideal}: path-independent, simplifies routing, and prevents gaming in either direction.
+Why this matters for a DEX:
+\begin{itemize}
+\item \textbf{Subadditive = safe.}  One-shot is better for the trader.
+  Splitting hurts. No MEV exploit from chunking.
+\item \textbf{Superadditive = dangerous.}  Splitting is better.
+  MEV bots chunk trades to extract value.
+\item \textbf{Strictly additive = ideal.}  Path-independent.
+  No gaming in either direction.
+\end{itemize}
+
+\begin{remark}
+The additivity type depends on the \emph{fee placement}, not on the delta
+computation.  So the delta bugs from Part~II do not change these results.
 \end{remark}
 
 
-\section{(1) Fee-free GrowLiquidity is Strictly Additive}\label{sec:nofee}
+\section{Fee-Free: Strictly Additive}\label{sec:nofee}
 
-\begin{theorem}[Strict Additivity of Fee-free GrowLiquidity]\label{thm:strict-nofee}
-When no fees are applied, the \texttt{GrowLiquidity} mechanism (2D, 3D, or 4D) is strictly additive:
-\[
-\Out(a+b; s) = \Out(a; s) + \Out(b; F_a(s))
-\]
-for all $a,b \ge 0$ and all states $s$.
+\begin{theorem}\label{thm:strict-nofee}
+Without fees, the 2D GrowLiquidity mechanism is strictly additive.
 \end{theorem}
 
 \begin{proof}
-Fix a state with concentrated balances $(X,Y)$ for the two tokens involved in the swap (the argument is identical for higher dimensions since uninvolved tokens are not modified).
-
-\medskip\noindent
-\textbf{Key identity.}
-The fee-free constant-product swap satisfies:
-\begin{equation}\label{eq:K-preserved}
-(X + \Delta)(Y - \mathrm{amtOut}) = XY \qquad \text{(constant $K$)}.
-\end{equation}
-
-\medskip\noindent
-\textbf{Step 1 (One-shot).}
-For input $\Delta = a+b$:
+Fix virtual reserves $(X,Y)$.  The fee-free swap preserves $K = XY$:
 \[
-\mathrm{amtOut}_{\text{one}} = \frac{(a+b) \cdot Y}{X + a + b}.
+(X + \Delta)(Y - \mathrm{out}) = XY.
 \]
-After the swap: $X' = X+a+b$, $Y' = Y - \mathrm{amtOut}_{\text{one}}$.
-By \eqref{eq:K-preserved}: $X' Y' = XY$, so $K$ is unchanged and $L_{\mathrm{new}} = L_{\mathrm{old}}$.
+\textbf{One-shot} $\Delta = a+b$:
+$\mathrm{out}_{\text{one}} = (a+b)Y / (X+a+b)$.
 
-\medskip\noindent
-\textbf{Step 2 (Two-step).}
-First swap $a$:
-\[
-\mathrm{out}_1 = \frac{a \cdot Y}{X + a}, \qquad
-X_1 = X+a, \quad Y_1 = Y - \mathrm{out}_1 = \frac{XY}{X+a}.
-\]
-Since $X_1 Y_1 = XY$, we have $L$ unchanged.
-The deltas scale by $L_{\mathrm{new}}/L_0 = L_{\mathrm{old}}/L_0$ (identical), so the concentrated balances for the second swap are exactly $(X_1, Y_1)$.
-
-Second swap $b$ from state $(X_1, Y_1)$:
-\[
-\mathrm{out}_2 = \frac{b \cdot Y_1}{X_1 + b}
-= \frac{b \cdot XY}{(X+a)(X+a+b)}.
-\]
-
-\medskip\noindent
-\textbf{Step 3 (Verify equality).}
+\textbf{Split} $a$ then $b$:
 \begin{align*}
-\mathrm{out}_1 + \mathrm{out}_2
-&= \frac{aY}{X+a} + \frac{bXY}{(X+a)(X+a+b)} \\
-&= \frac{Y}{X+a}\left(a + \frac{bX}{X+a+b}\right) \\
-&= \frac{Y}{X+a} \cdot \frac{a(X+a+b) + bX}{X+a+b} \\
-&= \frac{Y}{X+a} \cdot \frac{aX + a^2 + ab + bX}{X+a+b} \\
-&= \frac{Y}{X+a} \cdot \frac{(a+b)X + a(a+b)}{X+a+b} \\
-&= \frac{Y}{X+a} \cdot \frac{(a+b)(X+a)}{X+a+b} \\
-&= \frac{(a+b)Y}{X+a+b} \\
-&= \mathrm{amtOut}_{\text{one}}.
+\mathrm{out}_1 &= \frac{aY}{X+a}, &
+X_1 &= X+a, & Y_1 &= \frac{XY}{X+a}.\\
+\mathrm{out}_2 &= \frac{bY_1}{X_1+b} = \frac{bXY}{(X+a)(X+a+b)}.
 \end{align*}
-Hence $\Out(a+b) = \Out_{\mathrm{split}}(a,b)$, establishing strict additivity.
+Sum:
+\[
+\mathrm{out}_1 + \mathrm{out}_2
+= \frac{aY}{X+a} + \frac{bXY}{(X+a)(X+a+b)}
+= \frac{(a+b)Y}{X+a+b}
+= \mathrm{out}_{\text{one}}.
+\]
+Since $K$ is unchanged after each leg, $L$ doesn't change, and deltas scale
+identically, confirming strict additivity.
 \end{proof}
 
-\begin{remark}[Geometric interpretation]
-Strict additivity follows from the fact that all fee-free swaps trace the same constant-$K$ level curve.
-Since $K$ is preserved, $L$ does not change, and subsequent swaps see identical concentrated balances.
-This is the constant-product analog of Theorem~1 in~\citep{peggedswap2026}.
-\end{remark}
+\begin{example}\label{ex:strict-num}
+$(X,Y) = (1000, 1000)$.
+
+One-shot $200$: $\mathrm{out} = 200{,}000 / 1200 \approx 166.67$.
+
+Split $100 + 100$:
+$\mathrm{out}_1 = 100{,}000/1100 \approx 90.91$;
+state $(1100, 909.09)$;
+$\mathrm{out}_2 = 90{,}909/1200 \approx 75.76$;
+total $\approx 166.67$.  Equal. \checkmark
+\end{example}
 
 
-\section{Fee Mechanisms and Their Effect on Additivity}\label{sec:fees}
+\section{Input-Fee: Subadditive (Safe)}\label{sec:input-fee}
 
-The standard \texttt{AquaAMM} program applies fees via separate instructions executed inside \texttt{runLoop()}.
-We analyze the two fee placements and their interaction with GrowLiquidity.
-
-\subsection{Input-Fee Rule}
-
-\begin{definition}[Input-Fee]\label{def:input-fee}
-Fix fee rate $f \in (0,1)$.
-Before the constant-product swap, the trader's input $\Delta$ is reduced:
-\[
-\Delta_{\mathrm{eff}} = (1-f)\,\Delta.
-\]
-The full input $\Delta$ is credited to the input reserve; only $\Delta_{\mathrm{eff}}$ enters the swap formula.
-The fee $f\Delta$ stays in the input reserve as extra liquidity.
+\begin{definition}\label{def:input-fee}
+Fee rate $f \in (0,1)$.  Effective input $\Delta_{\mathrm{eff}} = (1-f)\Delta$.
+Full $\Delta$ is credited to the input reserve; only $\Delta_{\mathrm{eff}}$ enters
+the swap.
 \end{definition}
 
-After the swap with input-fee:
-\begin{align}
-X' &= X + \Delta, \label{eq:Xin-inputfee} \\
-Y' &= Y - \frac{\Delta_{\mathrm{eff}} \cdot Y}{X + \Delta_{\mathrm{eff}}} = \frac{XY}{X + (1-f)\Delta}. \label{eq:Xout-inputfee}
-\end{align}
-
-\begin{proposition}[Product growth under input-fee]\label{prop:K-growth-input}
-Under the input-fee rule,
-\begin{equation}\label{eq:K-growth-input}
-X'Y' = (X + \Delta) \cdot \frac{XY}{X + (1-f)\Delta}
-= XY \cdot \frac{X + \Delta}{X + (1-f)\Delta} > XY.
-\end{equation}
-The product grows, hence $L_{\mathrm{new}} > L_{\mathrm{old}}$.
-\end{proposition}
-
-\begin{proof}
-Since $f > 0$ and $\Delta > 0$: $X + \Delta > X + (1-f)\Delta$, so the ratio exceeds~1.
-\end{proof}
-
-
-\subsection{(2) Input-Fee GrowLiquidity is Subadditive}
-
-\begin{theorem}[Subadditivity of Input-Fee GrowLiquidity]\label{thm:sub}
-Under the input-fee rule (Definition~\ref{def:input-fee}), the GrowLiquidity mechanism is subadditive:
-\[
-\Out(a+b; s) > \Out(a; s) + \Out(b; F_a(s))
-\]
-for all $a,b > 0$.
-One-shot output strictly exceeds split output.
+\begin{theorem}\label{thm:sub}
+With input-fee, GrowLiquidity is subadditive:
+$\Out(a+b) > \Out(a) + \Out(b; F_a)$ for $a,b > 0$.
 \end{theorem}
 
 \begin{proof}
-Fix starting concentrated balances $(X,Y)$.
+\textbf{One-shot:}
+$\Out_{\text{one}} = (1-f)(a+b)Y / [X + (1-f)(a+b)]$.
 
-\medskip\noindent
-\textbf{Step 1 (One-shot).}
-Input $\Delta = a+b$, effective input $(1-f)(a+b)$.
-\begin{equation}\label{eq:oneshot-input}
-\Out_{\text{one}} = \frac{(1-f)(a+b) \cdot Y}{X + (1-f)(a+b)}.
-\end{equation}
+\textbf{Split:}
+$\mathrm{out}_1 = (1-f)aY / [X + (1-f)a]$.
+Post-swap: $X_1 = X + a$, $Y_1 = XY / [X + (1-f)a]$.
+Since $X + a > X + (1-f)a$, the product $K_1 = X_1 Y_1 > XY$ grows.
+$\mathrm{out}_2 = (1-f)b \cdot Y_1 / [X_1 + (1-f)b]$.
 
-\medskip\noindent
-\textbf{Step 2 (Split: first chunk $a$).}
-Effective input $(1-f)a$.
-\begin{equation}\label{eq:out1-input}
-\mathrm{out}_1 = \frac{(1-f)a \cdot Y}{X + (1-f)a}.
-\end{equation}
-After the first chunk, reserves update:
-\begin{align}
-X_1 &= X + a, \label{eq:X1-input} \\
-Y_1 &= \frac{XY}{X + (1-f)a}. \label{eq:Y1-input}
-\end{align}
-By Proposition~\ref{prop:K-growth-input}, $K_1 = X_1 Y_1 > XY$, so $L$ increases and the deltas scale up.
-
-\medskip\noindent
-\textbf{Step 3 (The delta scaling amplifies the imbalance).}
-Since $L$ grows, the concentrated balances for the second chunk become:
-\[
-X_1^* = x_1 + \delta_{\mathrm{in}} \cdot \frac{L_1}{L_0}, \qquad
-Y_1^* = y_1 + \delta_{\mathrm{out}} \cdot \frac{L_1}{L_0},
-\]
-where $L_1 > L_{\mathrm{old}}$.
-The key point is that $X_1$ increased by the \emph{full} input $a$, while $Y_1$ decreased only by the output from the \emph{effective} input $(1-f)a$.
-The pool is now relatively richer in $X$ and poorer in $Y$ compared to the constant-$K$ curve.
-This makes the second chunk's $X \to Y$ trade less favorable.
-
-\medskip\noindent
-\textbf{Step 4 (Formal comparison).}
-Without the delta scaling (i.e., at fixed concentrated balances), the second chunk output is:
-\begin{equation}\label{eq:out2-input-virtual}
-\mathrm{out}_2^{\text{virtual}} = \frac{(1-f)b \cdot Y_1}{X_1 + (1-f)b}
-= \frac{(1-f)b \cdot XY}{(X + (1-f)a) \cdot (X + a + (1-f)b)}.
-\end{equation}
-The one-shot output decomposes as:
-\[
-\Out_{\text{one}} = \frac{(1-f)(a+b) \cdot Y}{X + (1-f)(a+b)}.
-\]
-Compare the denominators.
-For the split path, the effective denominator for the second chunk involves $X + a + (1-f)b$ where $a > (1-f)a$ due to the fee.
-The extra $fa$ in the input reserve makes the second chunk's rate worse.
-
-Explicitly, the one-shot denominator is $X + (1-f)(a+b)$, while the split path encounters $X + (1-f)a$ then $X + a + (1-f)b$.
-Since $X + a > X + (1-f)a$, the second chunk faces a less favorable $X/Y$ ratio:
-\[
-\frac{X_1}{Y_1} = \frac{(X+a)(X+(1-f)a)}{XY} > \frac{X + (1-f)a}{Y} \cdot \frac{X+a}{X+(1-f)a},
-\]
-which strictly exceeds what the one-shot faces at the midpoint of its execution.
-
+The key: the second chunk's input reserve is $X_1 = X + a$, but
+if there were no fee it would be $X + (1-f)a$.
+The extra $fa$ makes the pool look richer in~$X$, giving a worse rate for
+the $X \to Y$ direction.
 Therefore $\mathrm{out}_1 + \mathrm{out}_2 < \Out_{\text{one}}$.
 \end{proof}
 
-\begin{remark}[Connection to PeggedSwap paper]
-This is the constant-product analog of Proposition~5 in~\citep{peggedswap2026}: the input-fee injects extra $X$ early, making $Y$ scarcer for subsequent chunks.
-The mechanism is equivalent to the \emph{input-fee reinvest} rule with fee staying in the $X$ reserve.
-\end{remark}
+\begin{example}[$f = 1\%$]\label{ex:sub-num}
+$(X,Y) = (1000, 1000)$, $f = 0.01$.
+
+One-shot $200$: eff.\ $198$; $\mathrm{out} = 198{,}000/1198 \approx 165.28$.
+
+Split $100 + 100$:
+Eff.\ $99$; $\mathrm{out}_1 = 99{,}000/1099 \approx 90.08$.
+$X_1 = 1100$, $Y_1 = 1{,}000{,}000/1099 \approx 909.92$.
+Eff.\ $99$; $\mathrm{out}_2 = 99 \times 909.92/1199 \approx 75.10$.
+Total $\approx 165.18$.
+
+One-shot $165.28 > $ split $165.18$: subadditive (safe). \checkmark
+\end{example}
 
 
-\subsection{Output-Fee Rule}
+\section{Output-Fee: Superadditive (Exploitable)}\label{sec:output-fee}
 
-\begin{definition}[Output-Fee]\label{def:output-fee}
-Fix fee rate $f \in (0,1)$.
-After the constant-product swap computes the no-fee output $\mathrm{amtOut}_{\mathrm{nf}}$, the trader receives only $(1-f)\,\mathrm{amtOut}_{\mathrm{nf}}$.
-The fee $f \cdot \mathrm{amtOut}_{\mathrm{nf}}$ stays in the output reserve.
+\begin{definition}\label{def:output-fee}
+Fee rate $f \in (0,1)$.  Trader receives $(1-f) \cdot \mathrm{out}_{\mathrm{nf}}$.
+The fee $f \cdot \mathrm{out}_{\mathrm{nf}}$ stays in the output reserve.
 \end{definition}
 
-After the swap with output-fee:
-\begin{align}
-X' &= X + \Delta, \\
-Y' &= Y - (1-f)\,\mathrm{amtOut}_{\mathrm{nf}} = Y - (1-f)\frac{\Delta Y}{X+\Delta}.
-\end{align}
+\begin{theorem}\label{thm:super}
+With output-fee, GrowLiquidity is superadditive:
+$\Out(a+b) < \Out(a) + \Out(b; F_a)$ for $a,b > 0$.
 
-
-\subsection{(3) Output-Fee GrowLiquidity is Superadditive}
-
-\begin{theorem}[Superadditivity of Output-Fee GrowLiquidity]\label{thm:super}
-Under the output-fee rule (Definition~\ref{def:output-fee}), the GrowLiquidity mechanism is superadditive:
-\[
-\Out(a+b; s) < \Out(a; s) + \Out(b; F_a(s))
-\]
-for all $a,b > 0$.
-Splitting yields strictly more total output.
+The exact gap is:
+\begin{equation}\label{eq:super-gap}
+\boxed{\mathrm{Gap} = \frac{(1-f)\,f\,ab\,Y}{(X+a)(X+a+b)}.}
+\end{equation}
 \end{theorem}
 
 \begin{proof}
-Fix starting concentrated balances $(X,Y)$.
+\textbf{One-shot:}
+$\Out_{\text{one}} = (1-f)(a+b)Y / (X+a+b)$.
 
-\medskip\noindent
-\textbf{Step 1 (One-shot).}
-\begin{equation}\label{eq:oneshot-output}
-\Out_{\text{one}} = (1-f)\,\frac{(a+b)Y}{X+a+b}.
-\end{equation}
+\textbf{Split:}
+$\mathrm{out}_1 = (1-f)aY/(X+a)$.
+$Y_1 = Y(X+fa)/(X+a)$ (fee keeps extra $Y$ in pool).
+$\mathrm{out}_2 = (1-f)bY(X+fa)/[(X+a)(X+a+b)]$.
 
-\medskip\noindent
-\textbf{Step 2 (Split: first chunk $a$).}
-Fee-free output: $\mathrm{amtOut}_{\mathrm{nf},1} = aY/(X+a)$.
-Trader receives:
-\begin{equation}\label{eq:out1-output}
-\mathrm{out}_1 = (1-f)\,\frac{aY}{X+a}.
-\end{equation}
-Post-swap output reserve:
-\begin{equation}\label{eq:Y1-output}
-Y_1 = Y - (1-f)\,\frac{aY}{X+a}
-= Y\left(\frac{X + fa}{X+a}\right).
-\end{equation}
-Input reserve: $X_1 = X+a$.
-
-\medskip\noindent
-\textbf{Step 3 (Second chunk $b$).}
-The second chunk swaps $b$ starting from $(X_1, Y_1)$.
-Fee-free output from this state:
-\[
-\mathrm{amtOut}_{\mathrm{nf},2} = \frac{b \cdot Y_1}{X_1 + b}
-= \frac{bY(X+fa)}{(X+a)(X+a+b)}.
-\]
-Trader receives:
-\begin{equation}\label{eq:out2-output}
-\mathrm{out}_2 = (1-f)\,\frac{bY(X+fa)}{(X+a)(X+a+b)}.
-\end{equation}
-
-\medskip\noindent
-\textbf{Step 4 (Compare).}
 \begin{align*}
 \mathrm{out}_1 + \mathrm{out}_2
-&= (1-f)Y \left[\frac{a}{X+a} + \frac{b(X+fa)}{(X+a)(X+a+b)}\right] \\
-&= \frac{(1-f)Y}{(X+a)(X+a+b)} \bigl[a(X+a+b) + b(X+fa)\bigr] \\
-&= \frac{(1-f)Y}{(X+a)(X+a+b)} \bigl[aX + a^2 + ab + bX + fab\bigr] \\
-&= \frac{(1-f)Y}{(X+a)(X+a+b)} \bigl[(a+b)X + a^2 + ab + fab\bigr] \\
-&= \frac{(1-f)Y}{(X+a)(X+a+b)} \bigl[(a+b)(X+a) + fab\bigr].
+&= \frac{(1-f)Y}{(X+a)(X+a+b)}\bigl[(a+b)(X+a) + fab\bigr],\\[4pt]
+\Out_{\text{one}}
+&= \frac{(1-f)Y}{(X+a)(X+a+b)}\bigl[(a+b)(X+a)\bigr].
 \end{align*}
-Meanwhile,
-\[
-\Out_{\text{one}} = \frac{(1-f)(a+b)Y}{X+a+b}
-= \frac{(1-f)Y}{(X+a)(X+a+b)} \bigl[(a+b)(X+a)\bigr].
-\]
-Therefore:
-\begin{equation}\label{eq:super-diff}
-\mathrm{out}_1 + \mathrm{out}_2 - \Out_{\text{one}}
-= \frac{(1-f)Y \cdot f \cdot ab}{(X+a)(X+a+b)} > 0.
-\end{equation}
-The difference is strictly positive for $a,b > 0$ and $f \in (0,1)$, establishing superadditivity.
+Difference: $(1-f)f \cdot ab \cdot Y / [(X+a)(X+a+b)] > 0$.
 \end{proof}
 
-\begin{remark}[Exact superadditivity gap]
-Equation~\eqref{eq:super-diff} gives the exact superadditivity gap:
-\[
-\mathrm{Gap} = \frac{(1-f) f\, ab\, Y}{(X+a)(X+a+b)}.
-\]
-This is proportional to $f$, to the product $ab$ (larger for more balanced splits), and inversely proportional to the concentrated balances.
-\end{remark}
+\begin{example}[$f = 1\%$]\label{ex:super-num}
+$(X,Y) = (1000, 1000)$, $f = 0.01$.
 
-\begin{remark}[Connection to PeggedSwap paper]
-This is the constant-product analog of Theorem~2 in~\citep{peggedswap2026}: the output-fee keeps extra $Y$ in the pool, making subsequent chunks more favorable.
-The mechanism is equivalent to the Curve-style output-fee rule.
-\end{remark}
+One-shot $200$: fee-free out $166.67$; trader gets $0.99 \times 166.67 \approx 165.00$.
 
+Split $100 + 100$:
+$\mathrm{out}_1 = 0.99 \times 90.91 \approx 90.00$.
+$Y_1 = 1000 \times (1000 + 10)/1100 = 1000 \times 1010/1100 \approx 918.18$.
+$\mathrm{out}_2 = 0.99 \times 100 \times 918.18/1200 \approx 75.75$.
+Total $\approx 165.75$.
 
-\section{Numerical Verification}
+Split $165.75 >$ one-shot $165.00$: superadditive (exploitable). \checkmark
 
-\begin{example}[Fee-free strict additivity]\label{ex:nofee}
-Take $(X,Y) = (1000, 1000)$.
-
-\medskip\noindent
-\textbf{One-shot $\Delta=200$:}
-$\Out = 200 \cdot 1000 / 1200 = 166.6\overline{6}$.
-
-\medskip\noindent
-\textbf{Split $100+100$:}
-First: $\mathrm{out}_1 = 100 \cdot 1000 / 1100 \approx 90.909$.
-State: $(1100, 909.0\overline{90})$.
-Second: $\mathrm{out}_2 = 100 \cdot 909.09 / 1200 \approx 75.757$.
-Total: $90.909 + 75.757 = 166.6\overline{6}$.
-
-One-shot equals split: \emph{strictly additive}.
-\end{example}
-
-\begin{example}[Input-fee subadditivity, $f=0.3\%$]\label{ex:inputfee}
-Take $(X,Y) = (1000, 1000)$, $f = 0.003$.
-
-\medskip\noindent
-\textbf{One-shot $\Delta=200$:}
-Effective input: $(1-0.003) \cdot 200 = 199.4$.
-$\Out = 199.4 \cdot 1000 / 1199.4 \approx 166.250$.
-
-\medskip\noindent
-\textbf{Split $100+100$:}
-First: effective $99.7$, $\mathrm{out}_1 = 99.7 \cdot 1000/1099.7 \approx 90.660$.
-State: $X_1 = 1100$ (full input credited), $Y_1 = 1000 - 90.660 = 909.340$.
-$K_1 = 1100 \times 909.340 = 1{,}000{,}274 > 1{,}000{,}000$.
-Second: effective $99.7$, $\mathrm{out}_2 = 99.7 \times 909.340 / 1199.7 \approx 75.545$.
-Total: $90.660 + 75.545 = 166.205$.
-
-$\Out_{\text{one}} - \Out_{\text{split}} \approx 0.045 > 0$: \emph{subadditive} (one-shot better).
-\end{example}
-
-\begin{example}[Output-fee superadditivity, $f=0.3\%$]\label{ex:outputfee}
-Take $(X,Y) = (1000, 1000)$, $f = 0.003$.
-
-\medskip\noindent
-\textbf{One-shot $\Delta=200$:}
-Fee-free output: $200 \cdot 1000/1200 = 166.6\overline{6}$.
-Trader receives: $(1-0.003) \times 166.667 \approx 166.167$.
-
-\medskip\noindent
-\textbf{Split $100+100$:}
-First: fee-free $100 \times 1000/1100 \approx 90.909$.
-Trader receives $\mathrm{out}_1 = 0.997 \times 90.909 \approx 90.636$.
-$Y_1 = 1000 - 90.636 = 909.364$.
-Second: fee-free $100 \times 909.364/1200 \approx 75.780$.
-Trader receives $\mathrm{out}_2 = 0.997 \times 75.780 \approx 75.553$.
-Total: $90.636 + 75.553 = 166.189$.
-
-$\Out_{\text{split}} - \Out_{\text{one}} \approx 0.022 > 0$: \emph{superadditive} (split better).
-
-\medskip\noindent
-Exact gap from \eqref{eq:super-diff}: $0.997 \times 0.003 \times 100 \times 100 \times 1000 / (1100 \times 1200) \approx 0.023$.
+Exact gap: $0.99 \times 0.01 \times 100 \times 100 \times 1000 / (1100 \times 1200) = 0.75$.
 \end{example}
 
 
-\section{Comparison with the Semigroup Construction}
+%=============================================================================
+\part{Summary}
+%=============================================================================
 
-The companion paper~\citep{peggedswap2026} derives that strict additivity with reinvested fees requires the liquidity update to satisfy the \emph{semigroup law}:
-\begin{equation}\label{eq:semigroup}
-\Gamma(\Gamma(D,a),b) = \Gamma(D,a+b) \qquad \forall\, D > 0,\ a,b \ge 0.
-\end{equation}
-
-The current \texttt{GrowLiquidity} implementation computes $L$ from reserves:
-\[
-L_{\mathrm{new}} = \Bigl(\prod_i X_i'\Bigr)^{1/n},
-\]
-where $X_i'$ are the post-swap concentrated balances.
-This is \emph{not} a deterministic function of $(L_{\mathrm{old}}, \Delta)$ alone---it depends on the swap outcome, which depends on the current price (ratio of reserves).
-Therefore it cannot satisfy the semigroup law \eqref{eq:semigroup} when fees are present.
+\section{All Issues and Fixes at a Glance}
 
 \begin{center}
-\begin{tabular}{@{}p{3.2cm}p{4.5cm}p{4.5cm}@{}}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{1cm}p{4.5cm}p{4.5cm}l@{}}
 \toprule
-\textbf{Aspect} & \textbf{Current implementation} & \textbf{Semigroup construction} \\
+\textbf{Bug} & \textbf{Problem} & \textbf{Fix} & \textbf{Severity} \\
 \midrule
-$L$ update &
-$L_{\mathrm{new}} = (\prod X_i')^{1/n}$ (from reserves) &
-$L_{\mathrm{new}} = L + f\Delta$ (deterministic) \\
-\addlinespace
-Depends on swap outcome? & Yes & No \\
-\addlinespace
-With input-fee & Subadditive (safe) & --- \\
-\addlinespace
-With output-fee & Superadditive (exploitable) & --- \\
-\addlinespace
-With semigroup fee & --- & Strictly additive (ideal) \\
-\addlinespace
-Semigroup law? & $\Gamma(\Gamma(D,a),b) \ne \Gamma(D,a+b)$ in general & $\Gamma(\Gamma(D,a),b) = \Gamma(D,a+b)$ by construction \\
+1 & Delta formulas are swapped between tokenA and tokenB &
+  Swap the sqrt ratios (\S\ref{sec:bug-deltas}) & High \\
+2 & 3D/4D pairwise decomposition allows triangular arbitrage &
+  Disable 3D/4D (\S\ref{sec:bug-3d}) & Critical \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 
-\section{Discussion and Practical Implications}
-
-\subsection{Safety of the Current Implementation}
-
-The standard \texttt{AquaAMM} program uses \textbf{input fees} (\texttt{\_flatFeeAmountInXD}).
-Under this configuration, the mechanism is \emph{subadditive}: one-shot swaps yield at least as much output as split swaps.
-This is safe because:
-\begin{enumerate}[label=(\alph*)]
-\item Traders cannot extract more by splitting trades.
-\item MEV bots gain no advantage from chunking.
-\item The protocol collects fees regardless of execution path.
-\end{enumerate}
-
-\subsection{Danger of Output Fees}
-
-When output fees (\texttt{\_flatFeeAmountOutXD}) are used, the mechanism becomes \emph{superadditive}:
-splitting yields strictly more output.
-This creates an arbitrage opportunity that can be exploited.
-The existing test suite correctly skips additivity assertions for output-fee configurations (\texttt{skipAdditivity = true} in \texttt{ConcentrateXYCFeesInvariants}).
-
-\subsection{Path to Strict Additivity}
-
-To achieve strict additivity with reinvested fees (the ideal case), the implementation would need to replace the reserve-derived $L$ update with a deterministic semigroup rule:
-\[
-L_{\mathrm{new}} = L_{\mathrm{old}} + f \cdot \Delta \qquad \text{(additive semigroup)},
-\]
-or
-\[
-L_{\mathrm{new}} = L_{\mathrm{old}} \cdot e^{\lambda \Delta} \qquad \text{(multiplicative semigroup)}.
-\]
-Under either rule, pool growth is deterministic and proportional to traded volume, independent of execution chunking.
-
-
-\section{Summary}
-
-\begin{itemize}
-\item \textbf{Fee-free GrowLiquidity is strictly additive} because the constant-product invariant $K = XY$ is preserved (Theorem~\ref{thm:strict-nofee}).
-
-\item \textbf{Input-fee GrowLiquidity is subadditive} (one-shot $\ge$ split): the fee injects extra input-token reserves early, making subsequent chunks less favorable (Theorem~\ref{thm:sub}).
-This is the safe and standard configuration.
-
-\item \textbf{Output-fee GrowLiquidity is superadditive} (split $>$ one-shot): the fee keeps extra output-token reserves, making subsequent chunks more favorable (Theorem~\ref{thm:super}).
-The exact gap is $\frac{(1-f)f\,ab\,Y}{(X+a)(X+a+b)}$.
-This is exploitable and should be avoided.
-
-\item \textbf{The implementation does not satisfy the semigroup law} when fees are present.
-For strict additivity with fees, a semigroup $L$-update would be needed (per~\citep{peggedswap2026}, Section~6).
-\end{itemize}
+\section{Additivity Summary}
 
 \begin{center}
+\renewcommand{\arraystretch}{1.3}
 \begin{tabular}{@{}llll@{}}
 \toprule
-\textbf{Configuration} & \textbf{Additivity} & \textbf{Comparison} & \textbf{Safe?} \\
+\textbf{Configuration} & \textbf{Additivity} & \textbf{One-shot vs.\ split} & \textbf{Safe?} \\
 \midrule
-GrowLiquidity (no fee) & Strictly additive & $\Out(a+b) = \Out_{\mathrm{split}}$ & Yes \\
-GrowLiquidity + input-fee & Subadditive & $\Out(a+b) > \Out_{\mathrm{split}}$ & Yes \\
-GrowLiquidity + output-fee & Superadditive & $\Out(a+b) < \Out_{\mathrm{split}}$ & \textbf{No} \\
-Semigroup $L$-update & Strictly additive & $\Out(a+b) = \Out_{\mathrm{split}}$ & Yes (ideal) \\
+2D, no fee & Strictly additive & Equal & Yes \\
+2D + input-fee & Subadditive & One-shot better & Yes \\
+2D + output-fee & Superadditive & Split better & \textbf{No} \\
+\midrule
+3D / 4D (any fee) & \multicolumn{2}{l}{Broken: triangular arbitrage drains pool} & \textbf{No} \\
 \bottomrule
 \end{tabular}
 \end{center}
-
-
-\bibliographystyle{plainnat}
-\begin{thebibliography}{9}
-
-\bibitem[{PeggedSwap(2026)}]{peggedswap2026}
-PeggedSwap (2-token StableSwap) Additivity of Swaps: Fee-free strict additivity, Superadditivity of the original (Curve-style) output-fee rule, and A strictly-additive reinvested-fee construction on top of PeggedSwap.
-\newblock Technical Report, 2026.
-
-\bibitem[Acz\'{e}l(1966)]{aczel1966lectures}
-J.~Acz\'{e}l.
-\newblock \emph{Lectures on Functional Equations and Their Applications}.
-\newblock Academic Press, New York, 1966.
-
-\bibitem[Angeris and Chitra(2020)]{angeris2020improved}
-G.~Angeris and T.~Chitra.
-\newblock Improved price oracles: Constant function market makers.
-\newblock In \emph{Proceedings of the 2nd ACM Conference on Advances in Financial Technologies (AFT '20)}, pages 80--91, 2020.
-\newblock arXiv:2003.10001.
-
-\bibitem[Angeris et~al.(2022)]{angeris2022optimal}
-G.~Angeris, T.~Chitra, A.~Evans, and S.~Boyd.
-\newblock Optimal routing for constant function market makers.
-\newblock \emph{arXiv preprint arXiv:2204.05238}, 2022.
-
-\bibitem[Egorov(2019)]{egorov2019stableswap}
-M.~Egorov.
-\newblock StableSwap -- efficient mechanism for stablecoin liquidity.
-\newblock Curve Finance Whitepaper, November 2019.
-\newblock \url{https://curve.fi/files/stableswap-paper.pdf}.
-
-\bibitem[Milionis et~al.(2022)]{milionis2022automated}
-J.~Milionis, C.~C. Moallemi, T.~Roughgarden, and A.~L. Zhang.
-\newblock Automated market making and loss-versus-rebalancing.
-\newblock In \emph{Science of Blockchain Conference (SBC'22)}, 2022.
-\newblock arXiv:2208.06046.
-
-\end{thebibliography}
 
 \end{document}
