@@ -33,11 +33,11 @@ library XYCConcentrateArgsBuilder {
     /// @dev JavaScript implementation:
     ///      ```js
     ///      function computeDeltas(balanceA, balanceB, price, priceMin, priceMax) {
-    ///         const sqrtMin = Math.sqrt(price * 1e18 / priceMin);
-    ///         const sqrtMax = Math.sqrt(priceMax * 1e18 / price);
+    ///         const sqrtRatioA = Math.sqrt(priceMax * 1e18 / price);
+    ///         const sqrtRatioB = Math.sqrt(price * 1e18 / priceMin);
     ///         return {
-    ///             deltaA: (price == priceMin) ? 0 : (balanceA * 1e18 / (sqrtMin - 1e18)),
-    ///             deltaB: (price == priceMax) ? 0 : (balanceB * 1e18 / (sqrtMax - 1e18)),
+    ///             deltaA: (price == priceMax) ? 0 : (balanceA * 1e18 / (sqrtRatioA - 1e18)),
+    ///             deltaB: (price == priceMin) ? 0 : (balanceB * 1e18 / (sqrtRatioB - 1e18)),
     ///         };
     ///      }
     ///      ```
@@ -56,10 +56,10 @@ library XYCConcentrateArgsBuilder {
         uint256 priceMax
     ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity) {
         require(priceMin <= price && price <= priceMax, ConcentrateInconsistentPrices(price, priceMin, priceMax));
-        uint256 sqrtPriceMin = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
-        uint256 sqrtPriceMax = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
-        deltaA = (price == priceMin) ? 0 : (balanceA * ONE / (sqrtPriceMin - ONE));
-        deltaB = (price == priceMax) ? 0 : (balanceB * ONE / (sqrtPriceMax - ONE));
+        uint256 sqrtPriceRatioA = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
+        uint256 sqrtPriceRatioB = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
+        deltaA = (price == priceMax) ? 0 : (balanceA * ONE / (sqrtPriceRatioA - ONE));
+        deltaB = (price == priceMin) ? 0 : (balanceB * ONE / (sqrtPriceRatioB - ONE));
         liquidity = Math.sqrt((balanceA + deltaA) * (balanceB + deltaB));
     }
 
@@ -72,28 +72,28 @@ library XYCConcentrateArgsBuilder {
         uint256 deltaB,
         uint256 price
     ) public pure returns (uint256 priceMin, uint256 priceMax) {
-        // From formula: deltaA = balanceA / (sqrt(price/priceMin) - 1)
-        // => sqrt(price/priceMin) = (balanceA + deltaA) / deltaA
-        // => priceMin = price * (deltaA / (balanceA + deltaA))²
-        uint256 ratioA = deltaA * ONE / (balanceA + deltaA);
-        priceMin = price * ratioA / ONE * ratioA / ONE;
-        // From formula: deltaB = balanceB / (sqrt(priceMax/price) - 1)
-        // => sqrt(priceMax/price) = (balanceB + deltaB) / deltaB
-        // => priceMax = price * ((balanceB + deltaB) / deltaB)²
-        uint256 ratioB = (balanceB + deltaB) * ONE / deltaB;
-        priceMax = price * ratioB / ONE * ratioB / ONE;
+        // From formula: deltaA = balanceA / (sqrt(priceMax/price) - 1)
+        // => sqrt(priceMax/price) = (balanceA + deltaA) / deltaA
+        // => priceMax = price * ((balanceA + deltaA) / deltaA)²
+        uint256 ratioA = (balanceA + deltaA) * ONE / deltaA;
+        priceMax = price * ratioA / ONE * ratioA / ONE;
+        // From formula: deltaB = balanceB / (sqrt(price/priceMin) - 1)
+        // => sqrt(price/priceMin) = (balanceB + deltaB) / deltaB
+        // => priceMin = price * (deltaB / (balanceB + deltaB))²
+        uint256 ratioB = deltaB * ONE / (balanceB + deltaB);
+        priceMin = price * ratioB / ONE * ratioB / ONE;
     }
 
     /// @notice Compute all deltas from 3 specific price bounds (one per delta)
-    /// @dev Uses priceMinAB for deltaA, priceMaxAB for deltaB, priceMaxAC for deltaC
+    /// @dev Uses priceMaxAB for deltaA, priceMinAB for deltaB, priceMaxAC for deltaC
     /// @param balanceA Initial balance of tokenA
     /// @param balanceB Initial balance of tokenB
     /// @param balanceC Initial balance of tokenC
     /// @param priceAB Absolute price for A/B pair
     /// @param priceAC Absolute price for A/C pair
     /// @param priceBC Absolute price for B/C pair
-    /// @param priceMinAB Minimum price for A/B pair (for deltaA)
-    /// @param priceMaxAB Maximum price for A/B pair (for deltaB)
+    /// @param priceMinAB Minimum price for A/B pair (for deltaB)
+    /// @param priceMaxAB Maximum price for A/B pair (for deltaA)
     /// @param priceMaxAC Maximum price for A/C pair (for deltaC)
     function computeDeltas3D(
         uint256 balanceA,
@@ -117,13 +117,13 @@ library XYCConcentrateArgsBuilder {
         uint256 priceMaxBC,
         uint256 liquidityRoot
     ) {
-        // Compute deltaA from priceMinAB
-        uint256 sqrtPriceMinAB = Math.sqrt(priceAB * ONE / priceMinAB) * SQRT_ONE;
-        deltaA = (priceAB == priceMinAB) ? 0 : (balanceA * ONE / (sqrtPriceMinAB - ONE));
-
-        // Compute deltaB from priceMaxAB
+        // Compute deltaA from priceMaxAB
         uint256 sqrtPriceMaxAB = Math.sqrt(priceMaxAB * ONE / priceAB) * SQRT_ONE;
-        deltaB = (priceAB == priceMaxAB) ? 0 : (balanceB * ONE / (sqrtPriceMaxAB - ONE));
+        deltaA = (priceAB == priceMaxAB) ? 0 : (balanceA * ONE / (sqrtPriceMaxAB - ONE));
+
+        // Compute deltaB from priceMinAB
+        uint256 sqrtPriceMinAB = Math.sqrt(priceAB * ONE / priceMinAB) * SQRT_ONE;
+        deltaB = (priceAB == priceMinAB) ? 0 : (balanceB * ONE / (sqrtPriceMinAB - ONE));
 
         // Compute deltaC from priceMaxAC
         uint256 sqrtPriceMaxAC = Math.sqrt(priceMaxAC * ONE / priceAC) * SQRT_ONE;
