@@ -135,8 +135,11 @@ library XYCConcentrateArgsBuilder {
         concentratedC = balanceC + deltaC;
 
         // Compute all price bounds from the deltas
-        (priceMinAC,) = computePriceBounds(balanceA, balanceC, deltaA, deltaC, priceAC);
-        (priceMinBC, priceMaxBC) = computePriceBounds(balanceB, balanceC, deltaB, deltaC, priceBC);
+        // All 3D deltas use the base-token formula (√(Pmax/P)), so we swap argument order:
+        // the delta that determines the upper bound goes first (→ priceMax slot),
+        // the delta that determines the lower bound goes second (→ priceMin slot).
+        (priceMinAC,) = computePriceBounds(balanceC, balanceA, deltaC, deltaA, priceAC);
+        (priceMinBC, priceMaxBC) = computePriceBounds(balanceC, balanceB, deltaC, deltaB, priceBC);
         liquidityRoot = CubeRoot.cbrt(concentratedA * concentratedB * concentratedC);
     }
 
