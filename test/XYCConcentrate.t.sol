@@ -255,7 +255,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRate = preAmountIn * 1e18 / preAmountOut;
         uint256 postRate = postAmountIn * 1e18 / postAmountOut;
         uint256 rateChange = preRate * 1e18 / postRate;
-        assertApproxEqRel(rateChange, setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB");
+        assertApproxEqRel(rateChange, 1e18 * 1e18 / setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB");
     }
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForTokenB() public {
@@ -283,7 +283,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRate = preAmountIn * 1e18 / preAmountOut;
         uint256 postRate = postAmountIn * 1e18 / postAmountOut;
         uint256 rateChange = postRate * 1e18 / preRate;
-        assertApproxEqRel(rateChange, setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB");
+        assertApproxEqRel(rateChange, 1e18 * 1e18 / setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB");
     }
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForBothTokensNoFee() public {
@@ -322,13 +322,13 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
         uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
         uint256 rateChangeA = preRateA * 1e18 / postRateA;
-        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenA");
+        assertApproxEqRel(rateChangeA, 1e18 * 1e18 / setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenA");
 
         // Compute and compare rate change for tokenB
         uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
         uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
         uint256 rateChangeB = postRateB * 1e18 / preRateB;
-        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenB");
+        assertApproxEqRel(rateChangeB, 1e18 * 1e18 / setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenB");
     }
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForBothTokensWithFee() public {
@@ -367,13 +367,13 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
         uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
         uint256 rateChangeA = preRateA * 1e18 / postRateA;
-        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenA");
+        assertApproxEqRel(rateChangeA, 1e18 * 1e18 / setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenA");
 
         // Compute and compare rate change for tokenB
         uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
         uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
         uint256 rateChangeB = postRateB * 1e18 / preRateB;
-        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenB");
+        assertApproxEqRel(rateChangeB, 1e18 * 1e18 / setup.priceBoundA, 0.01e18, "Quote should be within 1% range of actual paid scaled by scaleB for tokenB");
     }
 
     function test_ConcentrateGrowLiquidity_SpreadSlowlyGrowsForSomeReason() public {
@@ -422,15 +422,17 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
         uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
         uint256 rateChangeA = preRateA * 1e18 / postRateA;
-        assertNotApproxEqRel(rateChangeA, setup.priceBoundA, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenA");
-        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenA");
+        uint256 expectedRateChangeA = 1e18 * 1e18 / setup.priceBoundB;
+        assertNotApproxEqRel(rateChangeA, expectedRateChangeA, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenA");
+        assertApproxEqRel(rateChangeA, expectedRateChangeA, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenA");
 
         // Compute and compare rate change for tokenB
         uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
         uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
         uint256 rateChangeB = postRateB * 1e18 / preRateB;
-        assertNotApproxEqRel(rateChangeB, setup.priceBoundB, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenB");
-        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenB");
+        uint256 expectedRateChangeB = 1e18 * 1e18 / setup.priceBoundA;
+        assertNotApproxEqRel(rateChangeB, expectedRateChangeB, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenB");
+        assertApproxEqRel(rateChangeB, expectedRateChangeB, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenB");
     }
 
     function test_RoundingInvariantsWithFees() public {

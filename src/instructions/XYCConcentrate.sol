@@ -31,11 +31,11 @@ library XYCConcentrateArgsBuilder {
     /// @dev JavaScript implementation:
     ///      ```js
     ///      function computeDeltas(balanceA, balanceB, price, priceMin, priceMax) {
-    ///         const sqrtMin = Math.sqrt(price * 1e18 / priceMin);
-    ///         const sqrtMax = Math.sqrt(priceMax * 1e18 / price);
+    ///         const sqrtRatioA = Math.sqrt(priceMax * 1e18 / price);
+    ///         const sqrtRatioB = Math.sqrt(price * 1e18 / priceMin);
     ///         return {
-    ///             deltaA: (price == priceMin) ? 0 : (balanceA * 1e18 / (sqrtMin - 1e18)),
-    ///             deltaB: (price == priceMax) ? 0 : (balanceB * 1e18 / (sqrtMax - 1e18)),
+    ///             deltaA: (price == priceMax) ? 0 : (balanceA * 1e18 / (sqrtRatioA - 1e18)),
+    ///             deltaB: (price == priceMin) ? 0 : (balanceB * 1e18 / (sqrtRatioB - 1e18)),
     ///         };
     ///      }
     ///      ```
@@ -54,10 +54,10 @@ library XYCConcentrateArgsBuilder {
         uint256 priceMax
     ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity) {
         require(priceMin <= price && price <= priceMax, ConcentrateInconsistentPrices(price, priceMin, priceMax));
-        uint256 sqrtPriceMin = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
-        uint256 sqrtPriceMax = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
-        deltaA = (price == priceMin) ? 0 : (balanceA * ONE / (sqrtPriceMin - ONE));
-        deltaB = (price == priceMax) ? 0 : (balanceB * ONE / (sqrtPriceMax - ONE));
+        uint256 sqrtPriceRatioA = Math.sqrt(priceMax * ONE / price) * SQRT_ONE;
+        uint256 sqrtPriceRatioB = Math.sqrt(price * ONE / priceMin) * SQRT_ONE;
+        deltaA = (price == priceMax) ? 0 : (balanceA * ONE / (sqrtPriceRatioA - ONE));
+        deltaB = (price == priceMin) ? 0 : (balanceB * ONE / (sqrtPriceRatioB - ONE));
         liquidity = Math.sqrt((balanceA + deltaA) * (balanceB + deltaB));
     }
 
