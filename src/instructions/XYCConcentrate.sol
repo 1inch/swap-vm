@@ -27,21 +27,32 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingDeltas();
     error ConcentrateParsingMissingLiquidity();
 
-    /// @notice Compute initial balance adjustments to achieve concentration within price bounds
-    /// @dev Derives the implied spot price from (balanceA, balanceB, priceMin, priceMax) via
-    ///      the concentrated-liquidity quadratic, then computes deltas as L/√priceMax and L·√priceMin.
-    ///      This ensures exact price-boundary compliance: real balances deplete exactly at priceMin/priceMax.
+    /// @notice Compute virtual offsets (deltas) for concentrated liquidity within [priceMin, priceMax]
+    /// @dev Solves the concentrated-liquidity system:
+    ///        by = L · (√P − √Plo)       bx = L · (√Phi − √P) / (√P · √Phi)
+    ///      for the implied √P from the quadratic:
+    ///        bx · u² + u · (by/√Phi − bx · √Plo) − by = 0,   u = √P
     ///
-    ///      The quadratic solved is:  bx·u² + u·(by/√Phi - bx·√Plo) - by = 0,  where u = √Pspot.
-    ///      Then:  L = by/(u - √Plo),  deltaA = L/√Phi,  deltaB = L·√Plo.
-    /// @param balanceA Initial balance of tokenA (base token)
-    /// @param balanceB Initial balance of tokenB (quote token)
-    /// @param priceMin Minimum price for concentration range (tokenB/tokenA with 1e18 precision)
-    /// @param priceMax Maximum price for concentration range (tokenB/tokenA with 1e18 precision)
-    /// @return deltaA Virtual offset for tokenA
-    /// @return deltaB Virtual offset for tokenB
-    /// @return liquidity Concentrated liquidity L
-    /// @return impliedPrice The spot price implied by the balances and bounds (1e18 precision)
+    ///      When the linear coefficient is negative (price near upper bound) the standard
+    ///      quadratic formula suffers catastrophic cancellation.  The conjugate form
+    ///        u = 2 · by / (√D + |coeff|)
+    ///      is used instead, keeping both numerator and denominator as sums of non-negative terms.
+    ///
+    ///      In the general (interior) case deltas are derived directly from balances:
+    ///        δA = bA · √P / (√Phi − √P)        δB = bB · √Plo / (√P − √Plo)
+    ///      eliminating the intermediate L and one rounding step.
+    ///
+    ///      Rounding: all sqrt and mulDiv operations use floor rounding.  Each delta is
+    ///      individually a lower bound on the algebraic ideal for the discrete √P, √Plo, √Phi.
+    ///      Total error per delta is bounded by O(1) ULP per inexact operation.
+    /// @param balanceA Real balance of the base token (tokenA)
+    /// @param balanceB Real balance of the quote token (tokenB)
+    /// @param priceMin Lower price bound (tokenB/tokenA, 1e18 precision, must be < priceMax)
+    /// @param priceMax Upper price bound (tokenB/tokenA, 1e18 precision)
+    /// @return deltaA Virtual offset for tokenA (rounded down)
+    /// @return deltaB Virtual offset for tokenB (rounded down)
+    /// @return liquidity Concentrated liquidity L (rounded down)
+    /// @return impliedPrice Spot price implied by balances and bounds (1e18 precision)
     function computeDeltas(
         uint256 balanceA,
         uint256 balanceB,
@@ -53,40 +64,58 @@ library XYCConcentrateArgsBuilder {
         uint256 sqrtPlo = Math.sqrt(priceMin * ONE);
         uint256 sqrtPhi = Math.sqrt(priceMax * ONE);
 
-        uint256 sqrtP;
-        if (balanceA == 0) {
-            sqrtP = sqrtPhi;
-        } else if (balanceB == 0) {
-            sqrtP = sqrtPlo;
-        } else {
-            uint256 term1 = Math.mulDiv(balanceA, sqrtPlo, ONE);
-            uint256 term2 = Math.mulDiv(balanceB, ONE, sqrtPhi);
-
-            uint256 sqrtDisc;
-            if (term1 >= term2) {
-                uint256 diff = term1 - term2;
-                sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
-                sqrtP = Math.mulDiv(ONE, diff + sqrtDisc, 2 * balanceA);
-            } else {
-                uint256 diff = term2 - term1;
-                sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
-                sqrtP = Math.mulDiv(ONE, sqrtDisc - diff, 2 * balanceA);
-            }
-        }
+        uint256 sqrtP = _solveSqrtPrice(balanceA, balanceB, sqrtPlo, sqrtPhi);
 
         impliedPrice = Math.mulDiv(sqrtP, sqrtP, ONE);
 
-        uint256 L;
-        if (sqrtP > sqrtPlo && balanceB > 0) {
-            L = Math.mulDiv(balanceB, ONE, sqrtP - sqrtPlo);
-        } else if (sqrtP < sqrtPhi && balanceA > 0) {
-            uint256 sqrtProduct = Math.mulDiv(sqrtP, sqrtPhi, ONE);
-            L = Math.mulDiv(balanceA, sqrtProduct, sqrtPhi - sqrtP);
+        uint256 gapHi = sqrtPhi - sqrtP;
+        uint256 gapLo = sqrtP - sqrtPlo;
+
+        if (gapHi > 0 && gapLo > 0) {
+            deltaA = Math.mulDiv(balanceA, sqrtP, gapHi);
+            deltaB = Math.mulDiv(balanceB, sqrtPlo, gapLo);
+            liquidity = Math.mulDiv(balanceB, ONE, gapLo);
+        } else if (gapHi == 0) {
+            liquidity = Math.mulDiv(balanceB, ONE, sqrtPhi - sqrtPlo);
+            deltaA = Math.mulDiv(liquidity, ONE, sqrtPhi);
+            deltaB = Math.mulDiv(liquidity, sqrtPlo, ONE);
+        } else {
+            uint256 sqrtProduct = Math.mulDiv(sqrtPlo, sqrtPhi, ONE);
+            liquidity = Math.mulDiv(balanceA, sqrtProduct, sqrtPhi - sqrtPlo);
+            deltaA = Math.mulDiv(liquidity, ONE, sqrtPhi);
+            deltaB = Math.mulDiv(liquidity, sqrtPlo, ONE);
+        }
+    }
+
+    /// @dev Solve  bx·u² + u·(by/√Phi − bx·√Plo) − by = 0  for u = √Pspot.
+    ///      Standard form when coeff ≥ 0:  u = (coeff + √D) / (2·bx)      — no cancellation.
+    ///      Conjugate form when coeff < 0: u = 2·by / (|coeff| + √D)       — no cancellation.
+    ///      Result is clamped to [sqrtPlo, sqrtPhi].
+    function _solveSqrtPrice(
+        uint256 balanceA,
+        uint256 balanceB,
+        uint256 sqrtPlo,
+        uint256 sqrtPhi
+    ) private pure returns (uint256 sqrtP) {
+        if (balanceA == 0) return sqrtPhi;
+        if (balanceB == 0) return sqrtPlo;
+
+        uint256 bxSqrtPlo = Math.mulDiv(balanceA, sqrtPlo, ONE);
+        uint256 byDivSqrtPhi = Math.mulDiv(balanceB, ONE, sqrtPhi);
+
+        uint256 diff = bxSqrtPlo > byDivSqrtPhi
+            ? bxSqrtPlo - byDivSqrtPhi
+            : byDivSqrtPhi - bxSqrtPlo;
+        uint256 sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
+
+        if (bxSqrtPlo >= byDivSqrtPhi) {
+            sqrtP = Math.mulDiv(ONE, diff + sqrtDisc, 2 * balanceA);
+        } else {
+            sqrtP = Math.mulDiv(balanceB, 2 * ONE, diff + sqrtDisc);
         }
 
-        deltaA = Math.mulDiv(L, ONE, sqrtPhi);
-        deltaB = Math.mulDiv(L, sqrtPlo, ONE);
-        liquidity = L;
+        if (sqrtP < sqrtPlo) sqrtP = sqrtPlo;
+        else if (sqrtP > sqrtPhi) sqrtP = sqrtPhi;
     }
 
     /// @notice Backward-compatible wrapper that ignores the price parameter and derives it instead
