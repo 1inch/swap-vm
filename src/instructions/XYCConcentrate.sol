@@ -27,42 +27,37 @@ library XYCConcentrateArgsBuilder {
     error ConcentrateParsingMissingDeltas();
     error ConcentrateParsingMissingLiquidity();
 
-    /// @notice Compute virtual offsets (deltas) for concentrated liquidity within [priceMin, priceMax]
-    /// @dev Solves the concentrated-liquidity system:
-    ///        by = L · (√P − √Plo)       bx = L · (√Phi − √P) / (√P · √Phi)
-    ///      for the implied √P from the quadratic:
+    /// @notice Compute virtual offsets (deltas) from exact sqrt-price bounds (no ambiguous rounding)
+    /// @dev Primary entry point. Accepts pre-computed sqrt-price bounds so callers control
+    ///      the exact discrete values — no on-chain sqrt of prices is needed.
+    ///
+    ///      Solves the concentrated-liquidity quadratic for the implied √P:
     ///        bx · u² + u · (by/√Phi − bx · √Plo) − by = 0,   u = √P
+    ///      using the conjugate form when the linear coefficient is negative.
     ///
-    ///      When the linear coefficient is negative (price near upper bound) the standard
-    ///      quadratic formula suffers catastrophic cancellation.  The conjugate form
-    ///        u = 2 · by / (√D + |coeff|)
-    ///      is used instead, keeping both numerator and denominator as sums of non-negative terms.
-    ///
-    ///      In the general (interior) case deltas are derived directly from balances:
+    ///      In the interior case, deltas are derived directly from balances:
     ///        δA = bA · √P / (√Phi − √P)        δB = bB · √Plo / (√P − √Plo)
-    ///      eliminating the intermediate L and one rounding step.
     ///
-    ///      Rounding: all sqrt and mulDiv operations use floor rounding.  Each delta is
-    ///      individually a lower bound on the algebraic ideal for the discrete √P, √Plo, √Phi.
-    ///      Total error per delta is bounded by O(1) ULP per inexact operation.
+    ///      Rounding: all operations produce a consistent floor of the true √P.
+    ///      In the solver, β is computed with ceiling so that:
+    ///        - Standard branch: diff is a lower bound → numerator is lower bound → √P floors
+    ///        - Conjugate branch: diff is an upper bound → denominator is upper bound → √P floors
+    ///      Each delta is then individually floored via mulDiv for the discrete √P, √Plo, √Phi.
     /// @param balanceA Real balance of the base token (tokenA)
     /// @param balanceB Real balance of the quote token (tokenB)
-    /// @param priceMin Lower price bound (tokenB/tokenA, 1e18 precision, must be < priceMax)
-    /// @param priceMax Upper price bound (tokenB/tokenA, 1e18 precision)
+    /// @param sqrtPlo √(lower price bound), 1e18 precision (must be < sqrtPhi)
+    /// @param sqrtPhi √(upper price bound), 1e18 precision
     /// @return deltaA Virtual offset for tokenA (rounded down)
     /// @return deltaB Virtual offset for tokenB (rounded down)
     /// @return liquidity Concentrated liquidity L (rounded down)
     /// @return impliedPrice Spot price implied by balances and bounds (1e18 precision)
-    function computeDeltas(
+    function computeDeltasFromSqrtPrices(
         uint256 balanceA,
         uint256 balanceB,
-        uint256 priceMin,
-        uint256 priceMax
+        uint256 sqrtPlo,
+        uint256 sqrtPhi
     ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity, uint256 impliedPrice) {
-        require(priceMin < priceMax, ConcentrateInconsistentPrices(0, priceMin, priceMax));
-
-        uint256 sqrtPlo = Math.sqrt(priceMin * ONE);
-        uint256 sqrtPhi = Math.sqrt(priceMax * ONE);
+        require(sqrtPlo < sqrtPhi, ConcentrateInconsistentPrices(0, sqrtPlo, sqrtPhi));
 
         uint256 sqrtP = _solveSqrtPrice(balanceA, balanceB, sqrtPlo, sqrtPhi);
 
@@ -87,9 +82,36 @@ library XYCConcentrateArgsBuilder {
         }
     }
 
+    /// @notice Convenience wrapper that accepts price bounds and computes sqrt prices internally
+    /// @dev For production use, prefer computeDeltasFromSqrtPrices with exact sqrt-price values
+    ///      to avoid ambiguous rounding from the floor sqrt.
+    /// @param balanceA Real balance of the base token (tokenA)
+    /// @param balanceB Real balance of the quote token (tokenB)
+    /// @param priceMin Lower price bound (tokenB/tokenA, 1e18 precision)
+    /// @param priceMax Upper price bound (tokenB/tokenA, 1e18 precision)
+    function computeDeltas(
+        uint256 balanceA,
+        uint256 balanceB,
+        uint256 priceMin,
+        uint256 priceMax
+    ) public pure returns (uint256 deltaA, uint256 deltaB, uint256 liquidity, uint256 impliedPrice) {
+        uint256 sqrtPlo = Math.sqrt(priceMin * ONE);
+        uint256 sqrtPhi = Math.sqrt(priceMax * ONE);
+        return computeDeltasFromSqrtPrices(balanceA, balanceB, sqrtPlo, sqrtPhi);
+    }
+
     /// @dev Solve  bx·u² + u·(by/√Phi − bx·√Plo) − by = 0  for u = √Pspot.
-    ///      Standard form when coeff ≥ 0:  u = (coeff + √D) / (2·bx)      — no cancellation.
-    ///      Conjugate form when coeff < 0: u = 2·by / (|coeff| + √D)       — no cancellation.
+    ///
+    ///      Rounding strategy (consistent floor of true √P):
+    ///        α = mulDiv(bA, √Plo, ONE)              — floor
+    ///        β = mulDiv(bB, ONE, √Phi, Ceil)         — ceil
+    ///
+    ///      Branch on α ≥ β:
+    ///        Standard:  diff = α − β (lower bound), √D = floor(√(diff²+4·bA·bB))
+    ///                   → numerator = diff + √D is lower bound → mulDiv floors → √P floors ✓
+    ///        Conjugate: diff = β − α (upper bound), √D = ceil(√(diff²+4·bA·bB))
+    ///                   → denominator = diff + √D is upper bound → mulDiv floors → √P floors ✓
+    ///
     ///      Result is clamped to [sqrtPlo, sqrtPhi].
     function _solveSqrtPrice(
         uint256 balanceA,
@@ -100,17 +122,20 @@ library XYCConcentrateArgsBuilder {
         if (balanceA == 0) return sqrtPhi;
         if (balanceB == 0) return sqrtPlo;
 
-        uint256 bxSqrtPlo = Math.mulDiv(balanceA, sqrtPlo, ONE);
-        uint256 byDivSqrtPhi = Math.mulDiv(balanceB, ONE, sqrtPhi);
+        uint256 alpha = Math.mulDiv(balanceA, sqrtPlo, ONE);
+        uint256 betaCeil = Math.mulDiv(balanceB, ONE, sqrtPhi, Math.Rounding.Ceil);
 
-        uint256 diff = bxSqrtPlo > byDivSqrtPhi
-            ? bxSqrtPlo - byDivSqrtPhi
-            : byDivSqrtPhi - bxSqrtPlo;
-        uint256 sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
-
-        if (bxSqrtPlo >= byDivSqrtPhi) {
+        if (alpha >= betaCeil) {
+            // Standard form: sqrtP = ONE · (diff + √D) / (2·bA)
+            // diff is lower bound (floor α − ceil β), √D is floor → numerator is lower bound
+            uint256 diff = alpha - betaCeil;
+            uint256 sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB);
             sqrtP = Math.mulDiv(ONE, diff + sqrtDisc, 2 * balanceA);
         } else {
+            // Conjugate form: sqrtP = 2·bB·ONE / (diff + √D)
+            // diff is upper bound (ceil β − floor α), √D is ceil → denominator is upper bound
+            uint256 diff = betaCeil - alpha;
+            uint256 sqrtDisc = Math.sqrt(diff * diff + 4 * balanceA * balanceB, Math.Rounding.Ceil);
             sqrtP = Math.mulDiv(balanceB, 2 * ONE, diff + sqrtDisc);
         }
 
