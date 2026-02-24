@@ -116,7 +116,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -146,7 +147,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -177,7 +179,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -213,7 +216,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                         baseGasPrice,
                         ethPrices[i],
                         gasAmount,
-                        maxPriceDecay
+                        maxPriceDecay,
+                        18
                     ))
             );
 
@@ -251,7 +255,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -290,7 +295,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
