@@ -16,22 +16,26 @@ library BaseFeeAdjusterArgsBuilder {
     error BaseFeeAdjusterMissingEthPriceArg();
     error BaseFeeAdjusterMissingGasAmountArg();
     error BaseFeeAdjusterMissingMaxPriceDecayArg();
+    error BaseFeeAdjusterMissingToken1DecimalsArg();
 
     /// @param baseGasPrice Base gas price for comparison (64 bits)
-    /// @param ethToToken1Price ETH price in token1 units (96 bits), e.g., 3000e18 for 1 ETH = 3000 USDC
+    /// @param ethToToken1Price ETH price in token1 (1e18-scaled), e.g., 3000e18 for 1 ETH = 3000 USDC
     /// @param gasAmount Gas amount to compensate for (24 bits)
     /// @param maxPriceDecay Maximum price decay coefficient (64 bits), e.g., 0.99e18 = 1% max discount
+    /// @param token1Decimals Decimals of token1 (8 bits), used to normalize extraCostInToken1 to native units
     function build(
         uint64 baseGasPrice,
         uint96 ethToToken1Price,
         uint24 gasAmount,
-        uint64 maxPriceDecay
+        uint64 maxPriceDecay,
+        uint8 token1Decimals
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
             baseGasPrice,
             ethToToken1Price,
             gasAmount,
-            maxPriceDecay
+            maxPriceDecay,
+            token1Decimals
         );
     }
 
@@ -39,12 +43,14 @@ library BaseFeeAdjusterArgsBuilder {
         uint64 baseGasPrice,
         uint96 ethToToken1Price,
         uint24 gasAmount,
-        uint64 maxPriceDecay
+        uint64 maxPriceDecay,
+        uint8 token1Decimals
     ) {
         baseGasPrice = uint64(bytes8(args.slice(0, 8, BaseFeeAdjusterMissingBaseGasPriceArg.selector)));
         ethToToken1Price = uint96(bytes12(args.slice(8, 20, BaseFeeAdjusterMissingEthPriceArg.selector)));
         gasAmount = uint24(bytes3(args.slice(20, 23, BaseFeeAdjusterMissingGasAmountArg.selector)));
         maxPriceDecay = uint64(bytes8(args.slice(23, 31, BaseFeeAdjusterMissingMaxPriceDecayArg.selector)));
+        token1Decimals = uint8(bytes1(args.slice(31, 32, BaseFeeAdjusterMissingToken1DecimalsArg.selector)));
     }
 }
 
@@ -73,7 +79,7 @@ contract BaseFeeAdjuster {
 
     /// @notice Adjust swap amounts based on current gas price relative to base
     /// @param ctx Swap state with amounts from previous instruction
-    /// @param args Packed: baseGasPrice (64) | ethToToken1Price (96) | gasAmount (24) | maxPriceDecay (64)
+    /// @param args Packed: baseGasPrice (64) | ethToToken1Price (96) | gasAmount (24) | maxPriceDecay (64) | token1Decimals (8)
     function _baseFeeAdjuster1D(Context memory ctx, bytes calldata args) internal view {
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, BaseFeeAdjusterShouldBeAppliedAfterSwap());
 
@@ -81,14 +87,17 @@ contract BaseFeeAdjuster {
             uint64 baseGasPrice,
             uint96 ethToToken1Price,
             uint24 gasAmount,
-            uint64 maxPriceDecay
+            uint64 maxPriceDecay,
+            uint8 token1Decimals
         ) = BaseFeeAdjusterArgsBuilder.parse(args);
 
         // Only adjust if current gas exceeds base
         if (block.basefee > baseGasPrice) {
-            // Calculate extra gas cost in token1
+            // Calculate extra gas cost in token1 native units
+            // ethToToken1Price is 1e18-scaled, extraGasCost is in wei (1e18 per ETH)
+            // Dividing by 10^(36-decimals) normalizes to token1's native precision
             uint256 extraGasCost = (block.basefee - baseGasPrice) * gasAmount;
-            uint256 extraCostInToken1 = (extraGasCost * ethToToken1Price) / 1e18;
+            uint256 extraCostInToken1 = (extraGasCost * ethToToken1Price) / (10 ** (36 - token1Decimals));
 
             if (ctx.query.isExactIn) {
                 // exactIn: Increase amountOut (taker gets more token0)

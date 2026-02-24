@@ -21,6 +21,7 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
+import { TokenMockDecimals } from "./mocks/TokenMockDecimals.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -86,7 +87,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -156,7 +158,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -220,7 +223,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -268,7 +272,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
                     baseGasPrice,
                     ethToTokenPrice,
                     gasAmount,
-                    maxPriceDecay
+                    maxPriceDecay,
+                    18
                 ))
         );
 
@@ -322,7 +327,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
             program.build(_baseFeeAdjuster1D,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay, 18))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -363,7 +368,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
             program.build(_baseFeeAdjuster1D,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay, 18))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -405,7 +410,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
             program.build(_baseFeeAdjuster1D,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay, 18))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -424,6 +429,80 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         assertEq(baseInput, 3000e18, "Base should be 3000");
         assertLt(adjustedInput, baseInput, "Should pay less at high gas");
         assertApproxEqAbs(actualDiscount, expectedDiscount, 1e18, "Discount ~36 USDC");
+    }
+
+    /**
+     * @notice Test normalization with 6-decimal token (USDC-like)
+     * @dev Before the fix, extraCostInToken1 was 1e12x too large for 6-decimal tokens,
+     *      causing priceIncrease to saturate to maxIncrease even with 1 gwei above base.
+     */
+    function test_BaseFeeAdjusterNormalizationWith6Decimals() public {
+        TokenMockDecimals usdc = new TokenMockDecimals("USDC", "USDC", 6);
+        TokenMockDecimals weth = new TokenMockDecimals("WETH", "WETH", 18);
+
+        usdc.mint(maker, 1_000_000e6);
+        weth.mint(maker, 1000e18);
+        vm.prank(maker);
+        usdc.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        weth.approve(address(swapVM), type(uint256).max);
+
+        usdc.mint(taker, 100_000e6);
+        usdc.approve(address(swapVM), type(uint256).max);
+
+        uint64 baseGasPrice = 20 gwei;
+        uint96 ethToToken1Price = 3000e18;
+        uint24 gasAmount = 150_000;
+        uint64 maxPriceDecay = 99e16; // 1% max
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(usdc), address(weth)]),
+                    dynamic([uint256(3000e6), uint256(1e18)])
+                )),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(usdc), address(weth))),
+            program.build(_baseFeeAdjuster1D,
+                BaseFeeAdjusterArgsBuilder.build(
+                    baseGasPrice,
+                    ethToToken1Price,
+                    gasAmount,
+                    maxPriceDecay,
+                    6
+                ))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        // At base gas — no adjustment
+        vm.fee(20 gwei);
+        (, uint256 outputAtBase,) = swapVM.asView().quote(
+            order, address(usdc), address(weth), 3000e6, exactInData
+        );
+        assertEq(outputAtBase, 1e18, "Base output should be exactly 1 WETH");
+
+        // 10 gwei above base: extra = 10 gwei * 150k = 0.0015 ETH = 4.5 USDC
+        // 4.5 USDC / 3000 USDC input = 0.15%
+        // Expected output: 1e18 * 1.0015 = 1.0015e18 WETH
+        vm.fee(30 gwei);
+        (, uint256 outputAt30Gwei,) = swapVM.asView().quote(
+            order, address(usdc), address(weth), 3000e6, exactInData
+        );
+
+        uint256 compensation = outputAt30Gwei - outputAtBase;
+        assertApproxEqAbs(compensation, 0.0015e18, 0.0001e18, "Should compensate ~0.15%, not hit 1% cap");
+        assertLt(outputAt30Gwei, 1.01e18, "Must NOT saturate to 1% cap");
+
+        // 80 gwei above base: extra = 80 gwei * 150k = 0.012 ETH = 36 USDC
+        // 36 / 3000 = 1.2% -> capped to 1%
+        vm.fee(100 gwei);
+        (, uint256 outputAt100Gwei,) = swapVM.asView().quote(
+            order, address(usdc), address(weth), 3000e6, exactInData
+        );
+        assertEq(outputAt100Gwei, 1.01e18, "High gas should hit 1% cap");
     }
 
     // Helper functions
