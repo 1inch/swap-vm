@@ -463,6 +463,138 @@ bytes memory program = bytes.concat(
 );
 ```
 
+### Strategy Hash Uniqueness and Token Safety
+
+> **⚠️ CRITICAL SECURITY NOTICE FOR MAKERS**
+> 
+> Strategies must ensure unique orderHash to prevent unintended cross-strategy token access. Always include balance instructions and use `_salt` when needed.
+
+#### Understanding orderHash Generation
+
+For non-Aqua (signature-based) strategies:
+```solidity
+orderHash = _hashTypedDataV4(keccak256(abi.encode(
+    ORDER_TYPEHASH,
+    order.maker,
+    order.traits,
+    keccak256(order.data)  // Contains program bytecode (should include tokens list)
+)));
+```
+For Aqua strategies:
+```solidity
+orderHash = keccak256(abi.encode(order))
+```
+
+#### Required Safety Measures
+
+**1. Always Include Balance Instructions for non-Aqua strategies** (MANDATORY)
+
+Balance instructions (`_staticBalancesXD` or `_dynamicBalancesXD`) encode token addresses directly into your program, tying approved tokens to specific strategies.
+
+```solidity
+// ✅ SAFE - Tokens are encoded in program
+bytes memory program = bytes.concat(
+    p.build(Balances._staticBalancesXD,
+        BalancesArgsBuilder.build(
+            dynamic([USDC, WETH]),      // Tokens locked to this strategy
+            dynamic([1000e6, 0.5e18])
+        )),
+    p.build(LimitSwap._limitSwap1D, ...),
+    p.build(Controls._salt, abi.encodePacked(uint256(1)))  // Unique ID
+);
+
+// ❌ UNSAFE - No token validation!
+bytes memory program = bytes.concat(
+    p.build(LimitSwap._limitSwap1D, ...)  // Taker can choose ANY tokens!
+);
+```
+
+**2. Use `_salt` for Multiple Similar Strategies**
+
+If you create multiple strategies with identical instructions and parameters, add `_salt` with unique values:
+
+```solidity
+// Strategy A
+p.build(Controls._salt, abi.encodePacked(uint256(1)))
+
+// Strategy B (same instructions but different salt)
+p.build(Controls._salt, abi.encodePacked(uint256(2)))
+```
+
+Without `_salt`, identical programs generate the same `orderHash`, causing:
+- Shared storage state (one strategy affects the other)
+- Inability to run multiple identical strategies simultaneously
+- Potential accounting conflicts
+
+**3. Custom Accounting (`_extruction`) - Extra Validation Required**
+
+If using `_extruction` for custom token accounting:
+- YOU MUST verify no hash collisions with your existing strategies
+- Without balance validation, the strategy can access ALL approved tokens
+- Hash collision = potential fund loss through unintended token access
+
+```solidity
+// Custom accounting example - verify uniqueness!
+bytes memory program = bytes.concat(
+    p.build(Extruction._extruction, 
+        ExtructionArgsBuilder.build(customAccountingContract, args)),
+    p.build(Controls._salt, abi.encodePacked(keccak256("unique-id-v1")))
+);
+```
+
+#### Why This Matters
+
+**Problem: Strategies Depend on Each Other Through Approvals**
+
+```
+Scenario: Maker creates 3 strategies with common token approvals
+
+Strategy A: ✓ USDC/WETH with proper _staticBalancesXD
+Strategy B: ✓ DAI/WETH with proper _staticBalancesXD  
+Strategy C: ✗ Loose strategy without balance instruction
+
+Risk: Strategy C can execute with ANY tokens that have SwapVM approvals
+      (USDC, DAI, WETH, etc.), bypassing intended token restrictions
+
+Attack: Taker executes Strategy C, arbitrarily choosing tokenIn/tokenOut
+        from all approved tokens, potentially draining funds
+```
+
+**Without Proper Hash Uniqueness:**
+
+| Risk | Description | Mitigation |
+|------|-------------|------------|
+| **Cross-Strategy Token Access for Non-Aqua mode** | Loose strategies access all approved tokens | Always include `_staticBalancesXD` or `_dynamicBalancesXD` |
+| **Hash Collision** | Identical programs share storage/state | Use `_salt` with unique values |
+| **Storage Conflicts** | Multiple strategies interfere with each other | Ensure unique `orderHash` for each strategy |
+| **Approval Exploitation** | Taker chooses unexpected token pairs | Encode tokens in program via balance instructions |
+
+#### Best Practices Summary
+
+```solidity
+// ✓ COMPLETE SAFE EXAMPLE
+Program memory p = ProgramBuilder.init(_opcodes());
+bytes memory program = bytes.concat(
+    // 1. Include balance instruction (ties tokens to strategy)
+    p.build(Balances._staticBalancesXD,
+        BalancesArgsBuilder.build(
+            dynamic([USDC, WETH]),
+            dynamic([1000e6, 0.5e18])
+        )),
+    
+    // 2. Your swap logic
+    p.build(LimitSwap._limitSwap1D, 
+        LimitSwapArgsBuilder.build(USDC, WETH)),
+    
+    // 3. Add salt for uniqueness (if you have multiple similar strategies)
+    p.build(Controls._salt, abi.encodePacked(uint256(1)))
+);
+```
+
+**Key Takeaway:** The `orderHash` identifies your strategy and determines storage isolation. Always ensure it's unique and that tokens are explicitly bound to each strategy through balance instructions.
+
+---
+
 ### Balance Management Options
 
 #### Option 1: Static Balances (1D Single-Direction Strategies)
