@@ -53,6 +53,25 @@ library MakerTraitsLib {
         Program
     }
 
+    /// @notice Arguments for building maker order
+    /// @param maker Liquidity provider address
+    /// @param receiver Recipient address (address(0) defaults to maker)
+    /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
+    /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
+    /// @param allowZeroAmountIn Allow zero input amount swaps
+    /// @param hasPreTransferInHook Enable pre-transfer-in hook
+    /// @param hasPostTransferInHook Enable post-transfer-in hook
+    /// @param hasPreTransferOutHook Enable pre-transfer-out hook
+    /// @param hasPostTransferOutHook Enable post-transfer-out hook
+    /// @param preTransferInTarget Hook contract address (maker if zero/same)
+    /// @param preTransferInData Hook calldata
+    /// @param postTransferInTarget Hook contract address
+    /// @param postTransferInData Hook calldata
+    /// @param preTransferOutTarget Hook contract address
+    /// @param preTransferOutData Hook calldata
+    /// @param postTransferOutTarget Hook contract address
+    /// @param postTransferOutData Hook calldata
+    /// @param program VM bytecode to execute
     struct Args {
         address maker;
         address receiver;
@@ -75,6 +94,10 @@ library MakerTraitsLib {
         bytes program;
     }
 
+    /// @notice Build maker order from arguments
+    /// @dev Packs traits, hooks, and program into Order structure
+    /// @param args Order configuration arguments
+    /// @return order Complete Order ready for execution or signing
     function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
         bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
         bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);
