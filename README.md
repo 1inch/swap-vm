@@ -690,6 +690,7 @@ Your orders are protected by:
 - Use `_invalidateBit1D` for one-time orders
 - Validate rates match market conditions
 - Consider MEV protection (`_decayXD`)
+- ⚠️ **WETH Unwrapping:** Only use `shouldUnwrapWeth=true` with canonical WETH. Avoid any tokens with `withdraw()` functions - underlying assets may get stuck in SwapVM
 
 ---
 
