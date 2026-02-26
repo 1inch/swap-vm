@@ -57,9 +57,9 @@ contract Controls {
     error ControlsMissingDeadlineArg();
 
     error DeadlineReached(address taker, uint256 deadline);
-    error TakerTokenBalanceIsZero(address maker, address token);
-    error TakerTokenBalanceIsLessThatRequired(address maker, address token, uint256 balance, uint256 minAmount);
-    error TakerTokenBalanceSupplyShareIsLessThatRequired(address maker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
+    error TakerTokenBalanceIsZero(address taker, address token);
+    error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
+    error TakerTokenBalanceSupplyShareIsLessThanRequired(address taker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
 
     /// @dev This instruction does nothing and can be used for uniqueness order hash value.
     function _salt(Context memory /* ctx */, bytes calldata /* args */) internal pure { }
@@ -115,7 +115,7 @@ contract Controls {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 minAmount = uint256(bytes32(args.slice(20, 52, ControlsMissingMinAmountArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance >= minAmount, TakerTokenBalanceIsLessThatRequired(ctx.query.taker, token, balance, minAmount));
+        require(balance >= minAmount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, minAmount));
     }
 
     /// @dev Checks if the taker holds at least a certain share of the total token supply
@@ -127,6 +127,6 @@ contract Controls {
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
         // balance * 1e18 / totalSupply >= minShareE18
-        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThatRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
+        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
     }
 }
