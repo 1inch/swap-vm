@@ -21,7 +21,6 @@ library MakerTraitsLib {
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
-    error MakerTraitsMissingProgramData();
     error MakerTraitsMissingHasPreTransferInFlag();
     error MakerTraitsMissingHasPostTransferInFlag();
     error MakerTraitsMissingHasPreTransferOutFlag();

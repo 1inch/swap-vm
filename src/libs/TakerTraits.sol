@@ -8,7 +8,6 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { ITakerCallbacks } from "../interfaces/ITakerCallbacks.sol";
 
 type TakerTraits is uint256;
 
@@ -20,7 +19,6 @@ library TakerTraitsLib {
 
     error TakerTraitsMissingTraits();
     error TakerTraitsMissingHookData();
-    error TakerTraitsMissingHookTarget();
     error TakerTraitsMissingHasPreTransferInFlag();
     error TakerTraitsMissingHasPreTransferOutFlag();
     error TakerTraitsThresholdLengthInvalid(bytes threshold);
