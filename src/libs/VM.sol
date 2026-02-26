@@ -69,9 +69,7 @@ library ContextLib {
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
-    error TryChopTakerArgsExcessiveLength();
     error RunLoopExcessiveCall(uint256 pc, uint256 programLength);
-    error RunLoopSwapAmountsComputationMissing(uint256 amountIn, uint256 amountOut);
 
     function program(Context memory ctx) internal pure returns (bytes calldata) {
         return ctx.vm.programPtr.toBytes();
@@ -88,7 +86,7 @@ library ContextLib {
     function tryChopTakerArgs(Context memory ctx, uint256 length) internal pure returns (bytes calldata) {
         bytes calldata data = ctx.vm.takerArgsPtr.toBytes();
         length = Math.min(length, data.length);
-        ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length, TryChopTakerArgsExcessiveLength.selector));
+        ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length));
         return data.slice(0, length);
     }
 
