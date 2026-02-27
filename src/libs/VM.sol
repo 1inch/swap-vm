@@ -108,6 +108,10 @@ library ContextLib {
 
     /// @notice Execute program instructions sequentially
     /// @dev Iterates through bytecode, executing each instruction until program end
+    /// @dev LIMITATION: Program size is effectively limited to 65,535 bytes due to Controls
+    ///      jump instructions using uint16 addressing. Programs exceeding this size can execute,
+    ///      but jump instructions cannot address positions >= 65,536. For custom control flow in
+    ///      larger programs, use Extruction._extruction which supports arbitrary uint256 nextPC.
     /// @param ctx Execution context containing program and registers
     /// @return swapAmountIn Final computed input amount
     /// @return swapAmountOut Final computed output amount

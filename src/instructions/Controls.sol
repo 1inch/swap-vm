@@ -65,15 +65,18 @@ contract Controls {
     function _salt(Context memory /* ctx */, bytes calldata /* args */) internal pure { }
 
     /// @dev Unconditional jump to the specified program counter
-    /// @param args.nextPC | 2 bytes
+    /// @dev LIMITATION: Jump targets are limited to uint16 (0-65,535) due to 2-byte encoding.
+    ///      For jumps to positions >= 65,536, use Extruction with custom control flow logic.
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jump(Context memory ctx, bytes calldata args) internal pure {
         uint256 nextPC = uint16(bytes2(args.slice(0, 2, JumpMissingNextPCArg.selector)));
         ctx.setNextPC(nextPC);
     }
 
     /// @dev Jumps if tokenIn is the specified token
+    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
     /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         if (token == ctx.query.tokenIn) {
@@ -83,8 +86,9 @@ contract Controls {
     }
 
     /// @dev Jumps if tokenOut is the specified token
+    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
     /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         if (token == ctx.query.tokenOut) {
