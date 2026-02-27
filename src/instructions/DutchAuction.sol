@@ -18,6 +18,11 @@ library DutchAuctionArgsBuilder {
     error DutchAuctionMissingDuration();
     error DutchAuctionMissingDecayFactor();
 
+    /// @notice Build instruction arguments for DutchAuction
+    /// @param startTime Auction start timestamp (seconds)
+    /// @param duration Auction duration (seconds) - auction expires at startTime + duration
+    /// @param decayFactor Price decay per second (< 1e18), e.g., 0.99e18 = 1% decay/sec
+    /// @return Packed bytes for inclusion in program bytecode (15 bytes total)
     function build(
         uint40 startTime,
         uint16 duration,

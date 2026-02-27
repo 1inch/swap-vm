@@ -188,7 +188,7 @@ contract ControlsTest is Test, OpcodesDebug {
         tokenC.mint(taker, 999e18);
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            TakerTokenBalanceIsLessThatRequired.selector,
+            TakerTokenBalanceIsLessThanRequired.selector,
             taker,
             address(tokenC),
             999e18,
@@ -232,7 +232,7 @@ contract ControlsTest is Test, OpcodesDebug {
         // Should fail with insufficient share
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            TakerTokenBalanceSupplyShareIsLessThatRequired.selector,
+            TakerTokenBalanceSupplyShareIsLessThanRequired.selector,
             taker,
             address(tokenC),
             1000e18,

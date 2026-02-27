@@ -148,7 +148,7 @@ contract Fee {
                 ctx.query.isExactIn)
             ));
 
-            require(success, FeeProtocolProviderFailedCall());
+            require(success && result.length == 64, FeeProtocolProviderFailedCall());
             (feeBps, to) = abi.decode(result, (uint32, address));
             require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
         }
@@ -197,7 +197,7 @@ contract Fee {
                 ctx.query.isExactIn)
             ));
 
-            require(success, FeeProtocolProviderFailedCall());
+            require(success && result.length == 64, FeeProtocolProviderFailedCall());
             (feeBps, to) = abi.decode(result, (uint32, address));
             require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
         }

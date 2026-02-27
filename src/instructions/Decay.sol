@@ -68,7 +68,6 @@ contract Decay {
     using ContextLib for Context;
     using DecayingOffsetLib for DecayingOffset;
 
-    error DecayApplySwapAmountsRequiresAmountsToBeComputed(uint256 amountIn, uint256 amountOut);
     error DecayShouldBeCalledBeforeSwapAmountsComputation(uint256 amountIn, uint256 amountOut);
 
     /// @dev Offsets for balances in both directions: _offsets[orderHash][token][swapDirection]

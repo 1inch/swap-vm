@@ -53,10 +53,10 @@ library PeggedSwapMath {
     /// @dev Let w = √v, then: aw² + w = [c - √u - au]
     /// @dev Quadratic in w: aw² + w - rightSide = 0
     /// @dev Solution: w = (-1 + √(1 + 4a * rightSide)) / (2a)
-    /// @param u Normalized x value (x/X₀) scaled by 1e18
-    /// @param a Linear width parameter scaled by 1e18
-    /// @param invariantC Target invariant constant scaled by 1e18
-    /// @return v Normalized y value (y/Y₀) scaled by 1e18
+    /// @param u Normalized x value (x/X₀) scaled by ONE
+    /// @param a Linear width parameter scaled by ONE
+    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
+    /// @return v Normalized y value (y/Y₀) scaled by ONE
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         uint256 sqrtU = Math.sqrt(u * ONE);
 
