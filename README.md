@@ -1544,6 +1544,24 @@ SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
 
 ---
 
+## PeggedSwap Known Limitations
+
+### Quantization in Large Pools
+
+For pools ≥1e+27 tokens, integer quantization can create scenarios where:
+- Exact-out swaps of 1 wei may require 0 wei input (due to rounding)
+- This only occurs with `allowZeroAmountIn=true`
+
+**Impact:**
+- Theoretical: ~1-10 wei extractable from pools >1e+27 tokens
+- Economic: Completely infeasible (gas costs exceed profit)
+
+**Recommendations:**
+- ❌ DO NOT use `allowZeroAmountIn=true` with PeggedSwap AMM pools
+- ✅ DO use `allowZeroAmountIn=true` for limit orders (intended use case)
+
+---
+
 ## 📄 License
 
 This project is licensed under the **LicenseRef-Degensoft-SwapVM-1.1**
