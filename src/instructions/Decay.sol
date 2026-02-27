@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
@@ -84,7 +85,8 @@ contract Decay {
         // Adjust balances by decayed offsets
         uint256 period = DecayArgsBuilder.parse(args);
         ctx.swap.balanceIn += _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].getOffset(period);
-        ctx.swap.balanceOut -= _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
+        uint256 outOffset = _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
+        ctx.swap.balanceOut -= Math.min(outOffset, ctx.swap.balanceOut);
 
         (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
 
