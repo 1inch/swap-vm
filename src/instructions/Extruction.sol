@@ -82,6 +82,10 @@ contract Extruction {
     error ExtructionChoppedExceededLength(bytes chopped, uint256 requested);
 
     /// @dev Calls an external contract to perform custom logic, potentially modifying the swap state
+    /// @dev QUOTE/SWAP DIVERGENCE: This instruction delegates to external contracts (IStaticExtruction for
+    ///   quote, IExtruction for swap). Target implementations MUST be deterministic and return consistent
+    ///   results in both modes. Non-deterministic behavior breaks numerical consistency. Makers MUST NOT
+    ///   use backward jumps to this instruction as it breaks consistency between quote() and swap().
     /// @param args.target         | 20 bytes
     /// @param args.extructionArgs | N bytes
     function _extruction(Context memory ctx, bytes calldata args) internal {

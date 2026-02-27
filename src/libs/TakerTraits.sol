@@ -8,7 +8,6 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { ITakerCallbacks } from "../interfaces/ITakerCallbacks.sol";
 
 type TakerTraits is uint256;
 
@@ -20,7 +19,6 @@ library TakerTraitsLib {
 
     error TakerTraitsMissingTraits();
     error TakerTraitsMissingHookData();
-    error TakerTraitsMissingHookTarget();
     error TakerTraitsMissingHasPreTransferInFlag();
     error TakerTraitsMissingHasPreTransferOutFlag();
     error TakerTraitsThresholdLengthInvalid(bytes threshold);
@@ -33,6 +31,26 @@ library TakerTraitsLib {
     error TakerTraitsTakerAmountOutMismatch(uint256 takerAmount, uint256 computedAmount);
     error TakerTraitsDeadlineExpired();
 
+    /// @notice Arguments for building taker traits
+    /// @param taker Swap executor address
+    /// @param isExactIn True for exact input, false for exact output
+    /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
+    /// @param isStrictThresholdAmount Require exact threshold match (vs min/max)
+    /// @param isFirstTransferFromTaker Transfer order: taker->maker first or maker->taker first
+    /// @param useTransferFromAndAquaPush Use transferFrom + Aqua push pattern
+    /// @param threshold Min output (exactIn) or max input (exactOut), 32 bytes or empty
+    /// @param to Recipient address (zero defaults to taker)
+    /// @param deadline Expiration timestamp (0 = no deadline)
+    /// @param hasPreTransferInCallback Enable pre-transfer-in callback
+    /// @param hasPreTransferOutCallback Enable pre-transfer-out callback
+    /// @param preTransferInHookData Data for maker's pre-transfer-in hook
+    /// @param postTransferInHookData Data for maker's post-transfer-in hook
+    /// @param preTransferOutHookData Data for maker's pre-transfer-out hook
+    /// @param postTransferOutHookData Data for maker's post-transfer-out hook
+    /// @param preTransferInCallbackData Data for taker's pre-transfer-in callback
+    /// @param preTransferOutCallbackData Data for taker's pre-transfer-out callback
+    /// @param instructionsArgs Dynamic arguments for VM instructions
+    /// @param signature Order signature (for non-Aqua orders)
     struct Args {
         address taker;
         bool isExactIn;
@@ -82,6 +100,10 @@ library TakerTraitsLib {
     uint16 constant internal IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG = 0x0020;
     uint16 constant internal USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG = 0x0040;
 
+    /// @notice Build taker traits and data from arguments
+    /// @dev Packs traits, hooks, callbacks, and signature into single bytes
+    /// @param args Taker configuration arguments
+    /// @return packed Complete taker traits and data ready for swap execution
     function build(Args memory args) internal pure returns (bytes memory packed) {
         require(args.threshold.length == 32 || args.threshold.length == 0, TakerTraitsThresholdLengthInvalid(args.threshold));
 
@@ -139,6 +161,11 @@ library TakerTraitsLib {
         );
     }
 
+    /// @notice Parse taker traits from calldata
+    /// @dev Extracts traits header (22 bytes) and returns remaining data
+    /// @param data Packed taker traits and data
+    /// @return traits Parsed TakerTraits configuration
+    /// @return tail Remaining calldata after traits header
     function parse(bytes calldata data) internal pure returns (TakerTraits traits, bytes calldata tail) {
         traits = TakerTraits.wrap(uint176(bytes22(data.slice(0, 22, TakerTraitsMissingTraits.selector))));
         tail = data.slice(22);

@@ -37,6 +37,9 @@ library PeggedSwapArgsBuilder {
         uint256 rateGt;
     }
 
+    /// @notice Build instruction arguments for PeggedSwap
+    /// @param args Configuration for pegged swap curve
+    /// @return Packed bytes for inclusion in program bytecode
     function build(Args memory args) internal pure returns (bytes memory) {
         return abi.encodePacked(
             args.x0,
