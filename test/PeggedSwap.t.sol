@@ -26,6 +26,14 @@ contract PeggedSwapMathWrapper {
     function solve(uint256 u, uint256 a, uint256 invariantC) external pure returns (uint256) {
         return PeggedSwapMath.solve(u, a, invariantC);
     }
+
+    function computeInvariant(uint256 u, uint256 v, uint256 a) external pure returns (uint256) {
+        return PeggedSwapMath.invariant(u, v, a);
+    }
+
+    function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
+        return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
+    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
@@ -586,7 +594,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // NEGATIVE TESTS (REVERTS)
     // ========================================
 
-    function test_PeggedSwap_Revert_ZeroBalanceIn() public {
+    function test_PeggedSwap_ZeroBalanceIn_SwapSucceeds() public {
+        // Zero balanceIn should work — taker puts tokens into an empty reserve
         PoolSetup memory setup = PoolSetup({
             balanceA: 0,  // Zero balance
             balanceB: 1000e18,
@@ -601,17 +610,15 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory takerData = _makeTakerData(true, signature);
 
         vm.prank(taker);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PeggedSwap.PeggedSwapRequiresBothBalancesNonZero.selector,
-                0,
-                setup.balanceB
-            )
-        );
-        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+
+        assertEq(swappedIn, 10e18, "Should accept all input");
+        assertGt(swappedOut, 0, "Should produce output from non-empty reserve");
+        assertLe(swappedOut, 1000e18, "Output should not exceed balanceOut");
     }
 
-    function test_PeggedSwap_Revert_ZeroBalanceOut() public {
+    function test_PeggedSwap_Revert_ZeroBalanceOut_ExactIn() public {
+        // Zero balanceOut with ExactIn should revert (can't extract from empty pool)
         PoolSetup memory setup = PoolSetup({
             balanceA: 1000e18,
             balanceB: 0,  // Zero balance
@@ -626,13 +633,27 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory takerData = _makeTakerData(true, signature);
 
         vm.prank(taker);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PeggedSwap.PeggedSwapRequiresBothBalancesNonZero.selector,
-                setup.balanceA,
-                0
-            )
-        );
+        vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
+        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+    }
+
+    function test_PeggedSwap_Revert_BothBalancesZero() public {
+        // Both balances zero is a degenerate state (invariant=0) — must revert
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 0,
+            balanceB: 0,
+            x0: 1000e18,
+            y0: 1000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        vm.expectRevert(PeggedSwap.PeggedSwapBothBalancesZero.selector);
         swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
     }
 
@@ -679,5 +700,426 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
         wrapper.solve(u, a, invalidInvariant);
+    }
+
+    /// @notice Invariant symmetry: invariant(u, v, a) == invariant(v, u, a)
+    function test_PeggedSwapMath_InvariantSymmetry() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // Highly asymmetric pairs
+        uint256[5] memory us = [uint256(1), 1e15, 1e24, ONE, 2 * ONE];
+        uint256[5] memory vs = [2 * ONE, ONE, 1e15, 1e24, uint256(1)];
+        uint256[3] memory as_ = [uint256(0), 0.01e27, 2e27];
+
+        for (uint256 i = 0; i < us.length; i++) {
+            for (uint256 j = 0; j < as_.length; j++) {
+                uint256 inv_uv = wrapper.computeInvariant(us[i], vs[i], as_[j]);
+                uint256 inv_vu = wrapper.computeInvariant(vs[i], us[i], as_[j]);
+                assertEq(inv_uv, inv_vu, "Invariant must be symmetric in u,v");
+            }
+        }
+    }
+
+    /// @notice solve(u, a, C) round-trips: compute C from (u,v), solve back, get v' >= v
+    ///         Tests highly asymmetric, extra large, and extra small reserves
+    function test_PeggedSwapMath_SolveRoundTrip_AsymmetricReserves() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // (u, v) pairs — intentionally extreme and asymmetric
+        uint256[2][10] memory pairs = [
+            [ONE / 1e18, ONE],           // u tiny, v = 1.0
+            [ONE, ONE / 1e18],           // u = 1.0, v tiny
+            [ONE / 1e9, ONE / 1e9],      // both very small
+            [2 * ONE, 2 * ONE],          // both at 2x equilibrium
+            [ONE / 100, 2 * ONE],        // 100:1 asymmetry
+            [2 * ONE, ONE / 100],        // 1:100 asymmetry
+            [uint256(1), ONE],           // 1 wei vs full
+            [ONE, uint256(1)],           // full vs 1 wei
+            [ONE / 1e6, ONE / 1e6],      // both micro
+            [uint256(1), uint256(1)]     // both 1 wei
+        ];
+
+        uint256[4] memory as_ = [uint256(0), 0.01e27, 0.8e27, 2e27];
+
+        for (uint256 i = 0; i < pairs.length; i++) {
+            uint256 u = pairs[i][0];
+            uint256 v = pairs[i][1];
+
+            for (uint256 j = 0; j < as_.length; j++) {
+                uint256 a = as_[j];
+                uint256 C = wrapper.computeInvariant(u, v, a);
+
+                // Solve for v given u and C — should give v' such that invariant(u, v', a) <= C
+                uint256 vSolved = wrapper.solve(u, a, C);
+
+                // v' should be close to v (rounding may make it slightly smaller to protect maker)
+                assertLe(vSolved, v + 1, "Solved v should not significantly exceed original v");
+
+                // Re-compute invariant with solved v — it must not exceed C (maker protection)
+                uint256 CSolved = wrapper.computeInvariant(u, vSolved, a);
+                assertLe(CSolved, C + 1, "Round-trip invariant must not exceed original (maker safety)");
+            }
+        }
+    }
+
+    /// @notice Test solve with one coordinate at zero — depletion edge
+    function test_PeggedSwapMath_Solve_ZeroCoordinate() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+
+        for (uint256 j = 0; j < as_.length; j++) {
+            uint256 a = as_[j];
+
+            // u=0, v=ONE → C = √0 + √1 + a(0+1) = ONE^(1/2) + a
+            uint256 C = wrapper.computeInvariant(0, ONE, a);
+
+            // Solve for v when u=0 — should give back ~ONE
+            uint256 vSolved = wrapper.solve(0, a, C);
+            assertLe(vSolved, ONE + 1, "v from u=0 should be <= ONE");
+            assertGe(vSolved, ONE - 1e9, "v from u=0 should be close to ONE");
+
+            // Solve for v when u is at max (v should be ~0)
+            uint256 CFromMax = wrapper.computeInvariant(ONE, 0, a);
+            uint256 vFromMax = wrapper.solve(ONE, a, CFromMax);
+            assertLe(vFromMax, 1e9, "v should be ~0 when u occupies all invariant");
+        }
+    }
+
+    /// @notice Extra large reserves: invariantFromReserves with big numbers, verify no overflow
+    function test_PeggedSwapMath_InvariantFromReserves_ExtraLarge() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        _checkLargeReserves(wrapper, 1e24, 0);
+        _checkLargeReserves(wrapper, 1e24, 0.8e27);
+        _checkLargeReserves(wrapper, 1e24, 2e27);
+        _checkLargeReserves(wrapper, 1e27, 0);
+        _checkLargeReserves(wrapper, 1e27, 0.8e27);
+        _checkLargeReserves(wrapper, 1e27, 2e27);
+        _checkLargeReserves(wrapper, 1e30, 0);
+        _checkLargeReserves(wrapper, 1e30, 0.8e27);
+        _checkLargeReserves(wrapper, 1e30, 2e27);
+    }
+
+    function _checkLargeReserves(PeggedSwapMathWrapper wrapper, uint256 x0, uint256 a) private {
+        uint256 C = wrapper.computeInvariantFromReserves(x0, x0, x0, x0, a);
+        assertTrue(C > 0, "Invariant at equilibrium must be positive");
+
+        uint256 C2 = wrapper.computeInvariantFromReserves(2 * x0, x0 / 2, x0, x0, a);
+        assertTrue(C2 > 0, "Invariant at 2:0.5 must be positive");
+
+        uint256 u = 2 * PeggedSwapMath.ONE; // u = 2.0
+        uint256 v = PeggedSwapMath.ONE / 2; // v = 0.5
+        uint256 vSolved = wrapper.solve(u, a, C2);
+        assertLe(vSolved, v + 1e9, "Large-scale solve should be close to v");
+    }
+
+    /// @notice Extra small reserves: 1 wei to a few hundred wei
+    function test_PeggedSwapMath_InvariantFromReserves_ExtraSmall() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        _checkSmallReserves(wrapper, 1, 0);
+        _checkSmallReserves(wrapper, 1, 0.8e27);
+        _checkSmallReserves(wrapper, 1, 2e27);
+        _checkSmallReserves(wrapper, 10, 0);
+        _checkSmallReserves(wrapper, 10, 0.8e27);
+        _checkSmallReserves(wrapper, 10, 2e27);
+        _checkSmallReserves(wrapper, 100, 0);
+        _checkSmallReserves(wrapper, 100, 0.8e27);
+        _checkSmallReserves(wrapper, 100, 2e27);
+        _checkSmallReserves(wrapper, 1e6, 0);
+        _checkSmallReserves(wrapper, 1e6, 0.8e27);
+        _checkSmallReserves(wrapper, 1e6, 2e27);
+    }
+
+    function _checkSmallReserves(PeggedSwapMathWrapper wrapper, uint256 x, uint256 a) private {
+        uint256 x0 = 1000e18;
+        uint256 y0 = 1000e18;
+
+        uint256 C = wrapper.computeInvariantFromReserves(x, x, x0, y0, a);
+        assertTrue(C > 0, "Invariant with tiny reserves must be positive");
+
+        uint256 u = x * PeggedSwapMath.ONE / x0;
+        uint256 vSolved = wrapper.solve(u, a, C);
+        uint256 ySolved = vSolved * y0 / PeggedSwapMath.ONE;
+        assertLe(ySolved, x + 1, "Tiny reserves: solved y should not exceed original");
+    }
+
+    /// @notice Highly asymmetric equilibrium reserves (different x0, y0)
+    function test_PeggedSwapMath_AsymmetricEquilibrium() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        // e.g., WBTC/USDC pool: x0 = 10e8 (10 BTC), y0 = 400_000e6 (400k USDC)
+        _checkAsymmetricEquilibrium(wrapper, 1e8, 1e24, 0.8e27);   // 1:1e16 ratio
+        _checkAsymmetricEquilibrium(wrapper, 1e24, 1e8, 0.8e27);   // 1e16:1 ratio
+        _checkAsymmetricEquilibrium(wrapper, 1e18, 1e18, 2e27);    // 1:1, high A
+    }
+
+    function _checkAsymmetricEquilibrium(PeggedSwapMathWrapper wrapper, uint256 x0, uint256 y0, uint256 a) private {
+        uint256 C = wrapper.computeInvariantFromReserves(x0, y0, x0, y0, a);
+        assertTrue(C > 0, "Asymmetric equilibrium invariant must be positive");
+
+        // Drain x to 10%, solve for v
+        uint256 u_drained = PeggedSwapMath.ONE / 10; // 0.1
+        uint256 v_solved = wrapper.solve(u_drained, a, C);
+        assertTrue(v_solved > PeggedSwapMath.ONE, "Draining x should push v above 1.0");
+
+        // Drain y to 10%, solve for u
+        uint256 v_drained = PeggedSwapMath.ONE / 10;
+        uint256 u_solved = wrapper.solve(v_drained, a, C);
+        assertTrue(u_solved > PeggedSwapMath.ONE, "Draining y should push u above 1.0");
+    }
+
+    /// @notice Monotonicity: increasing u should decrease v (and vice versa) on the same curve
+    function test_PeggedSwapMath_SolveMonotonicity() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+
+        for (uint256 j = 0; j < as_.length; j++) {
+            uint256 a = as_[j];
+            // Compute C at equilibrium (u=1, v=1)
+            uint256 C = wrapper.computeInvariant(ONE, ONE, a);
+
+            uint256 prevV = type(uint256).max;
+
+            // Walk u from tiny to large — v must strictly decrease (or stay if rounding)
+            uint256[8] memory uValues = [
+                ONE / 1000,  // 0.001
+                ONE / 100,   // 0.01
+                ONE / 10,    // 0.1
+                ONE / 2,     // 0.5
+                ONE,         // 1.0
+                ONE + ONE / 2, // 1.5
+                ONE * 2 - ONE / 10, // 1.9
+                ONE * 2      // 2.0 (near curve limit for C ~ 3.6 at a=0.8)
+            ];
+
+            for (uint256 i = 0; i < uValues.length; i++) {
+                // Skip values where sqrtU + au > C (beyond curve capacity)
+                uint256 sqrtU = Math.sqrt(uValues[i] * ONE);
+                uint256 au = a * uValues[i] / ONE;
+                if (sqrtU + au >= C) break;
+
+                uint256 vNow = wrapper.solve(uValues[i], a, C);
+                assertLe(vNow, prevV, "v must decrease as u increases (monotonicity)");
+                prevV = vNow;
+            }
+        }
+    }
+
+    /// @notice A=0 special case: pure square-root curve √u + √v = C
+    function test_PeggedSwapMath_PureSqrtCurve() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 ONE = PeggedSwapMath.ONE;
+
+        // At equilibrium u=v=ONE: C = 2 * √ONE = 2 * ONE^(1/2)
+        uint256 C = wrapper.computeInvariant(ONE, ONE, 0);
+        uint256 expectedC = 2 * Math.sqrt(ONE * ONE); // 2 * ONE
+        assertEq(C, expectedC, "Pure sqrt: C = 2*sqrt(ONE)");
+
+        // u=0 → v should satisfy √v = C → v = C²/ONE
+        uint256 vAtZero = wrapper.solve(0, 0, C);
+        uint256 expectedV = C * C / ONE;
+        assertEq(vAtZero, expectedV, "Pure sqrt: u=0 should give v = C^2/ONE");
+
+        // Asymmetric: u = ONE/4 → √(ONE/4) = ONE/2 → √v = C - ONE/2 → v = (C-ONE/2)²/ONE
+        uint256 uQuarter = ONE / 4;
+        uint256 vQuarter = wrapper.solve(uQuarter, 0, C);
+        uint256 sqrtUq = Math.sqrt(uQuarter * ONE);
+        uint256 expectedVq = (C - sqrtUq) * (C - sqrtUq) / ONE;
+        assertEq(vQuarter, expectedVq, "Pure sqrt: analytical solution for u=ONE/4");
+    }
+
+    // ========================================
+    // ROUND-ROBIN DEPLETION & ROUNDING EXPLOIT TEST
+    // ========================================
+
+    /// @notice Performs many round-robin swaps that deplete one reserve to zero,
+    ///         then refill via reverse swaps, using small edge-case amounts to stress
+    ///         rounding. Verifies maker invariant never decreases (no rounding exploit).
+    function test_PeggedSwap_RoundRobin_DepletionAndRoundingExploit() public {
+        uint256 poolSize = 1000e18;
+
+        // Test with multiple A values
+        uint256[3] memory linearWidths = [uint256(0), 0.8e27, 2e27];
+
+        for (uint256 w = 0; w < linearWidths.length; w++) {
+            PoolSetup memory setup = PoolSetup({
+                balanceA: poolSize,
+                balanceB: poolSize,
+                x0: poolSize,
+                y0: poolSize,
+                linearWidth: linearWidths[w],
+                feeInBps: 0
+            });
+
+            ISwapVM.Order memory order = _createOrder(setup);
+            bytes memory signature = _signOrder(order);
+            bytes memory takerDataExactIn = _makeTakerData(true, signature);
+
+            // Track cumulative taker in/out to verify maker never loses
+            uint256 takerTotalIn = 0;
+            uint256 takerTotalOut = 0;
+
+            // Current virtual balances (mirroring what dynamic balances track)
+            uint256 balA = poolSize;
+            uint256 balB = poolSize;
+
+            // Phase 1: Progressively drain tokenB with increasingly large swaps A→B
+            uint256[] memory drainAmounts = new uint256[](6);
+            drainAmounts[0] = 100e18;
+            drainAmounts[1] = 200e18;
+            drainAmounts[2] = 300e18;
+            drainAmounts[3] = 200e18;
+            drainAmounts[4] = 100e18;
+            drainAmounts[5] = 50e18;
+
+            for (uint256 i = 0; i < drainAmounts.length; i++) {
+                vm.prank(taker);
+                (uint256 amIn, uint256 amOut,) = swapVM.swap(
+                    order, tokenA, tokenB, drainAmounts[i], takerDataExactIn
+                );
+                takerTotalIn += amIn;
+                takerTotalOut += amOut;
+                balA += amIn;
+                balB -= amOut;
+
+                // Verify invariant never decreases (maker protected)
+                if (balA > 0 && balB > 0) {
+                    uint256 invAfter = PeggedSwapMath.invariantFromReserves(
+                        balA, balB, setup.x0, setup.y0, setup.linearWidth
+                    );
+                    uint256 invInit = PeggedSwapMath.invariantFromReserves(
+                        poolSize, poolSize, setup.x0, setup.y0, setup.linearWidth
+                    );
+                    assertGe(invAfter, invInit - 1, "Invariant must not decrease (drain phase)");
+                }
+            }
+
+            // Phase 2: Small edge-case swaps A→B near depletion to stress rounding
+            uint256[] memory edgeAmounts = new uint256[](8);
+            edgeAmounts[0] = 1;           // 1 wei
+            edgeAmounts[1] = 7;           // prime
+            edgeAmounts[2] = 13;          // prime
+            edgeAmounts[3] = 100;         // 100 wei
+            edgeAmounts[4] = 1337;        // odd
+            edgeAmounts[5] = 1e9;         // 1 gwei
+            edgeAmounts[6] = 1e12;        // small
+            edgeAmounts[7] = 1e15;        // 0.001 token
+
+            for (uint256 i = 0; i < edgeAmounts.length; i++) {
+                if (balB == 0) break; // Already fully depleted
+
+                try swapVM.asView().quote(
+                    order, tokenA, tokenB, edgeAmounts[i], takerDataExactIn
+                ) returns (uint256, uint256 qOut, bytes32) {
+                    if (qOut == 0) continue; // Skip dust that produces zero output
+
+                    vm.prank(taker);
+                    (uint256 amIn, uint256 amOut,) = swapVM.swap(
+                        order, tokenA, tokenB, edgeAmounts[i], takerDataExactIn
+                    );
+                    takerTotalIn += amIn;
+                    takerTotalOut += amOut;
+                    balA += amIn;
+                    balB -= amOut;
+                } catch {
+                    // Expected near full depletion — solve may revert
+                }
+            }
+
+            // Phase 3: Reverse direction B→A to refill the depleted reserve
+            // After depletion, reverse swaps must work
+            bytes memory takerDataExactInReverse = _makeTakerData(true, signature);
+            uint256[] memory refillAmounts = new uint256[](7);
+            refillAmounts[0] = 1;         // 1 wei — extreme edge
+            refillAmounts[1] = 100;
+            refillAmounts[2] = 1e12;
+            refillAmounts[3] = 1e15;
+            refillAmounts[4] = 10e18;
+            refillAmounts[5] = 50e18;
+            refillAmounts[6] = 100e18;
+
+            for (uint256 i = 0; i < refillAmounts.length; i++) {
+                try swapVM.asView().quote(
+                    order, tokenB, tokenA, refillAmounts[i], takerDataExactInReverse
+                ) returns (uint256, uint256 qOut, bytes32) {
+                    if (qOut == 0) continue;
+
+                    vm.prank(taker);
+                    (uint256 amIn, uint256 amOut,) = swapVM.swap(
+                        order, tokenB, tokenA, refillAmounts[i], takerDataExactInReverse
+                    );
+                    // For B→A swaps: taker puts B in, gets A out
+                    // From the pool's perspective: balB increases, balA decreases
+                    takerTotalIn += amOut; // taker received A (=amOut), previously gave A as input
+                    takerTotalOut += amIn; // taker gave B (=amIn), previously received B as output
+                    balB += amIn;
+                    balA -= amOut;
+
+                    // Verify invariant after refill
+                    if (balA > 0 && balB > 0) {
+                        uint256 invAfter = PeggedSwapMath.invariantFromReserves(
+                            balA, balB, setup.x0, setup.y0, setup.linearWidth
+                        );
+                        uint256 invInit = PeggedSwapMath.invariantFromReserves(
+                            poolSize, poolSize, setup.x0, setup.y0, setup.linearWidth
+                        );
+                        assertGe(invAfter, invInit - 1, "Invariant must not decrease (refill phase)");
+                    }
+                } catch {
+                    // May revert for very small amounts near edge
+                }
+            }
+
+            // Phase 4: More edge-case swaps in both directions with tiny amounts
+            for (uint256 round = 0; round < 5; round++) {
+                // Small A→B
+                uint256 smallAmtAB = (round + 1) * 3 + 1; // 4, 7, 10, 13, 16 wei
+                try swapVM.asView().quote(
+                    order, tokenA, tokenB, smallAmtAB, takerDataExactIn
+                ) returns (uint256, uint256 qOut, bytes32) {
+                    if (qOut > 0) {
+                        vm.prank(taker);
+                        (uint256 amIn, uint256 amOut,) = swapVM.swap(
+                            order, tokenA, tokenB, smallAmtAB, takerDataExactIn
+                        );
+                        balA += amIn;
+                        balB -= amOut;
+                    }
+                } catch {}
+
+                // Small B→A
+                uint256 smallAmtBA = (round + 1) * 5 + 2; // 7, 12, 17, 22, 27 wei
+                try swapVM.asView().quote(
+                    order, tokenB, tokenA, smallAmtBA, takerDataExactInReverse
+                ) returns (uint256, uint256 qOut, bytes32) {
+                    if (qOut > 0) {
+                        vm.prank(taker);
+                        (uint256 amIn, uint256 amOut,) = swapVM.swap(
+                            order, tokenB, tokenA, smallAmtBA, takerDataExactInReverse
+                        );
+                        balB += amIn;
+                        balA -= amOut;
+                    }
+                } catch {}
+            }
+
+            // Final invariant check: pool should be at least as good as initial
+            if (balA > 0 && balB > 0) {
+                uint256 invFinal = PeggedSwapMath.invariantFromReserves(
+                    balA, balB, setup.x0, setup.y0, setup.linearWidth
+                );
+                uint256 invInit = PeggedSwapMath.invariantFromReserves(
+                    poolSize, poolSize, setup.x0, setup.y0, setup.linearWidth
+                );
+                assertGe(invFinal, invInit - 1, "Final invariant must not decrease");
+            }
+        }
     }
 }

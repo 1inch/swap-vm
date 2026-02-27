@@ -7,7 +7,6 @@ pragma solidity 0.8.30;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
-import { TakerTraits, TakerTraitsLib } from "./TakerTraits.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
@@ -16,12 +15,10 @@ type MakerTraits is uint256;
 library MakerTraitsLib {
     using SafeCast for uint256;
     using Calldata for bytes;
-    using TakerTraitsLib for TakerTraits;
     using MakerTraitsLib for MakerTraits;
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
-    error MakerTraitsMissingProgramData();
     error MakerTraitsMissingHasPreTransferInFlag();
     error MakerTraitsMissingHasPostTransferInFlag();
     error MakerTraitsMissingHasPreTransferOutFlag();
@@ -42,7 +39,6 @@ library MakerTraitsLib {
     uint256 constant internal POST_TRANSFER_OUT_HOOK_HAS_TARGET = 1 << 245;
 
     uint256 constant internal ORDER_DATA_SLICES_INDEXES_BIT_OFFSET = 160;
-    uint256 constant internal ORDER_DATA_SLICES_INDEXES_BIT_MASK = type(uint64).max;
     uint256 constant internal ORDER_DATA_SLICES_INDEX_BIT_MASK = type(uint16).max;
     uint256 constant internal ORDER_DATA_SLICES_INDEX_BIT_SIZE_SHL = 4;
 
@@ -54,6 +50,25 @@ library MakerTraitsLib {
         Program
     }
 
+    /// @notice Arguments for building maker order
+    /// @param maker Liquidity provider address
+    /// @param receiver Recipient address (address(0) defaults to maker)
+    /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
+    /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
+    /// @param allowZeroAmountIn Allow zero input amount swaps
+    /// @param hasPreTransferInHook Enable pre-transfer-in hook
+    /// @param hasPostTransferInHook Enable post-transfer-in hook
+    /// @param hasPreTransferOutHook Enable pre-transfer-out hook
+    /// @param hasPostTransferOutHook Enable post-transfer-out hook
+    /// @param preTransferInTarget Hook contract address (maker if zero/same)
+    /// @param preTransferInData Hook calldata
+    /// @param postTransferInTarget Hook contract address
+    /// @param postTransferInData Hook calldata
+    /// @param preTransferOutTarget Hook contract address
+    /// @param preTransferOutData Hook calldata
+    /// @param postTransferOutTarget Hook contract address
+    /// @param postTransferOutData Hook calldata
+    /// @param program VM bytecode to execute
     struct Args {
         address maker;
         address receiver;
@@ -76,6 +91,10 @@ library MakerTraitsLib {
         bytes program;
     }
 
+    /// @notice Build maker order from arguments
+    /// @dev Packs traits, hooks, and program into Order structure
+    /// @param args Order configuration arguments
+    /// @return order Complete Order ready for execution or signing
     function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
         bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
         bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);

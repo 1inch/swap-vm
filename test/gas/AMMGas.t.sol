@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
@@ -67,6 +68,23 @@ contract AMMGas is Test, OpcodesDebug {
         tokenA.approve(address(swapVM), type(uint256).max);
         tokenB.approve(address(swapVM), type(uint256).max);
     }
+    // Helper: compute correct initial balances for concentrate pool
+    // For symmetric ranges (sqrt(Pmin)*sqrt(Pmax)=1), returns equal amounts.
+    function _concentrateBalances(
+        uint256 available,
+        uint256 sqrtPmin,
+        uint256 sqrtPmax
+    ) internal view returns (uint256 balA, uint256 balB) {
+        (, uint256 actualLt, uint256 actualGt) =
+            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+                available, available, 1e18, sqrtPmin, sqrtPmax
+            );
+        (balA, balB) = address(tokenA) < address(tokenB)
+            ? (actualLt, actualGt)
+            : (actualGt, actualLt);
+    }
+
+
 
     // ==================== XYCSwap (Basic AMM) ====================
 
@@ -276,33 +294,20 @@ contract AMMGas is Test, OpcodesDebug {
     }
 
     function _createConcentrateGrowLiquidityOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.8e18;
-        uint256 priceMax = 1.25e18;
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            BALANCE_A,
-            BALANCE_B,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
+        uint256 sqrtPmin = Math.sqrt(0.8e36);
+        uint256 sqrtPmax = Math.sqrt(1.25e36);
+        (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([BALANCE_A, BALANCE_B])
+                    dynamic([balA, balB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            ),
             program.build(_xycSwapXD)
         );
 
@@ -313,33 +318,20 @@ contract AMMGas is Test, OpcodesDebug {
     }
 
     function _createConcentrateGrowPriceRangeOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.7e18;
-        uint256 priceMax = 1.4e18;
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            BALANCE_A,
-            BALANCE_B,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
+        uint256 sqrtPmin = Math.sqrt(0.7e36);
+        uint256 sqrtPmax = Math.sqrt(1.4e36);
+        (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
 
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([BALANCE_A, BALANCE_B])
+                    dynamic([balA, balB])
                 )),
-            program.build(_xycConcentrateGrowPriceRange2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            ),
             program.build(_xycSwapXD)
         );
 
@@ -371,18 +363,9 @@ contract AMMGas is Test, OpcodesDebug {
     }
 
     function _createConcentrateDecayXYCSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.8e18;
-        uint256 priceMax = 1.25e18;
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            BALANCE_A,
-            BALANCE_B,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
+        uint256 sqrtPmin = Math.sqrt(0.8e36);
+        uint256 sqrtPmax = Math.sqrt(1.25e36);
+        (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 3600;
 
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -390,16 +373,11 @@ contract AMMGas is Test, OpcodesDebug {
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([BALANCE_A, BALANCE_B])
+                    dynamic([balA, balB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            ),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -437,18 +415,9 @@ contract AMMGas is Test, OpcodesDebug {
     }
 
     function _createFullAMMOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.8e18;
-        uint256 priceMax = 1.25e18;
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            BALANCE_A,
-            BALANCE_B,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
+        uint256 sqrtPmin = Math.sqrt(0.8e36);
+        uint256 sqrtPmax = Math.sqrt(1.25e36);
+        (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 3600;
         uint32 feeBps = 30; // 0.3%
 
@@ -457,16 +426,11 @@ contract AMMGas is Test, OpcodesDebug {
             program.build(_dynamicBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([BALANCE_A, BALANCE_B])
+                    dynamic([balA, balB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            ),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBps)),

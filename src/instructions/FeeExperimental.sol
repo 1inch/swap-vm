@@ -9,8 +9,6 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
-import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
-
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
@@ -100,6 +98,10 @@ contract FeeExperimental is Fee {
         }
     }
 
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
+    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
+    ///   break numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _protocolFeeAmountOutXD(Context memory ctx, bytes calldata args) internal {
@@ -111,6 +113,10 @@ contract FeeExperimental is Fee {
         }
     }
 
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
+    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
+    ///   consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _aquaProtocolFeeAmountOutXD(Context memory ctx, bytes calldata args) internal {

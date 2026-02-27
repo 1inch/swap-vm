@@ -14,6 +14,10 @@ library LimitSwapArgsBuilder {
 
     error LimitSwapArgsBuilderMissingMakerDirectionLt();
 
+    /// @notice Build instruction arguments for LimitSwap
+    /// @param tokenIn Input token address
+    /// @param tokenOut Output token address
+    /// @return Packed bytes encoding swap direction (1 byte boolean: tokenIn < tokenOut)
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
         return abi.encodePacked(tokenIn < tokenOut);
     }

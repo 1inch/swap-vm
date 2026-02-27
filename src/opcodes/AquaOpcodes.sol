@@ -11,7 +11,6 @@ import { Context } from "../libs/VM.sol";
 import { Controls } from "../instructions/Controls.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
-import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperimental.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
@@ -22,7 +21,6 @@ contract AquaOpcodes is
     Controls,
     XYCSwap,
     XYCConcentrate,
-    XYCConcentrateExperimental,
     Decay,
     Fee,
     FeeExperimental,
@@ -34,7 +32,7 @@ contract AquaOpcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[37] memory instructions = [
+        function(Context memory, bytes calldata) internal[34] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -58,10 +56,7 @@ contract AquaOpcodes is
             // XYCSwap - basic swap (most common swap type)
             XYCSwap._xycSwapXD,
             // XYCConcentrate - liquidity concentration (common AMM feature)
-            XYCConcentrate._xycConcentrateGrowLiquidityXD,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
-            XYCConcentrateExperimental._xycConcentrateGrowPriceRangeXD,
-            XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,
             // Decay - Decay AMM (specific AMM)
             Decay._decayXD,
             // NOTE: Add new instructions here to maintain backward compatibility

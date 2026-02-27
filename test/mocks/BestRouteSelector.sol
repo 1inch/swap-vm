@@ -103,7 +103,8 @@ contract BestRouteSelector is OpcodesDebug {
                     balanceIn: swap.balanceIn,
                     balanceOut: swap.balanceOut,
                     amountIn: swap.amountIn,
-                    amountOut: amountOut
+                    amountOut: amountOut,
+                    amountNetPulled: swap.amountNetPulled
                 });
             }
         }

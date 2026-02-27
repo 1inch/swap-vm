@@ -5,7 +5,6 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Power } from "../libs/Power.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
@@ -86,7 +85,6 @@ library TWAPSwapArgsBuilder {
 contract TWAPSwap is LimitSwap {
     using Math for uint256;
     using Power for uint256;
-    using SafeCast for uint256;
     using ContextLib for Context;
 
     error TWAPSwapMinTradeAmountNotReached(uint256 amountIn, uint256 minAmount);
@@ -102,6 +100,10 @@ contract TWAPSwap is LimitSwap {
 
     constructor() {} // 0.01% decay per second for Dutch auction (price gets worse for maker) - price discovery
 
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction reads last swap data
+    ///   but does NOT update it. Quote may succeed while swap reverts if TWAP state changed between calls
+    ///   (e.g., another taker filled the order). Makers MUST NOT use backward jumps to this instruction as
+    ///   it breaks numerical consistency between quote() and swap().
     /// @param argsData.TwapArgs | 192 bytes
     function _twap(Context memory ctx, bytes calldata argsData) internal {
         TWAPSwapArgsBuilder.TwapArgs calldata args = TWAPSwapArgsBuilder.parse(argsData);

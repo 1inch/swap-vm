@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
 import { Vm } from "forge-std/Vm.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
@@ -17,7 +18,6 @@ import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
-import { XYCConcentrateExperimental } from "../../src/instructions/XYCConcentrateExperimental.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeExperimental, FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -84,33 +84,22 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
 
         if(setup.swapType == SwapType.CONCENTRATE_GROW_LIQUIDITY ||
             setup.swapType == SwapType.CONCENTRATE_GROW_PRICE_RANGE) {
-            (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-                setup.balanceA,
-                setup.balanceB,
-                setup.balanceB * TestConstants.ONE / setup.balanceA,
-                setup.priceMin,
-                setup.priceMax
-            );
+            // In the new API, use sqrt price bounds directly
+            // priceMin/priceMax are in 1e18 format; sqrtP = sqrt(price * 1e18)
+            uint256 sqrtPmin = Math.sqrt(setup.priceMin * 1e18);
+            uint256 sqrtPmax = Math.sqrt(setup.priceMax * 1e18);
             concentrateProgram = p.build(
-                setup.swapType == SwapType.CONCENTRATE_GROW_LIQUIDITY ?
-                    XYCConcentrate._xycConcentrateGrowLiquidity2D :
-                    XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )
+                XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
             );
         }
 
         return bytes.concat(
+            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
+            concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
             setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
-            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             setup.progressiveFeeBps > 0 ? p.build(FeeExperimental._progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)) : bytes(""),
-            concentrateProgram,
             p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );

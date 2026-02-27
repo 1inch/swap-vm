@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 import { PeggedSwapMath } from "../libs/PeggedSwapMath.sol";
 
@@ -37,6 +36,9 @@ library PeggedSwapArgsBuilder {
         uint256 rateGt;
     }
 
+    /// @notice Build instruction arguments for PeggedSwap
+    /// @param args Configuration for pegged swap curve
+    /// @return Packed bytes for inclusion in program bytecode
     function build(Args memory args) internal pure returns (bytes memory) {
         return abi.encodePacked(
             args.x0,
@@ -83,11 +85,10 @@ library PeggedSwapArgsBuilder {
 /// @notice Optimized for pegged assets (stablecoins, wrapped tokens, etc.)
 /// @notice Calculates swap output directly using analytical solution with square root curve (p=0.5)
 contract PeggedSwap {
-    using Calldata for bytes;
     using ContextLib for Context;
 
     error PeggedSwapRecomputeDetected();
-    error PeggedSwapRequiresBothBalancesNonZero(uint256 balanceIn, uint256 balanceOut);
+    error PeggedSwapBothBalancesZero();
 
     /// @dev Square-root linear swap with direct calculation
     /// @param ctx Swap context
@@ -100,7 +101,7 @@ contract PeggedSwap {
         uint256 x0_raw = ctx.swap.balanceIn;
         uint256 y0_raw = ctx.swap.balanceOut;
 
-        require(x0_raw > 0 && y0_raw > 0, PeggedSwapRequiresBothBalancesNonZero(x0_raw, y0_raw));
+        require(x0_raw | y0_raw != 0, PeggedSwapBothBalancesZero());
 
         // ╔═══════════════════════════════════════════════════════════════════════════╗
         // ║  PEGGED SWAP CURVE FOR PEGGED ASSETS                                      ║
@@ -123,9 +124,12 @@ contract PeggedSwap {
         // ║    - Analytical solution - no iterative solving needed                    ║
         // ║                                                                           ║
         // ║  Parameters guide:                                                        ║
-        // ║    - For stablecoins (USDC/USDT): A ≈ 0.8e+27-1.5e+27                     ║
-        // ║    - For wrapped tokens (WETH/stETH): A ≈ 0.3e+27-0.6e+27                 ║
-        // ║    - For volatile pairs: A ≈ 0.0-0.2e+27                                  ║
+        // ║    - For pegged pairs (USDC/USDT, WETH/stETH, WBTC/cbBTC):               ║
+        // ║      A ≈ 0.8e+27-1.5e+27                                                  ║
+        // ║    - For looser pegs: A ≈ 0.3e+27-0.6e+27                                 ║
+        // ║    - WARNING: This curve has finite reserves (hard price boundary).        ║
+        // ║      NOT suitable for volatile/uncorrelated pairs or drifting-peg          ║
+        // ║      assets (e.g. WETH/wstETH where the ratio changes over time).         ║
         // ╚═══════════════════════════════════════════════════════════════════════════╝
 
         // Get rate multipliers based on token addresses

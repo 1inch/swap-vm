@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "ConcentrateGrowLiquidity_XYCSwap_quote_exactIn": "46003",
   "ConcentrateGrowLiquidity_XYCSwap_quote_exactOut": "46708",
   "ConcentrateGrowLiquidity_XYCSwap_swap_exactIn": "171421",
@@ -21,4 +22,28 @@
   "XYCSwap_quote_exactOut": "39545",
   "XYCSwap_swap_exactIn": "140103",
   "XYCSwap_swap_exactOut": "140894"
+=======
+  "ConcentrateGrowLiquidity_XYCSwap_quote_exactIn": "48905",
+  "ConcentrateGrowLiquidity_XYCSwap_quote_exactOut": "49607",
+  "ConcentrateGrowLiquidity_XYCSwap_swap_exactIn": "150275",
+  "ConcentrateGrowLiquidity_XYCSwap_swap_exactOut": "150979",
+  "ConcentrateGrowPriceRange_XYCSwap_quote_exactIn": "48905",
+  "ConcentrateGrowPriceRange_XYCSwap_swap_exactIn": "150275",
+  "Concentrate_Decay_XYCSwap_quote_exactIn": "58329",
+  "Concentrate_Decay_XYCSwap_swap_exactIn": "206980",
+  "Decay_XYCSwap_quote_exactIn": "47920",
+  "Decay_XYCSwap_quote_exactOut": "48621",
+  "Decay_XYCSwap_swap_exactIn": "196571",
+  "Decay_XYCSwap_swap_exactOut": "197274",
+  "FullAMM_quote_exactIn": "61693",
+  "FullAMM_swap_exactIn": "210344",
+  "XYCSwap_FlatFeeIn_quote_exactIn": "41856",
+  "XYCSwap_FlatFeeIn_swap_exactIn": "143226",
+  "XYCSwap_FlatFeeOut_quote_exactIn": "41845",
+  "XYCSwap_FlatFeeOut_swap_exactIn": "143215",
+  "XYCSwap_quote_exactIn": "38496",
+  "XYCSwap_quote_exactOut": "39284",
+  "XYCSwap_swap_exactIn": "139866",
+  "XYCSwap_swap_exactOut": "140656"
+>>>>>>> main
 }

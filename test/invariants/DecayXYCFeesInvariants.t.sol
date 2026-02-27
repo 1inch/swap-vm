@@ -112,10 +112,10 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_flatFeeAmountInXD,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
+            program.build(_flatFeeAmountInXD,
+                FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_xycSwapXD)
         );
 
@@ -158,10 +158,10 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_flatFeeAmountOutXD,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
+            program.build(_flatFeeAmountOutXD,
+                FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_xycSwapXD)
         );
 
@@ -205,10 +205,10 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_progressiveFeeInXD,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
+            program.build(_progressiveFeeInXD,
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycSwapXD)
         );
 
@@ -245,10 +245,10 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_progressiveFeeOutXD,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
+            program.build(_progressiveFeeOutXD,
+                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(_xycSwapXD)
         );
 
@@ -400,12 +400,12 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
+            program.build(_decayXD,
+                DecayArgsBuilder.build(decayPeriod)),
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(_progressiveFeeOutXD,
                 FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
-            program.build(_decayXD,
-                DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
         );
 

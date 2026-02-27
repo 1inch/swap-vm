@@ -68,7 +68,6 @@ contract Decay {
     using ContextLib for Context;
     using DecayingOffsetLib for DecayingOffset;
 
-    error DecayApplySwapAmountsRequiresAmountsToBeComputed(uint256 amountIn, uint256 amountOut);
     error DecayShouldBeCalledBeforeSwapAmountsComputation(uint256 amountIn, uint256 amountOut);
 
     /// @dev Offsets for balances in both directions: _offsets[orderHash][token][swapDirection]
@@ -77,6 +76,12 @@ contract Decay {
         mapping(address token =>
             mapping(bool buyOrSell => DecayingOffset))) internal _offsets;
 
+    /// @notice Applies virtual balance adjustment based on time since last trade (Mooniswap-style MEV protection)
+    /// @dev Gradually restores reserves to actual values over decay period
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction reads last update time
+    ///   but does NOT update it. Quote may succeed while swap reverts if decay state changed between calls.
+    ///   Makers MUST NOT use backward jumps to this instruction as it breaks numerical consistency between
+    ///   quote() and swap().
     /// @param args.period | 2 bytes (uint16)
     function _decayXD(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, DecayShouldBeCalledBeforeSwapAmountsComputation(ctx.swap.amountIn, ctx.swap.amountOut));
