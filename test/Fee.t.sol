@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
@@ -212,7 +213,7 @@ contract FeeTest is Test, OpcodesDebug {
 
         // Verify fee calculation correctness
         uint256 baseInput = (amountOut * setup.balanceA + (setup.balanceB - amountOut - 1)) / (setup.balanceB - amountOut);
-        uint256 expectedInputWithFee = baseInput * BPS / (BPS - setup.feeInBps);
+        uint256 expectedInputWithFee = Math.ceilDiv(baseInput * BPS, BPS - setup.feeInBps);
         assertEq(swappedAmountIn, expectedInputWithFee, "Input should reflect fee-in calculation");
     }
 

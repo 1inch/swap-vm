@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
@@ -92,8 +93,9 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 makerBalanceAAfter, uint256 makerBalanceBAfter) = getAquaBalances(strategyHash);
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
-        uint256 expectedFee = amountIn * setup.feeInBps / BPS;
-        uint256 amountInExpected = setup.balanceA * amountOut / (setup.balanceB - amountOut) + expectedFee;
+        uint256 baseAmountIn = Math.ceilDiv(setup.balanceA * amountOut, setup.balanceB - amountOut);
+        uint256 expectedFee = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), BPS - uint256(setup.feeInBps));
+        uint256 amountInExpected = baseAmountIn + expectedFee;
         assertApproxEqAbs(takerBalanceABefore - takerBalanceAAfter, amountInExpected, 1, "Taker paid correct amountIn");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
         assertEq(makerBalanceBAfter, makerBalanceBBefore - amountOut, "Maker balance B should decrease by amountOut");
@@ -198,10 +200,11 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 makerBalanceAAfter, uint256 makerBalanceBAfter) = getAquaBalances(strategyHash);
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
-        uint256 expectedFeeIn = amountIn * setup.feeInBps / BPS;
         uint256 expectedFeeOut = amountOut * setup.feeOutBps / (BPS - setup.feeOutBps);
         uint256 amountOutGross = amountOut + expectedFeeOut;
-        uint256 amountInExpected = setup.balanceA * amountOutGross / (setup.balanceB - amountOutGross) + expectedFeeIn;
+        uint256 baseAmountIn = Math.ceilDiv(amountOutGross * setup.balanceA, setup.balanceB - amountOutGross);
+        uint256 expectedFeeIn = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), BPS - uint256(setup.feeInBps));
+        uint256 amountInExpected = baseAmountIn + expectedFeeIn;
         assertApproxEqAbs(takerBalanceABefore - takerBalanceAAfter, amountInExpected, 1, "Taker paid correct amountIn");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
         assertEq(makerBalanceBAfter, makerBalanceBBefore - amountOut, "Maker balance B should decrease by amountOut");
