@@ -4,13 +4,10 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 
 library InvalidatorsArgsBuilder {
-    using SafeCast for uint256;
     using Calldata for bytes;
 
     error InvalidatorsMissingBitIndexArg();
@@ -63,6 +60,10 @@ contract Invalidators {
 
     /// @notice Invalidates order using a unique bit index (one-time execution)
     /// @dev Uses a bitmap to efficiently track which orders have been executed
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks the bit
+    ///   but does NOT set it. Quote may succeed while swap reverts if order was already executed between
+    ///   quote and swap calls. Makers MUST NOT use backward jumps to this instruction as it breaks
+    ///   numerical consistency between quote() and swap().
     /// @param args.bitIndex | 4 bytes (uint32)
     function _invalidateBit1D(Context memory ctx, bytes calldata args) internal {
         uint256 bitIndex = InvalidatorsArgsBuilder.parseBitIndex(args);
@@ -76,6 +77,10 @@ contract Invalidators {
 
     /// @notice Tracks input token consumption for partial fill orders
     /// @dev Prevents overfilling by tracking cumulative amountIn per order
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks limits
+    ///   but does NOT update the filled counter. Quote may succeed while swap reverts if order was
+    ///   partially filled between quote and swap calls. Makers MUST NOT use backward jumps to this
+    ///   instruction as it breaks numerical consistency between quote() and swap().
     function _invalidateTokenIn1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountIn computed in case of !isExactIn
         if (ctx.swap.amountIn == 0) {
@@ -93,6 +98,10 @@ contract Invalidators {
 
     /// @notice Tracks output token distribution for partial fill orders
     /// @dev Prevents overfilling by tracking cumulative amountOut per order
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks limits
+    ///   but does NOT update the filled counter. Quote may succeed while swap reverts if order was
+    ///   partially filled between quote and swap calls. Makers MUST NOT use backward jumps to this
+    ///   instruction as it breaks numerical consistency between quote() and swap().
     function _invalidateTokenOut1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountOut computed in case of isExactIn
         if (ctx.swap.amountOut == 0) {

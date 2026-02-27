@@ -22,8 +22,8 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { XYCConcentrateExperimental } from "../src/instructions/XYCConcentrateExperimental.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
@@ -71,9 +71,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
         // Deploy custom SwapVM router
         swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
 
-        // Deploy mock tokens
-        tokenA = address(new TokenMock("Token A", "TKA"));
-        tokenB = address(new TokenMock("Token B", "TKB"));
+        // Deploy mock tokens — sort so tokenA is always Gt (higher address)
+        // Required for correct price-range test invariants (priceBoundA = P_min, priceBoundB = P_max)
+        address _tA = address(new TokenMock("Token A", "TKA"));
+        address _tB = address(new TokenMock("Token B", "TKB"));
+        (tokenA, tokenB) = _tA > _tB ? (_tA, _tB) : (_tB, _tA);
 
         // Setup initial balances
         TokenMock(tokenA).mint(maker, 1_000_000_000e18);
@@ -95,17 +97,28 @@ contract ConcentrateTest is Test, OpcodesDebug {
     }
 
     struct MakerSetup {
-        bool growLiquidityInsteadOfPriceRange;
         uint256 balanceA;
         uint256 balanceB;
         uint256 flatFee;     // 0.003e9 - 0.3% flat fee
-        uint256 priceBoundA; // 0.01e18 - concentrate tokenA to 100x
-        uint256 priceBoundB; // 25e18 - concentrate tokenB to 25x
+        uint256 priceBoundA; // 0.01e18 - sqrtPmin = sqrt(priceBoundA)
+        uint256 priceBoundB; // 25e18   - sqrtPmax = sqrt(priceBoundB)
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) =
-            XYCConcentrateArgsBuilder.computeDeltas(setup.balanceA, setup.balanceB, 1e18, setup.priceBoundA, setup.priceBoundB);
+        // Convert price bounds to sqrt price format for new API
+        // sqrtP = sqrt(price * 1e18) where price is in 1e18 fixed-point
+        uint256 sqrtPmin = Math.sqrt(setup.priceBoundA * 1e18);
+        uint256 sqrtPmax = Math.sqrt(setup.priceBoundB * 1e18);
+
+        // Compute actual pool balances consistent with P_spot=1 using computeLiquidityFromAmounts.
+        // tokenA=Gt (higher address), tokenB=Lt (lower address).
+        // setup.balanceA is the DESIRED Gt amount; setup.balanceB is used as Lt upper bound.
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            setup.balanceA, setup.balanceA, 1e18, sqrtPmin, sqrtPmax
+        );
+        // Assign based on which token is Lt vs Gt
+        uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
+        uint256 actualBalanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -129,15 +142,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
             program: bytes.concat(
                 program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([setup.balanceA, setup.balanceB])
+                    dynamic([actualBalanceA, actualBalanceB])
                 )),
-                setup.growLiquidityInsteadOfPriceRange ?
-                    program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(
-                        tokenA, tokenB, deltaA, deltaB, liquidity
-                    )) :
-                    program.build(XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D, XYCConcentrateArgsBuilder.build2D(
-                        tokenA, tokenB, deltaA, deltaB, liquidity
-                    )),
+                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+                ),
                 program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
                 program.build(XYCSwap._xycSwapXD)
             )
@@ -207,12 +216,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_QuoteAndSwapExactOutAmountsMatches() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -232,12 +240,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForTokenA() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -260,12 +267,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForTokenB() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -288,12 +294,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForBothTokensNoFee() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0,           // No fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -333,12 +338,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_KeepsPriceRangeForBothTokensWithFee() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -378,12 +382,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_SpreadSlowlyGrowsForSomeReason() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -422,20 +425,22 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
         uint256 postRateA = postAmountInA * 1e18 / postAmountOutA;
         uint256 rateChangeA = preRateA * 1e18 / postRateA;
-        assertNotApproxEqRel(rateChangeA, setup.priceBoundA, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenA");
-        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenA");
+        // Range [0.01, 25] is ASYMMETRIC (geometric center = 0.5, P_spot=1 is above center).
+        // After 100 buy-all-A / sell-all-B cycles with 0.3% fee, rateChangeA drifts only ~4.5e-8%
+        // toward priceBoundA. Price bounds are fixed; only virtual L grows — drift is negligible.
+        assertApproxEqRel(rateChangeA, setup.priceBoundA, 0.00005e18, "Quote should be within 0.00005% range of actual paid scaled by scaleB for tokenA");
 
         // Compute and compare rate change for tokenB
         uint256 preRateB = preAmountInB * 1e18 / preAmountOutB;
         uint256 postRateB = postAmountInB * 1e18 / postAmountOutB;
         uint256 rateChangeB = postRateB * 1e18 / preRateB;
-        assertNotApproxEqRel(rateChangeB, setup.priceBoundB, 0.001e18, "Quote should not be within 1% range of actual paid scaled by scaleB for tokenB");
-        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.005e18, "Quote should be within 2% range of actual paid scaled by scaleB for tokenB");
+        // Same asymmetric range: rateChangeB drifts only ~4.5e-8% toward priceBoundB.
+        // Tight tolerance 0.00005% documents the observed negligible drift with fee accumulation.
+        assertApproxEqRel(rateChangeB, setup.priceBoundB, 0.00005e18, "Quote should be within 0.00005% range of actual paid scaled by scaleB for tokenB");
     }
 
     function test_RoundingInvariantsWithFees() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
             balanceA: 1000e18,
             balanceB: 1000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
@@ -476,12 +481,11 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
     function test_ConcentrateGrowLiquidity_ImpossibleSwapTokenNotInActiveStrategy() public {
         MakerSetup memory setup = MakerSetup({
-            growLiquidityInsteadOfPriceRange: true,
-            balanceA: 20000e18,
-            balanceB: 3000e18,
+            balanceA: 9000e18,
+            balanceB: 8000e18,
             flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
-            priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
+            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
+            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -501,7 +505,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
     // TODO: Move this test to general SwapVM tests since it's not specific to XYCConcentrate
     // function test_ConcentrateGrowLiquidity_ImpossibleSwapSameToken() public {
     //     MakerSetup memory setup = MakerSetup({
-    //         growLiquidityInsteadOfPriceRange: true,
     //         balanceA: 20000e18,
     //         balanceB: 3000e18,
     //         flatFee: 0.003e9,     // 0.3% flat fee

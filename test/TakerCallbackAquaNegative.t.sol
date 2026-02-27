@@ -94,7 +94,8 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
             SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB,  // balance unchanged
             _setup.balanceB,  // original balance
-            SWAP_AMOUNT
+            SWAP_AMOUNT,
+            0                 // amountNetPulled (no protocol fee)
         ));
 
         _executeSwap();
@@ -112,7 +113,8 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
             SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB + insufficientAmount,
             _setup.balanceB,
-            SWAP_AMOUNT
+            SWAP_AMOUNT,
+            0               // amountNetPulled (no protocol fee)
         ));
 
         _executeSwap();
@@ -151,7 +153,8 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
             SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB + SWAP_AMOUNT - 1,
             _setup.balanceB,
-            SWAP_AMOUNT
+            SWAP_AMOUNT,
+            0               // amountNetPulled (no protocol fee)
         ));
 
         _executeSwap();

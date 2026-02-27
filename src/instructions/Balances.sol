@@ -78,6 +78,10 @@ contract Balances {
 
     /// @dev Load or init ctx.swap.balanceIn/Out from provided initial balances,
     ///      then execute sub-instruction and apply swap amounts to stored balances
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction reads balances
+    ///   but does NOT update them after nested instructions complete. Quote may succeed while swap reverts
+    ///   if balances were modified between quote and swap calls. Makers MUST NOT use backward jumps to
+    ///   this instruction as it breaks numerical consistency between quote() and swap().
     /// @param args.tokensCount       | 2 bytes
     /// @param args.tokens[]  | 20 bytes * args.tokensCount
     /// @param args.initialBalances[] | 32 bytes * args.tokensCount

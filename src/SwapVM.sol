@@ -11,7 +11,6 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
@@ -21,21 +20,35 @@ import { Context, ContextLib, VM, SwapRegisters, SwapQuery  } from "./libs/VM.so
 import { MakerTraits, MakerTraitsLib } from "./libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 
+/// @title SwapVM
+/// @notice Virtual machine for executing programmable token swap strategies from bytecode
+/// @dev Abstract contract that must be inherited by routers defining instruction sets
 abstract contract SwapVM is EIP712, OnlyWethReceiver {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-    using Calldata for bytes;
     using TransientLockLib for TransientLock;
     using ContextLib for Context;
     using MakerTraitsLib for MakerTraits;
     using TakerTraitsLib for TakerTraits;
 
+    /// @dev Signature verification failed for the order
     error BadSignature(address maker, bytes32 orderHash, bytes signature);
-    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
+    /// @dev Aqua balance insufficient after taker pushed tokens
+    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount, uint256 amountNetPulled);
+    /// @dev Cannot use shouldUnwrapWeth with Aqua orders
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
+    /// @dev Cannot use custom receiver with Aqua orders
     error MakerTraitsCustomReceiverIsIncompatibleWithAqua();
 
+    /// @notice Emitted when a swap is successfully executed
+    /// @param orderHash Unique identifier for the order
+    /// @param maker Address of the liquidity provider
+    /// @param taker Address that executed the swap
+    /// @param tokenIn Input token address
+    /// @param tokenOut Output token address
+    /// @param amountIn Input token amount
+    /// @param amountOut Output token amount
     event Swapped(
         bytes32 orderHash,
         address maker,
@@ -46,6 +59,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
         uint256 amountOut
     );
 
+    /// @notice EIP-712 typehash for Order struct
     bytes32 public constant ORDER_TYPEHASH = keccak256(
         "Order("
             "address maker,"
@@ -54,18 +68,29 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
         ")"
     );
 
+    /// @notice Aqua protocol instance for balance management
     IAqua public immutable AQUA;
 
     mapping(bytes32 orderHash => TransientLock) private _reentrancyGuards;
 
+    /// @notice Initialize SwapVM with Aqua and WETH addresses
+    /// @param aqua Address of the Aqua protocol contract
+    /// @param weth Address of the WETH token
+    /// @param name EIP-712 domain name
+    /// @param version EIP-712 domain version
     constructor(address aqua, address weth, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) {
         AQUA = IAqua(aqua);
     }
 
+    /// @notice Cast contract to ISwapVM interface for view-only operations
+    /// @return Interface instance for static calls
     function asView() external view returns (ISwapVM) {
         return ISwapVM(address(this));
     }
 
+    /// @notice Compute unique hash for an order
+    /// @param order The maker's order structure
+    /// @return Unique identifier for this order/strategy
     function hash(ISwapVM.Order calldata order) public view returns (bytes32) {
         if (order.traits.useAquaInsteadOfSignature()) {
             return keccak256(abi.encode(order));
@@ -111,7 +136,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount
+                amountOut: isExactIn ? 0 : amount,
+                amountNetPulled: 0
             })
         });
 
@@ -156,7 +182,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount
+                amountOut: isExactIn ? 0 : amount,
+                amountNetPulled: 0
             })
         });
 
@@ -207,7 +234,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
                     AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn);
                 } else {
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
-                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
+                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn - ctx.swap.amountNetPulled, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn, ctx.swap.amountNetPulled));
                 }
             } else {
                 _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());

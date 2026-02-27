@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 import { PeggedSwapMath } from "../libs/PeggedSwapMath.sol";
 
@@ -37,6 +36,9 @@ library PeggedSwapArgsBuilder {
         uint256 rateGt;
     }
 
+    /// @notice Build instruction arguments for PeggedSwap
+    /// @param args Configuration for pegged swap curve
+    /// @return Packed bytes for inclusion in program bytecode
     function build(Args memory args) internal pure returns (bytes memory) {
         return abi.encodePacked(
             args.x0,
@@ -83,7 +85,6 @@ library PeggedSwapArgsBuilder {
 /// @notice Optimized for pegged assets (stablecoins, wrapped tokens, etc.)
 /// @notice Calculates swap output directly using analytical solution with square root curve (p=0.5)
 contract PeggedSwap {
-    using Calldata for bytes;
     using ContextLib for Context;
 
     error PeggedSwapRecomputeDetected();

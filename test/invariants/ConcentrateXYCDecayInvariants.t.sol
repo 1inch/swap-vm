@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
@@ -22,7 +23,6 @@ import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
-
 
 /**
  * @title ConcentrateXYCDecayInvariants
@@ -64,6 +64,22 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         tokenB.approve(address(swapVM), type(uint256).max);
     }
 
+    function _concentrateBalances(
+        uint256 available,
+        uint256 sqrtPmin,
+        uint256 sqrtPmax
+    ) internal view returns (uint256 balA, uint256 balB) {
+        (, uint256 actualLt, uint256 actualGt) =
+            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+                available, available, 1e18, sqrtPmin, sqrtPmax
+            );
+        (balA, balB) = address(tokenA) < address(tokenB)
+            ? (actualLt, actualGt)
+            : (actualGt, actualLt);
+    }
+
+
+
     /**
      * @notice Implementation of _executeSwap for real swap execution
      */
@@ -89,7 +105,6 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // Verify the swap consumed the expected input amount
 
-
         return (actualIn, actualOut);
     }
 
@@ -97,21 +112,10 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
      * Test _xycConcentrateGrowLiquidity2D + Decay invariants
      */
     function test_ConcentrateGrowLiquidity2D_Decay() public {
-        uint256 balanceA = 1000e18;
-        uint256 balanceB = 1000e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.8e18;
-        uint256 priceMax = 1.25e18;
+        uint256 sqrtPmin = Math.sqrt(0.8e36);
+        uint256 sqrtPmax = Math.sqrt(1.25e36);
+        (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1000e18, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 300; // 5 minutes
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
@@ -120,181 +124,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
-            program.build(_decayXD,
-                DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        InvariantConfig memory config = _getDefaultConfig();
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test _xycConcentrateGrowPriceRange2D + Decay invariants
-     */
-    function test_ConcentrateGrowPriceRange2D_Decay() public {
-        uint256 balanceA = 1500e18;
-        uint256 balanceB = 1500e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.7e18;
-        uint256 priceMax = 1.4e18;
-        uint16 decayPeriod = 600; // 10 minutes
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
-            program.build(_xycConcentrateGrowPriceRange2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
-            program.build(_decayXD,
-                DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        InvariantConfig memory config = _getDefaultConfig();
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test _xycConcentrateGrowLiquidityXD + Decay invariants
-     */
-    function test_ConcentrateGrowLiquidityXD_Decay() public {
-        uint256 balanceA = 2000e18;
-        uint256 balanceB = 2000e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.5e18;
-        uint256 priceMax = 2e18;
-        uint16 decayPeriod = 900; // 15 minutes
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
-        // Create arrays for XD version
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = deltaA;
-        deltas[1] = deltaB;
-
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
-            program.build(_xycConcentrateGrowLiquidityXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
-            program.build(_decayXD,
-                DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        InvariantConfig memory config = _getDefaultConfig();
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test _xycConcentrateGrowPriceRangeXD + Decay invariants
-     */
-    function test_ConcentrateGrowPriceRangeXD_Decay() public {
-        uint256 balanceA = 2500e18;
-        uint256 balanceB = 2500e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.6e18;
-        uint256 priceMax = 1.7e18;
-        uint16 decayPeriod = 1200; // 20 minutes
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
-        // Create arrays for XD version
-        address[] memory tokens = new address[](2);
-        tokens[0] = address(tokenA);
-        tokens[1] = address(tokenB);
-
-        uint256[] memory deltas = new uint256[](2);
-        deltas[0] = deltaA;
-        deltas[1] = deltaB;
-
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
-            program.build(_xycConcentrateGrowPriceRangeXD,
-                XYCConcentrateArgsBuilder.buildXD(tokens, deltas, liquidity)),
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)
@@ -334,20 +164,9 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
      * Helper to test specific decay period
      */
     function _testDecayPeriod(uint16 decayPeriod) private {
-        uint256 balanceA = 1500e18;
-        uint256 balanceB = 1500e18;
-        uint256 currentPrice = 1e18;
-        uint256 priceMin = 0.85e18;
-        uint256 priceMax = 1.18e18;
-
-        (uint256 deltaA, uint256 deltaB, uint256 liquidity) = XYCConcentrateArgsBuilder.computeDeltas(
-            balanceA,
-            balanceB,
-            currentPrice,
-            priceMin,
-            priceMax
-        );
-
+        uint256 sqrtPmin = Math.sqrt(0.8e36);
+        uint256 sqrtPmax = Math.sqrt(1.25e36);
+        (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1500e18, sqrtPmin, sqrtPmax);
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
@@ -356,13 +175,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(
-                    address(tokenA),
-                    address(tokenB),
-                    deltaA,
-                    deltaB,
-                    liquidity
-                )),
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_xycSwapXD)

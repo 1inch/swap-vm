@@ -13,7 +13,6 @@ import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
-import { XYCConcentrateExperimental } from "../instructions/XYCConcentrateExperimental.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
@@ -31,7 +30,6 @@ contract Opcodes is
     Invalidators,
     XYCSwap,
     XYCConcentrate,
-    XYCConcentrateExperimental,
     Decay,
     LimitSwap,
     MinRate,
@@ -48,7 +46,7 @@ contract Opcodes is
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[50] memory instructions = [
+        function(Context memory, bytes calldata) internal[47] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -79,10 +77,7 @@ contract Opcodes is
             // XYCSwap - basic swap (most common swap type)
             XYCSwap._xycSwapXD,
             // XYCConcentrate - liquidity concentration (common AMM feature)
-            XYCConcentrate._xycConcentrateGrowLiquidityXD,
             XYCConcentrate._xycConcentrateGrowLiquidity2D,
-            XYCConcentrateExperimental._xycConcentrateGrowPriceRangeXD,
-            XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D,
             // Decay - Decay AMM (specific AMM)
             Decay._decayXD,
             // LimitSwap - limit orders (specific trading type)

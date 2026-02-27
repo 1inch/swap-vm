@@ -57,23 +57,26 @@ contract Controls {
     error ControlsMissingDeadlineArg();
 
     error DeadlineReached(address taker, uint256 deadline);
-    error TakerTokenBalanceIsZero(address maker, address token);
-    error TakerTokenBalanceIsLessThatRequired(address maker, address token, uint256 balance, uint256 minAmount);
-    error TakerTokenBalanceSupplyShareIsLessThatRequired(address maker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
+    error TakerTokenBalanceIsZero(address taker, address token);
+    error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
+    error TakerTokenBalanceSupplyShareIsLessThanRequired(address taker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
 
     /// @dev This instruction does nothing and can be used for uniqueness order hash value.
     function _salt(Context memory /* ctx */, bytes calldata /* args */) internal pure { }
 
     /// @dev Unconditional jump to the specified program counter
-    /// @param args.nextPC | 2 bytes
+    /// @dev LIMITATION: Jump targets are limited to uint16 (0-65,535) due to 2-byte encoding.
+    ///      For jumps to positions >= 65,536, use Extruction with custom control flow logic.
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jump(Context memory ctx, bytes calldata args) internal pure {
         uint256 nextPC = uint16(bytes2(args.slice(0, 2, JumpMissingNextPCArg.selector)));
         ctx.setNextPC(nextPC);
     }
 
     /// @dev Jumps if tokenIn is the specified token
+    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
     /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         if (token == ctx.query.tokenIn) {
@@ -83,8 +86,9 @@ contract Controls {
     }
 
     /// @dev Jumps if tokenOut is the specified token
+    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
     /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes
+    /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         if (token == ctx.query.tokenOut) {
@@ -115,7 +119,7 @@ contract Controls {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 minAmount = uint256(bytes32(args.slice(20, 52, ControlsMissingMinAmountArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance >= minAmount, TakerTokenBalanceIsLessThatRequired(ctx.query.taker, token, balance, minAmount));
+        require(balance >= minAmount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, minAmount));
     }
 
     /// @dev Checks if the taker holds at least a certain share of the total token supply
@@ -127,6 +131,6 @@ contract Controls {
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
         // balance * 1e18 / totalSupply >= minShareE18
-        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThatRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
+        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
     }
 }

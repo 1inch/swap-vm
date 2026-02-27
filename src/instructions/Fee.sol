@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
@@ -74,6 +73,15 @@ contract Fee {
         _feeAmountIn(ctx, feeBps);
     }
 
+    /// @notice Protocol fee on amountIn — transfers fee from maker to recipient via safeTransferFrom.
+    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance and have approved this contract
+    ///   BEFORE the swap is executed. The fee transfer occurs during program execution (inside runLoop),
+    ///   which is before SwapVM completes the taker→maker tokenIn transfer. If the maker lacks tokenIn
+    ///   balance or allowance, the swap will revert.
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
+    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
+    ///   break numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _protocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
@@ -85,11 +93,21 @@ contract Fee {
         }
     }
 
+    /// @notice Protocol fee on amountIn for Aqua — pulls fee from maker's Aqua balance to recipient.
+    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance in Aqua BEFORE the swap
+    ///   is executed. The fee pull occurs during program execution (inside runLoop), which is before
+    ///   SwapVM completes the taker→maker tokenIn transfer. If the maker's Aqua tokenIn balance is
+    ///   insufficient, the swap will revert.
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
+    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
+    ///   consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+        ctx.swap.amountNetPulled += feeAmountIn;
 
         if (!ctx.vm.isStaticContext) {
             _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
@@ -97,6 +115,14 @@ contract Fee {
     }
 
     /// @notice Dynamic protocol fee with external fee provider
+    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance and have approved this contract
+    ///   BEFORE the swap is executed. The fee transfer occurs during program execution (inside runLoop),
+    ///   which is before SwapVM completes the taker→maker tokenIn transfer. If the maker lacks tokenIn
+    ///   balance or allowance, the swap will revert.
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
+    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
+    ///   break numerical consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
     ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
@@ -121,7 +147,7 @@ contract Fee {
                 ctx.query.isExactIn)
             ));
 
-            require(success, FeeProtocolProviderFailedCall());
+            require(success && result.length == 64, FeeProtocolProviderFailedCall());
             (feeBps, to) = abi.decode(result, (uint32, address));
             require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
         }
@@ -138,6 +164,14 @@ contract Fee {
     }
 
     /// @notice Dynamic protocol fee with external fee provider (Aqua version)
+    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance in Aqua BEFORE the swap
+    ///   is executed. The fee pull occurs during program execution (inside runLoop), which is before
+    ///   SwapVM completes the taker→maker tokenIn transfer. If the maker's Aqua tokenIn balance is
+    ///   insufficient, the swap will revert.
+    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
+    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
+    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
+    ///   consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
     ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
@@ -162,7 +196,7 @@ contract Fee {
                 ctx.query.isExactIn)
             ));
 
-            require(success, FeeProtocolProviderFailedCall());
+            require(success && result.length == 64, FeeProtocolProviderFailedCall());
             (feeBps, to) = abi.decode(result, (uint32, address));
             require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
         }
@@ -171,6 +205,7 @@ contract Fee {
             require(to != address(0), FeeDynamicProtocolInvalidRecipient());
 
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+            ctx.swap.amountNetPulled += feeAmountIn;
 
             if (!ctx.vm.isStaticContext) {
                 _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);

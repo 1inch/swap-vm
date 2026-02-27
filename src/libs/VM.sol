@@ -44,52 +44,77 @@ struct SwapQuery {
 /// @param balanceOut The current balance of the output token
 /// @param amountIn The amount of input token being swapped
 /// @param amountOut The amount of output token being swapped
+/// @param amountNetPulled The net amount pulled from the maker during the swap, used for fee calculations
 struct SwapRegisters {
     uint256 balanceIn;
     uint256 balanceOut;
     uint256 amountIn;
     uint256 amountOut;
+    uint256 amountNetPulled;
 }
 
 /// @title SwapVM context
-/// @dev This struct is used to represent the state of the VM during a swap operation
-/// @param vm #readonly The state of the VM, including the program counter
-/// @param query #readonly The read-only swap details
-/// @param swap The registers used to compute missing amounts during the swap
+/// @notice Complete execution state for a swap operation
+/// @param vm The VM execution state including program counter and bytecode
+/// @param query Read-only swap information (maker, taker, tokens, etc.)
+/// @param swap Mutable registers for computing swap amounts
 struct Context {
     VM vm;
     SwapQuery query;
-    SwapRegisters swap; // Registers used to compute missing amount (amountOut for isExactIn and amountIn for !isExactIn)
+    SwapRegisters swap;
 }
 
+/// @title ContextLib
+/// @notice Library for managing VM execution context and program execution
 library ContextLib {
     using Calldata for bytes;
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
-    error TryChopTakerArgsExcessiveLength();
+    /// @dev Program counter exceeds program length
     error RunLoopExcessiveCall(uint256 pc, uint256 programLength);
-    error RunLoopSwapAmountsComputationMissing(uint256 amountIn, uint256 amountOut);
 
+    /// @notice Get the program bytecode from context
+    /// @param ctx Execution context
+    /// @return Program bytecode as calldata slice
     function program(Context memory ctx) internal pure returns (bytes calldata) {
         return ctx.vm.programPtr.toBytes();
     }
 
+    /// @notice Get remaining taker arguments from context
+    /// @param ctx Execution context
+    /// @return Taker arguments as calldata slice
     function takerArgs(Context memory ctx) internal pure returns (bytes calldata) {
         return ctx.vm.takerArgsPtr.toBytes();
     }
 
+    /// @notice Set the program counter to a specific position
+    /// @param ctx Execution context
+    /// @param pc New program counter value
     function setNextPC(Context memory ctx, uint256 pc) internal pure {
         ctx.vm.nextPC = pc;
     }
 
+    /// @notice Consume and return taker arguments from the front
+    /// @param ctx Execution context
+    /// @param length Number of bytes to consume
+    /// @return Consumed taker arguments (up to length bytes)
     function tryChopTakerArgs(Context memory ctx, uint256 length) internal pure returns (bytes calldata) {
         bytes calldata data = ctx.vm.takerArgsPtr.toBytes();
         length = Math.min(length, data.length);
-        ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length, TryChopTakerArgsExcessiveLength.selector));
+        ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length));
         return data.slice(0, length);
     }
 
+    /// @notice Execute program instructions sequentially
+    /// @dev Iterates through bytecode, executing each instruction until program end
+    /// @dev LIMITATION: Program size is effectively limited to 65,535 bytes due to Controls
+    ///      jump instructions using uint16 addressing. Programs exceeding this size can execute,
+    ///      but jump instructions cannot address positions >= 65,536. For custom control flow in
+    ///      larger programs, use Extruction._extruction which supports arbitrary uint256 nextPC.
+    /// @param ctx Execution context containing program and registers
+    /// @return swapAmountIn Final computed input amount
+    /// @return swapAmountOut Final computed output amount
     function runLoop(Context memory ctx) internal returns (uint256 swapAmountIn, uint256 swapAmountOut) {
         bytes calldata programBytes = ctx.program();
         require(ctx.vm.nextPC < programBytes.length, RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));

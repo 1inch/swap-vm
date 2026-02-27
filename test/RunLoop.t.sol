@@ -19,6 +19,7 @@ import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
@@ -176,7 +177,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             program.build(_decayXD, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(address(tokenA), address(tokenB), 50e18, 50e18, 100e18)), // Level 3: XYCConcentrate → runLoop
+                XYCConcentrateArgsBuilder.build2D(Math.sqrt(0.5e36), Math.sqrt(2.0e36))), // Level 3: XYCConcentrate → runLoop
             program.build(_requireMinRate1D,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 4: MinRate → runLoop
             program.build(_xycSwapXD) // Level 5: XYCSwap (terminal)

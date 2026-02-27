@@ -9,11 +9,10 @@ import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 
 contract Debug {
     using CalldataPtrLib for CalldataPtr;
-    using ContextLib for Context;
 
     function _injectDebugOpcodes(function(Context memory, bytes calldata) internal[] memory opcodes) internal pure returns (function(Context memory, bytes calldata) internal[] memory) {
         opcodes[0] = Debug._printSwapRegisters;
