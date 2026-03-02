@@ -138,13 +138,20 @@ process-swap-vm-router-name:
 process-swap-vm-router-version:
 		@$(MAKE) OPS_GEN_VAL='$(OPS_SWAP_VM_ROUTER_VERSION)' OPS_GEN_KEY='swapVmRouterVersion' upsert-constant
 
+process-weth-address:
+    @if [ -n "$$OPS_WETH_ADDRESS" ]; then $(MAKE) OPS_GEN_VAL='"$(OPS_WETH_ADDRESS)"' OPS_GEN_KEY='weth' upsert-constant; fi
+
 upsert-constant:
 		@{ \
 		$(MAKE) ID=OPS_GEN_VAL validate || exit 1; \
 		$(MAKE) ID=OPS_GEN_KEY validate || exit 1; \
 		$(MAKE) ID=OPS_CHAIN_ID validate || exit 1; \
 		tmpfile=$$(mktemp); \
-		jq '.$(OPS_GEN_KEY)."$(OPS_CHAIN_ID)" = $(OPS_GEN_VAL)' $(FILE_CONSTANTS_JSON) > $$tmpfile && mv $$tmpfile $(FILE_CONSTANTS_JSON); \
+		if echo '$(OPS_GEN_VAL)' | jq -e . >/dev/null 2>&1; then \
+			jq --argjson val '$(OPS_GEN_VAL)' '.$(OPS_GEN_KEY)."$(OPS_CHAIN_ID)" = $$val' $(FILE_CONSTANTS_JSON) > $$tmpfile; \
+		else \
+			jq --arg val '$(OPS_GEN_VAL)' '.$(OPS_GEN_KEY)."$(OPS_CHAIN_ID)" = $$val' $(FILE_CONSTANTS_JSON) > $$tmpfile; \
+		fi && mv $$tmpfile $(FILE_CONSTANTS_JSON); \
 		echo "Updated $(OPS_GEN_KEY)[$(OPS_CHAIN_ID)] = $(OPS_GEN_VAL)"; \
 		}
 
