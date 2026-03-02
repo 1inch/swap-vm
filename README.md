@@ -1073,22 +1073,29 @@ if (useAquaInsteadOfSignature) {
 > - `isFirstTransferFromTaker = true`:
 >   1. `preTransferInHook` (maker)
 >   2. `preTransferInCallback` (taker)
->   3. Input token transfer
+>   3. **Input token settlement** (details below)
 >   4. `postTransferInHook` (maker)
 >   5. `preTransferOutHook` (maker)
 >   6. `preTransferOutCallback` (taker)
->   7. Output token transfer
+>   7. **Output token settlement** (details below)
 >   8. `postTransferOutHook` (maker)
 >
 > - `isFirstTransferFromTaker = false`:
 >   1. `preTransferOutHook` (maker)
 >   2. `preTransferOutCallback` (taker)
->   3. Output token transfer
+>   3. **Output token settlement** (details below)
 >   4. `postTransferOutHook` (maker)
 >   5. `preTransferInHook` (maker)
 >   6. `preTransferInCallback` (taker)
->   7. Input token transfer
+>   7. **Input token settlement** (details below)
 >   8. `postTransferInHook` (maker)
+>
+> **Settlement Mechanisms:**
+> - **Input (non-Aqua):** `IERC20.transferFrom(taker → receiver)`
+> - **Input (Aqua + useTransferFromAndAquaPush):** `IERC20.transferFrom(taker → SwapVM) + AQUA.push()`
+> - **Input (Aqua without useTransferFromAndAquaPush):** Balance validation only (taker must push tokens before `swap()`)
+> - **Output (non-Aqua):** `IERC20.transferFrom(maker → to)`
+> - **Output (Aqua):** `AQUA.pull(maker → to)`
 >
 > **Maker Responsibility:** When implementing hooks, you must account for both possible execution orders. Do not assume a fixed sequence (e.g., assuming `preTransferInHook` always executes before `preTransferOutHook`). Note that taker callbacks are executed between your hooks - this is controlled by the taker and outside your control.
 >
