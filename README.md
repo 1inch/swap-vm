@@ -1618,11 +1618,7 @@ This instruction verifies the taker owns a minimum percentage of total token sup
 
 ### PeggedSwap Known Limitations
 
-#### Dust Amount Behavior (<100 wei)
-
-For extremely small trades (≤100 wei), integer rounding can cause unexpected behavior across all swap instructions:
-
-##### Observed Effects
+#### Observed Effects
 
 **1. Monotonicity Violations**
 Larger trades may receive better rates due to relative rounding error:
@@ -1630,7 +1626,7 @@ Larger trades may receive better rates due to relative rounding error:
 - **50 wei trade:** 0.3% fee = 0.15 wei → rounds UP to 1 wei (6x overcharge)
 - **100 wei trade:** 0.3% fee = 0.30 wei → rounds UP to 1 wei (3x overcharge)
 
-As amount increases, relative rounding error decreases, creating non-monotonic pricing.
+As amount increases, relative rounding error decreases, creating monotonic pricing.
 
 **2. Zero Outputs**
 Some dust amounts may round down to 0 output, causing transaction reverts.
@@ -1638,7 +1634,7 @@ Some dust amounts may round down to 0 output, causing transaction reverts.
 **3. Quantization Steps**
 Discrete jumps in exchange rates due to integer quantization.
 
-##### Why This Happens
+#### Why This Happens
 
 SwapVM uses **"rounding favors maker"** for security:
 - **Fees round UP** (`Math.ceilDiv`) - maker receives full protection
@@ -1647,7 +1643,7 @@ SwapVM uses **"rounding favors maker"** for security:
 
 For dust amounts, rounding error dominates actual swap calculations.
 
-##### Economic Impact: ZERO ✅
+#### Economic Impact: ZERO ✅
 
 **Gas Cost Dominance:**
 ```
@@ -1662,7 +1658,7 @@ Loss ratio: 500 trillion to 1
 - ✅ **Maker protected** - rounding favors liquidity providers
 - ✅ **No pool drain** - would need billions of transactions
 
-##### Testing Approach
+#### Testing Approach
 
 SwapVM test suite handles dust amounts with appropriate tolerances:
 
@@ -1678,7 +1674,7 @@ roundingToleranceBps = 100;         // 1% tolerance
 
 **Key Insight:** Invariant violations for dust amounts are **mathematical artifacts** without real-world impact. The test suite validates that all invariants hold for economically relevant trade sizes.
 
-#### PeggedSwap Quantization in Large Pools
+### PeggedSwap Quantization in Large Pools
 
 For pools ≥1e+27 tokens, integer quantization can create scenarios where:
 - Exact-out swaps of 1 wei may require 0 wei input (due to rounding)
