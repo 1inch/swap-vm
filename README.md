@@ -1586,11 +1586,43 @@ SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
 
 ## Known Limitations
 
-### Dust Amount Behavior (<100 wei)
+### Token Support Limitations
+
+**Fee-on-Transfer Tokens:**
+SwapVM does not support fee-on-transfer tokens (tokens that deduct fees during transfers). Using such tokens will cause accounting mismatches between expected and actual transferred amounts.
+
+**ERC1155 Tokens:**
+SwapVM does not support ERC1155 multi-token standard. Only ERC20 tokens are supported in the current version.
+
+### allowZeroAmountIn with AMM Strategies
+
+**Not Recommended:** Using `allowZeroAmountIn=true` with AMM strategies (PeggedSwap, XYCSwap, XYCConcentrate) is not recommended. This flag is intended for:
+- Cross-chain bridge integration
+- Limit orders with specific use cases
+
+For AMM pools, `allowZeroAmountIn=true` can enable theoretical (but economically infeasible) dust extraction.
+
+### Control Instruction Limitations
+
+**_onlyTakerTokenBalanceGte / _onlyTakerTokenBalanceNonZero:**
+These instructions verify the taker owns a minimum token balance. **Limitations:**
+- **Not compatible with routers/aggregators** - these contracts don't hold user tokens
+- **Easily bypassed via flash loans** - if the token supports flash lending, attackers can temporarily borrow the required balance
+
+**_onlyTakerTokenSupplyShareGte:**
+This instruction verifies the taker owns a minimum percentage of total token supply. **Limitations:**
+- **Bypassed with ERC4626 vault tokens** - attackers can wrap/unwrap to manipulate their share
+- **Bypassed with flash-mintable tokens** (e.g., DAI) - attackers can temporarily mint tokens to meet the threshold
+
+**Use Case:** These instructions provide basic access control for specific scenarios but should not be relied upon as strong security mechanisms. Consider them convenience features rather than robust protections.
+
+### PeggedSwap Known Limitations
+
+#### Dust Amount Behavior (<100 wei)
 
 For extremely small trades (≤100 wei), integer rounding can cause unexpected behavior across all swap instructions:
 
-#### Observed Effects
+##### Observed Effects
 
 **1. Monotonicity Violations**
 Larger trades may receive better rates due to relative rounding error:
@@ -1606,7 +1638,7 @@ Some dust amounts may round down to 0 output, causing transaction reverts.
 **3. Quantization Steps**
 Discrete jumps in exchange rates due to integer quantization.
 
-#### Why This Happens
+##### Why This Happens
 
 SwapVM uses **"rounding favors maker"** for security:
 - **Fees round UP** (`Math.ceilDiv`) - maker receives full protection
@@ -1615,7 +1647,7 @@ SwapVM uses **"rounding favors maker"** for security:
 
 For dust amounts, rounding error dominates actual swap calculations.
 
-#### Economic Impact: ZERO ✅
+##### Economic Impact: ZERO ✅
 
 **Gas Cost Dominance:**
 ```
@@ -1630,7 +1662,7 @@ Loss ratio: 500 trillion to 1
 - ✅ **Maker protected** - rounding favors liquidity providers
 - ✅ **No pool drain** - would need billions of transactions
 
-#### Testing Approach
+##### Testing Approach
 
 SwapVM test suite handles dust amounts with appropriate tolerances:
 
@@ -1646,7 +1678,7 @@ roundingToleranceBps = 100;         // 1% tolerance
 
 **Key Insight:** Invariant violations for dust amounts are **mathematical artifacts** without real-world impact. The test suite validates that all invariants hold for economically relevant trade sizes.
 
-### PeggedSwap Quantization in Large Pools
+#### PeggedSwap Quantization in Large Pools
 
 For pools ≥1e+27 tokens, integer quantization can create scenarios where:
 - Exact-out swaps of 1 wei may require 0 wei input (due to rounding)
