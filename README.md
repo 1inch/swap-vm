@@ -1594,6 +1594,19 @@ SwapVM does not support fee-on-transfer tokens (tokens that deduct fees during t
 **ERC1155 Tokens:**
 SwapVM does not support ERC1155 multi-token standard. Only ERC20 tokens are supported in the current version.
 
+### Two-Token Strategy Limit
+
+SwapVM currently supports **maximum two tokens per strategy** (2D strategies only). Multi-token (XD) functionality for more than two tokens is not available in this version.
+
+**What This Means:**
+- Each strategy can trade between exactly 2 tokens (token pair)
+- AMM pools (XYCSwap, PeggedSwap, XYCConcentrate) operate on 2-token reserves
+- Limit orders work with 1 token pair (1D single-direction)
+- Cannot create strategies that simultaneously manage >2 different tokens
+
+**Recommendation:**
+We strongly recommend against creating custom instructions with more than 2 tokens. The protocol is designed and tested for <= 2-token strategies only. Using more than 2 tokens may lead to unexpected behavior, security vulnerabilities, and is not supported.
+
 ### allowZeroAmountIn with AMM Strategies
 
 **Not Recommended:** Using `allowZeroAmountIn=true` with AMM strategies (PeggedSwap, XYCSwap, XYCConcentrate) is not recommended. This flag is intended for:
