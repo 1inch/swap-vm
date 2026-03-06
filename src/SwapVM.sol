@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
@@ -23,7 +24,7 @@ import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 /// @title SwapVM
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
-abstract contract SwapVM is EIP712, OnlyWethReceiver {
+abstract contract SwapVM is EIP712, OnlyWethReceiver, Ownable {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
@@ -76,9 +77,10 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
     /// @notice Initialize SwapVM with Aqua and WETH addresses
     /// @param aqua Address of the Aqua protocol contract
     /// @param weth Address of the WETH token
+    /// @param owner Address of the owner of the contract
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) {
+    constructor(address aqua, address weth, string memory name, string memory version, address owner) EIP712(name, version) OnlyWethReceiver(weth) Ownable(owner) {
         AQUA = IAqua(aqua);
     }
 
@@ -288,4 +290,12 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
 
     /// @dev Override this function in router to provide supported instruction list
     function _instructions() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory) { }
+
+    function rescueFunds(IERC20 token, uint256 amount) external onlyOwner {
+        if(token_ == IERC20(address(0))) {
+            payable(owner()).sendValue(amount);
+        } else {
+            token_.safeTransfer(owner(), amount);
+        }
+    }
 }

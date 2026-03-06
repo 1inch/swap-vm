@@ -19,7 +19,7 @@ contract AquaSwapVMRouter is Simulator, SwapVM, AquaOpcodes {
     /// @param weth Address of WETH token for unwrapping support
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, string memory name, string memory version) SwapVM(aqua, weth, name, version) AquaOpcodes(aqua) { }
+    constructor(address aqua, address weth, string memory name, string memory version, address owner) SwapVM(aqua, weth, name, version, owner) AquaOpcodes(aqua) { }
 
     /// @dev Returns instruction set for VM execution
     function _instructions() internal pure override returns (function(Context memory, bytes calldata) internal[] memory result) {

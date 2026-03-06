@@ -11,7 +11,7 @@ import { SwapVM } from "../SwapVM.sol";
 import { LimitOpcodesDebug } from "../opcodes/LimitOpcodesDebug.sol";
 
 contract LimitSwapVMRouterDebug is Simulator, SwapVM, LimitOpcodesDebug {
-    constructor(address aqua, address weth, string memory name, string memory version) SwapVM(aqua, weth, name, version) LimitOpcodesDebug(aqua) { }
+    constructor(address aqua, address weth, string memory name, string memory version, address owner) SwapVM(aqua, weth, name, version, owner) LimitOpcodesDebug(aqua) { }
 
     function _instructions() internal pure override returns (function(Context memory, bytes calldata) internal[] memory) {
         return _opcodes();
