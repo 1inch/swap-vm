@@ -47,7 +47,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     function setUp() public {
         makerPK = 0x1234;
         maker = vm.addr(makerPK);
-        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Ensure tokenLt < tokenGt
         TokenMock tA = new TokenMock("TokenA", "A");
