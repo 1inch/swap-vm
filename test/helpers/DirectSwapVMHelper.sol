@@ -26,7 +26,7 @@ contract DirectSwapVMHelper is OpcodesDebug {
     Vm internal vmInstance;
 
     constructor(address aqua, Vm _vm) OpcodesDebug(aqua) {
-        router = new SwapVMRouter(aqua, address(0), "SwapVM", "1.0.0");
+        router = new SwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
         vmInstance = _vm;
     }
 
