@@ -41,6 +41,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Ownable {
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
     /// @dev Cannot use custom receiver with Aqua orders
     error MakerTraitsCustomReceiverIsIncompatibleWithAqua();
+    /// @dev Native ETH transfer failed during rescue
+    error ETHTransferFailed();
 
     /// @notice Emitted when a swap is successfully executed
     /// @param orderHash Unique identifier for the order
@@ -292,10 +294,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Ownable {
     function _instructions() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory) { }
 
     function rescueFunds(IERC20 token, uint256 amount) external onlyOwner {
-        if(token_ == IERC20(address(0))) {
-            payable(owner()).sendValue(amount);
+        if(token == IERC20(address(0))) {
+            (bool success, ) = payable(owner()).call{ value: amount }("");
+            if (!success) revert ETHTransferFailed();
         } else {
-            token_.safeTransfer(owner(), amount);
+            token.safeTransfer(owner(), amount);
         }
     }
 }
