@@ -9,7 +9,7 @@
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.30-blue)](https://docs.soliditylang.org/en/v0.8.30/)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg)](https://book.getfoundry.sh/)
 
-**A virtual machine for programmable token swaps.** Execute complex trading strategies from bytecode programs without deploying contracts.
+**A universal and composable EVM execution engine designed for swap operations**. Execute complex trading strategies using deterministic bytecode programs, consisting from instructions, implementing various logic related to token swaps.
 
 ---
 
@@ -23,7 +23,6 @@
 - [For Developers](#-for-developers)
 - [Security Model](#-security-model)
 - [Advanced Topics](#-advanced-topics)
-  - [AMM Instruction Ordering (Canonical)](#amm-instruction-ordering-canonical)
 
 ---
 
@@ -31,18 +30,25 @@
 
 ### What is SwapVM?
 
-SwapVM is a **computation engine** that executes token swap strategies from bytecode programs. Instead of deploying smart contracts, you compose instructions into programs that are signed off-chain and executed on-demand.
+SwapVM is an **EVM execution engine** that executes token swap strategies from bytecode programs. Instead of deploying smart contracts, you compose instructions into programs that are signed off-chain and executed on-demand.
+
+**Why SwapVM:**
+- **No per-strategy deployment** - Ship new swap logic as signed bytecode programs instead of deploying and auditing a new contract for every strategy
+- **Controlled execution model** - Programs run through a bounded instruction set with on-chain validation and deterministic VM execution
+- **Reusable strategy primitives** - Recombine instructions across AMM, limit, and fee logic to build and iterate on strategy sets faster
 
 **Key Features:**
-- **Static Balances** - Fixed exchange rates for single-direction trades (limit orders, auctions, TWAP, DCA, RFQ)
-- **Dynamic Balances** - Persistent, isolated AMM-style orders (each maker's liquidity is separate)
-- **Composable Instructions** - Mix and match building blocks for complex strategies (combining pricing, fees, MEV protection)
+- **Composable instructions** - Mix and match building blocks for complex strategies (combining pricing, fees, and MEV protection)
+- **Constant product, pegged-asset swap, and concentrated-liquidity AMM instructions** - Compose AMMs with modern swap primitives
+- **Configurable fee instructions** - Implement different fee models (flat, progressive, and in different tokens)
+- **Limit order instructions** - Implement limit-order functionality
+
 
 ### Who is this for?
 
-- **🌾 Makers** - Provide liquidity through limit orders, AMM-style orders, or complex strategies
+- **🌾 Makers** - Provide liquidity through limit orders, AMM-style orders, or complex strategy sets
 - **🏃 Takers** - Execute swaps to arbitrage or fulfill trades
-- **🛠 Developers** - Build custom instructions and integrate SwapVM
+- **🛠 Developers** - Build custom instructions and SwapVM programs, and analyze and use strategy sets
 
 ---
 
@@ -70,10 +76,11 @@ SwapVM is deployed across multiple chains with a unified address for seamless cr
 
 ## How It Works
 
-### The 4-Register Model
+### The "CPU-like" Model
 
-SwapVM uses **4 registers** to compute token swaps:
+SwapVM uses a "CPU-like" model with data registers and a program counter that controls which instruction executes next. Registers store data between instructions and deterministically transform the swap process from one state to another. SwapVM initializes these registers at the start of execution, runs instructions step by step, and then performs final settlement for Maker and Taker balances.
 
+The main registers of SwapVM:
 ```
 ┌────────────────────────────────────────────────────────────┐
 │                    SwapRegisters                           │
@@ -84,171 +91,124 @@ SwapVM uses **4 registers** to compute token swaps:
 │  amountOut:  Output amount (taker provides OR VM computes) │
 └────────────────────────────────────────────────────────────┘
 ```
+This set of registers represents the current state of a SwapVM strategy and can model AMM logic, limit-order logic, or any other strategy that operates on Maker and Taker balances.
+
 
 **The Core Principle:**
 1. **Taker specifies ONE amount** (either `amountIn` or `amountOut`)
 2. **VM computes the OTHER amount** using the 4 registers
 3. **Instructions modify registers** to apply fees, adjust rates, etc.
+4. **SwapVM settles the final state** to perform final transfers or balance updates (for setups with 1inch's Aqua)
 
-### Execution Flow
+**Execution Guarantees:**
+- **Atomic execution** - If any instruction fails, the entire swap reverts
+- **Single-input invariant** - Exactly one side (`amountIn` or `amountOut`) is taker-provided, and the other side is derived by the VM
+- **Mode-aware execution** - Instruction behavior can depend on the current VM context (for example, static vs. dynamic balance modes)
 
-The execution flow shows all available instructions and strategies for each balance type:
 
-```
-┌──────────────────────────────────────────────────────────┐
-│      1D STRATEGY (Static Balances, Single Direction)     │
-├──────────────────────────────────────────────────────────┤
-│ BYTECODE COMPOSITION (Off-chain)                         │
-│                                                          │
-│ 1. Balance Setup (Required)                              │
-│    └─ _staticBalancesXD → Fixed exchange rate            │
-│                                                          │
-│ 2. Core Swap Logic (Choose One)                          │
-│    ├─ _limitSwap1D → Partial fills allowed               │
-│    └─ _limitSwapOnlyFull1D → All-or-nothing              │
-│                                                          │
-│ 3. Order Invalidation (Required for Partial Fills)       │
-│    ├─ _invalidateBit1D → One-time order                  │
-│    ├─ _invalidateTokenIn1D → Track input consumed        │
-│    └─ _invalidateTokenOut1D → Track output distributed   │
-│                                                          │
-│ 4. Dynamic Pricing (Optional, Combinable)                │
-│    ├─ _dutchAuctionBalanceIn1D → Decreasing input amount  │
-│    ├─ _dutchAuctionBalanceOut1D → Increasing output amount│
-│    ├─ _oraclePriceAdjuster1D → External price feed       │
-│    └─ _baseFeeAdjuster1D → Gas-responsive pricing        │
-│                                                          │
-│ 5. Fee Mechanisms (Optional, Combinable)                 │
-│    ├─ _flatFeeAmountInXD → Fee from input amount         │
-│    ├─ _flatFeeAmountOutXD → Fee from output amount       │
-│    ├─ _progressiveFeeInXD → Size-based dynamic fee (input)│
-│    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
-│    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20) │
-│    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
-│    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│
-│    └─ _aquaDynamicProtocolFeeAmountInXD → Dynamic Aqua fee│
-│                                                          │
-│ 6. Advanced Strategies (Optional)                        │
-│    ├─ _requireMinRate1D → Enforce minimum exchange rate  │
-│    ├─ _adjustMinRate1D → Adjust amounts to meet min rate │
-│    ├─ _twap → Time-weighted average price execution      │
-│    └─ _extruction → Extract and execute custom logic     │
-│                                                          │
-│ 7. Control Flow (Optional)                               │
-│    ├─ _jump → Skip instructions                          │
-│    ├─ _jumpIfTokenIn → Conditional on exact input        │
-│    ├─ _jumpIfTokenOut → Conditional on exact output      │
-│    ├─ _deadline → Expiration check                       │
-│    ├─ _onlyTakerTokenBalanceNonZero → Require balance > 0│
-│    ├─ _onlyTakerTokenBalanceGte → Minimum balance check  │
-│    ├─ _onlyTakerTokenSupplyShareGte → Min % of supply   │
-│    └─ _salt → Order uniqueness (hash modifier)           │
-│                                                          │
-│ EXECUTION (On-chain)                                     │
-│ ├─ Verify signature & expiration                         │
-│ ├─ Load static balances into 4 registers                 │
-│ ├─ Execute bytecode instructions sequentially            │
-│ ├─ Update invalidator state (prevent replay/overfill)    │
-│ └─ Transfer tokens (single direction only)               │
-└──────────────────────────────────────────────────────────┘
 
-┌────────────────────────────────────────────────────────────┐
-│  AMM STRATEGIES (2D/XD Bidirectional, Two Balance Options) │
-├────────────────────────────────────────────────────────────┤
-│ BALANCE MANAGEMENT OPTIONS                                 │
-│                                                            │
-│ Option A: Dynamic Balances (SwapVM Internal)               │
-│    ├─ Setup: Sign order with EIP-712                       │
-│    ├─ Balance Instruction: _dynamicBalancesXD              │
-│    └─ Storage: SwapVM contract (self-managed)              │
-│                                                            │
-│ Option B: Aqua Protocol (External)                         │
-│    ├─ Setup: Deposit via Aqua.ship() (on-chain)            │
-│    ├─ Balance Instruction: None (Aqua manages)             │
-│    ├─ Configuration: useAquaInsteadOfSignature = true      │
-│    └─ Storage: Aqua protocol (shared liquidity)            │
-│                                                            │
-├────────────────────────────────────────────────────────────┤
-│ BYTECODE COMPOSITION (Same for Both)                       │
-│                                                            │
-│ 1. Balance Setup                                           │
-│    ├─ Dynamic: _dynamicBalancesXD (required)               │
-│    └─ Aqua: Skip (balances in Aqua)                        │
-│                                                            │
-│ 2. AMM Logic (Choose Primary Strategy)                     │
-│    ├─ _xycSwapXD → Classic x*y=k constant product          │
-│    ├─ _peggedSwapGrowPriceRange2D → Curve for pegged assets│
-│    └─ _xycConcentrateGrowLiquidityXD/2D → CLMM ranges      │
-│                                                            │
-│ 3. Fee Mechanisms (Optional, Combinable)                   │
-│    ├─ _flatFeeAmountInXD → Fee from input amount           │
-│    ├─ _flatFeeAmountOutXD → Fee from output amount         │
-│    ├─ _progressiveFeeInXD → Size-based dynamic fee (input) │
-│    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
-│    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20)   │
-│    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
-│    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│
-│    └─ _aquaDynamicProtocolFeeAmountInXD → Dynamic Aqua fee │
-│                                                            │
-│ 4. MEV Protection (Optional)                               │
-│    └─ _decayXD → Virtual reserves (Mooniswap-style)        │
-│                                                            │
-│ 5. Advanced Features (Optional)                            │
-│    ├─ _twap → Time-weighted average price trading          │
-│    └─ _extruction → Extract and execute custom logic       │
-│                                                            │
-│ 6. Control Flow (Optional)                                 │
-│    ├─ _jump → Skip instructions                            │
-│    ├─ _jumpIfTokenIn → Conditional jump on exact input     │
-│    ├─ _jumpIfTokenOut → Conditional jump on exact output   │
-│    ├─ _deadline → Expiration check                         │
-│    ├─ _onlyTakerTokenBalanceNonZero → Require balance > 0  │
-│    ├─ _onlyTakerTokenBalanceGte → Minimum balance check    │
-│    ├─ _onlyTakerTokenSupplyShareGte → Min % of supply     │
-│    └─ _salt → Order uniqueness (hash modifier)             │
-│                                                            │
-├────────────────────────────────────────────────────────────┤
-│ EXECUTION (On-chain)                                       │
-│                                                            │
-│ Dynamic Balances Flow:                                     │
-│ ├─ Verify EIP-712 signature                                │
-│ ├─ Load maker's isolated reserves from SwapVM              │
-│ ├─ Execute AMM calculations                                │
-│ ├─ Update maker's state in SwapVM storage                  │
-│ └─ Transfer tokens (bidirectional)                         │
-│                                                            │
-│ Aqua Protocol Flow:                                        │
-│ ├─ Verify Aqua balance (no signature)                      │
-│ ├─ Load reserves from Aqua protocol                        │
-│ ├─ Execute AMM calculations (same logic!)                  │
-│ ├─ Aqua updates balance accounting                         │
-│ └─ Transfer tokens via Aqua settlement                     │
-└────────────────────────────────────────────────────────────┘
+### Example execution flows
 
-┌─────────────────────────────────────────────────────────┐
-│           COMMON TAKER FLOW (All Strategies)            │
-├─────────────────────────────────────────────────────────┤
-│ 1. Discovery (Off-chain)                                │
-│    ├─ Find orders via indexer/API                       │
-│    ├─ Filter by tokens, rates, liquidity                │
-│    └─ Simulate profitability                            │
-│                                                         │
-│ 2. Quote (On-chain View)                                │
-│    ├─ Call quote() to preview exact amounts             │
-│    ├─ Check slippage and fees                           │
-│    └─ Verify execution conditions                       │
-│                                                         │
-│ 3. Execution Parameters                                 │
-│    ├─ isExactIn → Specify input or output amount        │
-│    ├─ threshold → Minimum/maximum acceptable amount     │
-│    ├─ to → Recipient address                            │
-│    └─ hooks → Pre/post swap callbacks                   │
-│                                                         │
-│ 4. Settlement                                           │
-│    ├─ Maker → Taker (output token)                      │
-│    └─ Taker → Maker (input token)                       │
-└─────────────────────────────────────────────────────────┘
-```
+The execution flows below list available instructions' flow and typical sequences for different strategy types.
+
+On-chain execution of SwapVM programs generally includes authorization and constraint checks (signature/Aqua mode, expiration, and other restrictions), loading balances into SwapVM registers, sequential bytecode execution, post-execution state updates (for example, invalidation or partial-fill accounting for limit orders), and final settlement through token transfers and/or Aqua balance updates.
+
+> **Note:** There are many possible instruction combinations and orderings, and for some combinations, instruction order is critical to strategy security. Each SwapVM strategy should be thoroughly audited. The sequences below are examples and may need to be adjusted for specific use cases.
+
+#### Limit Orders instructions sequences(one token strategy, static balances, single direction)
+
+- **1. Balance setup (required)**
+  - `_staticBalancesXD` -> Fixed exchange rate
+- **2. Core swap logic (choose one)**
+  - `_limitSwap1D` -> Partial fills allowed
+  - `_limitSwapOnlyFull1D` -> All-or-nothing
+- **3. Order invalidation (required for partial fills)**
+  - `_invalidateBit1D` -> One-time order
+  - `_invalidateTokenIn1D` -> Track input consumed
+  - `_invalidateTokenOut1D` -> Track output distributed
+- **4. Dynamic pricing (optional, combinable)**
+  - `_dutchAuctionBalanceIn1D` -> Decreasing input amount
+  - `_dutchAuctionBalanceOut1D` -> Increasing output amount
+  - `_baseFeeAdjuster1D` -> Gas-responsive pricing
+- **5. Fee mechanisms (optional, combinable)**
+  - `_flatFeeAmountInXD` -> Fee from input amount
+  - `_flatFeeAmountOutXD` -> Fee from output amount
+  - `_progressiveFeeInXD` -> Size-based dynamic fee (input)
+  - `_progressiveFeeOutXD` -> Size-based dynamic fee (output)
+  - `_protocolFeeAmountOutXD` -> Protocol revenue (ERC20)
+  - `_aquaProtocolFeeAmountOutXD` -> Protocol revenue (Aqua)
+  - `_dynamicProtocolFeeAmountInXD` -> Dynamic fee via provider
+  - `_aquaDynamicProtocolFeeAmountInXD` -> Dynamic Aqua fee
+- **6. Advanced strategies (optional)**
+  - `_requireMinRate1D` -> Enforce minimum exchange rate
+  - `_adjustMinRate1D` -> Adjust amounts to meet min rate
+  - `_twap` -> Time-weighted average price execution
+- **7. Control flow (optional)**
+  - `_jump` -> Skip instructions
+  - `_jumpIfTokenIn` -> Conditional on exact input
+  - `_jumpIfTokenOut` -> Conditional on exact output
+  - `_deadline` -> Expiration check
+  - `_onlyTakerTokenBalanceNonZero` -> Require balance > 0
+  - `_onlyTakerTokenBalanceGte` -> Minimum balance check
+  - `_onlyTakerTokenSupplyShareGte` -> Min % of supply
+  - `_salt` -> Order uniqueness (hash modifier)
+
+#### AMM instructions sequences (two tokens strategy, dynamic balances, exact in/exact out, two directions)
+
+- **1. Balance setup (variant-dependent)**
+  - Non-Aqua: include dynamic balance initialization
+  - Aqua: skip balance setup instruction
+- **2. AMM logic (choose primary strategy)**
+  - `_peggedSwapGrowPriceRange2D` -> Curve for pegged assets
+  - `_xycConcentrateGrowLiquidity2D` -> CLMM liquidity
+  - `_xycConcentrateGrowPriceRange2D` -> CLMM price range
+- **3. Fee mechanisms (optional, combinable)**
+  - Flat fee (input-side or output-side)
+  - Progressive fee (size-based)
+  - Protocol fee (including dynamic/provider-based variants)
+  - **Important:** fee instruction position is security-critical; placing fees before or after AMM math changes pricing and settlement behavior
+- **4. Advanced features (optional)**
+  - `_twap` -> Time-weighted average price trading
+- **5. Control flow (optional)**
+  - `_jump` -> Skip instructions
+  - `_jumpIfTokenIn` -> Conditional jump on exact input
+  - `_jumpIfTokenOut` -> Conditional jump on exact output
+  - `_deadline` -> Expiration check
+  - `_onlyTakerTokenBalanceNonZero` -> Require balance > 0
+  - `_onlyTakerTokenBalanceGte` -> Minimum balance check
+  - `_onlyTakerTokenSupplyShareGte` -> Min % of supply
+  - `_salt` -> Order uniqueness (hash modifier)
+
+
+
+
+### Common Taker flow
+
+This part describes how Taker (swapping user, limit order Taker) works with SwapVM strategies.
+
+
+- **1. Discovery (off-chain)**
+  - Find orders(strategies) via indexer/API
+  - Filter by tokens, rates, liquidity
+  - Estimate profitability
+- **2. Quote (on-chain view)**
+  - Call `quote()` to preview exact amounts
+  - Check slippage and fees
+  - Verify execution conditions
+- **3. Execution parameters**
+  - `isExactIn` -> Specify input or output amount
+  - `threshold` + `isStrictThresholdAmount` -> Min/max limit or exact-match amount validation
+  - `to` -> Recipient address override
+  - `deadline` -> Taker-level execution deadline
+  - `shouldUnwrapWeth` -> Receive native ETH instead of WETH (when applicable)
+  - `isFirstTransferFromTaker` -> Select transfer ordering mode
+  - `useTransferFromAndAquaPush` -> Use transferFrom + Aqua push settlement path
+  - `hasPreTransferInCallback` / `hasPreTransferOutCallback` -> Enable taker callbacks
+  - Hook/callback payloads -> Data for pre/post transfer hooks, callbacks, and instruction args
+- **4. Settlement**
+  - Output leg: Maker -> Taker recipient (`to`, or taker by default), with optional WETH unwrapping
+  - Input leg: Taker -> Maker, with transfer order/path controlled by `isFirstTransferFromTaker` and `useTransferFromAndAquaPush`
+
 
 ### Bytecode Format
 
@@ -272,6 +232,7 @@ Programs are sequences of instructions, each encoded as:
 SwapVM offers two primary balance management approaches:
 
 #### Static Balances (Single-Direction Trading)
+
 **Use Case:** Limit orders, Dutch auctions, TWAP, DCA, RFQ, range orders, stop-loss
 - **Fixed Rate:** Exchange rate remains constant
 - **Partial Fills:** Supports partial execution with amount invalidators  
@@ -323,38 +284,10 @@ Splitting swaps must not provide better rates:
 - Larger trades cannot be improved by breaking into smaller ones
 
 ### 3. Quote/Swap Consistency
-
-**Numerical Consistency Guarantee:**
-- `quote()` and `swap()` return identical `(amountIn, amountOut)` **if both succeed**
-- This ensures predictable execution and prevents quote-execution arbitrage
-- Essential for MEV protection and reliable off-chain quoting
-
-**Execution Divergence via `isStaticContext`:**
-
-SwapVM uses `ctx.vm.isStaticContext` to enable gas-free quote previews by conditionally skipping side effects:
-
-| Instruction Category | Quote Mode (`isStaticContext=true`) | Swap Mode (`isStaticContext=false`) |
-|---------------------|-----------------------------------|-----------------------------------|
-| **Protocol Fees** | Computes fee, skips token transfer | Computes fee, executes token transfer |
-| **Invalidators** | Checks limits, skips state update | Checks limits, updates state (prevents replay) |
-| **Dynamic Balances** | Reads balances, skips storage write | Reads balances, updates storage |
-| **Decay/TWAP** | Uses current state, skips time update | Uses current state, updates timestamp |
-
-**Legitimate Divergence Cases:**
-1. ✅ **Quote succeeds, swap reverts** - Missing balance/approval for protocol fee transfer
-2. ✅ **Quote succeeds, swap reverts** - Order already executed (invalidator state changed between calls)
-3. ✅ **Quote succeeds, swap reverts** - Insufficient remaining balance (partial fill exhausted)
-
-These cases preserve **numerical consistency** (amounts match when both succeed) while allowing execution to fail due to external conditions.
-
-**Problematic Patterns (Maker Responsibility):**
-- ❌ **Backward jumps to stateful instructions** - Can break numerical consistency (quote and swap compute different amounts)
-- ❌ **Control flow depending on same-execution state changes** - Violates the invariant
-
-**Best Practices:**
-- **Makers:** Avoid backward jumps to `isStaticContext`-dependent instructions; test strategies with both `quote()` and `swap()`
-- **Takers:** Always use threshold protection in TakerTraits; handle swap revert scenarios even after successful quote
-- **Integrations:** Never rely on quote success as guarantee of swap success; use on-chain `quote()` for accurate amounts
+Quote and swap functions must return identical amounts:
+- `quote()` is a view function that previews swap results
+- `swap()` execution must match the quoted amounts exactly
+- Essential for MEV protection and predictable execution
 
 ### 4. Price Monotonicity
 Larger trades receive equal or worse prices:
@@ -491,138 +424,6 @@ bytes memory program = bytes.concat(
 );
 ```
 
-### Strategy Hash Uniqueness and Token Safety
-
-> **⚠️ CRITICAL SECURITY NOTICE FOR MAKERS**
-> 
-> Strategies must ensure unique orderHash to prevent unintended cross-strategy token access. Always include balance instructions and use `_salt` when needed.
-
-#### Understanding orderHash Generation
-
-For non-Aqua (signature-based) strategies:
-```solidity
-orderHash = _hashTypedDataV4(keccak256(abi.encode(
-    ORDER_TYPEHASH,
-    order.maker,
-    order.traits,
-    keccak256(order.data)  // Contains program bytecode (should include tokens list)
-)));
-```
-For Aqua strategies:
-```solidity
-orderHash = keccak256(abi.encode(order))
-```
-
-#### Required Safety Measures
-
-**1. Always Include Balance Instructions for non-Aqua strategies** (MANDATORY)
-
-Balance instructions (`_staticBalancesXD` or `_dynamicBalancesXD`) encode token addresses directly into your program, tying approved tokens to specific strategies.
-
-```solidity
-// ✅ SAFE - Tokens are encoded in program
-bytes memory program = bytes.concat(
-    p.build(Balances._staticBalancesXD,
-        BalancesArgsBuilder.build(
-            dynamic([USDC, WETH]),      // Tokens locked to this strategy
-            dynamic([1000e6, 0.5e18])
-        )),
-    p.build(LimitSwap._limitSwap1D, ...),
-    p.build(Controls._salt, abi.encodePacked(uint256(1)))  // Unique ID
-);
-
-// ❌ UNSAFE - No token validation!
-bytes memory program = bytes.concat(
-    p.build(LimitSwap._limitSwap1D, ...)  // Taker can choose ANY tokens!
-);
-```
-
-**2. Use `_salt` for Multiple Similar Strategies**
-
-If you create multiple strategies with identical instructions and parameters, add `_salt` with unique values:
-
-```solidity
-// Strategy A
-p.build(Controls._salt, abi.encodePacked(uint256(1)))
-
-// Strategy B (same instructions but different salt)
-p.build(Controls._salt, abi.encodePacked(uint256(2)))
-```
-
-Without `_salt`, identical programs generate the same `orderHash`, causing:
-- Shared storage state (one strategy affects the other)
-- Inability to run multiple identical strategies simultaneously
-- Potential accounting conflicts
-
-**3. Custom Accounting (`_extruction`) - Extra Validation Required**
-
-If using `_extruction` for custom token accounting:
-- YOU MUST verify no hash collisions with your existing strategies
-- Without balance validation, the strategy can access ALL approved tokens
-- Hash collision = potential fund loss through unintended token access
-
-```solidity
-// Custom accounting example - verify uniqueness!
-bytes memory program = bytes.concat(
-    p.build(Extruction._extruction, 
-        ExtructionArgsBuilder.build(customAccountingContract, args)),
-    p.build(Controls._salt, abi.encodePacked(keccak256("unique-id-v1")))
-);
-```
-
-#### Why This Matters
-
-**Problem: Strategies Depend on Each Other Through Approvals**
-
-```
-Scenario: Maker creates 3 strategies with common token approvals
-
-Strategy A: ✓ USDC/WETH with proper _staticBalancesXD
-Strategy B: ✓ DAI/WETH with proper _staticBalancesXD  
-Strategy C: ✗ Loose strategy without balance instruction
-
-Risk: Strategy C can execute with ANY tokens that have SwapVM approvals
-      (USDC, DAI, WETH, etc.), bypassing intended token restrictions
-
-Attack: Taker executes Strategy C, arbitrarily choosing tokenIn/tokenOut
-        from all approved tokens, potentially draining funds
-```
-
-**Without Proper Hash Uniqueness:**
-
-| Risk | Description | Mitigation |
-|------|-------------|------------|
-| **Cross-Strategy Token Access for Non-Aqua mode** | Loose strategies access all approved tokens | Always include `_staticBalancesXD` or `_dynamicBalancesXD` |
-| **Hash Collision** | Identical programs share storage/state | Use `_salt` with unique values |
-| **Storage Conflicts** | Multiple strategies interfere with each other | Ensure unique `orderHash` for each strategy |
-| **Approval Exploitation** | Taker chooses unexpected token pairs | Encode tokens in program via balance instructions |
-
-#### Best Practices Summary
-
-```solidity
-// ✓ COMPLETE SAFE EXAMPLE
-Program memory p = ProgramBuilder.init(_opcodes());
-bytes memory program = bytes.concat(
-    // 1. Include balance instruction (ties tokens to strategy)
-    p.build(Balances._staticBalancesXD,
-        BalancesArgsBuilder.build(
-            dynamic([USDC, WETH]),
-            dynamic([1000e6, 0.5e18])
-        )),
-    
-    // 2. Your swap logic
-    p.build(LimitSwap._limitSwap1D, 
-        LimitSwapArgsBuilder.build(USDC, WETH)),
-    
-    // 3. Add salt for uniqueness (if you have multiple similar strategies)
-    p.build(Controls._salt, abi.encodePacked(uint256(1)))
-);
-```
-
-**Key Takeaway:** The `orderHash` identifies your strategy and determines storage isolation. Always ensure it's unique and that tokens are explicitly bound to each strategy through balance instructions.
-
----
-
 ### Balance Management Options
 
 #### Option 1: Static Balances (1D Single-Direction Strategies)
@@ -690,7 +491,6 @@ Your orders are protected by:
 - Use `_invalidateBit1D` for one-time orders
 - Validate rates match market conditions
 - Consider MEV protection (`_decayXD`)
-- ⚠️ **WETH Unwrapping:** Only use `shouldUnwrapWeth=true` with canonical WETH. Avoid any tokens with `withdraw()` functions - underlying assets may get stuck in SwapVM
 
 ---
 
@@ -1065,46 +865,6 @@ if (useAquaInsteadOfSignature) {
 | **Custom Logic** | Hooks for validation | Pre/post transfer hooks |
 | **Receiver Control** | Specify token recipient | `receiver` in MakerTraits |
 
-> **⚠️ HOOK EXECUTION ORDER WARNING FOR MAKERS**
->
-> **Taker Controls Transfer Order:** The taker specifies `isFirstTransferFromTaker` flag, which determines whether the taker transfers input tokens first or receives output tokens first. This means the actual execution order of your hooks depends on the taker's choice.
->
-> **Complete Execution Sequence:**
-> - `isFirstTransferFromTaker = true`:
->   1. `preTransferInHook` (maker)
->   2. `preTransferInCallback` (taker)
->   3. **Input token settlement** (details below)
->   4. `postTransferInHook` (maker)
->   5. `preTransferOutHook` (maker)
->   6. `preTransferOutCallback` (taker)
->   7. **Output token settlement** (details below)
->   8. `postTransferOutHook` (maker)
->
-> - `isFirstTransferFromTaker = false`:
->   1. `preTransferOutHook` (maker)
->   2. `preTransferOutCallback` (taker)
->   3. **Output token settlement** (details below)
->   4. `postTransferOutHook` (maker)
->   5. `preTransferInHook` (maker)
->   6. `preTransferInCallback` (taker)
->   7. **Input token settlement** (details below)
->   8. `postTransferInHook` (maker)
->
-> **Settlement Mechanisms:**
-> - **Input (non-Aqua):** `IERC20.transferFrom(taker → receiver)`
-> - **Input (Aqua + useTransferFromAndAquaPush):** `IERC20.transferFrom(taker → SwapVM) + AQUA.push()`
-> - **Input (Aqua without useTransferFromAndAquaPush):** Balance validation only (taker must push tokens before `swap()`)
-> - **Output (non-Aqua):** `IERC20.transferFrom(maker → to)`
-> - **Output (Aqua):** `AQUA.pull(maker → to)`
->
-> **Maker Responsibility:** When implementing hooks, you must account for both possible execution orders. Do not assume a fixed sequence (e.g., assuming `preTransferInHook` always executes before `preTransferOutHook`). Note that taker callbacks are executed between your hooks - this is controlled by the taker and outside your control.
->
-> **Best Practices:**
-> - Design hooks to be order-independent (stateless validation)
-> - If order matters, explicitly check transfer direction within your hook logic
-> - Test your hooks with both `isFirstTransferFromTaker` values
-> - Be aware that taker callbacks execute between your hooks
-
 **Risk Mitigations:**
 ```solidity
 // Limit order exposure
@@ -1268,84 +1028,6 @@ The protocol provides these built-in protections:
 
 ## 🔬 Advanced Topics
 
-### AMM Instruction Ordering (Canonical)
-
-The order in which instructions appear in an AMM program is critical for correct accounting — specifically for protocol fee isolation, liquidity growth, and conservation laws. The canonical orderings below are validated by `AquaAccounting.t.sol` and `SwapVmAccounting.t.sol`.
-
-#### Aqua Protocol (balance managed by Aqua)
-
-```
-aquaProtocolFeeAmountIn → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
-```
-
-```solidity
-// XYC AMM with protocol fee + flat fee + MEV protection
-bytes memory program = bytes.concat(
-    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
-    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
-    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
-    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-    p.build(XYCSwap._xycSwapXD),
-    p.build(Controls._salt, saltArgs)
-);
-
-// Pegged swap variant (replaces concentrate + xycSwap)
-bytes memory program = bytes.concat(
-    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
-    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
-    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
-    p.build(Controls._salt, saltArgs)
-);
-```
-
-#### Dynamic Balances (SwapVM internal, no Aqua)
-
-```
-protocolFeeAmountIn → dynamicBalances → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
-```
-
-```solidity
-// XYC AMM with protocol fee + flat fee + MEV protection
-bytes memory program = bytes.concat(
-    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
-    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
-    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
-    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
-    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-    p.build(XYCSwap._xycSwapXD),
-    p.build(Controls._salt, saltArgs)
-);
-
-// Pegged swap variant
-bytes memory program = bytes.concat(
-    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
-    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
-    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
-    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
-    p.build(Controls._salt, saltArgs)
-);
-```
-
-#### Why This Order Matters
-
-| Position | Instruction | Reason |
-|----------|-------------|--------|
-| 1st | **Protocol Fee** | Extracted from `amountIn` **before** balances are touched — ensures fee is isolated from pool reserves and does not inflate liquidity |
-| 2nd | **Dynamic Balances** (non-Aqua only) | Loads/initializes maker's isolated reserves; wraps all subsequent instructions via `runLoop()` |
-| 3rd | **Decay** | Applies virtual reserve adjustment based on time since last trade — must see real balances |
-| 4th | **Concentrate** | Shifts reserves into concentrated range — must happen before the swap but after decay |
-| 5th | **Flat Fee** | Reduces effective `amountIn` before swap calculation — fee amount stays in the pool, growing liquidity |
-| 6th | **Swap / PeggedSwap** | Core AMM calculation using final adjusted registers |
-| Last | **Salt** | Order uniqueness — pure hash modifier, no effect on computation |
-
-**Key invariant:** `pool_balance + protocol_fee = initial_balance + total_amountIn` (Token A conservation). Placing protocol fee first guarantees it is cleanly separated from pool accounting. Placing flat fee after concentrate ensures the retained fee grows liquidity correctly.
-
-See `test/AquaAccounting.t.sol` and `test/SwapVmAccounting.t.sol` for comprehensive conservation law tests.
-
----
-
 ### Concentrated Liquidity
 
 Provide liquidity within specific price ranges:
@@ -1498,41 +1180,6 @@ bytes memory program = bytes.concat(
 
 **Note:** Debug instructions are no-ops in production routers and should only be used for development and testing.
 
-### Program Size Limitations
-
-SwapVM programs have an effective size limit of **65,535 bytes** (64KB) due to control flow instruction addressing.
-
-**Technical Details:**
-- The VM itself (`ContextLib.runLoop`) uses `uint256` for the program counter and can execute programs of any size
-- Control flow instructions (`_jump`, `_jumpIfTokenIn`, `_jumpIfTokenOut`) use `uint16` (2-byte) encoding for jump targets
-- Jump targets are limited to positions 0-65,535 within the bytecode
-- Programs larger than 65KB can execute, but jump instructions cannot address positions >= 65,536
-
-**Practical Impact:**
-- This limitation is **not restrictive** in practice
-- Typical strategies are 100-1,000 bytes
-- Even complex multi-instruction programs rarely exceed 5KB
-- 65KB ≈ 1,000-30,000 instructions (depending on argument sizes)
-
-**Workarounds for Large Programs:**
-If you need custom control flow beyond byte 65,535:
-```solidity
-// Use Extruction with arbitrary uint256 nextPC
-p.build(Extruction._extruction, 
-    ExtructionArgsBuilder.build(customControlContract, args))
-```
-
-The `Extruction` instruction can set arbitrary `uint256` program counter values, enabling custom control flow logic for edge cases requiring programs larger than 64KB.
-
-**Example Program Sizes:**
-| Strategy Type | Typical Size |
-|--------------|-------------|
-| Simple limit order | ~50 bytes |
-| Dutch auction + fees | ~100 bytes |
-| AMM with MEV protection | ~200 bytes |
-| Complex multi-conditional | ~500 bytes |
-| Maximum practical | ~5,000 bytes |
-
 ### Gas Optimization
 
 **Architecture Benefits:**
@@ -1550,6 +1197,62 @@ The `Extruction` instruction can set arbitrary `uint256` program counter values,
 - Batch multiple swaps
 - Use `quote()` to avoid failed transactions
 - Consider gas costs in profit calculations
+
+### AquaAMM Strategy Builder
+
+The `AquaAMM` contract provides a helper for building AMM programs with Aqua integration:
+
+```solidity
+import { AquaAMM } from "@1inch/swap-vm/contracts/strategies/AquaAMM.sol";
+
+// Build a concentrated liquidity AMM with fees
+ISwapVM.Order memory order = AquaAMM(aquaAMM).buildProgram(
+    maker,           // Your address
+    expiration,      // Order expiration
+    token0,          // First token
+    token1,          // Second token
+    feeBpsIn,        // Trading fee (e.g., 30 for 0.3%)
+    delta0,          // Concentration parameter for token0
+    delta1,          // Concentration parameter for token1
+    decayPeriod,     // MEV protection decay period
+    protocolFeeBps,  // Protocol fee share
+    feeReceiver,     // Protocol fee recipient
+    salt             // Order uniqueness salt
+);
+```
+
+**Features:**
+- Automatically constructs bytecode with proper instruction ordering
+- Integrates concentrated liquidity, fees, and MEV protection
+- Uses Aqua protocol for balance management (no signatures needed)
+- Includes debug output in development mode
+
+**Example: 0.3% Fee Concentrated AMM:**
+```solidity
+// Calculate concentration deltas for price range
+(uint256 delta0, uint256 delta1) = XYCConcentrateArgsBuilder.computeDeltas(
+    1000e6,   // 1000 USDC
+    0.5e18,   // 0.5 ETH
+    2000e18,  // Current price: 2000 USDC/ETH
+    1900e18,  // Lower bound
+    2100e18   // Upper bound
+);
+
+// Build order
+ISwapVM.Order memory order = aquaAMM.buildProgram(
+    msg.sender,    // maker
+    block.timestamp + 30 days,  // expiration
+    USDC,          // token0
+    WETH,          // token1
+    30,            // 0.3% fee
+    delta0,        // USDC concentration
+    delta1,        // ETH concentration
+    30,            // 30s decay period
+    10,            // 0.1% protocol fee
+    treasury,      // fee receiver
+    1              // salt
+);
+```
 
 ---
 
@@ -1581,125 +1284,6 @@ SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
 - **Documentation**: See `/docs` directory
 - **Tests**: Comprehensive examples in `/test`
 - **Audits**: Security review reports in `/audits`
-
----
-
-## Known Limitations
-
-### Token Support Limitations
-
-**Fee-on-Transfer Tokens:**
-SwapVM does not support fee-on-transfer tokens (tokens that deduct fees during transfers). Using such tokens will cause accounting mismatches between expected and actual transferred amounts.
-
-**ERC1155 Tokens:**
-SwapVM does not support ERC1155 multi-token standard. Only ERC20 tokens are supported in the current version.
-
-### Two-Token Strategy Limit
-
-SwapVM currently supports **maximum two tokens per strategy** (2D strategies only). Multi-token (XD) functionality for more than two tokens is not available in this version.
-
-**What This Means:**
-- Each strategy can trade between exactly 2 tokens (token pair)
-- AMM pools (XYCSwap, PeggedSwap, XYCConcentrate) operate on 2-token reserves
-- Limit orders work with 1 token pair (1D single-direction)
-- Cannot create strategies that simultaneously manage >2 different tokens
-
-**Recommendation:**
-We strongly recommend against creating custom instructions with more than 2 tokens. The protocol is designed and tested for <= 2-token strategies only. Using more than 2 tokens may lead to unexpected behavior, security vulnerabilities, and is not supported.
-
-### allowZeroAmountIn with AMM Strategies
-
-**Not Recommended:** Using `allowZeroAmountIn=true` with AMM strategies (PeggedSwap, XYCSwap, XYCConcentrate) is not recommended. This flag is intended for:
-- Cross-chain bridge integration
-- Limit orders with specific use cases
-
-For AMM pools, `allowZeroAmountIn=true` can enable theoretical (but economically infeasible) dust extraction.
-
-### Control Instruction Limitations
-
-**_onlyTakerTokenBalanceGte / _onlyTakerTokenBalanceNonZero:**
-These instructions verify the taker owns a minimum token balance. **Limitations:**
-- **Not compatible with routers/aggregators** - these contracts don't hold user tokens
-- **Easily bypassed via flash loans** - if the token supports flash lending, attackers can temporarily borrow the required balance
-
-**_onlyTakerTokenSupplyShareGte:**
-This instruction verifies the taker owns a minimum percentage of total token supply. **Limitations:**
-- **Bypassed with ERC4626 vault tokens** - attackers can wrap/unwrap to manipulate their share
-- **Bypassed with flash-mintable tokens** (e.g., DAI) - attackers can temporarily mint tokens to meet the threshold
-
-**Use Case:** These instructions provide basic access control for specific scenarios but should not be relied upon as strong security mechanisms. Consider them convenience features rather than robust protections.
-
-### Swap instructions known limitations
-
-#### Observed Effects
-
-**1. Monotonicity Violations**
-Larger trades may receive better rates due to relative rounding error:
-- **20 wei trade:** 0.3% fee = 0.06 wei → rounds UP to 1 wei (16x overcharge)
-- **50 wei trade:** 0.3% fee = 0.15 wei → rounds UP to 1 wei (6x overcharge)
-- **100 wei trade:** 0.3% fee = 0.30 wei → rounds UP to 1 wei (3x overcharge)
-
-As amount increases, relative rounding error decreases, creating monotonic pricing.
-
-**2. Zero Outputs**
-Some dust amounts may round down to 0 output, causing transaction reverts.
-
-**3. Quantization Steps**
-Discrete jumps in exchange rates due to integer quantization.
-
-#### Why This Happens
-
-SwapVM uses **"rounding favors maker"** for security:
-- **Fees round UP** (`Math.ceilDiv`) - maker receives full protection
-- **Outputs round DOWN** (floor division) - maker keeps extra dust
-- Necessary to prevent value extraction via rounding attacks
-
-For dust amounts, rounding error dominates actual swap calculations.
-
-#### Economic Impact: ZERO ✅
-
-**Gas Cost Dominance:**
-```
-Transaction cost: ~$15 (@ 100k gas, 50 gwei, ETH=$3000)
-Profit from rate improvement: ~$0.0000000000000001
-Loss ratio: 500 trillion to 1
-```
-
-**Why This is Safe:**
-- ❌ **NOT economically exploitable** - gas >> profit by 12+ orders of magnitude
-- ✅ **Self-limiting** - only affects negligible amounts (<$0.000001)
-- ✅ **Maker protected** - rounding favors liquidity providers
-- ✅ **No pool drain** - would need billions of transactions
-
-#### Testing Approach
-
-SwapVM test suite handles dust amounts with appropriate tolerances:
-
-```solidity
-// DustAmounts.t.sol - tests 1-100 wei
-monotonicityToleranceBps = 10000;  // 100% tolerance
-roundingToleranceBps = 1000;        // 10% tolerance
-
-// MicroAmounts.t.sol - tests 20 wei - 1B wei  
-monotonicityToleranceBps = 1;       // 1 bps tolerance
-roundingToleranceBps = 100;         // 1% tolerance
-```
-
-**Key Insight:** Invariant violations for dust amounts are **mathematical artifacts** without real-world impact. The test suite validates that all invariants hold for economically relevant trade sizes.
-
-### PeggedSwap Quantization in Large Pools
-
-For pools ≥1e+27 tokens, integer quantization can create scenarios where:
-- Exact-out swaps of 1 wei may require 0 wei input (due to rounding)
-- This only occurs with `allowZeroAmountIn=true`
-
-**Impact:**
-- Theoretical: ~1-10 wei extractable from pools >1e+27 tokens
-- Economic: Completely infeasible (gas costs exceed profit)
-
-**Recommendations:**
-- ❌ DO NOT use `allowZeroAmountIn=true` with PeggedSwap AMM pools
-- ✅ DO use `allowZeroAmountIn=true` for limit orders (intended use case)
 
 ---
 
