@@ -20,6 +20,7 @@ contract DeploySwapVMRouter is Script {
         (
             address aquaAddress,
             address wethAddress,
+            address owner,
             string memory name,
             string memory version
         ) = vm.readSwapVMRouterParameters();
@@ -28,6 +29,7 @@ contract DeploySwapVMRouter is Script {
         SwapVMRouter swapVMRouter = new SwapVMRouter(
             aquaAddress,
             wethAddress,
+            owner,
             name,
             version
         );

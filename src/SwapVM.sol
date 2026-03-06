@@ -80,7 +80,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Ownable {
     /// @param owner Address of the owner of the contract
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, string memory name, string memory version, address owner) EIP712(name, version) OnlyWethReceiver(weth) Ownable(owner) {
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Ownable(owner) {
         AQUA = IAqua(aqua);
     }
 
