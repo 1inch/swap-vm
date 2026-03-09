@@ -9,7 +9,6 @@ pragma solidity 0.8.30;
 ///         to precisely determine in which token fees accumulate
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
@@ -240,7 +239,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 finalUSD = swapVM.balances(mainHash, tokenUSD);
         uint256 finalETH = swapVM.balances(mainHash, tokenETH);
 
-        (uint256 finalL, uint256 finalSqrtP) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
+        (, uint256 finalSqrtP) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
             finalETH, finalUSD, sqrtPriceMin, sqrtPriceMax
         );
         uint256 finalSpotPrice = (finalSqrtP * finalSqrtP) / 1e18;

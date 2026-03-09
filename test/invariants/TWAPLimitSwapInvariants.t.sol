@@ -5,7 +5,6 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
@@ -536,14 +535,10 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             (,, , uint256 currentSold) = swapVM.twapLastSwaps(orderHash);
 
             // Invariant 1: totalSold should increase monotonically
-            assertGt(currentSold, previousSold, string(abi.encodePacked("Swap ", _toString(i + 1), ": totalSold should increase")));
+            assertGt(currentSold, previousSold, string(abi.encodePacked("Swap ", vm.toString(i + 1), ": totalSold should increase")));
 
             // Invariant 2: totalSold should never exceed unlocked
-            assertLe(currentSold, unlocked, string(abi.encodePacked("Swap ", _toString(i + 1), ": totalSold should not exceed unlocked")));
-
-            // Invariant 3: available liquidity should be positive or zero
-            uint256 available = unlocked - currentSold;
-            assertGe(available, 0, string(abi.encodePacked("Swap ", _toString(i + 1), ": available should be non-negative")));
+            assertLe(currentSold, unlocked, string(abi.encodePacked("Swap ", vm.toString(i + 1), ": totalSold should not exceed unlocked")));
 
             previousSold = currentSold;
         }
@@ -552,24 +547,6 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         (,, , uint256 finalSold) = swapVM.twapLastSwaps(orderHash);
         assertGt(finalSold, 50e18, "Should have accumulated significant sales");
         assertLe(finalSold, balanceOut * 95 / 100, "Should not exceed 95% at 95% time");
-    }
-
-    // Helper to convert uint to string for error messages
-    function _toString(uint256 value) private pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
     }
 
     /**

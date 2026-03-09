@@ -567,7 +567,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
 
-        // Valid swap: Gt -> Lt (selling expensive Gt at upper bound)
+        // Valid swap: Lt -> Gt (buying Gt at upper bound using Lt)
         uint256 swapAmount = 10e18;
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenLt, tokenGt, swapAmount, swapExactIn);
@@ -592,7 +592,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
 
-        // Valid swap: Lt -> Gt (buying cheap Gt at lower bound)
+        // Valid swap: Gt -> Lt (selling Gt to get Lt at lower bound)
         uint256 swapAmount = 10e18;
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenGt, tokenLt, swapAmount, swapExactIn);
