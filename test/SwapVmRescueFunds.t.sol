@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
+import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
@@ -15,6 +15,7 @@ import { SwapVM } from "../src/SwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { NoReceive } from "./mocks/NoReceive.sol";
+import { ERC20ReturnFalseMock } from "./mocks/ERC20ReturnFalseMock.sol";
 
 contract SwapVmRescueFundsTest is Test, OpcodesDebug {
     constructor() OpcodesDebug(address(new Aqua())) {}
@@ -64,6 +65,12 @@ contract SwapVmRescueFundsTest is Test, OpcodesDebug {
         vm.prank(noReceive);
         vm.expectRevert(abi.encodeWithSelector(SwapVM.ETHTransferFailed.selector));
         swapVM.rescueFunds(IERC20(address(0)), amount);
+    }
+
+    function test_RescueFunds_ERC20_RevertsIfTransferReturnsFalse() public {
+        ERC20ReturnFalseMock badToken = new ERC20ReturnFalseMock();
+        vm.expectRevert(SafeERC20.SafeTransferFailed.selector);
+        swapVM.rescueFunds(IERC20(address(badToken)), 1e18);
     }
 
     receive() external payable {}
