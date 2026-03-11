@@ -69,7 +69,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy custom SwapVM router
-        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens — sort so tokenA is always Gt (higher address)
         // Required for correct price-range test invariants (priceBoundA = P_min, priceBoundB = P_max)

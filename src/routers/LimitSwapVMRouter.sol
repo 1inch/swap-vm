@@ -17,9 +17,10 @@ contract LimitSwapVMRouter is Simulator, SwapVM, LimitOpcodes {
     /// @notice Deploy router with Aqua and WETH addresses
     /// @param aqua Address of Aqua protocol for balance management
     /// @param weth Address of WETH token for unwrapping support
+    /// @param owner Address of the owner of the router. Only owner can rescue funds.
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, string memory name, string memory version) SwapVM(aqua, weth, name, version) LimitOpcodes(aqua) { }
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) LimitOpcodes(aqua) { }
 
     /// @dev Returns instruction set for VM execution
     function _instructions() internal pure override returns (function(Context memory, bytes calldata) internal[] memory result) {

@@ -14,10 +14,12 @@ library Config {
     error WethAddressDoesNotExist();
     error NameDoesNotExist();
     error VersionDoesNotExist();
+    error OwnerAddressDoesNotExist();
 
     function readSwapVMRouterParameters(Vm vm) internal view returns (
         address aquaAddress,
         address wethAddress,
+        address owner,
         string memory name,
         string memory version
     ) {
@@ -42,5 +44,9 @@ library Config {
         version = vm.parseJsonString(json, string.concat(".swapVmRouterVersion", key));
         if (bytes(version).length == 0) revert VersionDoesNotExist();
         console2.log("Version:", version);
+
+        owner = vm.parseJsonAddress(json, string.concat(".owner", key));
+        if (owner == address(0)) revert OwnerAddressDoesNotExist();
+        console2.log("Owner:", owner);
     }
 }
