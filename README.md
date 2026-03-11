@@ -69,9 +69,9 @@ SwapVM is deployed across multiple chains with a unified address for seamless cr
 
 ## How It Works
 
-### The 4-Register Model
+### Swap Registers
 
-SwapVM uses **4 registers** to compute token swaps:
+SwapVM uses `SwapRegisters` (5 fields) to compute token swaps and track execution accounting:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -81,12 +81,13 @@ SwapVM uses **4 registers** to compute token swaps:
 │  balanceOut: Maker's available output token balance        │
 │  amountIn:   Input amount (taker provides OR VM computes)  │
 │  amountOut:  Output amount (taker provides OR VM computes) │
+│  amountNetPulled: Net amount pulled (fees accounting)│
 └────────────────────────────────────────────────────────────┘
 ```
 
 **The Core Principle:**
 1. **Taker specifies ONE amount** (either `amountIn` or `amountOut`)
-2. **VM computes the OTHER amount** using the 4 registers
+2. **VM computes the OTHER amount** using `SwapRegisters`
 3. **Instructions modify registers** to apply fees, adjust rates, etc.
 
 ### Execution Flow
