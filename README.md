@@ -16,13 +16,15 @@
 ## 📚 Table of Contents
 
 - [Overview](#overview)
-- [Deployment](#-deployment)
+- [Deployment](#deployment)
 - [How It Works](#how-it-works)
-- [For Makers (Liquidity Providers)](#-for-makers-liquidity-providers)
-- [For Takers (Swap Executors)](#-for-takers-swap-executors)
-- [For Developers](#-for-developers)
-- [Security Model](#-security-model)
-- [Advanced Topics](#-advanced-topics)
+- [Core Invariants](#core-invariants)
+- [For Makers (Liquidity Providers)](#for-makers-liquidity-providers)
+- [For Takers (Swap Executors)](#for-takers-swap-executors)
+- [For Developers](#for-developers)
+- [Security Model](#security-model)
+- [Getting Started](#getting-started)
+- [License](#license)
 
 ---
 
