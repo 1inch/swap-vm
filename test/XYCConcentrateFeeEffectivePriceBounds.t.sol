@@ -51,7 +51,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
     function setUp() public {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
-        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         address _tA = address(new TokenMock("USD Token", "USD"));
         address _tB = address(new TokenMock("ETH Token", "ETH"));
