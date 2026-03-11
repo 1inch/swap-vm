@@ -94,6 +94,9 @@ SwapVM uses `SwapRegisters` (5 fields) to compute token swaps and track executio
 
 ### Execution Flow
 
+> **VERY IMPORTANT:** Instruction order is security-critical. The same instructions in a different order can change strategy behavior and, in some cases, introduce dangerous outcomes. Any SwapVM program used by makers and takers should be audited before production use.
+
+
 The execution flow shows all available instructions and strategies for each balance type:
 
 ```
