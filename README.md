@@ -1346,29 +1346,78 @@ See `test/AquaAccounting.t.sol` and `test/SwapVmAccounting.t.sol` for comprehens
 
 ---
 
+### Price Bounds and Fees
+
+**Important:** Price bounds ([sqrtPriceMin, sqrtPriceMax] for XYCConcentrate) apply to the **AMM invariant curve**, not to the final execution price paid by takers. This is standard behavior across all AMMs.
+
+**How Fees Affect Execution Prices:**
+
+When fees are applied on top of AMM calculations, takers experience effective prices outside the declared bounds:
+
+```
+Example: XYCConcentrate with bounds [2000-4000] USD/ETH + 3% fee
+
+Declared AMM Bounds: [2,000 - 4,000] USD/ETH
+Effective Price Range for Takers: [1,940 - 4,124] USD/ETH
+
+At Pmin = 2000:
+  - Sell ETH: ~1,940 USD/ETH (receive 3% less due to fee)
+  - Buy ETH:  ~2,062 USD/ETH (pay 3% more due to fee)
+
+At Pmax = 4000:
+  - Sell ETH: ~3,880 USD/ETH (receive 3% less due to fee)
+  - Buy ETH:  ~4,124 USD/ETH (pay 3% more due to fee)
+```
+
+**Why This Happens:**
+- AMM bounds define the swap curve (x*y=k invariant boundaries)
+- Fees are applied as a separate layer: `effective_price = AMM_price ± fee`
+
+**Analogy:** A product priced at $100 with bounds [$50-$200] plus 10% sales tax means you pay $110, but the product's price bounds remain [$50-$200].
+
+**For Makers:** Your strategy's AMM bounds control liquidity distribution, but takers always pay/receive amounts adjusted for fees.
+
+**For Takers:** Always account for fees when calculating expected execution prices. Use `quote()` to preview exact amounts before executing swaps.
+
 ### Concentrated Liquidity
 
 Provide liquidity within specific price ranges:
 
 ```solidity
-// Calculate concentration parameters
-(uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
-    1000e6,   // balanceA
-    0.5e18,   // balanceB
-    2000e18,  // current price
-    1900e18,  // lower bound
-    2100e18   // upper bound
+// 1. Define price range (sqrt of actual prices, in 1e18 fixed-point)
+// Example: Concentrate between 0.9 and 1.1 for near-parity tokens
+uint256 sqrtPriceMin = Math.sqrt(0.9e18 * 1e18);   // sqrt(0.9) ≈ 0.9487e18
+uint256 sqrtPriceMax = Math.sqrt(1.1e18 * 1e18);   // sqrt(1.1) ≈ 1.0488e18
+
+// 2. Calculate initial balances for desired spot price (e.g., 1.0)
+// tokenLt = token with lower address, tokenGt = token with higher address
+(, uint256 balanceLt, uint256 balanceGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+    1000e18,    // available Lt tokens
+    1000e18,    // available Gt tokens  
+    1e18,       // sqrt spot price (1.0 for parity)
+    sqrtPriceMin,
+    sqrtPriceMax
 );
 
-// Build CLMM strategy
+// 3. Build CLMM strategy
 bytes memory program = bytes.concat(
-    p.build(Balances._dynamicBalancesXD, balances),
+    p.build(Balances._dynamicBalancesXD,
+        BalancesArgsBuilder.build(
+            dynamic([tokenLt, tokenGt]),
+            dynamic([balanceLt, balanceGt])
+        )),
     p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, 
-        XYCConcentrateArgsBuilder.build2D(tokenA, tokenB, deltaA, deltaB)),
-    p.build(Fee._flatFeeAmountInXD, fee),
+        XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)),
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)),
     p.build(XYCSwap._xycSwapXD)
 );
 ```
+
+**Key Points:**
+- `build2D()` takes sqrt price bounds, not token addresses
+- Use `computeLiquidityFromAmounts()` to get initial balances for your desired spot price
+- Price P is defined as `tokenGt/tokenLt` (higher address token / lower address token)
+- Sqrt prices are in 1e18 fixed-point format
 
 ### 1inch Fusion Orders
 

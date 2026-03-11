@@ -5,7 +5,6 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
@@ -408,7 +407,8 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Test TWAP at different time points with fees
+     * Test TWAP at different time points with fees - sequential swaps without revert
+     * @dev This test validates state persistence across multiple swaps
      */
     function test_TWAP_TimeProgressionWithFees() public {
         uint256 startTime = block.timestamp;
@@ -440,46 +440,113 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes32 orderHash = swapVM.hash(order);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        // Test at different time points
-        uint256[] memory timePoints = new uint256[](3);
-        timePoints[0] = startTime + duration / 4;   // 25% unlocked
-        timePoints[1] = startTime + duration / 2;   // 50% unlocked
-        timePoints[2] = startTime + duration;       // 100% unlocked
+        uint256 totalSoldExpected = 0;
 
-        for (uint256 i = 0; i < timePoints.length; i++) {
-            uint256 snapshot = vm.snapshot();
-            vm.warp(timePoints[i]);
+        // Swap at 25% time
+        vm.warp(startTime + duration / 4);
+        uint256 unlocked1 = balanceOut * 25 / 100;
 
-            // Adjust test amounts based on liquidity available at this time point
-            uint256[] memory testAmounts;
-            if (i == 0) { // 25% unlocked = 25e18 available
-                testAmounts = dynamic([uint256(2e18), uint256(5e18), uint256(10e18)]);
-            } else if (i == 1) { // 50% unlocked = 50e18 available
-                testAmounts = dynamic([uint256(5e18), uint256(10e18), uint256(20e18)]);
-            } else { // 100% unlocked = 100e18 available (minus fees)
-                testAmounts = dynamic([uint256(10e18), uint256(20e18), uint256(40e18)]);
-            }
+        (, uint256 out1) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 5e18, exactInData);
+        totalSoldExpected += out1;
 
-            InvariantConfig memory config = createInvariantConfig(
-                testAmounts,
-                10
-            );
-            config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-            config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-            // TODO: TWAP violates standard invariants due to time and state dependencies
-            config.skipAdditivity = true;
+        (,, , uint256 stored1) = swapVM.twapLastSwaps(orderHash);
+        assertApproxEqAbs(stored1, totalSoldExpected, 0.1e18, "25%: totalSold should match cumulative");
+        assertLe(stored1, unlocked1, "25%: totalSold should not exceed unlocked");
 
-            assertAllInvariantsWithConfig(
-                swapVM,
-                order,
-                address(tokenA),
-                address(tokenB),
-                config
-            );
+        // Swap at 50% time
+        vm.warp(startTime + duration / 2);
+        uint256 unlocked2 = balanceOut * 50 / 100;
 
-            vm.revertTo(snapshot);
+        (, uint256 out2) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 10e18, exactInData);
+        totalSoldExpected += out2;
+
+        (,, , uint256 stored2) = swapVM.twapLastSwaps(orderHash);
+        assertApproxEqAbs(stored2, totalSoldExpected, 0.5e18, "50%: totalSold should match cumulative");
+        assertLe(stored2, unlocked2, "50%: totalSold should not exceed unlocked");
+        assertGt(stored2, stored1, "50%: totalSold should increase from previous");
+
+        // Swap at 100% time
+        vm.warp(startTime + duration);
+        uint256 unlocked3 = balanceOut;
+
+        (, uint256 out3) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 20e18, exactInData);
+        totalSoldExpected += out3;
+
+        (,, , uint256 stored3) = swapVM.twapLastSwaps(orderHash);
+        assertApproxEqAbs(stored3, totalSoldExpected, 1e18, "100%: totalSold should match cumulative");
+        assertLe(stored3, unlocked3, "100%: totalSold should not exceed unlocked");
+        assertGt(stored3, stored2, "100%: totalSold should continue increasing");
+    }
+
+    /**
+     * Test TWAP state persistence invariant across multiple sequential swaps
+     * @dev This test would have caught the bug where sold was not properly accumulated
+     */
+    function test_TWAP_StatePersistence_Invariant() public {
+        uint256 startTime = block.timestamp;
+        uint256 duration = 3600; // 1 hour (shorter to reduce decay impact)
+        uint256 balanceOut = 1000e18;
+        uint256 balanceIn = 1000e18;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([uint256(1000e18), uint256(1000e18)])  // 1:1 rate
+                )),
+            program.build(_twap,
+                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
+                    balanceIn: balanceIn,
+                    balanceOut: balanceOut,
+                    startTime: startTime,
+                    duration: duration,
+                    priceBumpAfterIlliquidity: 1.05e18,  // Lower bump
+                    minTradeAmountOut: 1e18 // Lower minimum
+                }))),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes32 orderHash = swapVM.hash(order);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        uint256 previousSold = 0;
+
+        // Execute 3 swaps at different time points (fewer swaps, closer together)
+        uint256[] memory timePercentages = new uint256[](3);
+        timePercentages[0] = 40; // 40%
+        timePercentages[1] = 70; // 70%
+        timePercentages[2] = 95; // 95%
+
+        for (uint256 i = 0; i < timePercentages.length; i++) {
+            vm.warp(startTime + duration * timePercentages[i] / 100);
+            uint256 unlocked = balanceOut * timePercentages[i] / 100;
+
+            // Execute swaps with large enough amounts to meet minimum
+            uint256 swapAmount = 50e18 + i * 30e18; // Large amounts
+            _executeSwap(swapVM, order, address(tokenA), address(tokenB), swapAmount, exactInData);
+
+            // Check invariants
+            (,, , uint256 currentSold) = swapVM.twapLastSwaps(orderHash);
+
+            // Invariant 1: totalSold should increase monotonically
+            assertGt(currentSold, previousSold, string(abi.encodePacked("Swap ", vm.toString(i + 1), ": totalSold should increase")));
+
+            // Invariant 2: totalSold should never exceed unlocked
+            assertLe(currentSold, unlocked, string(abi.encodePacked("Swap ", vm.toString(i + 1), ": totalSold should not exceed unlocked")));
+
+            previousSold = currentSold;
         }
+
+        // Final check: totalSold should have accumulated significantly
+        (,, , uint256 finalSold) = swapVM.twapLastSwaps(orderHash);
+        assertGt(finalSold, 50e18, "Should have accumulated significant sales");
+        assertLe(finalSold, balanceOut * 95 / 100, "Should not exceed 95% at 95% time");
     }
 
     /**

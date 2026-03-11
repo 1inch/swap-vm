@@ -114,7 +114,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         // tokenA=Gt (higher address), tokenB=Lt (lower address).
         // setup.balanceA is the DESIRED Gt amount; setup.balanceB is used as Lt upper bound.
         (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
-            setup.balanceA, setup.balanceA, 1e18, sqrtPmin, sqrtPmax
+            setup.balanceB, setup.balanceA, 1e18, sqrtPmin, sqrtPmax
         );
         // Assign based on which token is Lt vs Gt
         uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
@@ -185,24 +185,19 @@ contract ConcentrateTest is Test, OpcodesDebug {
         }));
     }
 
-    function _swappingTakerData(bytes memory takerData, bytes memory signature) internal view returns (bytes memory) {
-        // Just need to rebuild the takerData with signature for swapping
-        // Since the original takerData was built for quoting (with empty signature),
-        // we need to extract the isExactIn flag first (first two bytes contain flags)
-        bool isExactIn = (uint16(bytes2(takerData)) & 0x0001) != 0;
-
+    function _swappingTakerData(TakerSetup memory takerSetup, bytes memory signature) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
-            isExactIn: isExactIn,
+            isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
-            threshold: "",
+            threshold: "", // no minimum output
             to: address(0),
             deadline: 0,
-            hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
             preTransferInHookData: "",
             postTransferInHookData: "",
             preTransferOutHookData: "",
@@ -226,7 +221,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Buy all tokenB liquidity
         uint256 amountOut = setup.balanceB;
@@ -250,7 +245,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Check quotes before and after buying all tokenA liquidity
         (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
@@ -277,7 +272,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Check quotes before and after buying all tokenB liquidity
         (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
@@ -304,7 +299,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Check tokenA and tokenB prices before
         (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
@@ -348,7 +343,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Check tokenA and tokenB prices before
         (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
@@ -392,7 +387,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         // Setup taker traits and data
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Check tokenA and tokenB prices before
         (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
@@ -449,7 +444,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
-        bytes memory takerData = _swappingTakerData(_quotingTakerData(TakerSetup({ isExactIn: true })), signature);
+        bytes memory takerData = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
 
         // Test comprehensive rounding invariants
         RoundingInvariants.assertRoundingInvariants(
@@ -493,13 +488,116 @@ contract ConcentrateTest is Test, OpcodesDebug {
         TokenMock malToken = new TokenMock("Malicious token", "MTK");
 
         // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(quoteExactOut, signature);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
         // Buy all tokenB liquidity
         bytes memory tokenAddresses = abi.encodePacked(tokenA, tokenB);
         vm.expectRevert(abi.encodeWithSelector(Balances.DynamicBalancesLoadingRequiresSettingBothBalances.selector, address(malToken), tokenB, tokenAddresses));
         swapVM.swap(order, address(malToken), tokenB, setup.balanceB, swapExactOut);
+    }
+
+    /// @notice Helper to create order with custom spot price at bounds (resulting in zero balance for one token)
+    function _createOrderAtBoundary(
+        uint256 sqrtPspot,
+        uint256 sqrtPmin,
+        uint256 sqrtPmax,
+        uint256 targetL
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        // Compute balances for the given spot price
+        (uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeBalances(
+            targetL, sqrtPspot, sqrtPmin, sqrtPmax
+        );
+
+        // Assign based on which token is Lt vs Gt
+        uint256 balanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
+        uint256 balanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: bytes.concat(
+                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+                ),
+                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
+                program.build(XYCSwap._xycSwapXD)
+            )
+        }));
+
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Test zero-balance boundary: bLt = 0 (spot price at upper bound)
+    ///         Only Gt->Lt swaps should work, Lt->Gt should fail due to no Lt liquidity
+    function test_ZeroBalance_SpotAtUpperBound() public {
+        uint256 sqrtPmin = Math.sqrt(0.01e18 * 1e18);  // 0.1e18
+        uint256 sqrtPmax = Math.sqrt(25e18 * 1e18);    // 5e18
+        uint256 sqrtPspot = sqrtPmax + 100;                  // At upper bound
+        uint256 targetL = 100_000e18;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderAtBoundary(
+            sqrtPspot, sqrtPmin, sqrtPmax, targetL
+        );
+
+        // Verify bLt = 0 (one balance should be zero)
+        address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
+        address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
+
+        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+
+        // Valid swap: Lt -> Gt (buying Gt at upper bound using Lt)
+        uint256 swapAmount = 10e18;
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenLt, tokenGt, swapAmount, swapExactIn);
+        assertGt(amountOut, 0);
+        assertEq(amountIn, swapAmount);
+    }
+
+    /// @notice Test zero-balance boundary: bGt = 0 (spot price at lower bound)
+    ///         Only Lt->Gt swaps should work, Gt->Lt should fail due to no Gt liquidity
+    function test_ZeroBalance_SpotAtLowerBound() public {
+        uint256 sqrtPmin = Math.sqrt(0.01e18 * 1e18);  // 0.1e18
+        uint256 sqrtPmax = Math.sqrt(25e18 * 1e18);    // 5e18
+        uint256 sqrtPspot = sqrtPmin - 100;              // At lower bound
+        uint256 targetL = 100_000e18;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderAtBoundary(
+            sqrtPspot, sqrtPmin, sqrtPmax, targetL
+        );
+
+        address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
+        address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
+
+        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+
+        // Valid swap: Gt -> Lt (selling Gt to get Lt at lower bound)
+        uint256 swapAmount = 10e18;
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenGt, tokenLt, swapAmount, swapExactIn);
+        assertGt(amountOut, 0);
+        assertEq(amountIn, swapAmount);
     }
 
     // TODO: Move this test to general SwapVM tests since it's not specific to XYCConcentrate

@@ -60,10 +60,15 @@ library XYCConcentrateArgsBuilder {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal pure returns (uint256 bLt, uint256 bGt) {
+        require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
+
         uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
         uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
-        bLt = Math.mulDiv(targetL, invSqrtPspot - invSqrtPmax, ONE);
-        bGt = Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE);
+
+        // Handle boundary: if sqrtPspot >= sqrtPmax, bLt = 0
+        bLt = invSqrtPspot > invSqrtPmax ? Math.mulDiv(targetL, invSqrtPspot - invSqrtPmax, ONE) : 0;
+        // Handle boundary: if sqrtPspot <= sqrtPmin, bGt = 0
+        bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
     }
 
     /// @notice Compute max achievable L from available token amounts at a given spot price.
@@ -78,6 +83,8 @@ library XYCConcentrateArgsBuilder {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal pure returns (uint256 targetL, uint256 actualLt, uint256 actualGt) {
+        require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
+
         uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
         uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
         uint256 lFromLt = (invSqrtPspot > invSqrtPmax)
