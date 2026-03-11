@@ -407,12 +407,13 @@ contract MyInstructionTest is Test, OpcodesDebug, CoreInvariants {
 ```
 
 Configuration options for complex scenarios:
+
 ```solidity
 InvariantConfig memory config = createInvariantConfig(testAmounts, tolerance);
 config.skipAdditivity = true;    // For stateless orders
 config.skipMonotonicity = true;  // For fixed-rate orders
-config.exactInTakerData = signAndPackTakerData(order, true, 0);
-config.exactOutTakerData = signAndPackTakerData(order, false, type(uint256).max);
+config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 assertAllInvariantsWithConfig(swapVM, order, tokenIn, tokenOut, config);
 ```
 
@@ -420,17 +421,15 @@ See `test/invariants/ExampleInvariantUsage.t.sol` for complete examples.
 
 ---
 
-## 🌾 For Makers (Liquidity Providers)
+## For Makers (Liquidity Providers)
 
-Makers provide liquidity by creating orders with custom swap logic.
+Makers provide liquidity by creating orders/strategies with custom swap logic. This includes:
 
-### Your Role
+- **Defining swap logic** via a SwapVM program
+- **Configuring order/strategy parameters** (type, expiration, fees, hooks)
+- **Signing orders** off-chain (gasless)
 
-- **Define swap logic** via bytecode programs (includes setting balances/exchange rate)
-- **Configure order parameters** (expiration, fees, hooks)
-- **Sign orders** off-chain (gasless)
-
-### Creating a Simple Limit Order
+### Example: creating a simple limit order
 
 ```solidity
 // 1. Build your swap program
@@ -446,8 +445,7 @@ bytes memory program = bytes.concat(
     p.build(LimitSwap._limitSwap1D,
         LimitSwapArgsBuilder.build(USDC, WETH)),
     // Track partial fills (prevents overfilling)
-    p.build(Invalidators._invalidateTokenOut1D,
-        InvalidatorsArgsBuilder.buildInvalidateByTokenOut(WETH))
+    p.build(Invalidators._invalidateTokenOut1D)
 );
 
 // 2. Configure order parameters
@@ -477,12 +475,13 @@ bytes32 orderHash = swapVM.hash(order);
 bytes memory signature = signEIP712(orderHash);
 ```
 
-### Building an AMM Strategy
+### Example: building an AMM strategy
 
-Create a persistent, isolated AMM-style order (your liquidity only):
+Create a persistent, isolated AMM-style strategy:
 
 ```solidity
 // Constant product AMM with 0.3% fee
+Program memory p = ProgramBuilder.init(_opcodes());
 bytes memory program = bytes.concat(
     // Load/initialize balances
     p.build(Balances._dynamicBalancesXD,
@@ -516,7 +515,7 @@ p.build(Balances._staticBalancesXD, ...)
 
 #### Option 2: AMM Strategies (2D/XD Bidirectional) - Two Storage Choices
 
-Both options use the **same AMM logic** and support identical features. The only difference is where balances are stored:
+Both options use the **same AMM logic** and support identical strategy composition. The key difference is where balances are stored and how authorization is handled.
 
 ##### 2A. Dynamic Balances (SwapVM Internal)
 
@@ -529,16 +528,22 @@ p.build(Balances._dynamicBalancesXD, ...)
 **Storage:** SwapVM contract (per-maker isolation)  
 **Setup:** Sign order off-chain (gasless)  
 **Use Case:** Individual AMM strategies, custom curves  
-**Key Point:** Replicates Aqua-like functionality but with signature-based orders (no deposits)  
+**Key Point:** Signature-based AMM orders without liquidity deposits into Aqua  
 **Note:** Each maker's liquidity is isolated - no pooling with others
 
 ##### 2B. Aqua Protocol (External Shared Liquidity)
 
 ```solidity
-// Use Aqua's shared liquidity layer
-MakerTraits makerTraits = MakerTraitsLib.build({
+// Use Aqua's shared liquidity layer for the same strategy bytecode
+ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
+    maker: maker,
+    receiver: address(0),
+    shouldUnwrapWeth: false,
     useAquaInsteadOfSignature: true
-});
+    // other MakerTraits args omitted for brevity
+    // ...
+    program: program
+}));
 // Requires prior: aqua.ship(token, amount)
 ```
 
@@ -553,31 +558,32 @@ See [Aqua Protocol](https://github.com/1inch/aqua) for details
 
 Your orders are protected by:
 
-- **EIP-712 Signatures** - Orders cannot be modified
-- **Expiration Control** - Orders expire when you want
-- **Balance Limits** - Cannot trade more than specified
-- **Custom Receivers** - Send tokens where you want
-- **Hooks** - Custom validation logic
-- **Order Invalidation** - One-time execution via bitmaps
+- **Authorization Mode** - EIP-712 signatures or Aqua balance mode (`useAquaInsteadOfSignature`)
+- **Expiration Control** - Orders can expire at the time you define
+- **Balance Limits** - Execution cannot exceed configured balances
+- **Custom Receivers** - Control where settlement tokens are sent
+- **Hooks** - Add custom validation/automation logic around transfers
+- **Order Invalidation** - Prevent replay/overfill via bitmap or token-based invalidators
 
 **Best Practices:**
 - Always set expiration dates
 - Use `_invalidateBit1D` for one-time orders
-- Validate rates match market conditions
-- Consider MEV protection (`_decayXD`)
+- Use `_invalidateTokenIn1D` / `_invalidateTokenOut1D` for partial-fill strategies
+- Validate rates against market conditions before signing
+- Add explicit rate protection (`_requireMinRate1D` or `_adjustMinRate1D`) when needed
+- Treat instruction ordering as security-critical, especially around fee instructions
+- Consider MEV protection (`_decayXD`) for AMM-style strategies
 
 ---
 
-## 🏃 For Takers (Swap Executors)
+## For Takers (Swap Executors)
 
-Takers execute swaps against maker orders to arbitrage or fulfill trades.
+Takers execute swaps against maker orders to arbitrage or fulfill trades. This includes:
 
-### Your Role
-
-- **Find profitable orders** to execute
-- **Specify swap amount** (either input or output)
-- **Provide dynamic data** for adaptive instructions
-- **Execute swaps** on-chain
+- **Finding profitable orders** to execute
+- **Specifying swap amount** (either input or output)
+- **Providing dynamic data** for adaptive instructions
+- **Executing swaps** on-chain
 
 ### Executing a Swap
 
@@ -585,33 +591,45 @@ Takers execute swaps against maker orders to arbitrage or fulfill trades.
 // 1. Find an order to execute
 ISwapVM.Order memory order = findProfitableOrder();
 
-// 2. Preview the swap (free call)
-(uint256 amountIn, uint256 amountOut) = swapVM.asView().quote(
-    order,
-    USDC,           // Token you're trading
-    WETH,           // Token you're receiving
-    1000e6,         // Amount (input if isExactIn=true)
-    takerTraitsData // Your execution parameters
-);
-
-// 3. Prepare taker parameters
-bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
-    isExactIn: true,              // You specify input amount
-    threshold: minAmountOut,      // Minimum output (slippage protection)
-    to: yourAddress,              // Where to receive tokens
-    shouldUnwrapWeth: false,      // Keep as WETH
-    // Optional features:
-    hasPreTransferInHook: false,
-    isFirstTransferFromTaker: false
+// 2. Build taker traits + data payload
+bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
+    taker: msg.sender,
+    isExactIn: true,                        // You specify input amount
+    shouldUnwrapWeth: false,                // Keep as WETH
+    isStrictThresholdAmount: false,         // false = min/max threshold mode
+    isFirstTransferFromTaker: false,
+    useTransferFromAndAquaPush: false,
+    threshold: abi.encodePacked(minAmountOut), // 32-byte min output for exactIn
+    to: yourAddress,                        // Recipient override (or address(0))
+    deadline: uint40(block.timestamp + 5 minutes),
+    hasPreTransferInCallback: false,
+    hasPreTransferOutCallback: false,
+    preTransferInHookData: "",
+    postTransferInHookData: "",
+    preTransferOutHookData: "",
+    postTransferOutHookData: "",
+    preTransferInCallbackData: "",
+    preTransferOutCallbackData: "",
+    instructionsArgs: customInstructionArgs, // Data consumed by VM instructions
+    signature: signature                      // Maker's order signature (empty for Aqua mode)
 }));
 
-// 4. Execute the swap
+// 3. Preview the swap (free call)
+(uint256 quotedIn, uint256 quotedOut, bytes32 quotedOrderHash) = swapVM.asView().quote(
+    order,
+    USDC,           // Token you're paying
+    WETH,           // Token you're receiving
+    1000e6,         // Amount (input if isExactIn=true)
+    takerData
+);
+
+// 4. Execute the swap with the same takerData
 (uint256 actualIn, uint256 actualOut, bytes32 orderHash) = swapVM.swap(
     order,
     USDC,
     WETH,
     1000e6,        // Your input amount
-    abi.encodePacked(signature, takerTraits, customData)
+    takerData
 );
 ```
 
@@ -620,55 +638,41 @@ bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
 Some instructions read data from takers at execution time:
 
 ```solidity
-// Pack custom data for instructions
-bytes memory customData = abi.encode(
+// Pack custom data into TakerTraits.instructionsArgs
+bytes memory customInstructionArgs = abi.encode(
     oraclePrice,    // For oracle-based adjustments
     maxGasPrice,    // For gas-sensitive orders
     userPreference  // Any custom parameters
 );
 
-// Instructions access via:
+// Instructions read it via:
 // ctx.tryChopTakerArgs(32) - extracts 32 bytes
 ```
-
-### Understanding isExactIn
-
-The `isExactIn` flag determines which amount you control:
-
-| isExactIn | You Specify | VM Computes | Use Case |
-|-----------|------------|-------------|----------|
-| true | Input amount | Output amount | "I want to sell exactly 1000 USDC" |
-| false | Output amount | Input amount | "I want to buy exactly 0.5 WETH" |
 
 ### Taker Security
 
 Your swaps are protected by:
 
-- **Threshold Validation** - Minimum output / maximum input
+- **Threshold Validation** - Minimum output / maximum input (or strict exact threshold mode)
 - **Slippage Protection** - Via threshold amounts
 - **Custom Recipients** - Send tokens anywhere
-- **Pre-hooks** - Validate before execution
+- **Deadline Control** - Enforce taker-side expiration
+- **Callbacks** - Pre-transfer callbacks for custom checks/integration
 - **Quote Preview** - Check amounts before executing
 
 **Best Practices:**
 - Always use `quote()` before `swap()`
 - Set appropriate thresholds for slippage
+- Set `deadline` to bound execution time
+- Use `isStrictThresholdAmount` only when exact threshold matching is required
+- Reuse the same `takerData` between quote and swap
 - Verify order hasn't expired
 - Check for MEV opportunities
 - Consider gas costs vs profit
 
-### MEV Opportunities
-
-SwapVM creates MEV opportunities:
-
-1. **Arbitrage** - Price differences between orders
-2. **Liquidations** - Execute against distressed positions
-3. **JIT Liquidity** - Provide liquidity just-in-time
-4. **Sandwich Protection** - Some orders use `_decayXD` for protection
-
 ---
 
-## 🛠 For Developers
+## For Developers
 
 Build custom instructions and integrate SwapVM into your protocols.
 
@@ -681,24 +685,48 @@ Every instruction receives a `Context` with three components:
 ```
 Context
 ├── VM (Execution State)
-│   ├── nextPC ───────────────────── Program counter (MUTABLE - for jumps)
-│   ├── programPtr ───────────────── Bytecode being executed
-│   ├── takerArgsPtr ─────────────── Taker's dynamic data (MUTABLE - via tryChopTakerArgs)
-│   └── opcodes ──────────────────── Available instructions array
+│   ├── isStaticContext
+│   │   - true during quote/static execution
+│   │   - false during state-changing swap execution
+│   ├── nextPC
+│   │   - Program counter (MUTABLE, used by jumps)
+│   ├── programPtr
+│   │   - Bytecode currently being executed
+│   ├── takerArgsPtr
+│   │   - Taker dynamic data pointer (MUTABLE)
+│   │   - Advanced via tryChopTakerArgs()
+│   └── opcodes
+│       - Available instruction array
 │
 ├── SwapQuery (READ-ONLY)
-│   ├── orderHash ────────────────── Unique order identifier
-│   ├── maker ────────────────────── Liquidity provider address
-│   ├── taker ────────────────────── Swap executor address
-│   ├── tokenIn ──────────────────── Input token address
-│   ├── tokenOut ─────────────────── Output token address
-│   └── isExactIn ────────────────── Taker's swap direction (true = exact in, false = exact out)
+│   ├── orderHash
+│   │   - Unique order identifier
+│   ├── maker
+│   │   - Liquidity provider address
+│   ├── taker
+│   │   - Swap executor address
+│   ├── tokenIn
+│   │   - Input token address
+│   ├── tokenOut
+│   │   - Output token address
+│   └── isExactIn
+│       - Swap direction
+│       - true = exact in, false = exact out
 │
 └── SwapRegisters (MUTABLE)
-    ├── balanceIn ────────────────── Maker's available input token balance
-    ├── balanceOut ───────────────── Maker's available output token balance
-    ├── amountIn ─────────────────── Input amount (taker provides OR VM computes)
-    └── amountOut ────────────────── Output amount (taker provides OR VM computes)
+    ├── balanceIn
+    │   - Maker available input-token balance
+    ├── balanceOut
+    │   - Maker available output-token balance
+    ├── amountIn
+    │   - Input amount
+    │   - Taker provides OR VM computes
+    ├── amountOut
+    │   - Output amount
+    │   - Taker provides OR VM computes
+    └── amountNetPulled
+        - Net amount pulled from maker
+        - Used by fee/accounting logic
 ```
 
 ### Order Configuration (MakerTraits & TakerTraits)
@@ -706,20 +734,26 @@ Context
 ```
 MakerTraits (256-bit packed)
 ├── Bit Flags (bits 245-255)
-│   ├── shouldUnwrapWeth (255) ──── Unwrap WETH to ETH on output
-│   ├── useAquaInsteadOfSignature (254) ─ Use Aqua balance instead of signature
-│   ├── allowZeroAmountIn (253) ── Allow zero amountIn (skip validation)
-│   ├── hasPreTransferInHook (252) ── Call maker before input transfer
-│   ├── hasPostTransferInHook (251) ── Call maker after input transfer
-│   ├── hasPreTransferOutHook (250) ── Call maker before output transfer
-│   ├── hasPostTransferOutHook (249) ── Call maker after output transfer
-│   ├── preTransferInHookHasTarget (248) ── Hook has custom target
+│   ├── shouldUnwrapWeth (255)
+│   │   - Unwrap WETH to ETH on output
+│   ├── useAquaInsteadOfSignature (254)
+│   │   - Use Aqua balance mode instead of signature
+│   ├── allowZeroAmountIn (253)
+│   │   - Allow zero amountIn (skip validation)
+│   ├── hasPreTransferInHook (252)
+│   ├── hasPostTransferInHook (251)
+│   ├── hasPreTransferOutHook (250)
+│   ├── hasPostTransferOutHook (249)
+│   ├── preTransferInHookHasTarget (248)
 │   ├── postTransferInHookHasTarget (247)
 │   ├── preTransferOutHookHasTarget (246)
 │   └── postTransferOutHookHasTarget (245)
 │
 ├── Data Slices Indexes (bits 160-223, 64 bits)
-│   └── Packed 4x uint16 offsets for hook data slices
+│   └── Packed 4x uint16 offsets for hook slices
+│
+├── Program
+│   └── Stored as the final tail in `order.data` (after hook slices)
 │
 └── Receiver (bits 0-159, 160 bits)
     └── Custom recipient address (0 = maker)
@@ -728,40 +762,53 @@ MakerTraits (256-bit packed)
 ```
 TakerTraits (Variable-length with 176-bit header)
 ├── Header (22 bytes packed)
-│   ├── Slices Indexes (160 bits) ── 10x uint16 offsets for data slices
+│   ├── Slices Indexes (160 bits)
+│   │   - 10x uint16 offsets for data slices
 │   └── Bit Flags (16 bits)
-│       ├── isExactIn (0) ────────── true = specify input, false = output
-│       ├── shouldUnwrapWeth (1) ── Unwrap WETH to ETH on output
-│       ├── hasPreTransferInCallback (2) ── Call taker before input transfer
-│       ├── hasPreTransferOutCallback (3) ── Call taker before output transfer
-│       ├── isStrictThresholdAmount (4) ── true = exact, false = min/max
-│       ├── isFirstTransferFromTaker (5) ── Who transfers first
-│       └── useTransferFromAndAquaPush (6) ── SwapVM does transferFrom + Aqua push
+│       ├── isExactIn (0)
+│       │   - true = specify input, false = specify output
+│       ├── shouldUnwrapWeth (1)
+│       │   - Unwrap WETH to ETH on output
+│       ├── hasPreTransferInCallback (2)
+│       │   - Call taker callback before input transfer
+│       ├── hasPreTransferOutCallback (3)
+│       │   - Call taker callback before output transfer
+│       ├── isStrictThresholdAmount (4)
+│       │   - true = exact threshold, false = min/max mode
+│       ├── isFirstTransferFromTaker (5)
+│       └── useTransferFromAndAquaPush (6)
+│           - SwapVM does transferFrom + Aqua push
 │
 └── Variable-length Data Slices
-    ├── threshold (0 or 32 bytes) ── Min output or max input
-    ├── to (0 or 20 bytes) ───────── Custom recipient
-    ├── deadline (0 or 5 bytes) ──── Unix timestamp (uint40)
-    ├── preTransferInHookData ────── Data for maker pre-in hook
-    ├── postTransferInHookData ───── Data for maker post-in hook
-    ├── preTransferOutHookData ──── Data for maker pre-out hook
-    ├── postTransferOutHookData ─── Data for maker post-out hook
-    ├── preTransferInCallbackData ─ Data for taker pre-in callback
-    ├── preTransferOutCallbackData ─ Data for taker pre-out callback
-    ├── instructionsArgs ──────────── Data consumed by VM instructions
-    └── signature ─────────────────── EIP-712 signature for order
+    ├── threshold (0 or 32 bytes)
+    │   - Min output or max input
+    ├── to (0 or 20 bytes)
+    │   - Custom recipient
+    ├── deadline (0 or 5 bytes)
+    │   - Unix timestamp (uint40)
+    ├── preTransferInHookData
+    ├── postTransferInHookData
+    ├── preTransferOutHookData
+    ├── postTransferOutHookData
+    ├── preTransferInCallbackData
+    ├── preTransferOutCallbackData
+    ├── instructionsArgs
+    │   - Data consumed by VM instructions
+    └── signature
+        - EIP-712 signature for order
 ```
 
 ### Instruction Capabilities
 
-Instructions **compute swap amounts only** - they do NOT execute the actual token transfers (except protocol fee instructions which can transfer fees). The swap itself happens after all instructions complete.
+Instructions primarily **compute swap amounts** and execution state. They do NOT perform the main final settlement transfers between maker and taker (that settlement happens in `SwapVM` after `runLoop()`), but some instructions can execute side effects such as protocol-fee transfers or external logic calls.
 
-Instructions can **only** modify three aspects of the Context:
+Instructions can modify these parts of the execution context:
 
 #### 1. Swap Registers (`ctx.swap.*`)
-All four registers can be modified to calculate swap amounts:
+All swap registers can be modified to calculate amounts and fee/accounting state:
 - `balanceIn` / `balanceOut` - Set or adjust available balances for calculations
 - `amountIn` / `amountOut` - Compute the missing swap amount
+- `amountNetPulled` - Track net amount pulled from maker for fee/accounting flows
 
 #### 2. Program Counter (`ctx.vm.nextPC`)
 Control execution flow between instructions:
@@ -788,7 +835,7 @@ Instructions operate within SwapVM's execution framework:
 
 **What Instructions CAN Do:**
 - ✅ Read all context data (query, VM state, registers)
-- ✅ Modify the 4 swap registers
+- ✅ Modify swap registers (including `amountNetPulled`)
 - ✅ Change program counter for control flow
 - ✅ Consume taker-provided data
 - ✅ Read and write to their own storage mappings
@@ -797,25 +844,31 @@ Instructions operate within SwapVM's execution framework:
 
 **What Instructions CANNOT Do:**
 - ❌ Modify query data (maker, taker, tokens, etc. - immutable)
-- ❌ Transfer swap tokens directly (except protocol fees)
+- ❌ Execute the main maker<->taker settlement flow directly (handled by `SwapVM` after VM execution)
 - ❌ Bypass SwapVM's validation (thresholds, signatures, etc.)
 - ❌ Modify core SwapVM protocol state
 - ❌ Execute after swap is complete
 
 **Security Considerations:**
-- Reentrancy protection only for Aqua settlement (via transient storage when taker pushes)
+- Swap execution uses order-level transient reentrancy lock (`orderHash`) in `SwapVM.swap()`
 - Gas limited by block and transaction
-- External calls risk managed by maker's instruction choice
-- Deterministic execution
+- External call risk is strategy-dependent (especially with `_extruction`)
+- Deterministic execution is guaranteed only for deterministic instruction sets and deterministic external dependencies
 
 ### Building a Custom Router
 
-Routers define available instructions:
+SwapVM includes multiple routers for different purposes, each exposing a different instruction set:
+
+- `SwapVMRouter` - General-purpose router with the full standard opcode set
+- `LimitSwapVMRouter` - Limit-order-focused router (time-dependent and order-management instructions)
+- `AquaSwapVMRouter` - Aqua-oriented router for shipped/shared-liquidity strategies
+
+If you need a custom instruction set, create your own router by inheriting `SwapVM` plus your opcode contract and overriding `_instructions()`:
 
 ```solidity
 contract MyRouter is SwapVM, Opcodes {
-    constructor(address aqua) 
-        SwapVM(aqua, "MyRouter", "1.0") 
+    constructor(address aqua, address weth, string memory name, string memory version)
+        SwapVM(aqua, weth, name, version)
         Opcodes(aqua) 
     {}
     
@@ -830,58 +883,68 @@ contract MyRouter is SwapVM, Opcodes {
 
 ### Testing Instructions
 
-Use the provided `CoreInvariants` base contract to ensure your instructions maintain all invariants:
+Every SwapVM program should be tested carefully before production use. Instruction composition and ordering can change pricing, invalidation behavior, quote/swap consistency, and security properties.
+
+#### Recipe: test all invariants for a new SwapVM program
+
+Use the provided `CoreInvariants` base contract:
+
+- Build your program bytecode
+- Build an order from that bytecode
+- Prepare taker data for both exact-in and exact-out paths
+- Run `assertAllInvariantsWithConfig(...)`
 
 ```solidity
 contract MyInstructionTest is Test, OpcodesDebug, CoreInvariants {
-    function test_MyInstruction() public {
-        // Build program with your instruction
-        bytes memory program = buildProgramWithMyInstruction();
-        ISwapVM.Order memory order = createOrder(program);
-        
-        // Validate all core invariants are maintained
-        assertAllInvariants(swapVM, order, tokenA, tokenB);
+    function test_MyProgram_AllInvariants() public {
+        bytes memory program = buildMyProgram();
+        ISwapVM.Order memory order = _createOrder(program);
+
+        InvariantConfig memory config = _getDefaultConfig();
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        // Optional tuning for strategy-specific behavior
+        // config.skipAdditivity = true;
+        // config.skipMonotonicity = true;
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
     }
 }
 ```
 
-For manual testing:
+#### Example: focused test for one program
 
 ```solidity
-function testMyInstructionManually() public {
-    // Create test context
-    Context memory ctx = Context({
-        vm: VM({
-            isStaticContext: false,
-            nextPC: 0,
-            programPtr: CalldataPtrLib.from(program),
-            takerArgsPtr: CalldataPtrLib.from(takerData),
-            opcodes: _opcodes()
-        }),
-        query: SwapQuery({
-            orderHash: bytes32(0),
-            maker: makeAddr("maker"),
-            taker: makeAddr("taker"),
-            tokenIn: address(tokenA),
-            tokenOut: address(tokenB),
-            isExactIn: true
-        }),
-        swap: SwapRegisters({
-            balanceIn: 1000e18,
-            balanceOut: 2000e18,
-            amountIn: 100e18,
-            amountOut: 0
-        })
-    });
-    
-    // Execute instruction
-    bytes memory args = abi.encode(0.003e9); // 0.3% fee
-    MyInstruction._myInstruction(ctx, args);
-    
-    // Verify results
-    assertGt(ctx.swap.amountOut, 0);
+function test_MyProgram_QuoteMatchesSwap() public {
+    bytes memory program = buildMyProgram();
+    ISwapVM.Order memory order = _createOrder(program);
+
+    bytes memory takerData = _signAndPackTakerData(order, true, 0);
+    uint256 amount = 1e18;
+
+    (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
+        order, address(tokenA), address(tokenB), amount, takerData
+    );
+
+    uint256 snapshot = vm.snapshot();
+    (uint256 swapIn, uint256 swapOut,) = swapVM.swap(
+        order, address(tokenA), address(tokenB), amount, takerData
+    );
+    vm.revertTo(snapshot);
+
+    assertEq(swapIn, quotedIn);
+    assertEq(swapOut, quotedOut);
 }
 ```
+
+See `test/invariants/ExampleInvariantUsage.t.sol` for complete, up-to-date examples.
 
 ---
 
@@ -926,410 +989,6 @@ if (useAquaInsteadOfSignature) {
 }
 ```
 
-### Maker Security
-
-**Protection Mechanisms:**
-
-| Feature | Description | Implementation |
-|---------|-------------|----------------|
-| **Signature Control** | Orders cannot be modified | EIP-712 signatures |
-| **Expiration** | Time-limited orders | `_deadline` instruction or TakerTraits deadline |
-| **Balance Limits** | Cannot exceed specified amounts | Register bounds checking |
-| **One-time Execution** | Prevent replay | `_invalidateBit1D` instruction |
-| **Custom Logic** | Hooks for validation | Pre/post transfer hooks |
-| **Receiver Control** | Specify token recipient | `receiver` in MakerTraits |
-
-**Risk Mitigations:**
-```solidity
-// Limit order exposure
-p.build(Invalidators._invalidateBit1D, bitIndex);
-
-// Add expiration via _deadline instruction in program
-p.build(Controls._deadline, ControlsArgsBuilder.buildDeadline(block.timestamp + 1 hours));
-
-// Or via TakerTraits deadline field
-
-// MEV protection
-p.build(Decay._decayXD, DecayArgsBuilder.build(30));
-```
-
-### Taker Security
-
-**Protection Mechanisms:**
-
-| Feature | Description | Implementation |
-|---------|-------------|----------------|
-| **Slippage Protection** | Min output/max input | `threshold` in TakerTraits |
-| **Amount Validation** | Exact amounts enforced | `isStrictThresholdAmount` flag |
-| **Preview Execution** | Check before swap | `quote()` function |
-| **Custom Recipients** | Control token destination | `to` in TakerTraits |
-| **Hook Validation** | Pre-execution checks | `hasPreTransferInHook` |
-
-**Risk Mitigations:**
-```solidity
-// Set minimum output
-takerTraits.threshold = minAcceptableOutput;
-
-// Preview first
-(amountIn, amountOut) = swapVM.asView().quote(...);
-require(amountOut >= minRequired, "Insufficient output");
-
-// Then execute
-swapVM.swap(...);
-```
-
-### Instruction Security
-
-**Sandboxed Execution:**
-
-```
-┌─────────────────────────────────────────┐
-│         Instruction Sandbox             │
-├─────────────────────────────────────────┤
-│  ✅ Allowed:                            │
-│  • Read context data                    │
-│  • Modify swap registers                │
-│  • Control flow (jumps)                 │
-│  • Pure computations                    │
-├─────────────────────────────────────────┤
-│  ❌ Restricted:                         │
-│  • External calls                       │
-│  • Storage modification                 │
-│  • Query data modification              │
-│  • Infinite loops                       │
-└─────────────────────────────────────────┘
-```
-
-**Validation Example:**
-```solidity
-function _safeInstruction(Context memory ctx, bytes calldata args) internal {
-    // ✅ Can read and modify swap registers
-    ctx.swap.amountIn = ctx.swap.amountIn * 99 / 100;
-    
-    // ✅ Can read query data (read-only)
-    address maker = ctx.query.maker;
-    
-    // ✅ Can modify VM state for control flow
-    ctx.vm.nextPC = newPC;
-    
-    // ✅ Can consume taker data
-    bytes calldata data = ctx.tryChopTakerArgs(32);
-    
-    // ❌ Cannot do:
-    // IERC20(token).transfer(...);  // No external calls
-    // ctx.query.maker = newMaker;    // Query is read-only
-    // selfdestruct();                // No destructive operations
-}
-```
-
-### Risk Assessment and Mitigation Options
-
-#### Program Construction Risks (Maker Responsibility)
-
-Makers define programs that trade assets on their behalf and are responsible for correctness:
-
-**Logic Errors**
-- **Risk:** Incorrect instruction sequence or arguments
-- **Mitigation:** Test thoroughly, use proven patterns, audit critical strategies
-
-**Replay Attacks**
-- **Risk:** Order executed multiple times or overfilled
-- **Mitigation:** 
-  - Include `_invalidateBit1D` for one-time execution
-  - Use `_invalidateTokenIn/Out1D` for partial fills
-  - Set appropriate expiration
-
-**Price Exposure**
-- **Risk:** Trades at unfavorable market conditions
-- **Mitigation:**
-  - Add `_requireMinRate1D` checks
-  - Set expiration timestamps
-  - Use oracle price bounds
-
-**Order Uniqueness**
-- **Risk:** Cannot create multiple identical orders
-- **Mitigation:** Use `_salt` instruction to differentiate, vary parameters slightly
-
-#### Execution Risks (Taker Responsibility)
-
-Takers control execution parameters and must verify rates:
-
-**Rate Slippage**
-- **Risk:** Receive worse exchange rate than expected
-- **Mitigation Options:**
-  - **Threshold Protection:**
-    - Exact: `isStrictThresholdAmount = true`
-    - Min output: `isExactIn = true, threshold = minOut`
-    - Max input: `isExactIn = false, threshold = maxIn`
-  - **Callback Validation:**
-    - Pre-transfer hook: `hasPreTransferInHook = true`
-    - Custom logic via `ITakerCallbacks`
-  - **Return Data Verification:**
-    - Check returned `(amountIn, amountOut)`
-    - Compare with `quote()` results
-
-**MEV Attacks**
-- **Risk:** Front-running or sandwich attacks
-- **Mitigation:** Use private mempools (Flashbots), set tight thresholds, use commit-reveal patterns
-
-**Failed Transactions**
-- **Risk:** Wasted gas from reverts
-- **Mitigation:** Always call `quote()` first, verify token balances, check order expiration
-
-#### SwapVM Security Guarantees
-
-The protocol provides these built-in protections:
-
-**Parameter Integrity**
-- Never violates maker/taker constraints through strict trait enforcement
-
-**Balance Isolation**
-- Each maker's liquidity is separate using per-maker storage slots
-
-**Instruction Sandboxing**
-- No external calls from instructions (pure/view functions only)
-
-**Reentrancy Protection**
-- Prevents recursive calls using transient locks (EIP-1153)
-
-**Overflow Protection**
-- Safe arithmetic operations with Solidity 0.8+ checks
-
-**Deterministic Execution**
-- Same inputs always produce same outputs (no external dependencies in core logic)
-
----
-
-## 🔬 Advanced Topics
-
-### Concentrated Liquidity
-
-Provide liquidity within specific price ranges:
-
-```solidity
-// Calculate concentration parameters
-(uint256 deltaA, uint256 deltaB) = XYCConcentrateArgsBuilder.computeDeltas(
-    1000e6,   // balanceA
-    0.5e18,   // balanceB
-    2000e18,  // current price
-    1900e18,  // lower bound
-    2100e18   // upper bound
-);
-
-// Build CLMM strategy
-bytes memory program = bytes.concat(
-    p.build(Balances._dynamicBalancesXD, balances),
-    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, 
-        XYCConcentrateArgsBuilder.build2D(tokenA, tokenB, deltaA, deltaB)),
-    p.build(Fee._flatFeeAmountInXD, fee),
-    p.build(XYCSwap._xycSwapXD)
-);
-```
-
-### 1inch Fusion Orders
-
-Complex multi-instruction strategies:
-
-```solidity
-// Dutch auction + gas adjustment + oracle + rate limit
-bytes memory program = bytes.concat(
-    p.build(Balances._staticBalancesXD, ...),
-    p.build(DutchAuction._dutchAuctionBalanceOut1D, ...),
-    p.build(BaseFeeAdjuster._baseFeeAdjuster1D, ...),
-    p.build(OraclePriceAdjuster._oraclePriceAdjuster1D, ...),
-    p.build(MinRate._adjustMinRate1D, ...),
-    p.build(LimitSwap._limitSwap1D, ...)
-);
-```
-
-### Protocol Fee Instructions
-
-SwapVM offers two protocol fee instructions with different settlement mechanisms:
-
-**1. `_protocolFeeAmountOutXD` - Direct ERC20 Transfer**
-- Uses standard `transferFrom` to collect fees
-- Requires maker to have approved SwapVM contract
-- Fee is transferred directly from maker to recipient
-- Suitable for standard ERC20 tokens
-
-**2. `_aquaProtocolFeeAmountOutXD` - Aqua Protocol Integration**
-- Uses Aqua's `pull` function for fee collection
-- Works with orders using Aqua balance management
-- No separate approval needed (uses Aqua's existing permissions)
-- Enables batched fee collection and gas optimization
-
-**Usage Example:**
-```solidity
-// Direct ERC20 protocol fee
-p.build(Fee._protocolFeeAmountOutXD, 
-    FeeArgsBuilder.buildProtocolFee(10, treasury)); // 0.1% to treasury
-
-// Aqua protocol fee (for Aqua-managed orders)
-p.build(Fee._aquaProtocolFeeAmountOutXD,
-    FeeArgsBuilder.buildProtocolFee(10, treasury)); // 0.1% via Aqua
-```
-
-Both calculate fees identically but differ in the transfer mechanism.
-
-### MEV Protection Strategies
-
-```solidity
-// Virtual balance decay
-p.build(Decay._decayXD, DecayArgsBuilder.build(30)); // 30s decay
-
-// Progressive fees (larger swaps pay more)
-p.build(Fee._progressiveFeeInXD, ...);  // or _progressiveFeeOutXD
-
-/* Progressive Fee Improvements:
- * New formula: dx_eff = dx / (1 + λ * dx / x) 
- * - Maintains near-perfect exact in/out symmetry
- * - Only ~1 gwei asymmetry from safety ceiling operations
- * - Mathematically reversible for consistent pricing
- */
-
-// Time-based pricing
-p.build(DutchAuction._dutchAuctionBalanceOut1D, ...);
-```
-
-### TWAP (Time-Weighted Average Price) Configuration
-
-The `_twap` instruction implements a sophisticated selling strategy with:
-- **Linear liquidity unlocking** over time
-- **Exponential price decay** (Dutch auction) for price discovery
-- **Automatic price bumps** after illiquidity periods
-- **Minimum trade size enforcement**
-
-#### Minimum Trade Size Guidelines
-
-Set `minTradeAmountOut` 1000x+ larger than expected gas costs:
-
-| Network | Gas Cost | Recommended Min Trade |
-|---------|----------|----------------------|
-| Ethereum | $50 | $50,000+ |
-| Arbitrum/Optimism | $0.50 | $500+ |
-| BSC/Polygon | $0.05 | $50+ |
-
-This ensures gas costs remain <0.1% of trade value.
-
-#### Price Bump Configuration
-
-The `priceBumpAfterIlliquidity` compensates for mandatory waiting periods:
-
-| Min Trade % of Balance | Unlock Time | Recommended Bump |
-|----------------------|-------------|------------------|
-| 0.1% | 14.4 min | 5-10% (1.05e18 - 1.10e18) |
-| 1% | 14.4 min | 10-20% (1.10e18 - 1.20e18) |
-| 5% | 1.2 hours | 30-50% (1.30e18 - 1.50e18) |
-| 10% | 2.4 hours | 50-100% (1.50e18 - 2.00e18) |
-
-Additional factors:
-- **Network gas costs**: Higher gas → larger bumps
-- **Pair volatility**: Volatile pairs → larger bumps
-- **Market depth**: Thin markets → higher bumps
-
-### Debug Instructions
-
-SwapVM reserves opcodes 1-10 for debugging utilities, available only in debug routers:
-
-**Available Debug Instructions:**
-- `_printSwapRegisters` - Logs all 4 swap registers (balances and amounts)
-- `_printSwapQuery` - Logs query data (orderHash, maker, taker, tokens, isExactIn)
-- `_printContext` - Logs complete execution context
-- `_printFreeMemoryPointer` - Logs current memory usage
-- `_printGasLeft` - Logs remaining gas
-
-**Usage:**
-```solidity
-// Deploy debug router
-SwapVMRouterDebug debugRouter = new SwapVMRouterDebug(aquaAddress);
-
-// Include debug instructions in program
-bytes memory program = bytes.concat(
-    p.build(Balances._staticBalancesXD, ...),
-    p.build(Debug._printSwapRegisters),  // Debug output
-    p.build(LimitSwap._limitSwap1D, ...),
-    p.build(Debug._printContext)          // Final state
-);
-```
-
-**Note:** Debug instructions are no-ops in production routers and should only be used for development and testing.
-
-### Gas Optimization
-
-**Architecture Benefits:**
-- Transient storage (EIP-1153) for reentrancy guards
-- Zero deployment cost for makers
-- Compact bytecode encoding (8-bit opcodes)
-
-**Tips for Makers:**
-- Use `_staticBalancesXD` for single-direction trades with fixed rates
-- Use `_dynamicBalancesXD` for AMM strategies with automatic rebalancing
-- Pack multiple operations in single program
-- Minimize argument sizes
-
-**Tips for Takers:**
-- Batch multiple swaps
-- Use `quote()` to avoid failed transactions
-- Consider gas costs in profit calculations
-
-### AquaAMM Strategy Builder
-
-The `AquaAMM` contract provides a helper for building AMM programs with Aqua integration:
-
-```solidity
-import { AquaAMM } from "@1inch/swap-vm/contracts/strategies/AquaAMM.sol";
-
-// Build a concentrated liquidity AMM with fees
-ISwapVM.Order memory order = AquaAMM(aquaAMM).buildProgram(
-    maker,           // Your address
-    expiration,      // Order expiration
-    token0,          // First token
-    token1,          // Second token
-    feeBpsIn,        // Trading fee (e.g., 30 for 0.3%)
-    delta0,          // Concentration parameter for token0
-    delta1,          // Concentration parameter for token1
-    decayPeriod,     // MEV protection decay period
-    protocolFeeBps,  // Protocol fee share
-    feeReceiver,     // Protocol fee recipient
-    salt             // Order uniqueness salt
-);
-```
-
-**Features:**
-- Automatically constructs bytecode with proper instruction ordering
-- Integrates concentrated liquidity, fees, and MEV protection
-- Uses Aqua protocol for balance management (no signatures needed)
-- Includes debug output in development mode
-
-**Example: 0.3% Fee Concentrated AMM:**
-```solidity
-// Calculate concentration deltas for price range
-(uint256 delta0, uint256 delta1) = XYCConcentrateArgsBuilder.computeDeltas(
-    1000e6,   // 1000 USDC
-    0.5e18,   // 0.5 ETH
-    2000e18,  // Current price: 2000 USDC/ETH
-    1900e18,  // Lower bound
-    2100e18   // Upper bound
-);
-
-// Build order
-ISwapVM.Order memory order = aquaAMM.buildProgram(
-    msg.sender,    // maker
-    block.timestamp + 30 days,  // expiration
-    USDC,          // token0
-    WETH,          // token1
-    30,            // 0.3% fee
-    delta0,        // USDC concentration
-    delta1,        // ETH concentration
-    30,            // 30s decay period
-    10,            // 0.1% protocol fee
-    treasury,      // fee receiver
-    1              // salt
-);
-```
-
----
-
 ## 🚀 Getting Started
 
 ### Installation
@@ -1343,11 +1002,15 @@ yarn add @1inch/swap-vm
 ### Quick Example
 
 ```solidity
-import { SwapVMRouter } from "@1inch/swap-vm/contracts/SwapVMRouter.sol";
-import { Program, ProgramBuilder } from "@1inch/swap-vm/test/utils/ProgramBuilder.sol";
+import { SwapVMRouter } from "src/routers/SwapVMRouter.sol";
 
 // Deploy router
-SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
+SwapVMRouter router = new SwapVMRouter(
+    aquaAddress,
+    wethAddress,
+    "MyDEX",
+    "1.0"
+);
 
 // Create and execute orders...
 ```
@@ -1355,9 +1018,10 @@ SwapVMRouter router = new SwapVMRouter(aquaAddress, "MyDEX", "1.0");
 ### Resources
 
 - **GitHub**: [github.com/1inch/swap-vm](https://github.com/1inch/swap-vm)
-- **Documentation**: See `/docs` directory
+- **Documentation**: See `README.md`
+- **Deployment Guide**: See `DEPLOY.md`
+- **Testing Guide**: See `TESTING.md`
 - **Tests**: Comprehensive examples in `/test`
-- **Audits**: Security review reports in `/audits`
 
 ---
 
