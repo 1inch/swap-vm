@@ -24,6 +24,7 @@ import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 /// @title SwapVM
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
+/// @dev This contract is Ownable via Rescuable mixin
 abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     using ECDSA for address;
     using SafeERC20 for IERC20;
