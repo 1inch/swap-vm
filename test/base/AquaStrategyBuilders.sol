@@ -14,8 +14,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
-import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
+import { AquaSwapVMRouterExperimental } from "../../src/routers/AquaSwapVMRouterExperimental.sol";
+import { AquaOpcodesExperimentalDebug } from "../../src/opcodes/AquaOpcodesExperimentalDebug.sol";
 
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
@@ -35,7 +35,7 @@ import { TestConstants } from "./TestConstants.sol";
  * @notice Abstract contract that provides helper methods for building various swap strategies
  * @dev Inherits from Test and OpcodesDebug to have access to vm and _opcodes() function
  */
-abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug {
+abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperimentalDebug {
     using ProgramBuilder for Program;
 
     enum SwapType {
@@ -65,7 +65,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     address public maker;
     uint256 public makerPrivateKey;
 
-    constructor(address _aqua) AquaOpcodesDebug(_aqua) {}
+    constructor(address _aqua) AquaOpcodesExperimentalDebug(_aqua) {}
 
     function setUp() public virtual {
         // Setup maker with known private key for signing
@@ -101,7 +101,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
             setup.progressiveFeeBps > 0 ? p.build(FeeExperimental._progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)) : bytes(""),
             p.build(XYCSwap._xycSwapXD),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -137,7 +137,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     }
 
     function shipStrategy(
-        AquaSwapVMRouter swapVM,
+        AquaSwapVMRouterExperimental swapVM,
         ISwapVM.Order memory order,
         TokenMock tokenIn,
         TokenMock tokenOut,

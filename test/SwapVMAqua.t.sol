@@ -6,6 +6,8 @@ pragma solidity 0.8.30;
 
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { ISwapVM } from "../src/SwapVM.sol";
+import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+import { AquaSwapVMRouterExperimental } from "../src/routers/AquaSwapVMRouterExperimental.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
@@ -133,5 +135,11 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(takerFirstTransfer);
         assertEq(takerBalanceA, expectedAmountOut, "Taker should have received tokenA");
         assertEq(takerBalanceB, 0, "Taker should have 0 tokenB remaining");
+    }
+}
+
+contract SwapVMAquaNonExperimentalTest is SwapVMAquaTest {
+    function _deployRouter() internal override returns (AquaSwapVMRouterExperimental) {
+        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0"))));
     }
 }

@@ -10,6 +10,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 
 import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+import { AquaSwapVMRouterExperimental } from "../src/routers/AquaSwapVMRouterExperimental.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
@@ -231,5 +232,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(taker);
         assertEq(takerBalanceA, 0, "Taker should have no tokenA");
         assertEq(takerBalanceB, 1050e18, "Taker should still have initial tokenB plus minted");
+    }
+}
+
+contract ControlsAquaNonExperimentalTest is ControlsAquaTest {
+    function _deployRouter() internal override returns (AquaSwapVMRouterExperimental) {
+        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0"))));
     }
 }

@@ -13,19 +13,21 @@ import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { Fee } from "../instructions/Fee.sol";
+import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-contract AquaOpcodes is
+contract AquaOpcodesExpiremental is
     Controls,
     XYCSwap,
     XYCConcentrate,
     Decay,
     Fee,
+    FeeExperimental,
     PeggedSwap,
     Extruction
 {
-    constructor(address aqua) Fee(aqua) {}
+    constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
@@ -60,11 +62,11 @@ contract AquaOpcodes is
             // NOTE: Add new instructions here to maintain backward compatibility
             Controls._salt,
             Fee._flatFeeAmountInXD,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
+            FeeExperimental._flatFeeAmountOutXD,
+            FeeExperimental._progressiveFeeInXD,
+            FeeExperimental._progressiveFeeOutXD,
+            FeeExperimental._protocolFeeAmountOutXD,
+            FeeExperimental._aquaProtocolFeeAmountOutXD,
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
