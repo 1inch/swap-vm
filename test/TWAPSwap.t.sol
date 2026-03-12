@@ -48,7 +48,7 @@ contract TWAPSwapTest is Test, OpcodesDebug {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
@@ -424,6 +424,128 @@ contract TWAPSwapTest is Test, OpcodesDebug {
 
         assertGt(laterOut, 0.0001e18, "Should get more output after TWAP");
     }
+
+    /**
+     * @notice Test cumulative sold tracking across multiple swaps
+     * @dev This test would have caught the bug where sold was calculated incorrectly
+     */
+    function test_TWAP_CumulativeSoldTracking_Multiple_Swaps() public {
+        uint256 startTime = block.timestamp;
+        uint256 duration = 86400; // 24 hours
+        uint256 totalBalance = 1000e18;
+
+        bytes memory bytecode = _createTWAPBytecode(
+            2000e18,
+            totalBalance,  // 2:1 rate
+            TWAPSwapArgsBuilder.TwapArgs({
+                balanceIn: 2000e18,
+                balanceOut: totalBalance,
+                startTime: startTime,
+                duration: duration,
+                priceBumpAfterIlliquidity: 1.1e18,
+                minTradeAmountOut: 0.1e18 // Lower minimum to account for decay
+            })
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes32 orderHash = swapVM.hash(order);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        uint256 cumulativeSold = 0;
+
+        // Swap 1: At 20% time (200e18 unlocked)
+        vm.warp(startTime + duration * 20 / 100);
+        uint256 unlocked1 = totalBalance * 20 / 100; // 200e18
+
+        uint256 out1 = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 100e18, exactInData);
+        cumulativeSold += out1;
+
+        // Check stored state
+        (,, uint256 timestamp1, uint256 storedSold1) = swapVM.twapLastSwaps(orderHash);
+        assertEq(storedSold1, cumulativeSold, "Swap 1: totalSold should equal first amountOut");
+        assertEq(timestamp1, block.timestamp, "Swap 1: timestamp should be updated");
+        assertLe(storedSold1, unlocked1, "Swap 1: totalSold should not exceed unlocked");
+
+        // Swap 2: At 50% time (500e18 unlocked total)
+        vm.warp(startTime + duration * 50 / 100);
+        uint256 unlocked2 = totalBalance * 50 / 100; // 500e18
+
+        uint256 out2 = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 150e18, exactInData);
+        cumulativeSold += out2;
+
+        // Check state after second swap
+        (,, uint256 timestamp2, uint256 storedSold2) = swapVM.twapLastSwaps(orderHash);
+        assertEq(storedSold2, cumulativeSold, "Swap 2: totalSold should be cumulative (sold1 + sold2)");
+        assertEq(timestamp2, block.timestamp, "Swap 2: timestamp should be updated");
+        assertLe(storedSold2, unlocked2, "Swap 2: totalSold should not exceed unlocked");
+        assertGt(storedSold2, storedSold1, "Swap 2: totalSold should increase");
+
+        // Swap 3: At 80% time (800e18 unlocked total)
+        vm.warp(startTime + duration * 80 / 100);
+        uint256 unlocked3 = totalBalance * 80 / 100; // 800e18
+
+        uint256 out3 = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 200e18, exactInData);
+        cumulativeSold += out3;
+
+        // Final check
+        (,, uint256 timestamp3, uint256 storedSold3) = swapVM.twapLastSwaps(orderHash);
+        assertEq(storedSold3, cumulativeSold, "Swap 3: totalSold should be cumulative (all swaps)");
+        assertEq(timestamp3, block.timestamp, "Swap 3: timestamp should be updated");
+        assertLe(storedSold3, unlocked3, "Swap 3: totalSold should not exceed unlocked");
+        assertGt(storedSold3, storedSold2, "Swap 3: totalSold should continue to increase");
+
+        // Verify cumulative accounting - the KEY invariant that would catch the bug
+        assertEq(storedSold3, out1 + out2 + out3, "Total sold should equal sum of all outputs");
+    }
+
+    /**
+     * @notice Test that swaps cannot exceed available liquidity
+     * @dev This validates the available = unlocked - totalSold calculation
+     */
+    function test_TWAP_CannotOverdraftLiquidity() public {
+        uint256 startTime = block.timestamp;
+        uint256 duration = 3600; // 1 hour
+        uint256 totalBalance = 100e18;
+
+        bytes memory bytecode = _createTWAPBytecode(
+            200e18,
+            totalBalance,  // 2:1 rate
+            TWAPSwapArgsBuilder.TwapArgs({
+                balanceIn: 200e18,
+                balanceOut: totalBalance,
+                startTime: startTime,
+                duration: duration,
+                priceBumpAfterIlliquidity: 1.1e18,
+                minTradeAmountOut: 1e18
+            })
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        // At 50% time: unlocked = 50e18
+        vm.warp(startTime + duration * 50 / 100);
+
+        // First swap: buy 40e18 (should succeed)
+        uint256 out1 = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 100e18, exactInData);
+        assertGt(out1, 35e18, "First swap should get close to 40e18");
+        assertLe(out1, 50e18, "First swap should not exceed unlocked");
+
+        // Second swap: try to buy more than available
+        // Available should be approximately: 50e18 - out1 (~10e18 or less)
+        TokenMock(tokenA).mint(taker, 100e18);
+
+        // This should revert because totalSold + newAmount > unlocked
+        vm.expectRevert(); // Expecting TWAPSwapTradeAmountExceedLiquidity
+        swapVM.swap(
+            order,
+            address(tokenA),
+            address(tokenB),
+            100e18, // Trying to get ~40-50e18 but only ~10e18 available
+            exactInData
+        );
+    }
+
 
     // Helper functions
     function _executeSwap(

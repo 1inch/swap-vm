@@ -94,6 +94,7 @@ contract TWAPSwap is LimitSwap {
         uint256 amountIn;
         uint256 amountOut;
         uint256 timestamp;
+        uint256 totalSold; // Cumulative amount sold across all swaps
     }
 
     mapping(bytes32 orderHash => LastSwap) public twapLastSwaps;
@@ -111,7 +112,9 @@ contract TWAPSwap is LimitSwap {
         // Calculate available liquidity (linear unlocking)
         uint256 durationPassed = Math.min(block.timestamp - args.startTime, args.duration);
         uint256 unlocked = args.balanceOut * durationPassed / args.duration;
-        uint256 sold = args.balanceOut - ctx.swap.balanceOut;
+
+        LastSwap memory lastSwap = twapLastSwaps[ctx.query.orderHash];
+        uint256 sold = lastSwap.totalSold; // Use cumulative sold from storage
         uint256 available = unlocked - sold;
 
         // Calculate current output (first trade args)
@@ -119,7 +122,6 @@ contract TWAPSwap is LimitSwap {
         uint256 baseAmountIn = args.balanceIn;
         uint256 auctionStartTime = args.startTime;
 
-        LastSwap memory lastSwap = twapLastSwaps[ctx.query.orderHash];
         if (lastSwap.timestamp > 0) {
             // Subsequent trades
             baseAmountOut = lastSwap.amountOut;
@@ -162,7 +164,8 @@ contract TWAPSwap is LimitSwap {
             twapLastSwaps[ctx.query.orderHash] = LastSwap({
                 amountIn: ctx.swap.amountIn,
                 amountOut: ctx.swap.amountOut,
-                timestamp: block.timestamp
+                timestamp: block.timestamp,
+                totalSold: sold + ctx.swap.amountOut // Update cumulative sold
             });
         }
     }

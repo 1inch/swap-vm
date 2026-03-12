@@ -12,6 +12,7 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
+import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
@@ -23,7 +24,8 @@ import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 /// @title SwapVM
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
-abstract contract SwapVM is EIP712, OnlyWethReceiver {
+/// @dev This contract is Ownable via Rescuable mixin
+abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
@@ -76,9 +78,10 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver {
     /// @notice Initialize SwapVM with Aqua and WETH addresses
     /// @param aqua Address of the Aqua protocol contract
     /// @param weth Address of the WETH token
+    /// @param owner Address of the owner of the contract, used for rescuing funds only
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) {
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) {
         AQUA = IAqua(aqua);
     }
 

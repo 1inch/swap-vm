@@ -134,6 +134,6 @@ contract FeeAquaTest is AquaSwapVMTest {
 
 contract FeeAquaNonExperimentalTest is FeeAquaTest {
     function _deployRouter() internal override returns (AquaSwapVMRouterExperimental) {
-        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0"))));
+        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0"))));
     }
 }

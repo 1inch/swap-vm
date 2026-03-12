@@ -65,7 +65,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
 
-        swapVM = new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
+        swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         decay = Decay(address(swapVM));
         peggedSwap = PeggedSwap(address(swapVM));
