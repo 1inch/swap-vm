@@ -14,13 +14,12 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
+
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeExperimental, FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { Controls } from "../../src/instructions/Controls.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
@@ -51,8 +50,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         uint256 priceMax;
         uint32 protocolFeeBps;
         uint32 feeInBps;
-        uint32 feeOutBps;
-        uint32 progressiveFeeBps;
         address protocolFeeRecipient;
         SwapType swapType;
     }
@@ -77,7 +74,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         tokenB = new TokenMock("Token B", "TKB");
     }
 
-    function buildProgram(MakerSetup memory setup) internal view returns (bytes memory) {
+    function buildProgram(MakerSetup memory setup) internal view virtual returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
 
         bytes memory concentrateProgram = "";
@@ -95,13 +92,11 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         }
 
         return bytes.concat(
-            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
+            setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
-            setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
-            setup.progressiveFeeBps > 0 ? p.build(FeeExperimental._progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)) : bytes(""),
             p.build(XYCSwap._xycSwapXD),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -137,7 +132,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     }
 
     function shipStrategy(
-        AquaSwapVMRouter swapVM,
+        SwapVM swapVM,
         ISwapVM.Order memory order,
         TokenMock tokenIn,
         TokenMock tokenOut,
