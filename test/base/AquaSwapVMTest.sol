@@ -105,6 +105,14 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         tokenIn.mint(address(swapProgram.taker), amount);
     }
 
+    function mintTokenInToMaker(
+        SwapProgram memory swapProgram,
+        uint256 amount
+    ) public {
+        (TokenMock tokenIn, ) = getTokenPair(swapProgram);
+        tokenIn.mint(maker, amount);
+    }
+
     function mintTokenOutToMaker(
         SwapProgram memory swapProgram,
         uint256 amountOut

@@ -77,7 +77,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
         tokenB = new TokenMock("Token B", "TKB");
     }
 
-    function buildProgram(MakerSetup memory setup) internal view returns (bytes memory) {
+    function buildProgram(MakerSetup memory setup) internal view virtual returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
 
         bytes memory concentrateProgram = "";
@@ -95,7 +95,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
         }
 
         return bytes.concat(
-            setup.protocolFeeBps > 0 ? p.build(FeeExperimental._aquaProtocolFeeAmountOutXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
+            setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
             setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
