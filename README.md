@@ -11,6 +11,8 @@
 
 **A virtual machine for programmable token swaps.** Execute complex trading strategies from bytecode programs without deploying contracts.
 
+For a catalog of strategy types and composition examples, see `docs/PROGRAMS.md`.
+
 ---
 
 ## 📚 Table of Contents
@@ -317,6 +319,7 @@ p.build(Balances._dynamicBalancesXD,
     ))
 ```
 
+
 ---
 
 ## Core Invariants
@@ -399,14 +402,14 @@ contract MyInstructionTest is Test, OpcodesDebug, CoreInvariants {
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = signAndPackTakerData(order, false, type(uint256).max);
-
+        
         // Test all invariants at once
         assertAllInvariantsWithConfig(swapVM, order, tokenIn, tokenOut, config);
-
+        
         // Or test specific invariants
-        assertSymmetryInvariant(swapVM, order, tokenIn, tokenOut,
+        assertSymmetryInvariant(swapVM, order, tokenIn, tokenOut, 
             amount, tolerance, exactInData, exactOutData);
-        assertMonotonicityInvariant(swapVM, order, tokenIn, tokenOut,
+        assertMonotonicityInvariant(swapVM, order, tokenIn, tokenOut, 
             amounts, takerData, 0); // strict monotonicity
     }
 }
@@ -905,7 +908,7 @@ contract MyInstructionTest is Test, OpcodesDebug, CoreInvariants {
     function test_MyProgram_AllInvariants() public {
         bytes memory program = buildMyProgram();
         ISwapVM.Order memory order = _createOrder(program);
-
+        
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
