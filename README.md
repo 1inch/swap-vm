@@ -574,6 +574,46 @@ Your orders are protected by:
 - **Hooks** - Add custom validation/automation logic around transfers
 - **Order Invalidation** - Prevent replay/overfill via bitmap or token-based invalidators
 
+> **⚠️ HOOK EXECUTION ORDER WARNING FOR MAKERS**
+>
+> **Taker Controls Transfer Order:** The taker specifies `isFirstTransferFromTaker` flag, which determines whether the taker transfers input tokens first or receives output tokens first. This means the actual execution order of your hooks depends on the taker's choice.
+>
+> **Complete Execution Sequence:**
+> - `isFirstTransferFromTaker = true`:
+>   1. `preTransferInHook` (maker)
+>   2. `preTransferInCallback` (taker)
+>   3. **Input token settlement** (details below)
+>   4. `postTransferInHook` (maker)
+>   5. `preTransferOutHook` (maker)
+>   6. `preTransferOutCallback` (taker)
+>   7. **Output token settlement** (details below)
+>   8. `postTransferOutHook` (maker)
+>
+> - `isFirstTransferFromTaker = false`:
+>   1. `preTransferOutHook` (maker)
+>   2. `preTransferOutCallback` (taker)
+>   3. **Output token settlement** (details below)
+>   4. `postTransferOutHook` (maker)
+>   5. `preTransferInHook` (maker)
+>   6. `preTransferInCallback` (taker)
+>   7. **Input token settlement** (details below)
+>   8. `postTransferInHook` (maker)
+>
+> **Settlement Mechanisms:**
+> - **Input (non-Aqua):** `IERC20.transferFrom(taker → receiver)`
+> - **Input (Aqua + useTransferFromAndAquaPush):** `IERC20.transferFrom(taker → SwapVM) + AQUA.push()`
+> - **Input (Aqua without useTransferFromAndAquaPush):** Balance validation only (taker must push tokens before `swap()`)
+> - **Output (non-Aqua):** `IERC20.transferFrom(maker → to)`
+> - **Output (Aqua):** `AQUA.pull(maker → to)`
+>
+> **Maker Responsibility:** When implementing hooks, you must account for both possible execution orders. Do not assume a fixed sequence (e.g., assuming `preTransferInHook` always executes before `preTransferOutHook`). Note that taker callbacks are executed between your hooks - this is controlled by the taker and outside your control.
+>
+> **Best Practices:**
+> - Design hooks to be order-independent (stateless validation)
+> - If order matters, explicitly check transfer direction within your hook logic
+> - Test your hooks with both `isFirstTransferFromTaker` values
+> - Be aware that taker callbacks execute between your hooks
+
 **Best Practices:**
 - Always set expiration dates
 - Use `_invalidateBit1D` for one-time orders
@@ -997,6 +1037,420 @@ if (useAquaInsteadOfSignature) {
     require(AQUA.balances(maker, orderHash, token) >= amount);
 }
 ```
+
+### Risk Assessment and Mitigation Options
+
+#### Program Construction Risks (Maker Responsibility)
+
+Makers define programs that trade assets on their behalf and are responsible for correctness:
+
+**Logic Errors**
+- **Risk:** Incorrect instruction sequence or arguments
+- **Mitigation:** Test thoroughly, use proven patterns, audit critical strategies
+
+**Replay Attacks**
+- **Risk:** Order executed multiple times or overfilled
+- **Mitigation:** 
+  - Include `_invalidateBit1D` for one-time execution
+  - Use `_invalidateTokenIn/Out1D` for partial fills
+  - Set appropriate expiration
+
+**Price Exposure**
+- **Risk:** Trades at unfavorable market conditions
+- **Mitigation:**
+  - Add `_requireMinRate1D` checks
+  - Set expiration timestamps
+  - Use oracle price bounds
+
+**Order Uniqueness**
+- **Risk:** Cannot create multiple identical orders
+- **Mitigation:** Use `_salt` instruction to differentiate, vary parameters slightly
+
+#### Execution Risks (Taker Responsibility)
+
+Takers control execution parameters and must verify rates:
+
+**Rate Slippage**
+- **Risk:** Receive worse exchange rate than expected
+- **Mitigation Options:**
+  - **Threshold Protection:**
+    - Exact: `isStrictThresholdAmount = true`
+    - Min output: `isExactIn = true, threshold = minOut`
+    - Max input: `isExactIn = false, threshold = maxIn`
+  - **Callback Validation:**
+    - Pre-transfer hook: `hasPreTransferInHook = true`
+    - Custom logic via `ITakerCallbacks`
+  - **Return Data Verification:**
+    - Check returned `(amountIn, amountOut)`
+    - Compare with `quote()` results
+
+**MEV Attacks**
+- **Risk:** Front-running or sandwich attacks
+- **Mitigation:** Use private mempools (Flashbots), set tight thresholds, use commit-reveal patterns
+
+**Failed Transactions**
+- **Risk:** Wasted gas from reverts
+- **Mitigation:** Always call `quote()` first, verify token balances, check order expiration
+
+#### SwapVM Security Guarantees
+
+The protocol provides these built-in protections:
+
+**Parameter Integrity**
+- Never violates maker/taker constraints through strict trait enforcement
+
+**Balance Isolation**
+- Each maker's liquidity is separate using per-maker storage slots
+
+**Instruction Sandboxing**
+- No external calls from instructions (pure/view functions only)
+
+**Reentrancy Protection**
+- Prevents recursive calls using transient locks (EIP-1153)
+
+**Overflow Protection**
+- Safe arithmetic operations with Solidity 0.8+ checks
+
+**Deterministic Execution**
+- Same inputs always produce same outputs (no external dependencies in core logic)
+
+---
+
+## 🔬 Advanced Topics
+
+### AMM Instruction Ordering (Canonical)
+
+The order in which instructions appear in an AMM program is critical for correct accounting — specifically for protocol fee isolation, liquidity growth, and conservation laws. The canonical orderings below are validated by `AquaAccounting.t.sol` and `SwapVmAccounting.t.sol`.
+
+#### Aqua Protocol (balance managed by Aqua)
+
+```
+aquaProtocolFeeAmountIn → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
+```
+
+```solidity
+// XYC AMM with protocol fee + flat fee + MEV protection
+bytes memory program = bytes.concat(
+    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(XYCSwap._xycSwapXD),
+    p.build(Controls._salt, saltArgs)
+);
+
+// Pegged swap variant (replaces concentrate + xycSwap)
+bytes memory program = bytes.concat(
+    p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
+    p.build(Controls._salt, saltArgs)
+);
+```
+
+#### Dynamic Balances (SwapVM internal, no Aqua)
+
+```
+protocolFeeAmountIn → dynamicBalances → [decay?] → [concentrate?] → flatFee → swap / peggedSwap → salt
+```
+
+```solidity
+// XYC AMM with protocol fee + flat fee + MEV protection
+bytes memory program = bytes.concat(
+    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, concentrateArgs),               // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(XYCSwap._xycSwapXD),
+    p.build(Controls._salt, saltArgs)
+);
+
+// Pegged swap variant
+bytes memory program = bytes.concat(
+    p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, feeReceiver)),
+    p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(tokens, initialBalances)),
+    p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),                          // optional
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+    p.build(PeggedSwap._peggedSwapGrowPriceRange2D, peggedArgs),
+    p.build(Controls._salt, saltArgs)
+);
+```
+
+#### Why This Order Matters
+
+| Position | Instruction | Reason |
+|----------|-------------|--------|
+| 1st | **Protocol Fee** | Extracted from `amountIn` **before** balances are touched — ensures fee is isolated from pool reserves and does not inflate liquidity |
+| 2nd | **Dynamic Balances** (non-Aqua only) | Loads/initializes maker's isolated reserves; wraps all subsequent instructions via `runLoop()` |
+| 3rd | **Decay** | Applies virtual reserve adjustment based on time since last trade — must see real balances |
+| 4th | **Concentrate** | Shifts reserves into concentrated range — must happen before the swap but after decay |
+| 5th | **Flat Fee** | Reduces effective `amountIn` before swap calculation — fee amount stays in the pool, growing liquidity |
+| 6th | **Swap / PeggedSwap** | Core AMM calculation using final adjusted registers |
+| Last | **Salt** | Order uniqueness — pure hash modifier, no effect on computation |
+
+**Key invariant:** `pool_balance + protocol_fee = initial_balance + total_amountIn` (Token A conservation). Placing protocol fee first guarantees it is cleanly separated from pool accounting. Placing flat fee after concentrate ensures the retained fee grows liquidity correctly.
+
+See `test/AquaAccounting.t.sol` and `test/SwapVmAccounting.t.sol` for comprehensive conservation law tests.
+
+---
+
+### Price Bounds and Fees
+
+**Important:** Price bounds ([sqrtPriceMin, sqrtPriceMax] for XYCConcentrate) apply to the **AMM invariant curve**, not to the final execution price paid by takers. This is standard behavior across all AMMs.
+
+**How Fees Affect Execution Prices:**
+
+When fees are applied on top of AMM calculations, takers experience effective prices outside the declared bounds:
+
+```
+Example: XYCConcentrate with bounds [2000-4000] USD/ETH + 3% fee
+
+Declared AMM Bounds: [2,000 - 4,000] USD/ETH
+Effective Price Range for Takers: [1,940 - 4,124] USD/ETH
+
+At Pmin = 2000:
+  - Sell ETH: ~1,940 USD/ETH (receive 3% less due to fee)
+  - Buy ETH:  ~2,062 USD/ETH (pay 3% more due to fee)
+
+At Pmax = 4000:
+  - Sell ETH: ~3,880 USD/ETH (receive 3% less due to fee)
+  - Buy ETH:  ~4,124 USD/ETH (pay 3% more due to fee)
+```
+
+**Why This Happens:**
+- AMM bounds define the swap curve (x*y=k invariant boundaries)
+- Fees are applied as a separate layer: `effective_price = AMM_price ± fee`
+
+**Analogy:** A product priced at $100 with bounds [$50-$200] plus 10% sales tax means you pay $110, but the product's price bounds remain [$50-$200].
+
+**For Makers:** Your strategy's AMM bounds control liquidity distribution, but takers always pay/receive amounts adjusted for fees.
+
+**For Takers:** Always account for fees when calculating expected execution prices. Use `quote()` to preview exact amounts before executing swaps.
+
+### Concentrated Liquidity
+
+Provide liquidity within specific price ranges:
+
+```solidity
+// 1. Define price range (sqrt of actual prices, in 1e18 fixed-point)
+// Example: Concentrate between 0.9 and 1.1 for near-parity tokens
+uint256 sqrtPriceMin = Math.sqrt(0.9e18 * 1e18);   // sqrt(0.9) ≈ 0.9487e18
+uint256 sqrtPriceMax = Math.sqrt(1.1e18 * 1e18);   // sqrt(1.1) ≈ 1.0488e18
+
+// 2. Calculate initial balances for desired spot price (e.g., 1.0)
+// tokenLt = token with lower address, tokenGt = token with higher address
+(, uint256 balanceLt, uint256 balanceGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+    1000e18,    // available Lt tokens
+    1000e18,    // available Gt tokens  
+    1e18,       // sqrt spot price (1.0 for parity)
+    sqrtPriceMin,
+    sqrtPriceMax
+);
+
+// 3. Build CLMM strategy
+bytes memory program = bytes.concat(
+    p.build(Balances._dynamicBalancesXD,
+        BalancesArgsBuilder.build(
+            dynamic([tokenLt, tokenGt]),
+            dynamic([balanceLt, balanceGt])
+        )),
+    p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, 
+        XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)),
+    p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)),
+    p.build(XYCSwap._xycSwapXD)
+);
+```
+
+**Key Points:**
+- `build2D()` takes sqrt price bounds, not token addresses
+- Use `computeLiquidityFromAmounts()` to get initial balances for your desired spot price
+- Price P is defined as `tokenGt/tokenLt` (higher address token / lower address token)
+- Sqrt prices are in 1e18 fixed-point format
+
+### 1inch Fusion Orders
+
+Complex multi-instruction strategies:
+
+```solidity
+// Dutch auction + gas adjustment + oracle + rate limit
+bytes memory program = bytes.concat(
+    p.build(Balances._staticBalancesXD, ...),
+    p.build(DutchAuction._dutchAuctionBalanceOut1D, ...),
+    p.build(BaseFeeAdjuster._baseFeeAdjuster1D, ...),
+    p.build(OraclePriceAdjuster._oraclePriceAdjuster1D, ...),
+    p.build(MinRate._adjustMinRate1D, ...),
+    p.build(LimitSwap._limitSwap1D, ...)
+);
+```
+
+### Protocol Fee Instructions
+
+SwapVM offers two protocol fee instructions with different settlement mechanisms:
+
+**1. `_protocolFeeAmountOutXD` - Direct ERC20 Transfer**
+- Uses standard `transferFrom` to collect fees
+- Requires maker to have approved SwapVM contract
+- Fee is transferred directly from maker to recipient
+- Suitable for standard ERC20 tokens
+
+**2. `_aquaProtocolFeeAmountOutXD` - Aqua Protocol Integration**
+- Uses Aqua's `pull` function for fee collection
+- Works with orders using Aqua balance management
+- No separate approval needed (uses Aqua's existing permissions)
+- Enables batched fee collection and gas optimization
+
+**Usage Example:**
+```solidity
+// Direct ERC20 protocol fee
+p.build(Fee._protocolFeeAmountOutXD, 
+    FeeArgsBuilder.buildProtocolFee(10, treasury)); // 0.1% to treasury
+
+// Aqua protocol fee (for Aqua-managed orders)
+p.build(Fee._aquaProtocolFeeAmountOutXD,
+    FeeArgsBuilder.buildProtocolFee(10, treasury)); // 0.1% via Aqua
+```
+
+Both calculate fees identically but differ in the transfer mechanism.
+
+### MEV Protection Strategies
+
+```solidity
+// Virtual balance decay
+p.build(Decay._decayXD, DecayArgsBuilder.build(30)); // 30s decay
+
+// Progressive fees (larger swaps pay more)
+p.build(Fee._progressiveFeeInXD, ...);  // or _progressiveFeeOutXD
+
+/* Progressive Fee Improvements:
+ * New formula: dx_eff = dx / (1 + λ * dx / x) 
+ * - Maintains near-perfect exact in/out symmetry
+ * - Only ~1 gwei asymmetry from safety ceiling operations
+ * - Mathematically reversible for consistent pricing
+ */
+
+// Time-based pricing
+p.build(DutchAuction._dutchAuctionBalanceOut1D, ...);
+```
+
+### TWAP (Time-Weighted Average Price) Configuration
+
+The `_twap` instruction implements a sophisticated selling strategy with:
+- **Linear liquidity unlocking** over time
+- **Exponential price decay** (Dutch auction) for price discovery
+- **Automatic price bumps** after illiquidity periods
+- **Minimum trade size enforcement**
+
+#### Minimum Trade Size Guidelines
+
+Set `minTradeAmountOut` 1000x+ larger than expected gas costs:
+
+| Network | Gas Cost | Recommended Min Trade |
+|---------|----------|----------------------|
+| Ethereum | $50 | $50,000+ |
+| Arbitrum/Optimism | $0.50 | $500+ |
+| BSC/Polygon | $0.05 | $50+ |
+
+This ensures gas costs remain <0.1% of trade value.
+
+#### Price Bump Configuration
+
+The `priceBumpAfterIlliquidity` compensates for mandatory waiting periods:
+
+| Min Trade % of Balance | Unlock Time | Recommended Bump |
+|----------------------|-------------|------------------|
+| 0.1% | 14.4 min | 5-10% (1.05e18 - 1.10e18) |
+| 1% | 14.4 min | 10-20% (1.10e18 - 1.20e18) |
+| 5% | 1.2 hours | 30-50% (1.30e18 - 1.50e18) |
+| 10% | 2.4 hours | 50-100% (1.50e18 - 2.00e18) |
+
+Additional factors:
+- **Network gas costs**: Higher gas → larger bumps
+- **Pair volatility**: Volatile pairs → larger bumps
+- **Market depth**: Thin markets → higher bumps
+
+### Debug Instructions
+
+SwapVM reserves opcodes 1-10 for debugging utilities, available only in debug routers:
+
+**Available Debug Instructions:**
+- `_printSwapRegisters` - Logs all 4 swap registers (balances and amounts)
+- `_printSwapQuery` - Logs query data (orderHash, maker, taker, tokens, isExactIn)
+- `_printContext` - Logs complete execution context
+- `_printFreeMemoryPointer` - Logs current memory usage
+- `_printGasLeft` - Logs remaining gas
+
+**Usage:**
+```solidity
+// Deploy debug router
+SwapVMRouterDebug debugRouter = new SwapVMRouterDebug(aquaAddress);
+
+// Include debug instructions in program
+bytes memory program = bytes.concat(
+    p.build(Balances._staticBalancesXD, ...),
+    p.build(Debug._printSwapRegisters),  // Debug output
+    p.build(LimitSwap._limitSwap1D, ...),
+    p.build(Debug._printContext)          // Final state
+);
+```
+
+**Note:** Debug instructions are no-ops in production routers and should only be used for development and testing.
+
+### Program Size Limitations
+
+SwapVM programs have an effective size limit of **65,535 bytes** (64KB) due to control flow instruction addressing.
+
+**Technical Details:**
+- The VM itself (`ContextLib.runLoop`) uses `uint256` for the program counter and can execute programs of any size
+- Control flow instructions (`_jump`, `_jumpIfTokenIn`, `_jumpIfTokenOut`) use `uint16` (2-byte) encoding for jump targets
+- Jump targets are limited to positions 0-65,535 within the bytecode
+- Programs larger than 65KB can execute, but jump instructions cannot address positions >= 65,536
+
+**Practical Impact:**
+- This limitation is **not restrictive** in practice
+- Typical strategies are 100-1,000 bytes
+- Even complex multi-instruction programs rarely exceed 5KB
+- 65KB ≈ 1,000-30,000 instructions (depending on argument sizes)
+
+**Workarounds for Large Programs:**
+If you need custom control flow beyond byte 65,535:
+```solidity
+// Use Extruction with arbitrary uint256 nextPC
+p.build(Extruction._extruction, 
+    ExtructionArgsBuilder.build(customControlContract, args))
+```
+
+The `Extruction` instruction can set arbitrary `uint256` program counter values, enabling custom control flow logic for edge cases requiring programs larger than 64KB.
+
+**Example Program Sizes:**
+| Strategy Type | Typical Size |
+|--------------|-------------|
+| Simple limit order | ~50 bytes |
+| Dutch auction + fees | ~100 bytes |
+| AMM with MEV protection | ~200 bytes |
+| Complex multi-conditional | ~500 bytes |
+| Maximum practical | ~5,000 bytes |
+
+### Gas Optimization
+
+**Architecture Benefits:**
+- Transient storage (EIP-1153) for reentrancy guards
+- Zero deployment cost for makers
+- Compact bytecode encoding (8-bit opcodes)
+
+**Tips for Makers:**
+- Use `_staticBalancesXD` for single-direction trades with fixed rates
+- Use `_dynamicBalancesXD` for AMM strategies with automatic rebalancing
+- Pack multiple operations in single program
+- Minimize argument sizes
+
+**Tips for Takers:**
+- Batch multiple swaps
+- Use `quote()` to avoid failed transactions
+- Consider gas costs in profit calculations
+
+---
 
 ## 🚀 Getting Started
 
