@@ -17,7 +17,7 @@ import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-contract AquaOpcodesExpiremental is
+contract AquaOpcodesExperimental is
     Controls,
     XYCSwap,
     XYCConcentrate,

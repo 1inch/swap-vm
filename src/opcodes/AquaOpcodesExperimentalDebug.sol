@@ -6,11 +6,11 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 
-import { AquaOpcodesExpiremental } from "./AquaOpcodesExpiremental.sol";
+import { AquaOpcodesExperimental } from "./AquaOpcodesExperimental.sol";
 import { Debug } from "../instructions/Debug.sol";
 
-contract AquaOpcodesExperimentalDebug is AquaOpcodesExpiremental, Debug {
-    constructor(address aqua) AquaOpcodesExpiremental(aqua) {}
+contract AquaOpcodesExperimentalDebug is AquaOpcodesExperimental, Debug {
+    constructor(address aqua) AquaOpcodesExperimental(aqua) {}
 
     function _opcodes() internal pure override returns (function(Context memory, bytes calldata) internal[] memory) {
         return _injectDebugOpcodes(super._opcodes());
