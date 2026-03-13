@@ -7,7 +7,9 @@ pragma solidity 0.8.30;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
+import { SwapVM } from "../src/SwapVM.sol";
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
+import { AquaSwapVMRouterExperimental } from "../src/routers/AquaSwapVMRouterExperimental.sol";
 import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
@@ -15,6 +17,10 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 contract FeeExperimentalAquaTest is AquaSwapVMTest {
     function setUp() public virtual override {
         super.setUp();
+    }
+
+    function _deployRouter() internal override returns (SwapVM) {
+        return new AquaSwapVMRouterExperimental(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 
     function _makerSetup(

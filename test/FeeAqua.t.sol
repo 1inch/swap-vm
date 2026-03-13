@@ -8,11 +8,10 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { SwapVM } from "../src/SwapVM.sol";
 import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+
 
 
 contract FeeAquaTest is AquaSwapVMTest {
@@ -130,11 +129,5 @@ contract FeeAquaTest is AquaSwapVMTest {
         // impossible to pay 100% feeIn on exactOut swap
         vm.expectRevert();
         swap(swapProgram, order);
-    }
-}
-
-contract FeeAquaNonExperimentalTest is FeeAquaTest {
-    function _deployRouter() internal override returns (SwapVM) {
-        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 }

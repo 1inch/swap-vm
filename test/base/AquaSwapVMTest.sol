@@ -13,7 +13,6 @@ import { MockTaker } from "../mocks/MockTaker.sol";
 
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouterExperimental } from "../../src/routers/AquaSwapVMRouterExperimental.sol";
 import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 
@@ -50,7 +49,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
     }
 
     function _deployRouter() internal virtual returns (SwapVM) {
-        return new AquaSwapVMRouterExperimental(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 
     // ===== HELPER FUNCTIONS =====

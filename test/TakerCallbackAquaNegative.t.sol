@@ -7,7 +7,7 @@ pragma solidity 0.8.30;
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { ISwapVM, SwapVM } from "../src/SwapVM.sol";
-import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+
 
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MockTakerBrokenCallback } from "./mocks/MockTakerBrokenCallback.sol";
@@ -159,11 +159,5 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
         ));
 
         _executeSwap();
-    }
-}
-
-contract TakerCallbackAquaNegativeNonExperimentalTest is TakerCallbackAquaNegativeTest {
-    function _deployRouter() internal override returns (SwapVM) {
-        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 }
