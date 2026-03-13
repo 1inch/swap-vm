@@ -9,8 +9,9 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
+import { SwapVM } from "../src/SwapVM.sol";
 import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
-import { AquaSwapVMRouterExperimental } from "../src/routers/AquaSwapVMRouterExperimental.sol";
+
 import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
@@ -618,7 +619,7 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
 }
 
 contract XYCSwapAquaNonExperimentalTest is XYCSwapAquaTest {
-    function _deployRouter() internal override returns (AquaSwapVMRouterExperimental) {
-        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0"))));
+    function _deployRouter() internal override returns (SwapVM) {
+        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 }

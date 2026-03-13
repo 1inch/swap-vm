@@ -14,7 +14,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouterExperimental } from "../../src/routers/AquaSwapVMRouterExperimental.sol";
+
 import { AquaOpcodesExperimentalDebug } from "../../src/opcodes/AquaOpcodesExperimentalDebug.sol";
 
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
@@ -137,7 +137,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
     }
 
     function shipStrategy(
-        AquaSwapVMRouterExperimental swapVM,
+        SwapVM swapVM,
         ISwapVM.Order memory order,
         TokenMock tokenIn,
         TokenMock tokenOut,

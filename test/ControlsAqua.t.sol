@@ -10,7 +10,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 
 import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
-import { AquaSwapVMRouterExperimental } from "../src/routers/AquaSwapVMRouterExperimental.sol";
+
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
@@ -236,7 +236,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
 }
 
 contract ControlsAquaNonExperimentalTest is ControlsAquaTest {
-    function _deployRouter() internal override returns (AquaSwapVMRouterExperimental) {
-        return AquaSwapVMRouterExperimental(payable(address(new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0"))));
+    function _deployRouter() internal override returns (SwapVM) {
+        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 }

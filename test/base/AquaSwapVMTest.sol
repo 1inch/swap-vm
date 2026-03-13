@@ -14,6 +14,7 @@ import { MockTaker } from "../mocks/MockTaker.sol";
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 import { AquaSwapVMRouterExperimental } from "../../src/routers/AquaSwapVMRouterExperimental.sol";
+import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 
 import { AquaStrategyBuilders } from "./AquaStrategyBuilders.sol";
@@ -28,7 +29,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         bool isExactIn;
     }
 
-    AquaSwapVMRouterExperimental public swapVM;
+    SwapVM public swapVM;
 
     MockTaker public taker;
     MockTaker public taker2;
@@ -48,7 +49,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         protocolFeeRecipient = vm.addr(0x8888);
     }
 
-    function _deployRouter() internal virtual returns (AquaSwapVMRouterExperimental) {
+    function _deployRouter() internal virtual returns (SwapVM) {
         return new AquaSwapVMRouterExperimental(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 
