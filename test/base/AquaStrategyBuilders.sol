@@ -15,12 +15,11 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { SwapVM } from "../../src/SwapVM.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 
-import { AquaOpcodesExperimentalDebug } from "../../src/opcodes/AquaOpcodesExperimentalDebug.sol";
+import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeExperimental, FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { Controls } from "../../src/instructions/Controls.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
@@ -35,7 +34,7 @@ import { TestConstants } from "./TestConstants.sol";
  * @notice Abstract contract that provides helper methods for building various swap strategies
  * @dev Inherits from Test and OpcodesDebug to have access to vm and _opcodes() function
  */
-abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperimentalDebug {
+abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug {
     using ProgramBuilder for Program;
 
     enum SwapType {
@@ -51,8 +50,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
         uint256 priceMax;
         uint32 protocolFeeBps;
         uint32 feeInBps;
-        uint32 feeOutBps;
-        uint32 progressiveFeeBps;
         address protocolFeeRecipient;
         SwapType swapType;
     }
@@ -65,7 +62,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
     address public maker;
     uint256 public makerPrivateKey;
 
-    constructor(address _aqua) AquaOpcodesExperimentalDebug(_aqua) {}
+    constructor(address _aqua) AquaOpcodesDebug(_aqua) {}
 
     function setUp() public virtual {
         // Setup maker with known private key for signing
@@ -98,8 +95,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesExperi
             setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
-            setup.feeOutBps > 0 ? p.build(FeeExperimental._flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
-            setup.progressiveFeeBps > 0 ? p.build(FeeExperimental._progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)) : bytes(""),
             p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );

@@ -33,8 +33,6 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
             priceMax: 0,
             protocolFeeBps: 0,
             feeInBps: 0,
-            feeOutBps: 0,
-            progressiveFeeBps: 0,
             protocolFeeRecipient: address(0),
             swapType: SwapType.XYC
         });

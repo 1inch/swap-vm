@@ -26,8 +26,6 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
             priceMax: 0,
             protocolFeeBps: protocolFeeBps,
             feeInBps: feeInBps,
-            feeOutBps: 0,
-            progressiveFeeBps: 0,
             protocolFeeRecipient: protocolFeeRecipient,
             swapType: SwapType.XYC
         });
