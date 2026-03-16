@@ -969,6 +969,7 @@ SwapVM's security is built on maintaining fundamental invariants that ensure eco
 4. **Price Monotonicity** - Natural market dynamics are preserved
 5. **Rounding Favors Maker** - Protects liquidity providers from value extraction
 6. **Balance Sufficiency** - Prevents impossible trades
+7. **Strategy Liveness** - Ensures a halted strategy can always resume execution
 
 These invariants are enforced at the VM level and validated through comprehensive test suites.
 

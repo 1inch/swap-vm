@@ -69,7 +69,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");

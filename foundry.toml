@@ -1,7 +1,7 @@
 [profile.default]
 solc_version   = "0.8.30"
 optimizer      = true
-optimizer_runs = 10_000
+optimizer_runs = 700
 via_ir         = true
 fs_permissions = [
     { access = "read-write", path = "./deployments" },
@@ -23,7 +23,7 @@ number_underscore            = "thousands"
 [profile.ci]
 solc_version   = "0.8.30"
 optimizer      = true
-optimizer_runs = 10_000
+optimizer_runs = 700
 via_ir         = true
 
 [profile.ci.optimizer_details]

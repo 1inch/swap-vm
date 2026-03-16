@@ -28,7 +28,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         bool isExactIn;
     }
 
-    AquaSwapVMRouter public swapVM;
+    SwapVM public swapVM;
 
     MockTaker public taker;
     MockTaker public taker2;
@@ -40,12 +40,16 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
     function setUp() public override virtual {
         super.setUp();
 
-        swapVM = new AquaSwapVMRouter(address(aqua), address(0), "SwapVM", "1.0.0");
+        swapVM = _deployRouter();
 
         taker = new MockTaker(aqua, swapVM, address(this));
         taker2 = new MockTaker(aqua, swapVM, address(this));
 
         protocolFeeRecipient = vm.addr(0x8888);
+    }
+
+    function _deployRouter() internal virtual returns (SwapVM) {
+        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 
     // ===== HELPER FUNCTIONS =====
@@ -99,6 +103,14 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
     ) public {
         (TokenMock tokenIn, ) = getTokenPair(swapProgram);
         tokenIn.mint(address(swapProgram.taker), amount);
+    }
+
+    function mintTokenInToMaker(
+        SwapProgram memory swapProgram,
+        uint256 amount
+    ) public {
+        (TokenMock tokenIn, ) = getTokenPair(swapProgram);
+        tokenIn.mint(maker, amount);
     }
 
     function mintTokenOutToMaker(

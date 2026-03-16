@@ -9,6 +9,8 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
+
+
 import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
@@ -31,8 +33,6 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
             priceMax: 0,
             protocolFeeBps: 0,
             feeInBps: 0,
-            feeOutBps: 0,
-            progressiveFeeBps: 0,
             protocolFeeRecipient: address(0),
             swapType: SwapType.XYC
         });

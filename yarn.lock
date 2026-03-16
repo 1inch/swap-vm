@@ -30,6 +30,26 @@
     mocha-chai-jest-snapshot "1.1.6"
     node-fetch "2.7.0"
 
+"@1inch/solidity-utils@6.9.7":
+  version "6.9.7"
+  resolved "https://registry.yarnpkg.com/@1inch/solidity-utils/-/solidity-utils-6.9.7.tgz#788660e358da4c753a0aa8e617513c5a64579027"
+  integrity sha512-2vKx7+EGw+IS/UoyHW3+9d0TPb+F+018KEJ9sQVqMy9Xd3Q3VxypdSYklUgYF9YmrjNxRtCPTRll28sFEeqNiQ==
+  dependencies:
+    "@metamask/eth-sig-util" "8.0.0"
+    "@nomicfoundation/hardhat-ethers" "3.0.8"
+    "@nomicfoundation/hardhat-network-helpers" "1.0.12"
+    "@nomicfoundation/hardhat-verify" "2.0.14"
+    "@openzeppelin/contracts" "5.1.0"
+    "@uniswap/permit2-sdk" "1.3.0"
+    chai "4.5.0"
+    dotenv "16.4.5"
+    ethereumjs-util "7.1.5"
+    ethers "6.13.4"
+    hardhat "2.23.0"
+    hardhat-deploy "0.14.0"
+    mocha-chai-jest-snapshot "1.1.6"
+    node-fetch "2.7.0"
+
 "@adraffy/ens-normalize@1.10.1":
   version "1.10.1"
   resolved "https://registry.yarnpkg.com/@adraffy/ens-normalize/-/ens-normalize-1.10.1.tgz#63430d04bd8c5e74f8d7d049338f1cd9d4f02069"

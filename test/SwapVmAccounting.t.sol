@@ -60,7 +60,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
 
-        swapVM = new SwapVMRouterDebug(address(0), address(0), "SwapVM", "1.0.0");
+        swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
         balancesContract = Balances(address(swapVM));
 
         makerPrivateKey = 0x1234;

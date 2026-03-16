@@ -6,6 +6,8 @@ pragma solidity 0.8.30;
 
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { ISwapVM } from "../src/SwapVM.sol";
+
+
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
@@ -26,8 +28,6 @@ contract SwapVMAquaTest is AquaSwapVMTest {
             priceMax: 0,
             protocolFeeBps: 0,
             feeInBps: 0,
-            feeOutBps: 0,
-            progressiveFeeBps: 0,
             protocolFeeRecipient: address(0),
             swapType: SwapType.XYC
         });
