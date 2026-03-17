@@ -22,7 +22,7 @@ library PeggedSwapArgsBuilder {
     ///        For equal decimals (e.g., both 18): rateLt = rateGt = 1
     ///        For 18 vs 6 decimals: rate18 = 1, rate6 = 1e12 (to scale up to common precision)
     /// @dev Curvature is hardcoded to p=0.5 for optimal gas efficiency and proven behavior
-    /// @dev Rates are assigned based on token address comparison (like Curve's rate_multipliers)
+    /// @dev Rates are assigned based on token address comparison
     /// @dev When tokenIn < tokenOut: rateIn = rateLt, rateOut = rateGt
     /// @dev When tokenIn > tokenOut: rateIn = rateGt, rateOut = rateLt
     /// @dev Example for 1000 USDC (6 dec) and 1000 DAI (18 dec), USDC < DAI:
