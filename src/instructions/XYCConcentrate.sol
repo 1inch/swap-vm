@@ -52,7 +52,7 @@ library XYCConcentrateArgsBuilder {
     }
 
     /// @notice Compute the initial balances for given L, P_spot, P_min, P_max:
-    ///   bLt = L * (1/sqrtPspot - 1/sqrtPmax)
+    ///   bLt = L * (sqrtPmax - sqrtPspot) / (sqrtPmax * sqrtPspot)
     ///   bGt = L * (sqrtPspot - sqrtPmin)
     function computeBalances(
         uint256 targetL,
@@ -62,12 +62,9 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 bLt, uint256 bGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
-        uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
-
-        // Handle boundary: if sqrtPspot >= sqrtPmax, bLt = 0
-        bLt = invSqrtPspot > invSqrtPmax ? Math.mulDiv(targetL, invSqrtPspot - invSqrtPmax, ONE) : 0;
-        // Handle boundary: if sqrtPspot <= sqrtPmin, bGt = 0
+        if (sqrtPmax > sqrtPspot) {
+            bLt = Math.mulDiv(targetL, sqrtPmax - sqrtPspot, Math.mulDiv(sqrtPmax, sqrtPspot, ONE));
+        }
         bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
     }
 
@@ -85,10 +82,8 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 targetL, uint256 actualLt, uint256 actualGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
-        uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
-        uint256 lFromLt = (invSqrtPspot > invSqrtPmax)
-            ? Math.mulDiv(availableLt, ONE, invSqrtPspot - invSqrtPmax)
+        uint256 lFromLt = (sqrtPmax > sqrtPspot)
+            ? Math.mulDiv(availableLt, Math.mulDiv(sqrtPmax, sqrtPspot, ONE), sqrtPmax - sqrtPspot)
             : type(uint256).max;
         uint256 lFromGt = (sqrtPspot > sqrtPmin)
             ? Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin)
