@@ -138,15 +138,12 @@ contract XYCConcentrate {
 
         uint256 L = XYCConcentrateArgsBuilder._computeL(bLt, bGt, sqrtPriceMin, sqrtPriceMax);
 
-        uint256 deltaLt = Math.mulDiv(L, ONE, sqrtPriceMax);
-        uint256 deltaGt = Math.mulDiv(L, sqrtPriceMin, ONE);
-
         if (isTokenInLt) {
-            ctx.swap.balanceIn += deltaLt;
-            ctx.swap.balanceOut += deltaGt;
+            ctx.swap.balanceIn += Math.ceilDiv(L * ONE, sqrtPriceMax);
+            ctx.swap.balanceOut += Math.mulDiv(L, sqrtPriceMin, ONE);
         } else {
-            ctx.swap.balanceIn += deltaGt;
-            ctx.swap.balanceOut += deltaLt;
+            ctx.swap.balanceIn += Math.ceilDiv(L * sqrtPriceMin, ONE);
+            ctx.swap.balanceOut += Math.mulDiv(L, ONE, sqrtPriceMax);
         }
 
         ctx.runLoop();
