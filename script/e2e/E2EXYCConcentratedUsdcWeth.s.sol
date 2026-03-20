@@ -15,10 +15,12 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
 import { AquaOpcodes } from "../../src/opcodes/AquaOpcodes.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../../src/instructions/XYCConcentrate.sol";
 import { Fee } from "../../src/instructions/Fee.sol";
+import { Controls } from "../../src/instructions/Controls.sol";
 
 import { Program, ProgramBuilder } from "../../test/utils/ProgramBuilder.sol";
 
@@ -35,15 +37,21 @@ import { console2 } from "forge-std/console2.sol";
 ///   AMOUNT_WETH=50000000000000000 \
 ///   SWAP_AMOUNT_IN=1000000 \
 ///   FEE_BPS=3000000 \
+///   PROTOCOL_FEE_BPS=0 \
+///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
+///   KYC_NFT=0x0000000000000000000000000000000000000000 \
 ///   forge script script/e2e/E2EXYCConcentratedUsdcWeth.s.sol \
 ///     --rpc-url $SEPOLIA_RPC --private-key $PK --broadcast
 ///
-///   ETH_USD_PRICE : current ETH price in USD (integer, e.g. 3000)
-///   AMOUNT_USDC   : USDC to seed (raw 6-decimal, e.g. 100e6 = 100 USDC)
-///   AMOUNT_WETH   : WETH to seed (raw 18-decimal, e.g. 5e16 = 0.05 ETH)
-///   SWAP_AMOUNT_IN: USDC to swap as taker (raw, e.g. 1e6 = 1 USDC)
-///   FEE_BPS       : fee in 1e9 basis (3000000 = 0.3%). Optional, default 0.3%
-///   RANGE_PCT     : price range ±% (default 20 → ±20%)
+///   ETH_USD_PRICE          : current ETH price in USD (integer, e.g. 3000)
+///   AMOUNT_USDC            : USDC to seed (raw 6-decimal, e.g. 100e6 = 100 USDC)
+///   AMOUNT_WETH            : WETH to seed (raw 18-decimal, e.g. 5e16 = 0.05 ETH)
+///   SWAP_AMOUNT_IN         : USDC to swap as taker (raw, e.g. 1e6 = 1 USDC)
+///   FEE_BPS                : fee in 1e9 basis (3000000 = 0.3%). Optional, default 0.3%
+///   RANGE_PCT              : price range +/-% (default 20)
+///   PROTOCOL_FEE_BPS       : protocol fee in 1e9 basis (optional, 0 = off)
+///   PROTOCOL_FEE_RECIPIENT : protocol fee recipient (required if PROTOCOL_FEE_BPS > 0)
+///   KYC_NFT                : ERC721 gate address (optional, 0x0 = off)
 contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
     using ProgramBuilder for Program;
     using SafeCast for uint256;
@@ -63,6 +71,9 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         uint256 swapAmountIn = vm.envUint("SWAP_AMOUNT_IN");
         uint32 feeBps = vm.envOr("FEE_BPS", uint256(3000000)).toUint32();
         uint256 rangePct = vm.envOr("RANGE_PCT", uint256(20));
+        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
+        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
+        address kycNft = vm.envOr("KYC_NFT", address(0));
 
         // USDC < WETH by address → Lt = USDC, Gt = WETH
         // P = tokenGt/tokenLt = WETH_raw per USDC_raw
@@ -77,6 +88,12 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         console2.log("sqrtPspot:   ", sqrtPspot);
         console2.log("sqrtPmin:    ", sqrtPmin);
         console2.log("sqrtPmax:    ", sqrtPmax);
+        if (protocolFeeBps > 0) {
+            console2.log("ProtocolFee: ", uint256(protocolFeeBps), " -> ", protocolFeeRecipient);
+        }
+        if (kycNft != address(0)) {
+            console2.log("KYC NFT:     ", kycNft);
+        }
 
         // Step 0: Wrap ETH → WETH (Aqua keeps tokens with the maker, no custody transfer)
         vm.startBroadcast();
@@ -89,7 +106,7 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
             aqua, router,
             amountUsdc, amountWeth,
             sqrtPspot, sqrtPmin, sqrtPmax,
-            feeBps
+            feeBps, protocolFeeBps, protocolFeeRecipient, kycNft
         );
 
         // Step 2: Execute test swap (USDC → WETH)
@@ -104,7 +121,10 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         uint256 sqrtPspot,
         uint256 sqrtPmin,
         uint256 sqrtPmax,
-        uint32 feeBps
+        uint32 feeBps,
+        uint32 protocolFeeBps,
+        address protocolFeeRecipient,
+        address kycNft
     ) internal returns (ISwapVM.Order memory order) {
         // Lt = USDC, Gt = WETH
         (uint256 targetL, uint256 actualUsdc, uint256 actualWeth) = XYCConcentrateArgsBuilder
@@ -115,7 +135,7 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         console2.log("Seeding USDC:", actualUsdc);
         console2.log("Seeding WETH:", actualWeth);
 
-        bytes memory bytecode = _buildProgram(sqrtPmin, sqrtPmax, feeBps);
+        bytes memory bytecode = _buildProgram(sqrtPmin, sqrtPmax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: msg.sender,
@@ -161,7 +181,7 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
 
         console2.log("Strategy hash:", vm.toString(strategyHash));
 
-        _saveResult(strategyHash, router, aqua, actualUsdc, actualWeth, sqrtPmin, sqrtPmax, feeBps);
+        _saveResult(strategyHash, router, aqua, actualUsdc, actualWeth, sqrtPmin, sqrtPmax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
     }
 
     function _executeSwap(
@@ -216,10 +236,19 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
     function _buildProgram(
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 feeBps
+        uint32 feeBps,
+        uint32 protocolFeeBps,
+        address protocolFeeRecipient,
+        address kycNft
     ) internal pure returns (bytes memory) {
         Program memory program = ProgramBuilder.init(_opcodes());
         return bytes.concat(
+            kycNft != address(0)
+                ? program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(kycNft))
+                : bytes(""),
+            protocolFeeBps > 0
+                ? program.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+                : bytes(""),
             program.build(
                 XYCConcentrate._xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
@@ -255,7 +284,10 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         uint256 balanceWeth,
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 feeBps
+        uint32 feeBps,
+        uint32 protocolFeeBps,
+        address protocolFeeRecipient,
+        address kycNft
     ) internal {
         string memory obj = "e2e";
         vm.serializeBytes32(obj, "strategyHash", strategyHash);
@@ -267,7 +299,10 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         vm.serializeUint(obj, "balanceWeth", balanceWeth);
         vm.serializeUint(obj, "sqrtPriceMin", sqrtPriceMin);
         vm.serializeUint(obj, "sqrtPriceMax", sqrtPriceMax);
-        string memory json = vm.serializeUint(obj, "feeBps", uint256(feeBps));
+        vm.serializeUint(obj, "feeBps", uint256(feeBps));
+        vm.serializeUint(obj, "protocolFeeBps", uint256(protocolFeeBps));
+        vm.serializeAddress(obj, "protocolFeeRecipient", protocolFeeRecipient);
+        string memory json = vm.serializeAddress(obj, "kycNft", kycNft);
 
         string memory dir = string.concat("deployments/e2e/", vm.toString(block.chainid));
         vm.createDir(dir, true);
