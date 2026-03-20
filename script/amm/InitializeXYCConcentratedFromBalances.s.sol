@@ -27,12 +27,17 @@ import { console2 } from "forge-std/console2.sol";
 ///   PRICE_SPOT=1000000000000000000 \
 ///   PRICE_MIN=800000000000000000 \
 ///   FEE_BPS=3000000 \
+///   PROTOCOL_FEE_BPS=0 \
+///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
+///   KYC_NFT=0x0000000000000000000000000000000000000000 \
 ///   forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
 ///     --rpc-url $RPC_URL --private-key $PK --broadcast
 ///
 /// Prices are in 1e18 fixed-point (P = tokenGt/tokenLt).
 /// Set exactly one of PRICE_MIN or PRICE_MAX.
 /// The script derives the other from (bLt, bGt, priceSpot).
+/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - optional protocol fee (skipped if 0).
+/// KYC_NFT - optional ERC721 gate; taker must hold >= 1 NFT to swap (skipped if zero address).
 contract InitializeXYCConcentratedFromBalances is InitializeXYCConcentratedBase {
     using SafeCast for uint256;
 
@@ -46,6 +51,9 @@ contract InitializeXYCConcentratedFromBalances is InitializeXYCConcentratedBase 
         uint256 balanceGt = vm.envUint("BALANCE_GT");
         uint256 sqrtPspot = Math.sqrt(vm.envUint("PRICE_SPOT") * 1e18);
         uint32 feeBps = vm.envUint("FEE_BPS").toUint32();
+        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
+        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
+        address kycNft = vm.envOr("KYC_NFT", address(0));
 
         (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = _resolveBounds(balanceLt, balanceGt, sqrtPspot);
 
@@ -53,7 +61,7 @@ contract InitializeXYCConcentratedFromBalances is InitializeXYCConcentratedBase 
         uint256 balA = aIsLt ? balanceLt : balanceGt;
         uint256 balB = aIsLt ? balanceGt : balanceLt;
 
-        _initialize(aqua, router, tokenA, tokenB, balA, balB, sqrtPriceMin, sqrtPriceMax, feeBps);
+        _initialize(aqua, router, tokenA, tokenB, balA, balB, sqrtPriceMin, sqrtPriceMax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
     }
 
     function _resolveBounds(

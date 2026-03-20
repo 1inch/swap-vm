@@ -14,10 +14,12 @@ import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
 import { AquaOpcodes } from "../../src/opcodes/AquaOpcodes.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../../src/instructions/XYCConcentrate.sol";
 import { Fee } from "../../src/instructions/Fee.sol";
+import { Controls } from "../../src/instructions/Controls.sol";
 
 import { Program, ProgramBuilder } from "../../test/utils/ProgramBuilder.sol";
 
@@ -47,6 +49,9 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
         uint256 sqrtPriceMin;
         uint256 sqrtPriceMax;
         uint32 feeBps;
+        uint32 protocolFeeBps;
+        address protocolFeeRecipient;
+        address kycNft;
     }
 
     function _initialize(
@@ -58,12 +63,15 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
         uint256 balB,
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 feeBps
+        uint32 feeBps,
+        uint32 protocolFeeBps,
+        address protocolFeeRecipient,
+        address kycNft
     ) internal returns (InitResult memory result) {
         require(tokenA != tokenB, "Tokens must differ");
         require(sqrtPriceMin < sqrtPriceMax, "sqrtPriceMin must be < sqrtPriceMax");
 
-        bytes memory bytecode = _buildProgram(sqrtPriceMin, sqrtPriceMax, feeBps);
+        bytes memory bytecode = _buildProgram(sqrtPriceMin, sqrtPriceMax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
 
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: msg.sender,
@@ -101,6 +109,12 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
         console2.log("sqrtPriceMin: ", sqrtPriceMin);
         console2.log("sqrtPriceMax: ", sqrtPriceMax);
         console2.log("Fee (1e9 bps):", uint256(feeBps));
+        if (protocolFeeBps > 0) {
+            console2.log("ProtocolFee:  ", uint256(protocolFeeBps), " -> ", protocolFeeRecipient);
+        }
+        if (kycNft != address(0)) {
+            console2.log("KYC NFT gate: ", kycNft);
+        }
 
         vm.startBroadcast();
 
@@ -128,7 +142,10 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
             balanceB: balB,
             sqrtPriceMin: sqrtPriceMin,
             sqrtPriceMax: sqrtPriceMax,
-            feeBps: feeBps
+            feeBps: feeBps,
+            protocolFeeBps: protocolFeeBps,
+            protocolFeeRecipient: protocolFeeRecipient,
+            kycNft: kycNft
         });
 
         _saveResult(result);
@@ -145,7 +162,10 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
         vm.serializeUint(obj, "balanceB", r.balanceB);
         vm.serializeUint(obj, "sqrtPriceMin", r.sqrtPriceMin);
         vm.serializeUint(obj, "sqrtPriceMax", r.sqrtPriceMax);
-        string memory json = vm.serializeUint(obj, "feeBps", uint256(r.feeBps));
+        vm.serializeUint(obj, "feeBps", uint256(r.feeBps));
+        vm.serializeUint(obj, "protocolFeeBps", uint256(r.protocolFeeBps));
+        vm.serializeAddress(obj, "protocolFeeRecipient", r.protocolFeeRecipient);
+        string memory json = vm.serializeAddress(obj, "kycNft", r.kycNft);
 
         string memory dir = string.concat("deployments/amm/", vm.toString(block.chainid));
         vm.createDir(dir, true);
@@ -157,10 +177,19 @@ abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
     function _buildProgram(
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 feeBps
+        uint32 feeBps,
+        uint32 protocolFeeBps,
+        address protocolFeeRecipient,
+        address kycNft
     ) internal pure returns (bytes memory) {
         Program memory program = ProgramBuilder.init(_opcodes());
         return bytes.concat(
+            kycNft != address(0)
+                ? program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(kycNft))
+                : bytes(""),
+            protocolFeeBps > 0
+                ? program.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+                : bytes(""),
             program.build(
                 XYCConcentrate._xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
