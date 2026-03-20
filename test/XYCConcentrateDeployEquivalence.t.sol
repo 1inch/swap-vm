@@ -21,7 +21,7 @@ import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { XYCConcentratePriceSolver } from "../script/utils/XYCConcentratePriceSolver.sol";
 
 /// @title XYCConcentrateDeployEquivalence
-/// @notice Verifies that DeployXYCConcentrated and DeployXYCConcentratedFromBalances
+/// @notice Verifies that InitializeXYCConcentrated and InitializeXYCConcentratedFromBalances
 ///         produce identical strategies when given equivalent inputs.
 contract XYCConcentrateDeployEquivalence is Test, AquaOpcodes {
     using ProgramBuilder for Program;
