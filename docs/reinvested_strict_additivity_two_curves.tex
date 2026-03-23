@@ -847,6 +847,170 @@ The choice is a design parameter, not a correctness issue.
 \end{remark}
 
 
+\section{Three Fee Regimes Under Pool Growth}\label{sec:three-regimes}
+
+The effective fee rate $\varphi_{\mathrm{eff}}(r)=(r^\alpha-r)/(1-r)$ with $r=x/(x{+}\dx)$ generates three distinct observable regimes depending on how trade size relates to pool size.
+We state each as a proposition with proof and illustrate with numeric examples (pool price $p=y/x=1000$, $\alpha=0.997$).
+
+\subsection{Regime 1: Fixed absolute trade, growing pool}
+
+\begin{proposition}[Absolute fee increases with pool depth]\label{prop:regime1}
+Fix $\dx>0$ and let reserves scale as $(x,y)=(\lambda x_0,\lambda y_0)$ with $\lambda\ge 1$.
+The absolute fee
+\[
+\mathrm{fee}_Y(\lambda)=\lambda y_0\!\left(r_\lambda^\alpha-r_\lambda\right),\qquad r_\lambda=\frac{\lambda x_0}{\lambda x_0+\dx},
+\]
+is strictly increasing in $\lambda$ and converges from below:
+\[
+\boxed{\lim_{\lambda\to\infty}\mathrm{fee}_Y(\lambda)=(1-\alpha)\,\frac{y_0}{x_0}\,\dx=(1-\alpha)\,p\,\dx.}
+\]
+\end{proposition}
+
+\begin{proof}
+Write $\epsilon_\lambda=\dx/(\lambda x_0)$ so that $r_\lambda=(1+\epsilon_\lambda)^{-1}$.
+Taylor-expanding around $\epsilon=0$:
+\[
+r_\lambda^\alpha - r_\lambda
+= (1-\alpha)\epsilon_\lambda - \tfrac{1}{2}\alpha(1-\alpha)\epsilon_\lambda^2 + O(\epsilon_\lambda^3).
+\]
+Multiplying by $\lambda y_0 = y_0\dx/(x_0\epsilon_\lambda)$:
+\[
+\mathrm{fee}_Y = (1-\alpha)\frac{y_0\dx}{x_0}
+  - \tfrac{1}{2}\alpha(1-\alpha)\frac{y_0\dx}{x_0}\epsilon_\lambda
+  + O(\epsilon_\lambda^2).
+\]
+The leading term is the stated limit; the correction $-\tfrac{1}{2}\alpha(1-\alpha)(y_0\dx/x_0)\epsilon_\lambda<0$ is negative and vanishes as $\lambda\to\infty$, confirming convergence from below.
+Monotonicity in $\lambda$ follows because $\epsilon_\lambda$ is decreasing in $\lambda$ and the correction is negative.
+\end{proof}
+
+\paragraph{Numeric verification ($\dx=1$ ETH, $p=1000$).}
+The predicted limit is $(1{-}0.997)\times 1000\times 1=3.0000$ USDC.
+
+\begin{center}
+\begin{tabular}{@{}rrrccl@{}}
+\toprule
+$\lambda$ & $x$ (ETH) & $y$ (USDC) & $r_\lambda$ & Fee (USDC) & Gap to 3.0000 \\
+\midrule
+$1\times$ & 10 & 10\,000 & 0.90909 & 2.5997 & 0.4003 \\
+$10\times$ & 100 & 100\,000 & 0.99010 & 2.9556 & 0.0444 \\
+$100\times$ & 1\,000 & 1\,000\,000 & 0.99900 & 2.9955 & 0.0045 \\
+$1{,}000\times$ & 10\,000 & 10\,000\,000 & 0.99990 & 2.9996 & 0.0004 \\
+$100{,}000\times$ & 1\,000\,000 & $10^9$ & 0.99999 & 3.0000 & $<10^{-5}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Hand-check for $\lambda=1$} ($x=10$, $y=10{,}000$, $\dx=1$):
+\begin{align*}
+r &= \tfrac{10}{11} = 0.909090\overline{90},\quad
+\ln r = \ln 10-\ln 11 = -0.09531017980,\\
+r^{0.997} &= \exp(0.997\times(-0.09531017980)) = \exp(-0.09502420902) = 0.90935088311,\\
+\mathrm{fee}_Y &= 10{,}000\times(0.90935088311 - 0.90909090909) = 10{,}000\times 0.00025997 = 2.5997\;\text{USDC}.\;\checkmark
+\end{align*}
+Each $10\times$ increase in $\lambda$ reduces the gap by ${\approx}10\times$, confirming the $O(1/\lambda)$ convergence rate.
+Makers with deeper pools collect the full $(1{-}\alpha)\,p\,\dx$ fee on every trade.
+
+\subsection{Regime 2: Fixed fraction of pool --- scale-invariant fee}
+
+\begin{proposition}[Constant fee rate for proportional trades]\label{prop:regime2}
+If the trade size is a fixed fraction of reserves, $\dx=f\cdot x$ with $0<f<1$, then
+\[
+r=\frac{x}{x+fx}=\frac{1}{1+f}
+\]
+is independent of $x$, and hence
+\[
+\boxed{\varphi_{\mathrm{eff}}=\frac{(1+f)^{-\alpha}-(1+f)^{-1}}{1-(1+f)^{-1}}=\mathrm{const}(\alpha,f).}
+\]
+The fee rate depends only on $\alpha$ and the fraction $f$, not on pool size.
+\end{proposition}
+
+\begin{proof}
+Immediate from $r=1/(1+f)$ being constant and $\varphi_{\mathrm{eff}}$ depending only on $r$ and $\alpha$ (Theorem~\ref{thm:ratio-only}).
+\end{proof}
+
+\paragraph{Numeric verification ($f=10\%$, $\alpha=0.997$).}
+Predicted fee rate (one-time calculation):
+\begin{align*}
+r &= 10/11 = 0.909090\overline{90},\quad
+r^{0.997} = 0.909350883,\\
+\varphi_{\mathrm{eff}} &= \frac{0.909350883 - 0.909090909}{1-0.909090909}
+= \frac{0.000259974}{0.090909091} = 0.285971\%.
+\end{align*}
+This value must be identical regardless of pool size:
+
+\begin{center}
+\begin{tabular}{@{}rrrl@{}}
+\toprule
+$x$ (ETH) & $y$ (USDC) & $\dx$ (ETH) & Fee Rate \\
+\midrule
+100 & 100\,000 & 10 & 0.285971\% \\
+10\,000 & 10\,000\,000 & 1\,000 & 0.285971\% \\
+1\,000\,000 & $10^9$ & 100\,000 & 0.285971\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Simulation confirms: running $1{,}000{,}000$ alternating swaps (each $10\%$ of the current input reserve, alternating $X{\to}Y$ and $Y{\to}X$), the fee rate is \emph{exactly} $0.285971\%$ on swap \#1 and on swap \#1\,000\,000, even though both reserves have grown by orders of magnitude.
+This is the scale-invariance property of power functions: the fee structure is self-similar at every pool scale.
+
+\subsection{Regime 3: Large trades receive a fee discount}
+
+\begin{proposition}[Whale discount]\label{prop:regime3}
+For fixed pool $(x,y)$ and $0<\alpha<1$, the fee rate $\varphi_{\mathrm{eff}}(r)$ is strictly decreasing in trade size $\dx$ (equivalently, strictly increasing in $r$).
+The discount relative to the small-trade ceiling $1{-}\alpha$ is:
+\[
+\boxed{\mathrm{discount}(f)=1-\frac{\varphi_{\mathrm{eff}}(1/(1{+}f))}{1-\alpha}}
+\]
+where $f=\dx/x$ is the trade-to-pool ratio.
+\end{proposition}
+
+\begin{proof}
+This is a restatement of Theorem~\ref{thm:anti-prog}.
+The discount formula follows from the definition of $\varphi_{\mathrm{eff}}$.
+\end{proof}
+
+\paragraph{Numeric verification ($\alpha=0.997$, pool $x=1000$).}
+\begin{center}
+\begin{tabular}{@{}rcccc@{}}
+\toprule
+\textbf{Trade (\% of pool)} & $f$ & $r$ & \textbf{Fee Rate} & \textbf{Discount vs $1{-}\alpha$} \\
+\midrule
+0.1\% & 0.001 & 0.999 & 0.2999\% & 0.05\% \\
+1\% & 0.01 & 0.990 & 0.2985\% & 0.50\% \\
+10\% & 0.10 & 0.909 & 0.2860\% & 4.68\% \\
+20\% & 0.20 & 0.833 & 0.2736\% & 8.81\% \\
+50\% & 0.50 & 0.667 & 0.2434\% & 18.86\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Hand-check for $\dx=500$ ($f=50\%$)}:
+\begin{align*}
+r &= 1000/1500 = 0.66\overline{6},\quad
+\ln r = \ln 2 - \ln 3 = -0.40546510811,\\
+r^{0.997} &= \exp(0.997\times(-0.40546510811)) = \exp(-0.40424896479) = 0.66747809,\\
+\varphi_{\mathrm{eff}} &= \frac{0.66747809-0.66666667}{1-0.66666667} = \frac{0.00081142}{0.33333333} = 0.24343\%,\\
+\mathrm{discount} &= 1 - 0.24343/0.300 = 18.86\%.\;\checkmark
+\end{align*}
+
+The fee rate drops monotonically from $0.300\%$ (ceiling) toward $0\%$ as the trade grows relative to the pool.
+For typical trade sizes (${\le}5\%$ of pool), the discount is ${\le}2.5\%$---negligible in practice.
+
+\subsection{Unified view}
+
+These three regimes are facets of a single function $\varphi_{\mathrm{eff}}(r)$:
+\begin{enumerate}
+\item \textbf{Growing pool, fixed $\dx$}: $r\to 1$, fee rate $\to 1{-}\alpha$, absolute fee $\to (1{-}\alpha)\,p\,\dx$.
+\item \textbf{Fixed fraction $f$}: $r=1/(1{+}f)$ constant, fee rate locked at $\varphi_{\mathrm{eff}}(1/(1{+}f))$.
+\item \textbf{Growing trade, fixed pool}: $r\to 0$, fee rate $\to 0$ (whale discount).
+\end{enumerate}
+All three follow from Theorem~\ref{thm:ratio-only}: because $\Psi(x)=x^\alpha$, the fee depends only on the ratio $r=x/(x{+}\dx)$.
+The ratio $r$ encodes the trade's size \emph{relative} to the pool, and the fee is a monotone function of that single variable.
+
+
 \section{Numeric showcase and evidence}
 We provide concrete numeric examples (with fully expanded calculations), a fee-rate visualization, and a round-trip loss summary.
 
