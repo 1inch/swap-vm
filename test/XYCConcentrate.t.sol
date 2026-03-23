@@ -549,6 +549,95 @@ contract ConcentrateTest is Test, OpcodesDebug {
         signature = abi.encodePacked(r, s, v);
     }
 
+    /// @notice Helper to create order with raw Lt/Gt balances for targeted rounding regression checks.
+    function _createOrderWithRawBalances(
+        uint256 balanceLt,
+        uint256 balanceGt,
+        uint256 sqrtPmin,
+        uint256 sqrtPmax
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        uint256 balanceA = address(tokenA) > address(tokenB) ? balanceGt : balanceLt;
+        uint256 balanceB = address(tokenA) > address(tokenB) ? balanceLt : balanceGt;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: bytes.concat(
+                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([balanceA, balanceB])
+                )),
+                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+                ),
+                program.build(XYCSwap._xycSwapXD)
+            )
+        }));
+
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Regression for taker-favorable rounding edge:
+    ///         must use maker-favoring rounding for reserveIn in concentrate step.
+    function test_ConcentrateRounding_ExactOutUsesMakerFavoringReserveIn() public view {
+        uint256 balanceLt = 1;
+        uint256 balanceGt = 1_000;
+        uint256 sqrtPmin = 1e18 - 1;
+        uint256 sqrtPmax = 1e18 + 1;
+
+        uint256 L = XYCConcentrateArgsBuilder._computeL(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
+        uint256 deltaLtFloor = Math.mulDiv(L, 1e18, sqrtPmax);
+        uint256 deltaLtCeil = Math.mulDiv(L, 1e18, sqrtPmax, Math.Rounding.Ceil);
+        uint256 deltaGtFloor = Math.mulDiv(L, sqrtPmin, 1e18);
+
+        uint256 reserveOut = balanceGt + deltaGtFloor;
+        uint256 amountOut = reserveOut - 2;
+
+        uint256 reserveInMakerFav = balanceLt + deltaLtCeil;
+        uint256 reserveInFloorFloor = balanceLt + deltaLtFloor;
+        uint256 expectedAmountInMakerFav = Math.ceilDiv(amountOut * reserveInMakerFav, reserveOut - amountOut);
+        uint256 expectedAmountInFloorFloor = Math.ceilDiv(amountOut * reserveInFloorFloor, reserveOut - amountOut);
+        assertLt(expectedAmountInFloorFloor, expectedAmountInMakerFav, "Pathological case must be taker-favorable without fix");
+
+        (ISwapVM.Order memory order,) = _createOrderWithRawBalances(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
+        address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
+        address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
+
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
+        (uint256 quotedAmountIn, uint256 quotedAmountOut,) = swapVM.asView().quote(
+            order,
+            tokenLt,
+            tokenGt,
+            amountOut,
+            quoteExactOut
+        );
+
+        assertEq(quotedAmountOut, amountOut);
+        assertEq(
+            quotedAmountIn,
+            expectedAmountInMakerFav,
+            "Concentrate must round reserveIn in maker-favoring direction for exact-out"
+        );
+    }
+
     /// @notice Test zero-balance boundary: bLt = 0 (spot price at upper bound)
     ///         Only Gt->Lt swaps should work, Lt->Gt should fail due to no Lt liquidity
     function test_ZeroBalance_SpotAtUpperBound() public {
