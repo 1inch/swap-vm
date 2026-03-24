@@ -21,7 +21,10 @@ REGOP_ENV_RPC_URL:=$(PREFIX)_RPC_URL
 REGOP_ENV_PK:=$(PREFIX)_PRIVATE_KEY
 
 RPC_URL=$(shell echo "$${!REGOP_ENV_RPC_URL}" | tr -d '"')
-PRIVATE_KEY=$(shell echo "$${!REGOP_ENV_PK}" | tr -d '"')
+_RESOLVED_PK:=$(shell echo "$${!REGOP_ENV_PK}" | tr -d '"')
+ifneq ($(_RESOLVED_PK),)
+PRIVATE_KEY=$(_RESOLVED_PK)
+endif
 
 COMPILER_VERSION:=$(shell grep 'solc_version' foundry.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
@@ -217,22 +220,48 @@ get-outputs:
 # Initialize concentrated liquidity from token amounts + full price bounds.
 # Required env: TOKEN_A, TOKEN_B, AMOUNT_A, AMOUNT_B, PRICE_MIN, PRICE_MAX, PRICE_SPOT, FEE_BPS
 init-liquidity:
-	forge script script/amm/InitializeXYCConcentrated.s.sol \
+	forge script script/defaultAquaPrograms/InitializeXYCConcentrated.s.sol \
 		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
 
 # Initialize concentrated liquidity from fixed balances + one price bound.
 # Required env: TOKEN_A, TOKEN_B, BALANCE_LT, BALANCE_GT, PRICE_SPOT, (PRICE_MIN xor PRICE_MAX), FEE_BPS
 init-liquidity-from-balances:
-	forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
+	forge script script/defaultAquaPrograms/InitializeXYCConcentratedFromBalances.s.sol \
 		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
 
 # Dry-run (no broadcast) — preview what would be deployed
 init-liquidity-dry:
-	forge script script/amm/InitializeXYCConcentrated.s.sol \
+	forge script script/defaultAquaPrograms/InitializeXYCConcentrated.s.sol \
 		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
 
 init-liquidity-from-balances-dry:
-	forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
+	forge script script/defaultAquaPrograms/InitializeXYCConcentratedFromBalances.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
+
+# ── Pegged swap initialization ────────────────────────────────────────────────
+# For pegged/correlated pairs (USDC/USDT, WETH/stETH, WBTC/cbBTC, etc.).
+# Required env: AQUA, ROUTER, TOKEN_A, TOKEN_B, BALANCE_A, BALANCE_B, LINEAR_WIDTH, FEE_BPS
+# Optional env: RATE_LT (default 1), RATE_GT (default 1), PROTOCOL_FEE_BPS, PROTOCOL_FEE_RECIPIENT, KYC_NFT
+
+init-pegged:
+	forge script script/defaultAquaPrograms/InitializePeggedSwap.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+
+init-pegged-dry:
+	forge script script/defaultAquaPrograms/InitializePeggedSwap.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
+
+# ── XYC constant product (xy=k) initialization ───────────────────────────────
+# Vanilla constant product pool — the simplest AMM curve.
+# Required env: AQUA, ROUTER, TOKEN_A, TOKEN_B, BALANCE_A, BALANCE_B, FEE_BPS
+# Optional env: PROTOCOL_FEE_BPS, PROTOCOL_FEE_RECIPIENT, KYC_NFT
+
+init-xyc:
+	forge script script/defaultAquaPrograms/InitializeXYCSwap.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+
+init-xyc-dry:
+	forge script script/defaultAquaPrograms/InitializeXYCSwap.s.sol \
 		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
 
 update:; forge update
@@ -288,4 +317,6 @@ help:
         verify-swap-vm-limit verify-swap-vm-router-impl save-deployments contract-address validate-swap-vm-router validate-verify \
         validate process-aqua-address process-swap-vm-router-name process-swap-vm-router-version upsert-constant \
         get get-outputs update build tests coverage snapshot snapshot-check format clean lint anvil balance balance-erc20 help \
-        init-liquidity init-liquidity-from-balances init-liquidity-dry init-liquidity-from-balances-dry
+        init-liquidity init-liquidity-from-balances init-liquidity-dry init-liquidity-from-balances-dry \
+        init-pegged init-pegged-dry \
+        init-xyc init-xyc-dry
