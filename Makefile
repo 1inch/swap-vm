@@ -210,6 +210,31 @@ get-outputs:
 		echo "$$result"; \
 		}
 
+# ── Liquidity initialization ──────────────────────────────────────────────────
+# All read AQUA, ROUTER, TOKEN_A, TOKEN_B, FEE_BPS from .env.
+# Override any var inline: make init-liquidity PRICE_SPOT=2150e18 ...
+
+# Initialize concentrated liquidity from token amounts + full price bounds.
+# Required env: TOKEN_A, TOKEN_B, AMOUNT_A, AMOUNT_B, PRICE_MIN, PRICE_MAX, PRICE_SPOT, FEE_BPS
+init-liquidity:
+	forge script script/amm/InitializeXYCConcentrated.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+
+# Initialize concentrated liquidity from fixed balances + one price bound.
+# Required env: TOKEN_A, TOKEN_B, BALANCE_LT, BALANCE_GT, PRICE_SPOT, (PRICE_MIN xor PRICE_MAX), FEE_BPS
+init-liquidity-from-balances:
+	forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+
+# Dry-run (no broadcast) — preview what would be deployed
+init-liquidity-dry:
+	forge script script/amm/InitializeXYCConcentrated.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
+
+init-liquidity-from-balances-dry:
+	forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
+		--rpc-url $(SEPOLIA_RPC) --private-key $(PRIVATE_KEY) -vvvv
+
 update:; forge update
 
 build:; forge build
@@ -262,4 +287,5 @@ help:
 .PHONY: deploy-swap-vm deploy-swap-vm-aqua deploy-swap-vm-limit deploy-swap-vm-router-impl verify-swap-vm verify-swap-vm-aqua \
         verify-swap-vm-limit verify-swap-vm-router-impl save-deployments contract-address validate-swap-vm-router validate-verify \
         validate process-aqua-address process-swap-vm-router-name process-swap-vm-router-version upsert-constant \
-        get get-outputs update build tests coverage snapshot snapshot-check format clean lint anvil balance balance-erc20 help
+        get get-outputs update build tests coverage snapshot snapshot-check format clean lint anvil balance balance-erc20 help \
+        init-liquidity init-liquidity-from-balances init-liquidity-dry init-liquidity-from-balances-dry

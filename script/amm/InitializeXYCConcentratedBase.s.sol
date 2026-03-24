@@ -7,7 +7,6 @@ pragma solidity 0.8.30;
 import { Script } from "forge-std/Script.sol";
 import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
-import { Config } from "../utils/Config.sol";
 
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
@@ -29,13 +28,12 @@ import { console2 } from "forge-std/console2.sol";
 /// @title InitializeXYCConcentratedBase
 /// @notice Shared logic for XYC Concentrated Liquidity strategy initialization scripts.
 abstract contract InitializeXYCConcentratedBase is Script, AquaOpcodes {
-    using Config for *;
     using ProgramBuilder for Program;
 
     constructor() AquaOpcodes(address(1)) {}
 
     function _readAqua() internal view returns (address aqua) {
-        (aqua,,,,) = vm.readSwapVMRouterParameters();
+        aqua = vm.envAddress("AQUA");
     }
 
     struct InitResult {
