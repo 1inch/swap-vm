@@ -63,7 +63,7 @@ library XYCConcentrateArgsBuilder {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
         if (sqrtPmax > sqrtPspot) {
-            bLt = Math.mulDiv(targetL, sqrtPmax - sqrtPspot, Math.mulDiv(sqrtPmax, sqrtPspot, ONE));
+            bLt = Math.Math.ceilDiv(targetL, sqrtPmax - sqrtPspot, Math.mulDiv(sqrtPmax, sqrtPspot, ONE));
         }
         bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
     }
@@ -101,7 +101,7 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256) {
         uint256 alpha = ONE - Math.mulDiv(sqrtPriceMin, ONE, sqrtPriceMax);
         uint256 beta  = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
-        uint256 fourAC = Math.mulDiv(Math.mulDiv(4 * alpha, bLt, 1e9), bGt, 1e9);
+        uint256 fourAC = Math.mulDiv(4 * alpha, bLt, ONE) * bGt;
         uint256 disc   = beta * beta + fourAC;
         return Math.mulDiv(beta + Math.sqrt(disc), ONE, 2 * alpha);
     }
