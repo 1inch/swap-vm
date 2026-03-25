@@ -39,7 +39,7 @@ abstract contract InitializeXYCSwapBase is AquaInitBase {
         console2.log("=== XYC Constant Product Strategy ===");
         _logCommonParams(feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
 
-        bytes32 strategyHash = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
+        (bytes32 strategyHash,) = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
 
         string memory extra = "xycSwap";
         vm.serializeUint(extra, "feeBps", uint256(feeBps));

@@ -48,7 +48,7 @@ abstract contract InitializePeggedSwapBase is AquaInitBase {
         console2.log("rateGt:       ", rateGt);
         _logCommonParams(feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
 
-        bytes32 strategyHash = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
+        (bytes32 strategyHash,) = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
 
         string memory extra = "peggedSwap";
         vm.serializeUint(extra, "x0", x0);

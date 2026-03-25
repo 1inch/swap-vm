@@ -45,7 +45,7 @@ abstract contract InitializeXYCConcentratedBase is AquaInitBase {
         console2.log("sqrtPriceMax: ", sqrtPriceMax);
         _logCommonParams(feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
 
-        bytes32 strategyHash = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
+        (bytes32 strategyHash,) = _shipStrategy(aqua, router, tokenA, tokenB, balA, balB, bytecode);
 
         string memory extra = "xycConcentrated";
         vm.serializeUint(extra, "sqrtPriceMin", sqrtPriceMin);

@@ -52,10 +52,10 @@ abstract contract AquaInitBase is Script, AquaOpcodes {
         uint256 balA,
         uint256 balB,
         bytes memory bytecode
-    ) internal returns (bytes32 strategyHash) {
+    ) internal returns (bytes32 strategyHash, ISwapVM.Order memory order) {
         require(tokenA != tokenB, "Tokens must differ");
 
-        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: msg.sender,
             useAquaInsteadOfSignature: true,
             shouldUnwrapWeth: false,

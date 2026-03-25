@@ -4,25 +4,15 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Script } from "forge-std/Script.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
-import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
-import { AquaOpcodes } from "../../src/opcodes/AquaOpcodes.sol";
-import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
-import { XYCConcentrate } from "../../src/instructions/XYCConcentrate.sol";
-import { Fee } from "../../src/instructions/Fee.sol";
-import { Controls } from "../../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder } from "../../test/utils/ProgramBuilder.sol";
+import { InitializeXYCConcentratedBase } from "../defaultAquaPrograms/InitializeXYCConcentratedBase.s.sol";
 
 // solhint-disable no-console
 import { console2 } from "forge-std/console2.sol";
@@ -36,152 +26,79 @@ import { console2 } from "forge-std/console2.sol";
 ///   AMOUNT_USDC=100000000 \
 ///   AMOUNT_WETH=50000000000000000 \
 ///   SWAP_AMOUNT_IN=1000000 \
-///   FEE_BPS=3000000 \
-///   PROTOCOL_FEE_BPS=0 \
-///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
-///   KYC_NFT=0x0000000000000000000000000000000000000000 \
 ///   forge script script/e2e/E2EXYCConcentratedUsdcWeth.s.sol \
 ///     --rpc-url $SEPOLIA_RPC --private-key $PK --broadcast
-///
-///   ETH_USD_PRICE          : current ETH price in USD (integer, e.g. 3000)
-///   AMOUNT_USDC            : USDC to seed (raw 6-decimal, e.g. 100e6 = 100 USDC)
-///   AMOUNT_WETH            : WETH to seed (raw 18-decimal, e.g. 5e16 = 0.05 ETH)
-///   SWAP_AMOUNT_IN         : USDC to swap as taker (raw, e.g. 1e6 = 1 USDC)
-///   FEE_BPS                : fee in 1e9 basis (3000000 = 0.3%). Optional, default 0.3%
-///   RANGE_PCT              : price range +/-% (default 20)
-///   PROTOCOL_FEE_BPS       : protocol fee in 1e9 basis (optional, 0 = off)
-///   PROTOCOL_FEE_RECIPIENT : protocol fee recipient (required if PROTOCOL_FEE_BPS > 0)
-///   KYC_NFT                : ERC721 gate address (optional, 0x0 = off)
-contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
-    using ProgramBuilder for Program;
+contract E2EXYCConcentratedUsdcWeth is InitializeXYCConcentratedBase {
     using SafeCast for uint256;
     using SafeERC20 for IERC20;
 
     address constant USDC_SEPOLIA = 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238;
     address constant WETH_SEPOLIA = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14;
 
-    constructor() AquaOpcodes(address(1)) {}
+    struct E2EParams {
+        address aqua;
+        address router;
+        uint256 ethUsdPrice;
+        uint256 amountUsdc;
+        uint256 amountWeth;
+        uint256 swapAmountIn;
+        uint32 feeBps;
+        uint256 rangePct;
+        uint32 protocolFeeBps;
+        address protocolFeeRecipient;
+        address kycNft;
+    }
 
     function run() external {
-        (address aqua, address router) = _readConfig();
+        E2EParams memory p;
+        p.aqua = _readAqua();
+        p.router = vm.envAddress("ROUTER");
+        p.ethUsdPrice = vm.envUint("ETH_USD_PRICE");
+        p.amountUsdc = vm.envUint("AMOUNT_USDC");
+        p.amountWeth = vm.envUint("AMOUNT_WETH");
+        p.swapAmountIn = vm.envUint("SWAP_AMOUNT_IN");
+        p.feeBps = vm.envOr("FEE_BPS", uint256(3000000)).toUint32();
+        p.rangePct = vm.envOr("RANGE_PCT", uint256(20));
+        p.protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
+        p.protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
+        p.kycNft = vm.envOr("KYC_NFT", address(0));
 
-        uint256 ethUsdPrice = vm.envUint("ETH_USD_PRICE");
-        uint256 amountUsdc = vm.envUint("AMOUNT_USDC");
-        uint256 amountWeth = vm.envUint("AMOUNT_WETH");
-        uint256 swapAmountIn = vm.envUint("SWAP_AMOUNT_IN");
-        uint32 feeBps = vm.envOr("FEE_BPS", uint256(3000000)).toUint32();
-        uint256 rangePct = vm.envOr("RANGE_PCT", uint256(20));
-        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        address kycNft = vm.envOr("KYC_NFT", address(0));
+        ISwapVM.Order memory order = _initStrategy(p);
+        _executeSwap(p.router, order, p.swapAmountIn);
+    }
 
-        // USDC < WETH by address → Lt = USDC, Gt = WETH
-        // P = tokenGt/tokenLt = WETH_raw per USDC_raw
-        // For ETH=$3000: 1 USDC_raw (1e-6 USD) buys 1e18/(3000*1e6) WETH_raw ≈ 3.33e8
-        uint256 priceFp = Math.mulDiv(1e18, 1e18, ethUsdPrice * 1e6);
+    function _initStrategy(E2EParams memory p) internal returns (ISwapVM.Order memory order) {
+        uint256 priceFp = Math.mulDiv(1e18, 1e18, p.ethUsdPrice * 1e6);
         uint256 sqrtPspot = Math.sqrt(priceFp * 1e18);
-        uint256 sqrtPmin = Math.sqrt(Math.mulDiv(priceFp, (100 - rangePct), 100) * 1e18);
-        uint256 sqrtPmax = Math.sqrt(Math.mulDiv(priceFp, (100 + rangePct), 100) * 1e18);
+        uint256 sqrtPmin = Math.sqrt(Math.mulDiv(priceFp, (100 - p.rangePct), 100) * 1e18);
+        uint256 sqrtPmax = Math.sqrt(Math.mulDiv(priceFp, (100 + p.rangePct), 100) * 1e18);
 
         console2.log("=== E2E: USDC/WETH Concentrated Liquidity ===");
-        console2.log("ETH price:   $", ethUsdPrice);
+        console2.log("ETH price:   $", p.ethUsdPrice);
         console2.log("sqrtPspot:   ", sqrtPspot);
         console2.log("sqrtPmin:    ", sqrtPmin);
         console2.log("sqrtPmax:    ", sqrtPmax);
-        if (protocolFeeBps > 0) {
-            console2.log("ProtocolFee: ", uint256(protocolFeeBps), " -> ", protocolFeeRecipient);
-        }
-        if (kycNft != address(0)) {
-            console2.log("KYC NFT:     ", kycNft);
-        }
 
-        // Step 0: Wrap ETH → WETH (Aqua keeps tokens with the maker, no custody transfer)
-        vm.startBroadcast();
-        IWETH(WETH_SEPOLIA).deposit{ value: amountWeth }();
-        vm.stopBroadcast();
-        console2.log("Wrapped WETH:", amountWeth);
-
-        // Step 1: Initialize strategy
-        ISwapVM.Order memory order = _initializeStrategy(
-            aqua, router,
-            amountUsdc, amountWeth,
-            sqrtPspot, sqrtPmin, sqrtPmax,
-            feeBps, protocolFeeBps, protocolFeeRecipient, kycNft
-        );
-
-        // Step 2: Execute test swap (USDC → WETH)
-        _executeSwap(router, order, swapAmountIn);
-    }
-
-    function _initializeStrategy(
-        address aqua,
-        address router,
-        uint256 amountUsdc,
-        uint256 amountWeth,
-        uint256 sqrtPspot,
-        uint256 sqrtPmin,
-        uint256 sqrtPmax,
-        uint32 feeBps,
-        uint32 protocolFeeBps,
-        address protocolFeeRecipient,
-        address kycNft
-    ) internal returns (ISwapVM.Order memory order) {
-        // Lt = USDC, Gt = WETH
         (uint256 targetL, uint256 actualUsdc, uint256 actualWeth) = XYCConcentrateArgsBuilder
-            .computeLiquidityFromAmounts(amountUsdc, amountWeth, sqrtPspot, sqrtPmin, sqrtPmax);
+            .computeLiquidityFromAmounts(p.amountUsdc, p.amountWeth, sqrtPspot, sqrtPmin, sqrtPmax);
         require(targetL > 0, "Zero liquidity");
 
         console2.log("Liquidity L: ", targetL);
         console2.log("Seeding USDC:", actualUsdc);
         console2.log("Seeding WETH:", actualWeth);
 
-        bytes memory bytecode = _buildProgram(sqrtPmin, sqrtPmax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
-
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: msg.sender,
-            useAquaInsteadOfSignature: true,
-            shouldUnwrapWeth: false,
-            allowZeroAmountIn: false,
-            receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
-            program: bytecode
-        }));
-
-        address[] memory tokens = new address[](2);
-        tokens[0] = USDC_SEPOLIA;
-        tokens[1] = WETH_SEPOLIA;
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = actualUsdc;
-        amounts[1] = actualWeth;
-
         vm.startBroadcast();
-
-        IERC20(USDC_SEPOLIA).approve(aqua, type(uint256).max);
-        IERC20(WETH_SEPOLIA).approve(aqua, type(uint256).max);
-
-        bytes32 strategyHash = IAqua(aqua).ship(
-            router,
-            abi.encode(order),
-            tokens,
-            amounts
-        );
-
+        IWETH(WETH_SEPOLIA).deposit{ value: actualWeth }();
         vm.stopBroadcast();
 
-        console2.log("Strategy hash:", vm.toString(strategyHash));
+        bytes memory bytecode = _buildDefaultAquaProgram(
+            sqrtPmin, sqrtPmax, p.feeBps, p.protocolFeeBps, p.protocolFeeRecipient, p.kycNft
+        );
+        _logCommonParams(p.feeBps, p.protocolFeeBps, p.protocolFeeRecipient, p.kycNft);
 
-        _saveResult(strategyHash, router, aqua, actualUsdc, actualWeth, sqrtPmin, sqrtPmax, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
+        bytes32 strategyHash;
+        (strategyHash, order) = _shipStrategy(p.aqua, p.router, USDC_SEPOLIA, WETH_SEPOLIA, actualUsdc, actualWeth, bytecode);
+        _saveDeployment(strategyHash, p.router, p.aqua, USDC_SEPOLIA, WETH_SEPOLIA, actualUsdc, actualWeth, "");
     }
 
     function _executeSwap(
@@ -216,99 +133,14 @@ contract E2EXYCConcentratedUsdcWeth is Script, AquaOpcodes {
         }));
 
         vm.startBroadcast();
-
         IERC20(USDC_SEPOLIA).approve(router, amountIn);
-
         (uint256 swappedIn, uint256 swappedOut,) = ISwapVM(router).swap(
-            order,
-            USDC_SEPOLIA,
-            WETH_SEPOLIA,
-            amountIn,
-            takerTraitsAndData
+            order, USDC_SEPOLIA, WETH_SEPOLIA, amountIn, takerTraitsAndData
         );
-
         vm.stopBroadcast();
 
         console2.log("Amount in  (USDC):", swappedIn);
         console2.log("Amount out (WETH):", swappedOut);
-    }
-
-    function _buildProgram(
-        uint256 sqrtPriceMin,
-        uint256 sqrtPriceMax,
-        uint32 feeBps,
-        uint32 protocolFeeBps,
-        address protocolFeeRecipient,
-        address kycNft
-    ) internal pure returns (bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
-        return bytes.concat(
-            kycNft != address(0)
-                ? program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(kycNft))
-                : bytes(""),
-            protocolFeeBps > 0
-                ? program.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
-                : bytes(""),
-            program.build(
-                XYCConcentrate._xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
-            ),
-            program.build(
-                Fee._flatFeeAmountInXD,
-                FeeArgsBuilder.buildFlatFee(feeBps)
-            ),
-            program.build(XYCSwap._xycSwapXD)
-        );
-    }
-
-    function _readConfig() internal view returns (address aqua, address router) {
-        string memory path = string.concat(vm.projectRoot(), "/config/constants.json");
-        string memory json = vm.readFile(path);
-        string memory key = string.concat(".", vm.toString(block.chainid));
-
-        aqua = vm.parseJsonAddress(json, string.concat(".aqua", key));
-        require(aqua != address(0), "Aqua address not configured");
-
-        router = vm.parseJsonAddress(json, string.concat(".swapVMRouter", key));
-        require(router != address(0), "Router address not configured");
-
-        console2.log("Aqua:  ", aqua);
-        console2.log("Router:", router);
-    }
-
-    function _saveResult(
-        bytes32 strategyHash,
-        address router,
-        address aqua,
-        uint256 balanceUsdc,
-        uint256 balanceWeth,
-        uint256 sqrtPriceMin,
-        uint256 sqrtPriceMax,
-        uint32 feeBps,
-        uint32 protocolFeeBps,
-        address protocolFeeRecipient,
-        address kycNft
-    ) internal {
-        string memory obj = "e2e";
-        vm.serializeBytes32(obj, "strategyHash", strategyHash);
-        vm.serializeAddress(obj, "router", router);
-        vm.serializeAddress(obj, "aqua", aqua);
-        vm.serializeAddress(obj, "usdc", USDC_SEPOLIA);
-        vm.serializeAddress(obj, "weth", WETH_SEPOLIA);
-        vm.serializeUint(obj, "balanceUsdc", balanceUsdc);
-        vm.serializeUint(obj, "balanceWeth", balanceWeth);
-        vm.serializeUint(obj, "sqrtPriceMin", sqrtPriceMin);
-        vm.serializeUint(obj, "sqrtPriceMax", sqrtPriceMax);
-        vm.serializeUint(obj, "feeBps", uint256(feeBps));
-        vm.serializeUint(obj, "protocolFeeBps", uint256(protocolFeeBps));
-        vm.serializeAddress(obj, "protocolFeeRecipient", protocolFeeRecipient);
-        string memory json = vm.serializeAddress(obj, "kycNft", kycNft);
-
-        string memory dir = string.concat("deployments/e2e/", vm.toString(block.chainid));
-        vm.createDir(dir, true);
-        string memory filePath = string.concat(dir, "/", vm.toString(strategyHash), ".json");
-        vm.writeJson(json, filePath);
-        console2.log("Result saved:", filePath);
     }
 }
 // solhint-enable no-console
