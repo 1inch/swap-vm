@@ -26,7 +26,7 @@ import { InitializePeggedSwapBase } from "./InitializePeggedSwapBase.s.sol";
 ///   PROTOCOL_FEE_BPS=0 \
 ///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
 ///   KYC_NFT=0x0000000000000000000000000000000000000000 \
-///   forge script script/amm/InitializePeggedSwap.s.sol \
+///   forge script script/defaultAquaPrograms/InitializePeggedSwap.s.sol \
 ///     --rpc-url $RPC_URL --private-key $PK --broadcast
 ///
 /// LINEAR_WIDTH is the A parameter in 1e27 scale:

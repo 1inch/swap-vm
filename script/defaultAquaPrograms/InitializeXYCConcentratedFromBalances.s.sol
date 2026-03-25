@@ -16,7 +16,7 @@ import { console2 } from "forge-std/console2.sol";
 /// @title InitializeXYCConcentratedFromBalances
 /// @notice Initialize an XYC Concentrated strategy from fixed balances and one price bound.
 ///   Computes the opposite bound from (bLt, bGt, priceSpot, known bound).
-/// @dev Reads Aqua address from config/constants.json (by chain ID).
+/// @dev Reads Aqua address from .env (AQUA=0x...).
 ///   Strategy parameters are passed as env vars:
 ///
 ///   ROUTER=0x... \
@@ -30,7 +30,7 @@ import { console2 } from "forge-std/console2.sol";
 ///   PROTOCOL_FEE_BPS=0 \
 ///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
 ///   KYC_NFT=0x0000000000000000000000000000000000000000 \
-///   forge script script/amm/InitializeXYCConcentratedFromBalances.s.sol \
+///   forge script script/defaultAquaPrograms/InitializeXYCConcentratedFromBalances.s.sol \
 ///     --rpc-url $RPC_URL --private-key $PK --broadcast
 ///
 /// Prices are in 1e18 fixed-point (P = tokenGt/tokenLt).

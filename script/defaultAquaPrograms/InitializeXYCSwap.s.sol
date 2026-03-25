@@ -23,7 +23,7 @@ import { InitializeXYCSwapBase } from "./InitializeXYCSwapBase.s.sol";
 ///   PROTOCOL_FEE_BPS=0 \
 ///   PROTOCOL_FEE_RECIPIENT=0x0000000000000000000000000000000000000000 \
 ///   KYC_NFT=0x0000000000000000000000000000000000000000 \
-///   forge script script/amm/InitializeXYCSwap.s.sol \
+///   forge script script/defaultAquaPrograms/InitializeXYCSwap.s.sol \
 ///     --rpc-url $RPC_URL --private-key $PK --broadcast
 ///
 /// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - optional protocol fee (skipped if 0).

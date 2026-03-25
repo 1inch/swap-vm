@@ -13,7 +13,7 @@ import { InitializeXYCConcentratedBase } from "./InitializeXYCConcentratedBase.s
 /// @title InitializeXYCConcentrated
 /// @notice Initialize an XYC Concentrated Liquidity + Flat Fee strategy via Aqua.
 ///   Accepts token amounts and both price bounds; computes optimal balances internally.
-/// @dev Reads Aqua address from config/constants.json (by chain ID).
+/// @dev Reads Aqua address from .env (AQUA=0x...).
 ///   Strategy parameters are passed as env vars:
 ///
 ///   ROUTER=0x... \
