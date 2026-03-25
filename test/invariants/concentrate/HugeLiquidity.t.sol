@@ -39,6 +39,6 @@ contract HugeLiquidity is ConcentrateXYCFeesInvariants {
         testAmounts[4] = 10e23;
 
         symmetryTolerance = 0;  // 0 wei tolerance for huge numbers
-        additivityTolerance = 0; // 1 wei tolerance (rounding from single-division bLt formula)
+        additivityTolerance = 0; // 0 wei tolerance (rounding from single-division bLt formula)
     }
 }

@@ -90,7 +90,7 @@ contract DustAmounts is ConcentrateXYCFeesInvariants {
         // Monotonicity: 100% tolerance for dust amounts
         // Reason: Fee rounding (ceil) creates monotonicity violations
         // This is SAFE: gas costs >> any arbitrage profit (500 trillion:1 loss ratio)
-        monotonicityToleranceBps = 10000;  // 150%
+        monotonicityToleranceBps = 10000;  // 100%
 
         // Rounding: 10% deviation allowed for dust
         // Dust amounts have extreme relative rounding errors
