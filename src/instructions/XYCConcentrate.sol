@@ -62,9 +62,12 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 bLt, uint256 bGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        if (sqrtPmax > sqrtPspot) {
-            bLt = Math.Math.ceilDiv(targetL, sqrtPmax - sqrtPspot, Math.mulDiv(sqrtPmax, sqrtPspot, ONE));
-        }
+        uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
+        uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
+
+        // Handle boundary: if sqrtPspot >= sqrtPmax, bLt = 0
+        bLt = invSqrtPspot > invSqrtPmax ? Math.mulDiv(targetL, invSqrtPspot - invSqrtPmax, ONE) : 0;
+        // Handle boundary: if sqrtPspot <= sqrtPmin, bGt = 0
         bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
     }
 
