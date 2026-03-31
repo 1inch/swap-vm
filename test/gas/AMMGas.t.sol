@@ -307,8 +307,7 @@ contract AMMGas is Test, OpcodesDebug {
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            ),
-            program.build(_xycSwapXD)
+            )
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -331,8 +330,7 @@ contract AMMGas is Test, OpcodesDebug {
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            ),
-            program.build(_xycSwapXD)
+            )
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -375,12 +373,11 @@ contract AMMGas is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balA, balB])
                 )),
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            ),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            )
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -428,13 +425,12 @@ contract AMMGas is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balA, balB])
                 )),
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            ),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
+            )
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

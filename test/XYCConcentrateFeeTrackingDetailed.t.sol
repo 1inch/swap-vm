@@ -20,7 +20,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
@@ -105,11 +104,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
                     dynamic([address(tokenUSD), address(tokenETH)]),
                     dynamic([balanceUSD, balanceETH])
                 )),
+                feeInstruction,
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
-                ),
-                feeInstruction,
-                program.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
 

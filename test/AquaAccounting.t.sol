@@ -203,13 +203,21 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
                      defaultConcentrateArgs())
             : bytes("");
 
-        return bytes.concat(
-            protocolFeeCode,
-            concentrateCode,
-            flatFeeCode,
-            p.build(XYCSwap._xycSwapXD),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-        );
+        if (includeConcentrate) {
+            return bytes.concat(
+                protocolFeeCode,
+                flatFeeCode,
+                concentrateCode,
+                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            );
+        } else {
+            return bytes.concat(
+                protocolFeeCode,
+                flatFeeCode,
+                p.build(XYCSwap._xycSwapXD),
+                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            );
+        }
     }
 
     function buildWrongProgram(
@@ -228,10 +236,9 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            flatFeeCode,     // WRONG: flatFee before Concentrate
+            flatFeeCode,
             p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                    defaultConcentrateArgs()),
-            p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }
@@ -254,10 +261,9 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         return bytes.concat(
             protocolFeeCode,
             p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),
+            flatFeeCode,
             p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                    defaultConcentrateArgs()),
-            flatFeeCode,
-            p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }

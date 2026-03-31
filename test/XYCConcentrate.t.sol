@@ -19,7 +19,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
@@ -144,11 +143,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([actualBalanceA, actualBalanceB])
                 )),
+                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
-                program.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
 
@@ -536,11 +534,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
+                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
-                program.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
 
@@ -585,8 +582,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
                 )),
                 program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                program.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
 

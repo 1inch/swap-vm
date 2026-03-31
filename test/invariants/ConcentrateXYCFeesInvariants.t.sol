@@ -186,16 +186,13 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([_balanceA, _balanceB])
                 )),
 
-            // Concentrate instruction (adds virtual liquidity)
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(_sqrtPriceMin, _sqrtPriceMax)),
-
-            // Flat fee AFTER balances and concentrate
+            // Flat fee BEFORE concentrate (concentrate is terminal)
             (_flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(_flatFeeInBps)) : bytes(""),
 
-            // XYC Swap instruction
-            program.build(_xycSwapXD)
+            // Concentrate instruction (terminal: computes virtual reserves + swap)
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(_sqrtPriceMin, _sqrtPriceMax))
         );
     }
 

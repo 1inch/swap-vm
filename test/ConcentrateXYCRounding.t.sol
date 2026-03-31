@@ -17,7 +17,6 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
@@ -98,11 +97,10 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
                     dynamic([tokenLt, tokenGt]),
                     dynamic([bLt, bGt])
                 )),
+                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
