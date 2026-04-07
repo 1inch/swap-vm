@@ -12,4 +12,6 @@ build
 .env*
 !.env.example
 venv/
+broadcast
+deployments
 .yarn
