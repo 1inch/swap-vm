@@ -59,9 +59,9 @@ contract E2EXYCConcentratedUsdcWeth is InitializeXYCConcentratedBase {
         p.swapAmountIn = vm.envUint("SWAP_AMOUNT_IN");
         p.feeBps = vm.envOr("FEE_BPS", uint256(3000000)).toUint32();
         p.rangePct = vm.envOr("RANGE_PCT", uint256(20));
-        p.protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        p.protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        p.kycNft = vm.envOr("KYC_NFT", address(0));
+        p.protocolFeeBps = uint32(vm.envUint("PROTOCOL_FEE_BPS"));
+        p.protocolFeeRecipient = vm.envAddress("PROTOCOL_FEE_RECIPIENT");
+        p.kycNft = vm.envAddress("KYC_NFT");
 
         ISwapVM.Order memory order = _initStrategy(p);
         _executeSwap(p.router, order, p.swapAmountIn);

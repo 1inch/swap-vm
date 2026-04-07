@@ -30,7 +30,7 @@ contract DeployKycNft is Script {
         console2.log("KycNft deployed:", address(nft));
         console2.log("Owner:          ", msg.sender);
 
-        string memory mintToRaw = vm.envOr("MINT_TO", string(""));
+        string memory mintToRaw = vm.envString("MINT_TO");
         if (bytes(mintToRaw).length > 0) {
             address[] memory recipients = _parseAddresses(mintToRaw);
             for (uint256 i; i < recipients.length; ++i) {

@@ -137,10 +137,11 @@ abstract contract AquaInitBase is Script, AquaOpcodes {
     }
 
     /// @notice Read common env vars: PROTOCOL_FEE_BPS, PROTOCOL_FEE_RECIPIENT, KYC_NFT.
+    /// @dev All three must be explicitly set (use 0 / address(0) when not needed).
     function _readCommonParams() internal view returns (uint32 protocolFeeBps, address protocolFeeRecipient, address kycNft) {
-        protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        kycNft = vm.envOr("KYC_NFT", address(0));
+        protocolFeeBps = uint32(vm.envUint("PROTOCOL_FEE_BPS"));
+        protocolFeeRecipient = vm.envAddress("PROTOCOL_FEE_RECIPIENT");
+        kycNft = vm.envAddress("KYC_NFT");
     }
 
     /// @notice Build the common prefix: [kycNft guard] + [protocol fee].

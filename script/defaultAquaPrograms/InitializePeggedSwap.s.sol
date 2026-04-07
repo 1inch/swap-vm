@@ -41,8 +41,8 @@ import { InitializePeggedSwapBase } from "./InitializePeggedSwapBase.s.sol";
 /// x0/y0 (normalization factors) are computed as:
 ///   x0 = balance_Lt * RATE_LT,  y0 = balance_Gt * RATE_GT
 ///
-/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - optional protocol fee (skipped if 0).
-/// KYC_NFT - optional ERC721 gate; taker must hold >= 1 NFT to swap (skipped if zero address).
+/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - protocol fee; must be set explicitly (use 0 to skip).
+/// KYC_NFT - ERC721 gate; must be set explicitly (use address(0) to skip).
 contract InitializePeggedSwap is InitializePeggedSwapBase {
     using SafeCast for uint256;
 
@@ -55,12 +55,12 @@ contract InitializePeggedSwap is InitializePeggedSwapBase {
         uint256 balanceA = vm.envUint("BALANCE_A");
         uint256 balanceB = vm.envUint("BALANCE_B");
         uint256 linearWidth = vm.envUint("LINEAR_WIDTH");
-        uint256 rateLt = vm.envOr("RATE_LT", uint256(1));
-        uint256 rateGt = vm.envOr("RATE_GT", uint256(1));
+        uint256 rateLt = vm.envUint("RATE_LT");
+        uint256 rateGt = vm.envUint("RATE_GT");
         uint32 feeBps = vm.envUint("FEE_BPS").toUint32();
-        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        address kycNft = vm.envOr("KYC_NFT", address(0));
+        uint32 protocolFeeBps = uint32(vm.envUint("PROTOCOL_FEE_BPS"));
+        address protocolFeeRecipient = vm.envAddress("PROTOCOL_FEE_RECIPIENT");
+        address kycNft = vm.envAddress("KYC_NFT");
 
         bool aIsLt = tokenA < tokenB;
         uint256 balanceLt = aIsLt ? balanceA : balanceB;

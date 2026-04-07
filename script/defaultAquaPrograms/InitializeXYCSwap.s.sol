@@ -26,8 +26,8 @@ import { InitializeXYCSwapBase } from "./InitializeXYCSwapBase.s.sol";
 ///   forge script script/defaultAquaPrograms/InitializeXYCSwap.s.sol \
 ///     --rpc-url $RPC_URL --private-key $PK --broadcast
 ///
-/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - optional protocol fee (skipped if 0).
-/// KYC_NFT - optional ERC721 gate; taker must hold >= 1 NFT to swap (skipped if zero address).
+/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - protocol fee; must be set explicitly (use 0 to skip).
+/// KYC_NFT - ERC721 gate; must be set explicitly (use address(0) to skip).
 contract InitializeXYCSwap is InitializeXYCSwapBase {
     using SafeCast for uint256;
 
@@ -40,9 +40,9 @@ contract InitializeXYCSwap is InitializeXYCSwapBase {
         uint256 balanceA = vm.envUint("BALANCE_A");
         uint256 balanceB = vm.envUint("BALANCE_B");
         uint32 feeBps = vm.envUint("FEE_BPS").toUint32();
-        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        address kycNft = vm.envOr("KYC_NFT", address(0));
+        uint32 protocolFeeBps = uint32(vm.envUint("PROTOCOL_FEE_BPS"));
+        address protocolFeeRecipient = vm.envAddress("PROTOCOL_FEE_RECIPIENT");
+        address kycNft = vm.envAddress("KYC_NFT");
 
         _initialize(aqua, router, tokenA, tokenB, balanceA, balanceB, feeBps, protocolFeeBps, protocolFeeRecipient, kycNft);
     }

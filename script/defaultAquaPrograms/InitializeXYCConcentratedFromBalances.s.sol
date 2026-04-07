@@ -36,8 +36,8 @@ import { console2 } from "forge-std/console2.sol";
 /// Prices are in 1e18 fixed-point (P = tokenGt/tokenLt).
 /// Set exactly one of PRICE_MIN or PRICE_MAX.
 /// The script derives the other from (bLt, bGt, priceSpot).
-/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - optional protocol fee (skipped if 0).
-/// KYC_NFT - optional ERC721 gate; taker must hold >= 1 NFT to swap (skipped if zero address).
+/// PROTOCOL_FEE_BPS / PROTOCOL_FEE_RECIPIENT - protocol fee; must be set explicitly (use 0 to skip).
+/// KYC_NFT - ERC721 gate; must be set explicitly (use address(0) to skip).
 contract InitializeXYCConcentratedFromBalances is InitializeXYCConcentratedBase {
     using SafeCast for uint256;
 
@@ -51,9 +51,9 @@ contract InitializeXYCConcentratedFromBalances is InitializeXYCConcentratedBase 
         uint256 balanceGt = vm.envUint("BALANCE_GT");
         uint256 sqrtPspot = Math.sqrt(vm.envUint("PRICE_SPOT") * 1e18);
         uint32 feeBps = vm.envUint("FEE_BPS").toUint32();
-        uint32 protocolFeeBps = uint32(vm.envOr("PROTOCOL_FEE_BPS", uint256(0)));
-        address protocolFeeRecipient = vm.envOr("PROTOCOL_FEE_RECIPIENT", address(0));
-        address kycNft = vm.envOr("KYC_NFT", address(0));
+        uint32 protocolFeeBps = uint32(vm.envUint("PROTOCOL_FEE_BPS"));
+        address protocolFeeRecipient = vm.envAddress("PROTOCOL_FEE_RECIPIENT");
+        address kycNft = vm.envAddress("KYC_NFT");
 
         (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = _resolveBounds(balanceLt, balanceGt, sqrtPspot);
 
