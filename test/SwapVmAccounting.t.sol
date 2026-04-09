@@ -236,23 +236,17 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
-        if (includeConcentrate) {
-            return bytes.concat(
-                protocolFeeCode,
-                p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-                flatFeeCode,
-                concentrateCode,
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        } else {
-            return bytes.concat(
-                protocolFeeCode,
-                p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-                flatFeeCode,
-                p.build(XYCSwap._xycSwapXD),
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        }
+        bytes memory swapCode = includeConcentrate
+            ? concentrateCode
+            : p.build(XYCSwap._xycSwapXD);
+
+        return bytes.concat(
+            protocolFeeCode,
+            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
+            flatFeeCode,
+            swapCode,
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+        ); 
     }
 
     function buildWrongProgram(
