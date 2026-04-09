@@ -203,21 +203,16 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
                      defaultConcentrateArgs())
             : bytes("");
 
-        if (includeConcentrate) {
-            return bytes.concat(
-                protocolFeeCode,
-                flatFeeCode,
-                concentrateCode,
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        } else {
-            return bytes.concat(
-                protocolFeeCode,
-                flatFeeCode,
-                p.build(XYCSwap._xycSwapXD),
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        }
+        bytes memory swapCode = includeConcentrate
+            ? concentrateCode
+            : p.build(XYCSwap._xycSwapXD);
+
+        return bytes.concat(
+            protocolFeeCode,
+            flatFeeCode,
+            swapCode,
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+        );
     }
 
     function buildWrongProgram(
