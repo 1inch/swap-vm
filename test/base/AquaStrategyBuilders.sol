@@ -91,21 +91,16 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             );
         }
 
-        if (concentrateProgram.length > 0) {
-            return bytes.concat(
-                setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
-                setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
-                concentrateProgram,
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        } else {
-            return bytes.concat(
-                setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
-                setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
-                p.build(XYCSwap._xycSwapXD),
-                p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-            );
-        }
+        bytes memory swapProgram = concentrateProgram.length > 0
+            ? concentrateProgram
+            : p.build(XYCSwap._xycSwapXD);
+
+        return bytes.concat(
+            setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
+            setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
+            swapProgram,
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+        );
     }
 
     function createStrategy(
