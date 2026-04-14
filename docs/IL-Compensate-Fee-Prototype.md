@@ -100,19 +100,19 @@ $$
 \frac{V_{LP}}{V_{HODL}}
 = \frac{2 e^{z/2}}{1 + e^z}
 = \frac{1}{\cosh(z/2)}
-= \text{sech}(z/2).
+= \mathop{\mathrm{sech}}(z/2).
 $$
 
 Therefore pure IL is
 
 $$
-IL(z) = \text{sech}(z/2) - 1.
+IL(z) = \mathop{\mathrm{sech}}(z/2) - 1.
 $$
 
 It is convenient to define the positive loss magnitude
 
 $$
-L(s) = -IL = 1 - \text{sech}(s/2).
+L(s) = -IL = 1 - \mathop{\mathrm{sech}}(s/2).
 $$
 
 This is the quantity we want the fee system to compensate.
@@ -202,14 +202,14 @@ $$
 = \frac{y_0 e^{z/2}}{y_0(1+e^z)}
 = \frac{e^{z/2}}{1+e^z}
 = \frac{1}{2\cosh(z/2)}
-= \frac12 \text{sech}(s/2).
+= \frac12 \mathop{\mathrm{sech}}(s/2).
 $$
 
 Therefore
 
 $$
 \boxed{
-dR = \frac{f(s)}{4}\text{sech}(s/2)\,ds
+dR = \frac{f(s)}{4}\mathop{\mathrm{sech}}(s/2)\,ds
 }
 $$
 
@@ -226,31 +226,31 @@ $$
 Since
 
 $$
-L(s) = 1 - \text{sech}(s/2),
+L(s) = 1 - \mathop{\mathrm{sech}}(s/2),
 $$
 
 we differentiate:
 
 $$
 \frac{dL}{ds}
-= \frac12 \text{sech}(s/2)\tanh(s/2).
+= \frac12 \mathop{\mathrm{sech}}(s/2)\tanh(s/2).
 $$
 
 So
 
 $$
 dL
-= \frac12 \text{sech}(s/2)\tanh(s/2)\,ds.
+= \frac12 \mathop{\mathrm{sech}}(s/2)\tanh(s/2)\,ds.
 $$
 
 Set $dR = dL$:
 
 $$
-\frac{f(s)}{4}\text{sech}(s/2)\,ds
-= \frac12 \text{sech}(s/2)\tanh(s/2)\,ds.
+\frac{f(s)}{4}\mathop{\mathrm{sech}}(s/2)\,ds
+= \frac12 \mathop{\mathrm{sech}}(s/2)\tanh(s/2)\,ds.
 $$
 
-Cancelling the common factors ($\text{sech}(s/2)$ and $ds$) we recieve the required harmful-direction fee:
+Cancelling the common factors ($\mathop{\mathrm{sech}}(s/2)$ and $ds$) we recieve the required harmful-direction fee:
 
 $$
 \boxed{
