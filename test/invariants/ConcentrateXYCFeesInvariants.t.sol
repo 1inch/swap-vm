@@ -73,8 +73,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     // Additivity tolerance (default 1 for concentrate due to L recalculation)
     uint256 internal additivityTolerance = 1;
 
-    // Rounding tolerance in bps (default 100 = 1%)
-    uint256 internal roundingToleranceBps = 100;
+    // Rounding tolerance in bps (default 10 = 0.1%)
+    uint256 internal roundingToleranceBps = 10;
 
     // Skip flags for edge cases
     bool internal skipMonotonicity = false;
