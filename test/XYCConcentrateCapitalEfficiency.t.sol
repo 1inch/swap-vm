@@ -164,8 +164,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
                 )),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                p.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));

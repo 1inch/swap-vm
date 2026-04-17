@@ -7,7 +7,7 @@ pragma solidity 0.8.30;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 
 /// @dev Fixed-point basis for sqrt price values (1e18)
 uint256 constant ONE = 1e18;
@@ -62,12 +62,9 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 bLt, uint256 bGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        uint256 invSqrtPspot = Math.mulDiv(ONE, ONE, sqrtPspot);
-        uint256 invSqrtPmax = Math.mulDiv(ONE, ONE, sqrtPmax);
-
-        // Handle boundary: if sqrtPspot >= sqrtPmax, bLt = 0
-        bLt = invSqrtPspot > invSqrtPmax ? Math.mulDiv(targetL, invSqrtPspot - invSqrtPmax, ONE) : 0;
-        // Handle boundary: if sqrtPspot <= sqrtPmin, bGt = 0
+        bLt = sqrtPmax > sqrtPspot
+            ? Math.mulDiv(targetL, (sqrtPmax - sqrtPspot) * ONE, sqrtPspot * sqrtPmax)
+            : 0;
         bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
     }
 
@@ -85,13 +82,16 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 targetL, uint256 actualLt, uint256 actualGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        uint256 lFromLt = (sqrtPmax > sqrtPspot)
-            ? Math.mulDiv(availableLt, Math.mulDiv(sqrtPmax, sqrtPspot, ONE), sqrtPmax - sqrtPspot)
-            : type(uint256).max;
-        uint256 lFromGt = (sqrtPspot > sqrtPmin)
-            ? Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin)
-            : type(uint256).max;
-        targetL = lFromLt < lFromGt ? lFromLt : lFromGt;
+        if (sqrtPspot <= sqrtPmin) {
+            targetL = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
+        } else if (sqrtPspot < sqrtPmax) {
+            uint256 lFromLt = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
+            uint256 lFromGt = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
+            targetL = lFromLt < lFromGt ? lFromLt : lFromGt;
+        } else {
+            targetL = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
+        }
+
         (actualLt, actualGt) = computeBalances(targetL, sqrtPspot, sqrtPmin, sqrtPmax);
     }
 
@@ -102,31 +102,27 @@ library XYCConcentrateArgsBuilder {
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax
     ) internal pure returns (uint256) {
-        uint256 alpha = ONE - Math.mulDiv(sqrtPriceMin, ONE, sqrtPriceMax);
-        uint256 beta  = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
-        uint256 fourAC = Math.mulDiv(4 * alpha, bLt, ONE) * bGt;
-        uint256 disc   = beta * beta + fourAC;
-        return Math.mulDiv(beta + Math.sqrt(disc), ONE, 2 * alpha);
+        uint256 priceDelta = sqrtPriceMax - sqrtPriceMin;
+        uint256 beta = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
+        uint256 fourAC = Math.mulDiv(4 * priceDelta, bLt * bGt, sqrtPriceMax);
+        uint256 disc = beta * beta + fourAC;
+        return Math.mulDiv(beta + Math.sqrt(disc), sqrtPriceMax, 2 * priceDelta);
     }
 }
 
-/// @title XYCConcentrate - Concentrated liquidity with price bounds (2-token only)
-/// @notice Computes virtual reserves from current real balances and price bounds.
+/// @title XYCConcentrate - Concentrated liquidity swap with price bounds (2-token only)
+/// @notice Terminal instruction: computes virtual reserves from real balances and price bounds,
+///         then performs a constant-product swap in a single step.
 ///         L (liquidity) is recomputed from real balances each swap.
 ///         Fee reinvestment happens automatically as growing real balances increase L.
+///         Virtual reserves are local — ctx.swap.balanceIn/Out are not mutated,
+///         so dynamicBalances sees only real balance changes (amountIn/amountOut).
 contract XYCConcentrate {
-    using Math for uint256;
-    using ContextLib for Context;
-
-    error ConcentrateShouldBeUsedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
+    error ConcentrateRecomputeDetected(uint256 amountIn, uint256 amountOut);
 
     /// @param args.sqrtPriceMin | 32 bytes (uint256, 1e18 fp) — sqrt(P_min) where P = tokenGt/tokenLt
     /// @param args.sqrtPriceMax | 32 bytes (uint256, 1e18 fp) — sqrt(P_max) where P = tokenGt/tokenLt
-    function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal {
-        require(
-            ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0,
-            ConcentrateShouldBeUsedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut)
-        );
+    function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal pure {
 
         (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = XYCConcentrateArgsBuilder.parse2D(args);
 
@@ -136,14 +132,28 @@ contract XYCConcentrate {
 
         uint256 L = XYCConcentrateArgsBuilder._computeL(bLt, bGt, sqrtPriceMin, sqrtPriceMax);
 
+        uint256 virtualBalanceIn;
+        uint256 virtualBalanceOut;
         if (isTokenInLt) {
-            ctx.swap.balanceIn += Math.ceilDiv(L * ONE, sqrtPriceMax);
-            ctx.swap.balanceOut += Math.mulDiv(L, sqrtPriceMin, ONE);
+            virtualBalanceIn  = ctx.swap.balanceIn  + Math.mulDiv(L, ONE, sqrtPriceMax, Math.Rounding.Ceil);
+            virtualBalanceOut = ctx.swap.balanceOut + Math.mulDiv(L, sqrtPriceMin, ONE);
         } else {
-            ctx.swap.balanceIn += Math.ceilDiv(L * sqrtPriceMin, ONE);
-            ctx.swap.balanceOut += Math.mulDiv(L, ONE, sqrtPriceMax);
+            virtualBalanceIn  = ctx.swap.balanceIn  + Math.mulDiv(L, sqrtPriceMin, ONE, Math.Rounding.Ceil);
+            virtualBalanceOut = ctx.swap.balanceOut + Math.mulDiv(L, ONE, sqrtPriceMax);
         }
 
-        ctx.runLoop();
+        if (ctx.query.isExactIn) {
+            require(ctx.swap.amountOut == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
+            ctx.swap.amountOut = (
+                (ctx.swap.amountIn * virtualBalanceOut) /
+                (virtualBalanceIn + ctx.swap.amountIn)
+            );
+        } else {
+            require(ctx.swap.amountIn == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
+            ctx.swap.amountIn = Math.ceilDiv(
+                ctx.swap.amountOut * virtualBalanceIn,
+                (virtualBalanceOut - ctx.swap.amountOut)
+            );
+        }
     }
 }

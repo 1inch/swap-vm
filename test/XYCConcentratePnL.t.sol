@@ -14,7 +14,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
@@ -114,11 +113,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
                     dynamic([tokenLt, tokenGt]),
                     dynamic([bLt, bGt])
                 )),
+                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -441,11 +439,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
                     dynamic([tokenLt, tokenGt]),
                     dynamic([bLt, bGt])
                 )),
+                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                ),
-                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
-                p.build(XYCSwap._xycSwapXD)
+                )
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));

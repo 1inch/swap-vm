@@ -132,9 +132,8 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(300)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         _testInvariants(_createOrder(bytecode), false);
@@ -150,9 +149,8 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(600)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_progressiveFeeOutXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.01e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         // Skip symmetry for GrowPriceRange with progressive fees
@@ -172,9 +170,8 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(450)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(0.004e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         _testInvariants(_createOrder(bytecode), false);
@@ -190,9 +187,8 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(720)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.05e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         // Skip symmetry for GrowPriceRange with progressive fees
@@ -214,10 +210,9 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(540)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(0.0025e9, feeRecipient)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         _testInvariants(_createOrder(bytecode), false);
@@ -233,10 +228,9 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(780)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(0.002e9)),
             program.build(_progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.03e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         // Skip symmetry for GrowPriceRange with multiple fees
@@ -254,9 +248,8 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
                     dynamic([_balA, _balB])
                 )),
             program.build(_decayXD, DecayArgsBuilder.build(480)),
-            program.build(_xycConcentrateGrowLiquidity2D, _cArgs()),
             program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(0.0055e9)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D, _cArgs())
         );
 
         _testInvariants(_createOrder(bytecode), false);

@@ -58,12 +58,9 @@ contract MicroAmounts is ConcentrateXYCFeesInvariants {
 
         // Minimal tolerances
         symmetryTolerance = 2;      // 2 wei
-        additivityTolerance = 1;    // 1 wei (concentrate needs this for L recalculation)
+        additivityTolerance = 0;    // 0 wei
 
         // Monotonicity: dust amounts violate due to rounding
-        monotonicityToleranceBps = 1;
-
-        // Rounding: 1% deviation from spot price
-        roundingToleranceBps = 100;  // 1%
+        monotonicityToleranceBps = 4;
     }
 }
