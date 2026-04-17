@@ -12,9 +12,6 @@ import { Context } from "../libs/VM.sol";
 /// @dev Fixed-point basis for sqrt price values (1e18)
 uint256 constant ONE = 1e18;
 
-/// @dev Higher-precision fixed-point for internal alpha computation in _computeL
-uint256 constant ONE_HI = 1e27;
-
 library XYCConcentrateArgsBuilder {
     using Calldata for bytes;
 
@@ -65,7 +62,6 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 bLt, uint256 bGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        // bLt = targetL * (1/sqrtPspot - 1/sqrtPmax) = targetL * (sqrtPmax - sqrtPspot) / (sqrtPspot * sqrtPmax)
         bLt = sqrtPmax > sqrtPspot
             ? Math.mulDiv(targetL, (sqrtPmax - sqrtPspot) * ONE, sqrtPspot * sqrtPmax)
             : 0;
@@ -86,13 +82,16 @@ library XYCConcentrateArgsBuilder {
     ) internal pure returns (uint256 targetL, uint256 actualLt, uint256 actualGt) {
         require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
 
-        uint256 lFromLt = (sqrtPmax > sqrtPspot)
-            ? Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE)
-            : type(uint256).max;
-        uint256 lFromGt = (sqrtPspot > sqrtPmin)
-            ? Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin)
-            : type(uint256).max;
-        targetL = lFromLt < lFromGt ? lFromLt : lFromGt;
+        if (sqrtPspot <= sqrtPmin) {
+            targetL = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
+        } else if (sqrtPspot < sqrtPmax) {
+            uint256 lFromLt = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
+            uint256 lFromGt = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
+            targetL = lFromLt < lFromGt ? lFromLt : lFromGt;
+        } else {
+            targetL = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
+        }
+
         (actualLt, actualGt) = computeBalances(targetL, sqrtPspot, sqrtPmin, sqrtPmax);
     }
 
@@ -103,11 +102,11 @@ library XYCConcentrateArgsBuilder {
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax
     ) internal pure returns (uint256) {
-        uint256 alpha = ONE_HI - Math.mulDiv(sqrtPriceMin, ONE_HI, sqrtPriceMax);
-        uint256 beta  = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
-        uint256 fourAC = Math.mulDiv(Math.mulDiv(4 * alpha, bLt, 1e9), bGt, 1e18);
-        uint256 disc   = beta * beta + fourAC;
-        return Math.mulDiv(beta + Math.sqrt(disc), ONE_HI, 2 * alpha);
+        uint256 priceDelta = sqrtPriceMax - sqrtPriceMin;
+        uint256 beta = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
+        uint256 fourAC = Math.mulDiv(4 * priceDelta, bLt * bGt, sqrtPriceMax);
+        uint256 disc = beta * beta + fourAC;
+        return Math.mulDiv(beta + Math.sqrt(disc), sqrtPriceMax, 2 * priceDelta);
     }
 }
 
