@@ -10,7 +10,7 @@ fs_permissions = [
 
 [profile.default.optimizer_details]
 yul = true
-yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul [j]Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }
+yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }
 
 [fmt]
 single_line_statement_blocks = "multi"
@@ -28,4 +28,4 @@ via_ir         = true
 
 [profile.ci.optimizer_details]
 yul = true
-yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul [j]Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }
+yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }
