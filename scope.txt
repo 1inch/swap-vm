@@ -13,3 +13,9 @@ src/libs/MakerTraits.sol
 src/libs/PeggedSwapMath.sol
 src/libs/TakerTraits.sol
 src/libs/VM.sol
+docs/aqua-dev-preview.md - Aqua whitepaper
+docs/aqua-README.md - Aqua README
+docs/AquaVM_Auditor_Brief.md - Assumptions, limitations and other experience from the previous human-audit  
+docs/swap-vm-1.0.md - SwapVM whitepaper
+docs/swapvm-PROGRAMS.md - docs on how swapvm programs are built
+docs/swapvm-README.md - SwapVM README
