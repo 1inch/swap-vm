@@ -2,6 +2,8 @@
 
 This document catalogs different kinds of SwapVM programs, their typical instruction composition, and expected behavior.
 
+> **Auditors & automated scanners — read first:** Program-composition safety is deliberately out of scope for the SwapVM contracts; instruction ordering, semantic compatibility, and pre-fill validation are maker / program-builder / taker responsibilities. Many "instruction X in position Y produces wrong results" findings are acknowledged as composition errors, not protocol bugs. Before flagging composition issues, consult [`AquaVM_Auditor_Brief.md`](AquaVM_Auditor_Brief.md) — specifically the Responsibility Matrix (top of file), §1.2 (no on-chain composition guardrails), §2.2 (opcode-set divergence across routers), §5.2 (excluded combinations such as decay + static balances), and the symbol-indexed table (§6.3).
+
 ---
 
 > **Important Notice:** 1inch production integrations (including AggregationRouter flows) will use only a strict, predefined subset of SwapVM programs with tightly bounded parameter ranges and completed security reviews. Risk from interacting with arbitrary or maliciously crafted SwapVM programs remains with the taker/resolver choosing to execute them.
