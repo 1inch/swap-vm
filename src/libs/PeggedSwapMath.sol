@@ -22,7 +22,7 @@ library PeggedSwapMath {
     function invariant(uint256 u, uint256 v, uint256 a) internal pure returns (uint256) {
         uint256 sqrtU = Math.sqrt(u * ONE);
         uint256 sqrtV = Math.sqrt(v * ONE);
-        // a * (u + v) / ONE - safe: a ≤ 2e27, u+v ≤ 2e27 → 4e54 < 1e77
+        // a * (u + v) / ONE - safe: a ≤ 500e27, u+v ≤ 8e27 (each ≤ u* ≤ 4·ONE) → 4e57 < 1e77
         uint256 linearTerm = a * (u + v) / ONE;
         return sqrtU + sqrtV + linearTerm;
     }
@@ -41,7 +41,7 @@ library PeggedSwapMath {
         uint256 y0,
         uint256 a
     ) internal pure returns (uint256) {
-        // x * ONE / x0 - safe: x ≤ 1e24 (huge reserve), ONE = 1e27 → 1e51 < 1e77
+        // x * ONE / x0 - safe: x ≤ 1e30 (huge reserve scaled), ONE = 1e27 → 1e57 < 1e77
         uint256 u = x * ONE / x0;
         uint256 v = y * ONE / y0;
         return invariant(u, v, a);
@@ -60,7 +60,7 @@ library PeggedSwapMath {
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         uint256 sqrtU = Math.sqrt(u * ONE);
 
-        // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
+        // a * u / ONE - safe: a ≤ 500e27, u ≤ u* ≤ 4·ONE = 4e27 → 2e57 < 1e77
         uint256 au = a * u / ONE;
 
         // Calculate rightSide = c - √u - au
@@ -92,7 +92,7 @@ library PeggedSwapMath {
         //
         // This form is stable for all values of a, including when a → 0.
 
-        // 4 * a * rightSide / ONE - safe: 4a ≤ 8e27, rightSide ≤ 2e27 → 16e54 < 1e77
+        // 4 * a * rightSide / ONE - safe: 4a ≤ 2e30, rightSide ≤ invariantC ≤ ~1002·ONE ≈ 1e30 → 2e60 < 1e77
         uint256 fourARightSide = 4 * a * rightSide / ONE;
 
         uint256 discriminant = ONE + fourARightSide;
@@ -103,9 +103,10 @@ library PeggedSwapMath {
 
         uint256 denominator = ONE + sqrtDiscriminant;
 
+        // 2 * rightSide * ONE - safe: rightSide ≤ ~1e30, ONE = 1e27 → 2e57 < 1e77
         uint256 w = 2 * rightSide * ONE / denominator;
 
-        // w² / ONE - safe: w ≤ 2e27 → 4e54 < 1e77
+        // w² / ONE - safe: w ≤ √2·ONE ≈ 1.5e27 (since v ≤ 2·ONE in peg zone) → 2.25e54 < 1e77
         v = w * w / ONE;
     }
 
