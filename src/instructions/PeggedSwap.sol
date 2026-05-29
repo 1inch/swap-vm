@@ -16,7 +16,7 @@ library PeggedSwapArgsBuilder {
     /// @notice Arguments for the pegged swap instruction (stored in program)
     /// @param x0 Initial X reserve (normalization factor) = initial_balance_X * rateLt (or rateGt)
     /// @param y0 Initial Y reserve (normalization factor) = initial_balance_Y * rateGt (or rateLt)
-    /// @param linearWidth Linear component coefficient A scaled by 1e27 (e.g., 0.8e27 for A=0.8)
+    /// @param linearWidth Linear component coefficient A scaled by 1e27 (e.g., 100e27 for A=100); must be <= 500e27
     /// @param rateLt Rate multiplier for token with LOWER address
     /// @param rateGt Rate multiplier for token with GREATER address
     ///        For equal decimals (e.g., both 18): rateLt = rateGt = 1
@@ -56,7 +56,7 @@ library PeggedSwapArgsBuilder {
         }
 
         require(args.x0 > 0 && args.y0 > 0, PeggedSwapInvalidInitialBalances(args.x0, args.y0));
-        require(args.linearWidth <= 2 * PeggedSwapMath.ONE, PeggedSwapInvalidLinearWidth(args.linearWidth));
+        require(args.linearWidth <= 500 * PeggedSwapMath.ONE, PeggedSwapInvalidLinearWidth(args.linearWidth));
         require(args.rateLt > 0 && args.rateGt > 0, PeggedSwapInvalidRates(args.rateLt, args.rateGt));
     }
 
@@ -111,7 +111,7 @@ contract PeggedSwap {
         // ║  Where:                                                                   ║
         // ║    - x, y are current reserves (in SwapVM: balanceIn, balanceOut)         ║
         // ║    - X₀, Y₀ are initial reserves (normalization factors)                  ║
-        // ║    - A is linear width parameter (0 to 2.0e+27)                           ║
+        // ║    - A is linear width parameter (0 to 500e+27, inclusive)                ║
         // ║    - Curvature p=0.5 is hardcoded for analytical solution                 ║
         // ║                                                                           ║
         // ║  Rate multipliers:                                                        ║
@@ -123,13 +123,14 @@ contract PeggedSwap {
         // ║    - Smooth price protection at extremes                                  ║
         // ║    - Analytical solution - no iterative solving needed                    ║
         // ║                                                                           ║
-        // ║  Parameters guide:                                                        ║
-        // ║    - For pegged pairs (USDC/USDT, WETH/stETH, WBTC/cbBTC):               ║
-        // ║      A ≈ 0.8e+27-1.5e+27                                                  ║
-        // ║    - For looser pegs: A ≈ 0.3e+27-0.6e+27                                 ║
+        // ║  Parameters guide (see docs/PeggedSwap/PeggedSwapWP.md §5):               ║
+        // ║    - Tight stablecoin pairs (USDC/USDT, USDC/DAI):  A ≈ 100e+27-300e+27   ║
+        // ║    - LST/LRT pairs (WETH/stETH, WETH/wstETH):       A ≈ 20e+27-100e+27    ║
+        // ║    - Looser pegs / wrapped BTC pairs:               A ≈ 5e+27-20e+27      ║
+        // ║    - Volatile / experimental:                       A ≈ 0-5e+27           ║
         // ║    - WARNING: This curve has finite reserves (hard price boundary).        ║
-        // ║      NOT suitable for volatile/uncorrelated pairs or drifting-peg          ║
-        // ║      assets (e.g. WETH/wstETH where the ratio changes over time).         ║
+        // ║      NOT suitable for drifting-peg assets where the ratio changes         ║
+        // ║      over time without a moving anchor.                                   ║
         // ╚═══════════════════════════════════════════════════════════════════════════╝
 
         // Get rate multipliers based on token addresses
@@ -158,12 +159,12 @@ contract PeggedSwap {
             uint256 x1 = x0 + ctx.swap.amountIn * rateIn;
 
             // Solve for y1: given x1, find y1 that maintains invariant
-            // x1 * ONE / x0 - safe: x1 ≤ 1e24, ONE = 1e27 → 1e51 < 1e77
+            // x1 * ONE / x0 - safe: x1 ≤ 1e30, ONE = 1e27 → 1e57 < 1e77
             uint256 u1 = x1 * PeggedSwapMath.ONE / x0_init;  // Round DOWN u1
             uint256 v1 = PeggedSwapMath.solve(u1, config.linearWidth, targetInvariant);
 
             // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
-            // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
+            // v1 * y0_init - safe: v1 ≤ u* ≤ 4e27 (boundary for any A ≥ 0), y0_init ≤ 1e30 → 4e57 < 1e77
             uint256 y1 = Math.ceilDiv(v1 * y0_init, PeggedSwapMath.ONE);
 
             // Convert back from normalized scale: amountOut = (y0 - y1) / rateOut
@@ -175,12 +176,12 @@ contract PeggedSwap {
             uint256 y1 = y0 - ctx.swap.amountOut * rateOut;
 
             // Solve for x1: given y1, find x1 that maintains invariant
-            // y1 * ONE / y0 - safe: y1 ≤ 1e24, ONE = 1e27 → 1e51 < 1e77
+            // y1 * ONE / y0 - safe: y1 ≤ 1e30, ONE = 1e27 → 1e57 < 1e77
             uint256 v1 = y1 * PeggedSwapMath.ONE / y0_init;  // Round DOWN v1
             uint256 u1 = PeggedSwapMath.solve(v1, config.linearWidth, targetInvariant);
 
             // Round UP x1 (normalized) to ensure amountIn rounds UP (protects maker)
-            // u1 * x0 - safe: u1 ≤ 2e27, x0 ≤ 1e27 → 2e54 < 1e77
+            // u1 * x0_init - safe: u1 ≤ u* ≤ 4e27 (boundary for any A ≥ 0), x0_init ≤ 1e30 → 4e57 < 1e77
             uint256 x1 = Math.ceilDiv(u1 * x0_init, PeggedSwapMath.ONE);
 
             // Convert back from normalized scale: amountIn = (x1 - x0) / rateIn
