@@ -2,6 +2,7 @@
   "name": "@1inch/swap-vm",
   "version": "0.0.6",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
+  "type": "module",
   "main": "index.js",
   "directories": {
     "lib": "lib",
@@ -13,15 +14,23 @@
     "@openzeppelin/contracts": "5.4.0",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
+  "devDependencies": {
+    "hardhat": "^3.7.0",
+    "patch-package": "^8.0.0"
+  },
   "resolutions": {
-    "elliptic": "6.6.1"
+    "elliptic": "6.6.1",
+    "@1inch/solidity-utils": "6.9.7",
+    "@openzeppelin/contracts": "5.4.0"
   },
   "scripts": {
-    "test": "forge test",
-    "build": "forge build",
+    "postinstall": "patch-package",
+    "test": "npx hardhat test solidity",
+    "build": "npx hardhat compile",
     "lint": "forge fmt --check",
     "format": "forge fmt",
-    "snapshot": "forge snapshot --force --no-match-test \"testFuzz_*\""
+    "snapshot": "npx hardhat test solidity --snapshot",
+    "snapshot:check": "npx hardhat test solidity --snapshot-check"
   },
   "repository": {
     "type": "git",
