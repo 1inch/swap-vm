@@ -236,14 +236,17 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
+        bytes memory swapCode = includeConcentrate
+            ? concentrateCode
+            : p.build(XYCSwap._xycSwapXD);
+
         return bytes.concat(
             protocolFeeCode,
             p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-            concentrateCode,
             flatFeeCode,
-            p.build(XYCSwap._xycSwapXD),
+            swapCode,
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
-        );
+        ); 
     }
 
     function buildWrongProgram(
@@ -263,10 +266,9 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return bytes.concat(
             p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
             protocolFeeCode, // WRONG: protocolFee after balances
-            flatFeeCode,     // WRONG: flatFee before Concentrate
+            flatFeeCode,
             p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                    defaultConcentrateArgs()),
-            p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }
@@ -290,10 +292,9 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             protocolFeeCode,
             p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
             p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),
+            flatFeeCode,
             p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                    defaultConcentrateArgs()),
-            flatFeeCode,
-            p.build(XYCSwap._xycSwapXD),
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }

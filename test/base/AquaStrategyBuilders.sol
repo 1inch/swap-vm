@@ -91,11 +91,14 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             );
         }
 
+        bytes memory swapProgram = concentrateProgram.length > 0
+            ? concentrateProgram
+            : p.build(XYCSwap._xycSwapXD);
+
         return bytes.concat(
             setup.protocolFeeBps > 0 ? p.build(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
-            concentrateProgram,
             setup.feeInBps > 0 ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
-            p.build(XYCSwap._xycSwapXD),
+            swapProgram,
             p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
         );
     }

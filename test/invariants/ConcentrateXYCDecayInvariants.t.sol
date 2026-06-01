@@ -123,11 +123,10 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -174,11 +173,10 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([address(tokenA), address(tokenB)]),
                     dynamic([balanceA, balanceB])
                 )),
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
             program.build(_decayXD,
                 DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycSwapXD)
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

@@ -163,7 +163,7 @@ contract RunLoopTest is Test, OpcodesDebug {
     // ============================================
 
     /**
-     * @notice Test deep nesting (6 levels): DynamicBalances → Decay → Fee → XYCConcentrate → MinRate → XYCSwap
+     * @notice Test deep nesting (5 levels): DynamicBalances → Decay → Fee → MinRate → XYCConcentrate(terminal)
      */
     function test_NestedRunLoop_Deep_SixLevels() public {
         Program memory program = ProgramBuilder.init(_opcodes());
@@ -176,11 +176,10 @@ contract RunLoopTest is Test, OpcodesDebug {
                 )), // Level 0: DynamicBalances → runLoop
             program.build(_decayXD, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
-            program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(Math.sqrt(0.5e36), Math.sqrt(2.0e36))), // Level 3: XYCConcentrate → runLoop
             program.build(_requireMinRate1D,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 4: MinRate → runLoop
-            program.build(_xycSwapXD) // Level 5: XYCSwap (terminal)
+                MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 3: MinRate → runLoop
+            program.build(_xycConcentrateGrowLiquidity2D,
+                XYCConcentrateArgsBuilder.build2D(Math.sqrt(0.5e36), Math.sqrt(2.0e36))) // Level 4: XYCConcentrate (terminal)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

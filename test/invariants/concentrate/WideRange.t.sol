@@ -40,7 +40,7 @@ contract WideRange is ConcentrateXYCFeesInvariants {
         testAmounts[4] = 200e18;   // 200 tokens
 
         // Tolerances
-        symmetryTolerance = 2;
+        symmetryTolerance = 0;
         additivityTolerance = 1;
     }
 }

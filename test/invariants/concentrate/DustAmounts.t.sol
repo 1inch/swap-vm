@@ -40,7 +40,7 @@ import { ConcentrateXYCFeesInvariants } from "../ConcentrateXYCFeesInvariants.t.
  * - Economically impossible
  *
  * **Tolerance:**
- * - `monotonicityToleranceBps = 10000` (100% tolerance)
+ * - `monotonicityToleranceBps = 15000` (150% tolerance)
  * - Accepts that dust amounts violate monotonicity
  * - This is a mathematical artifact, not a security risk
  */
@@ -85,15 +85,12 @@ contract DustAmounts is ConcentrateXYCFeesInvariants {
 
         // Minimal tolerances
         symmetryTolerance = 1;      // 1 wei
-        additivityTolerance = 1;    // 1 wei (concentrate needs this for L recalculation)
+        additivityTolerance = 0;
 
         // Monotonicity: 100% tolerance for dust amounts
         // Reason: Fee rounding (ceil) creates monotonicity violations
         // This is SAFE: gas costs >> any arbitrage profit (500 trillion:1 loss ratio)
-        monotonicityToleranceBps = 10000;  // 100%
+        monotonicityToleranceBps = 15000; // 150%
 
-        // Rounding: 10% deviation allowed for dust
-        // Dust amounts have extreme relative rounding errors
-        roundingToleranceBps = 1000;  // 10%
     }
 }

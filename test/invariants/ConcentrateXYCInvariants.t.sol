@@ -124,8 +124,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                     dynamic([balanceA, balanceB])
                 )),
             program.build(_xycConcentrateGrowLiquidity2D,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
-            program.build(_xycSwapXD)
+                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -164,8 +163,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
                         dynamic([balanceA, balanceB])
                     )),
                 program.build(_xycConcentrateGrowLiquidity2D,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
-                program.build(_xycSwapXD)
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
             );
 
             ISwapVM.Order memory order = _createOrder(bytecode);

@@ -19,13 +19,13 @@ contract XYCSwap {
 
         if (ctx.query.isExactIn) {
             require(ctx.swap.amountOut == 0, XYCSwapRecomputeDetected());
-            ctx.swap.amountOut = ( // Floor division for tokenOut is desired behavior
+            ctx.swap.amountOut = (
                 (ctx.swap.amountIn * ctx.swap.balanceOut) /
                 (ctx.swap.balanceIn + ctx.swap.amountIn)
             );
         } else {
             require(ctx.swap.amountIn == 0, XYCSwapRecomputeDetected());
-            ctx.swap.amountIn = Math.ceilDiv( // Ceiling division for tokenIn is desired behavior
+            ctx.swap.amountIn = Math.ceilDiv(
                 ctx.swap.amountOut * ctx.swap.balanceIn,
                 (ctx.swap.balanceOut - ctx.swap.amountOut)
             );
