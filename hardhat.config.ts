@@ -1,4 +1,7 @@
-import { defineConfig } from "hardhat/config";
+import { defineConfig, configVariable } from "hardhat/config";
+import hardhatIgnition from "@nomicfoundation/hardhat-ignition";
+import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
+import hardhatVerify from "@nomicfoundation/hardhat-verify";
 
 // Migrated from foundry.toml [profile.default].
 // [profile.ci] is identical to [profile.default] (same solc, optimizer, runs,
@@ -9,6 +12,7 @@ import { defineConfig } from "hardhat/config";
 //             (prettier-plugin-solidity is the usual alternative).
 
 export default defineConfig({
+  plugins: [hardhatIgnition, hardhatKeystore, hardhatVerify],
   solidity: {
     compilers: [
       {
@@ -49,6 +53,35 @@ export default defineConfig({
       fsPermissions: {
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },
+    },
+  },
+  // Deployment targets. Secrets resolve from config variables (env vars of the
+  // same name, or `npx hardhat keystore set <NAME>`); Hardhat 3 does NOT auto-load .env.
+  networks: {
+    localhost: {
+      type: "http",
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+    },
+    sepolia: {
+      type: "http",
+      chainType: "l1",
+      url: configVariable("SEPOLIA_RPC_URL"),
+      accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
+      chainId: 11155111,
+    },
+    mainnet: {
+      type: "http",
+      chainType: "l1",
+      url: configVariable("MAINNET_RPC_URL"),
+      accounts: [configVariable("MAINNET_PRIVATE_KEY")],
+      chainId: 1,
+    },
+  },
+  // Etherscan API v2 — a single key works across all supported chains.
+  verify: {
+    etherscan: {
+      apiKey: configVariable("ETHERSCAN_API_KEY"),
     },
   },
 });
