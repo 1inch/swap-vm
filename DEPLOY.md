@@ -1,135 +1,99 @@
 # SwapVM Deployment Guide
 
-This guide describes how to deploy SwapVM contracts using the Makefile-based deployment system.
+SwapVM is deployed with [Hardhat Ignition](https://hardhat.org/ignition) and verified with `hardhat-verify`.
 
 ## Prerequisites
 
-Before deploying, ensure you have the following installed:
+- Node.js + Yarn (`yarn install`)
+- A funded deployer key and an RPC URL for the target network
+- For verification: an Etherscan API key (v2 — a single key works across all chains)
 
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) (includes `forge`, `cast`, and `anvil`)
-- Make (usually pre-installed on Unix systems)
-- jq (JSON processor for parsing deployment outputs)
-- A funded wallet for gas fees
+## 1. Configure secrets (config variables)
 
-## Quick Start
-
-```bash
-# 1. Copy and configure environment file
-cp .env.example .env
-
-# 2. Set required environment variables
-# Edit .env file with your values
-
-# 3. Deploy standard SwapVMRouter
-make deploy-swap-vm
-
-# 4. Get SwapVMRouter deployment address
-make get PARAMETER=OPS_SWAP_VM_ROUTER_ADDRESS
-```
-
-## Environment Configuration
-
-The deployment system uses environment variables that can be configured in two ways:
-
-### Manual Mode (Default)
-Create a `.env` file in the project root with the following variables:
+RPC URLs and the deployer private key are Hardhat **configuration variables**. Hardhat 3 does **not** auto-load `.env`; provide them either as environment variables of the same name, or via the encrypted keystore:
 
 ```bash
-# Network Configuration
-OPS_NETWORK="localhost"          # Network name (e.g., mainnet, sepolia, localhost)
-OPS_CHAIN_ID="31337"            # Chain ID for the target network
+# Option A — environment variables
+export SEPOLIA_RPC_URL=https://...
+export SEPOLIA_PRIVATE_KEY=0x...
+export ETHERSCAN_API_KEY=...
 
-# Contract Parameters
-OPS_AQUA_ADDRESS="0x..."        # Address of the Aqua contract
-OPS_SWAP_VM_ROUTER_NAME="SwapVMRouter"
-OPS_SWAP_VM_ROUTER_VERSION="1.0.0"
-
-# Network-specific RPC and Private Key
-# Format: <NETWORK_NAME>_RPC_URL and <NETWORK_NAME>_PRIVATE_KEY
-LOCALHOST_RPC_URL=http://127.0.0.1:8545
-LOCALHOST_PRIVATE_KEY=0x...
-
-# For other networks, add corresponding entries:
-# MAINNET_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/YOUR-KEY"
-# MAINNET_PRIVATE_KEY="0x..."
-# SEPOLIA_RPC_URL="https://eth-sepolia.g.alchemy.com/v2/YOUR-KEY"
-# SEPOLIA_PRIVATE_KEY="0x..."
+# Option B — encrypted keystore (prompts for a password when the value is needed)
+npx hardhat keystore set SEPOLIA_RPC_URL
+npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+npx hardhat keystore set ETHERSCAN_API_KEY
 ```
 
-### Automation Mode (Automated deployment framework)
-For automated deployments .env.automation file will be created automatically and deployment is launched with:
+Configured networks live in `hardhat.config.ts` (`localhost`, `sepolia`, `mainnet`); add more by copying the pattern. See `.env.example` for the full list of variable names.
 
-```bash
-OPS_LAUNCH_MODE=auto make deploy-swap-vm
-```
+## 2. Set deployment parameters
 
-## Configuration File
-
-The `config/constants.json` file stores deployment parameters per chain:
+Each network has a parameter file at `ignition/parameters/chain-<chainId>.json` (e.g. `chain-11155111.json` for Sepolia) holding the router constructor arguments, shared by all three routers via Ignition's `$global` key:
 
 ```json
 {
-  "aqua": {
-    "31337": "0x...",
-    "1": "0x...",      // Mainnet address
-    "11155111": "0x..." // Sepolia address
-  },
-  "swapVmRouterVersion": {
-    "31337": "1.0.0"
-  },
-  "swapVmRouterName": {
-    "31337": "SwapVMRouter"
-  }
+    "$global": {
+        "aqua": "0x…",
+        "weth": "0x…",
+        "owner": "0x…",
+        "name": "SwapVMRouter",
+        "version": "1.0.0"
+    }
 }
 ```
 
-## Deployment Commands
+Fill in the `0x0000…` placeholders before deploying (`aqua` and `owner` are placeholders; canonical WETH is pre-filled for mainnet/sepolia). All five values are required — a missing one fails Ignition's validation before any transaction is sent.
 
-### Main Deployment Targets
+## 3. Deploy
 
-| Command | Description | Contract |
-|---------|-------------|----------|
-| `make deploy-swap-vm` | Deploy standard SwapVMRouter | SwapVMRouter.sol |
-| `make deploy-swap-vm-aqua` | Deploy Aqua AMM SwapVMRouter | AquaSwapVMRouter.sol |
-| `make deploy-swap-vm-limit` | Deploy Limit Orders SwapVMRouter | LimitSwapVMRouter.sol |
+Deploy with `hardhat ignition deploy`, passing the module path, the target network, and the matching parameter file:
 
-### Deployment Artifacts
-
-Deployment information is saved in:
-- `broadcast/` - Forge deployment transactions
-- `deployments/<network>/` - Organized deployment files per network
-
-## Helper Commands
-
-### Development Tools
-
-| Command | Description |
-|---------|-------------|
-| `make build` | Compile all contracts |
-| `make tests` | Run test suite with gas reporting |
-| `make coverage` | Generate code coverage report |
-| `make snapshot` | Create gas snapshot |
-| `make format` | Format code using Forge formatter |
-| `make lint` | Check code formatting |
-| `make clean` | Clean build artifacts |
-
-### Local Development
-
-Start local Anvil fork:
 ```bash
-make anvil NODE_URL=<your-rpc-url>
+npx hardhat ignition deploy <modulePath> \
+  --network <network> \
+  --parameters ignition/parameters/chain-<chainId>.json
 ```
 
-Define correct env variables:
+The deployable modules live in `ignition/modules/`:
+
+| Module                                  | Contract          |
+| --------------------------------------- | ----------------- |
+| `ignition/modules/SwapVMRouter.ts`      | SwapVMRouter      |
+| `ignition/modules/AquaSwapVMRouter.ts`  | AquaSwapVMRouter  |
+| `ignition/modules/LimitSwapVMRouter.ts` | LimitSwapVMRouter |
+
+`--network` is any network defined in `hardhat.config.ts` (`localhost`, `sepolia`, `mainnet`). Make sure the `--parameters` file matches the network's chain id.
 
 ```bash
-# define your network alias (e.g. localhost)
-OPS_NETWORK="localhost"
-# Use 31337 for local development
-OPS_CHAIN_ID="31337"
+# Deploy SwapVMRouter to Sepolia (chain id 11155111)
+npx hardhat ignition deploy ignition/modules/SwapVMRouter.ts \
+  --network sepolia --parameters ignition/parameters/chain-11155111.json
 
-# RPC URL for localhost network
-LOCALHOST_RPC_URL=http://localhost:8546
-# Replace with your own private key for localhost testing
-LOCALHOST_PRIVATE_KEY=0x
+# Deploy and verify in one step (see step 4)
+npx hardhat ignition deploy ignition/modules/SwapVMRouter.ts \
+  --network sepolia --parameters ignition/parameters/chain-11155111.json --verify
+
+# Wipe local state and redeploy
+npx hardhat ignition deploy ignition/modules/LimitSwapVMRouter.ts \
+  --network localhost --parameters ignition/parameters/chain-31337.json --reset
+```
+
+Ignition is idempotent and resumable: re-running a deploy continues from where it left off and skips completed steps. By default the deployment id is `chain-<chainId>` and artifacts (addresses + journal) are written to `ignition/deployments/chain-<chainId>/`. Real-network deployments are committed (so resume works across machines/CI); the throwaway local `chain-31337` deployment is git-ignored.
+
+## 4. Verify
+
+Add `--verify` to the deploy command — Ignition verifies every contract in the deployment and supplies the recorded constructor arguments automatically (no manual ABI encoding). Requires `ETHERSCAN_API_KEY`.
+
+`--verify` also works on an **already-deployed** deployment: re-run the same deploy command with `--verify`, and since everything is already deployed Ignition skips the transactions and just verifies the recorded contracts.
+
+```bash
+# Verify an existing deployment by re-running deploy with --verify
+npx hardhat ignition deploy ignition/modules/SwapVMRouter.ts \
+  --network sepolia --parameters ignition/parameters/chain-11155111.json --verify
+```
+
+Equivalently, verify a recorded deployment by its id:
+
+```bash
+npx hardhat ignition verify chain-11155111
 ```
