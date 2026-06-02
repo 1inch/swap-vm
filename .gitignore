@@ -13,3 +13,7 @@ build
 !.env.example
 venv/
 .yarn
+
+# Local Ignition deploy artifacts are throwaway; real-network deployments
+# (ignition/deployments/chain-<id>) should be committed for resumability.
+ignition/deployments/chain-31337
