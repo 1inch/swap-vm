@@ -34,6 +34,10 @@ contract PeggedSwapMathWrapper {
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
     }
+
+    function buildArgs(PeggedSwapArgsBuilder.Args memory args) external pure returns (bytes memory) {
+        return PeggedSwapArgsBuilder.build(args);
+    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
@@ -416,29 +420,23 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
     // ========================================
 
-    /// @notice linearWidth > 500*ONE must revert. One wei above the cap is enough — the
-    ///         <= 500*ONE branch is implicitly covered by every other test in this file
-    ///         that uses linearWidth = 500e27.
+    /// @notice linearWidth > 500*ONE must revert at build time. One wei above the cap is
+    ///         enough — the <= 500*ONE branch is implicitly covered by every other test in
+    ///         this file that uses linearWidth = 500e27.
     function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
-        PoolSetup memory setup = PoolSetup({
-            balanceA: 100e18,
-            balanceB: 100e18,
-            x0: 100e18,
-            y0: 100e18,
-            linearWidth: 500e27 + 1,
-            feeInBps: 0
-        });
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
 
-        ISwapVM.Order memory order = _createOrder(setup);
-        bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
-
-        vm.prank(taker);
         vm.expectRevert(abi.encodeWithSelector(
             PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
             500e27 + 1
         ));
-        swapVM.swap(order, tokenA, tokenB, 1e18, takerData);
+        wrapper.buildArgs(PeggedSwapArgsBuilder.Args({
+            x0: 100e18,
+            y0: 100e18,
+            linearWidth: 500e27 + 1,
+            rateLt: 1,
+            rateGt: 1
+        }));
     }
 
     // ========================================

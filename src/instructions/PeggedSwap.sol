@@ -40,6 +40,10 @@ library PeggedSwapArgsBuilder {
     /// @param args Configuration for pegged swap curve
     /// @return Packed bytes for inclusion in program bytecode
     function build(Args memory args) internal pure returns (bytes memory) {
+        require(args.x0 > 0 && args.y0 > 0, PeggedSwapInvalidInitialBalances(args.x0, args.y0));
+        require(args.linearWidth <= PeggedSwapMath.MAX_LINEAR_WIDTH, PeggedSwapInvalidLinearWidth(args.linearWidth));
+        require(args.rateLt > 0 && args.rateGt > 0, PeggedSwapInvalidRates(args.rateLt, args.rateGt));
+
         return abi.encodePacked(
             args.x0,
             args.y0,
@@ -54,10 +58,6 @@ library PeggedSwapArgsBuilder {
         assembly ("memory-safe") {
             args := data.offset // Zero-copy to calldata pointer casting
         }
-
-        require(args.x0 > 0 && args.y0 > 0, PeggedSwapInvalidInitialBalances(args.x0, args.y0));
-        require(args.linearWidth <= 500 * PeggedSwapMath.ONE, PeggedSwapInvalidLinearWidth(args.linearWidth));
-        require(args.rateLt > 0 && args.rateGt > 0, PeggedSwapInvalidRates(args.rateLt, args.rateGt));
     }
 
     /// @notice Get rate multipliers based on token addresses
