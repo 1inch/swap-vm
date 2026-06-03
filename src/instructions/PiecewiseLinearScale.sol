@@ -77,7 +77,7 @@ library PiecewiseLinearScaleArgsBuilder {
  * 2. _piecewiseLinearScaleBalanceIn1D is used with points [(now, 0.5), (now + 1000, 0.7), (now + 2000, 0.3)]
  * 3. At start balances would be threated as 500e18 : 2000e18 then linearly go to 700e18 : 2000e18 and later to 300e18 : 2000e18
  * 4. Swap instruction calculates amounts based on updated balances
- * 
+ *
  * @dev Integration Notes
  * - Scaling is applied to token balances (reserves), not the amounts, this follows Exact In/Out Symmetry SwapVM Invariant
  * - Scaling basis points are 2 ** 24 (comparing to 10 ** 7 in Fusion), this uses the computation field efficiently
@@ -91,12 +91,12 @@ library PiecewiseLinearScaleArgsBuilder {
 contract PiecewiseLinearScale {
     using PiecewiseLinearScaleArgsBuilder for bytes;
 
-    error PiecewiseLinearScaleShouldBeAppliedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
+    error PiecewiseLinearScaleAmountsAlreadyComputed(uint256 amountIn, uint256 amountOut);
 
     /// @notice Apply a piecewise-linear scale to grow the amount out by shrinking the balance in
     /// @dev Should not be used with _invalidateTokenIn1D because it relies on ctx.swap.balanceIn which is modified here
     function _piecewiseLinearScaleBalanceIn1D(Context memory ctx, bytes calldata points) internal view {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, PiecewiseLinearScaleShouldBeAppliedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
+        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, PiecewiseLinearScaleAmountsAlreadyComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
         ctx.swap.balanceIn = (ctx.swap.balanceIn * _calcScaleNow(points)) >> 24;
     }
@@ -104,7 +104,7 @@ contract PiecewiseLinearScale {
     /// @notice Apply a piecewise-linear scale to grow the amount in by shrinking the balance out
     /// @dev Should not be used with _invalidateTokenOut1D because it relies on ctx.swap.balanceOut which is modified here
     function _piecewiseLinearScaleBalanceOut1D(Context memory ctx, bytes calldata points) internal view {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, PiecewiseLinearScaleShouldBeAppliedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
+        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, PiecewiseLinearScaleAmountsAlreadyComputed(ctx.swap.amountIn, ctx.swap.amountOut));
 
         ctx.swap.balanceOut = (ctx.swap.balanceOut * _calcScaleNow(points)) >> 24;
     }
