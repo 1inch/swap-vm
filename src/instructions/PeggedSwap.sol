@@ -16,7 +16,7 @@ library PeggedSwapArgsBuilder {
     /// @notice Arguments for the pegged swap instruction (stored in program)
     /// @param x0 Initial X reserve (normalization factor) = initial_balance_X * rateLt (or rateGt)
     /// @param y0 Initial Y reserve (normalization factor) = initial_balance_Y * rateGt (or rateLt)
-    /// @param linearWidth Linear component coefficient A scaled by 1e27 (e.g., 100e27 for A=100); must be <= 500e27
+    /// @param linearWidth Linear component coefficient A scaled by 1e27 (e.g., 100e27 for A=100); must be <= PeggedSwapMath.MAX_LINEAR_WIDTH
     /// @param rateLt Rate multiplier for token with LOWER address
     /// @param rateGt Rate multiplier for token with GREATER address
     ///        For equal decimals (e.g., both 18): rateLt = rateGt = 1
