@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@1inch/aqua": "github:1inch/aqua#0.1.0",
-    "@1inch/solidity-utils": "6.9.7",
+    "@1inch/solidity-utils": "6.9.9",
     "@openzeppelin/contracts": "5.4.0",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
@@ -18,16 +18,14 @@
     "@nomicfoundation/hardhat-ignition": "^3.1.6",
     "@nomicfoundation/hardhat-keystore": "^3.0.11",
     "@nomicfoundation/hardhat-verify": "^3.0.0",
-    "hardhat": "^3.7.0",
-    "patch-package": "^8.0.0"
+    "hardhat": "^3.7.0"
   },
   "resolutions": {
     "elliptic": "6.6.1",
-    "@1inch/solidity-utils": "6.9.7",
+    "@1inch/solidity-utils": "6.9.9",
     "@openzeppelin/contracts": "5.4.0"
   },
   "scripts": {
-    "postinstall": "patch-package",
     "test": "npx hardhat test solidity",
     "build": "npx hardhat compile",
     "lint": "forge fmt --check",
