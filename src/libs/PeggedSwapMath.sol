@@ -11,7 +11,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 library PeggedSwapMath {
     uint256 internal constant ONE = 1e27;
     // A is the linear width
-    uint256 internal constant MAX_LINEAR_WIDTH = 500 * ONE;
+    uint256 internal constant MAX_LINEAR_WIDTH = 5000 * ONE;
 
     error PeggedSwapMathNoSolution();
     error PeggedSwapMathInvalidInput();
@@ -24,7 +24,7 @@ library PeggedSwapMath {
     function invariant(uint256 u, uint256 v, uint256 a) internal pure returns (uint256) {
         uint256 sqrtU = Math.sqrt(u * ONE);
         uint256 sqrtV = Math.sqrt(v * ONE);
-        // a * (u + v) / ONE - safe: a ≤ 500e27, u+v ≤ 8e27 (each ≤ u* ≤ 4·ONE) → 4e57 < 1e77
+        // a * (u + v) / ONE - safe: a ≤ 5000e27 = 5e30, u+v ≤ 8e27 (each ≤ u* ≤ 4·ONE) → 4e58 < 1e77
         uint256 linearTerm = a * (u + v) / ONE;
         return sqrtU + sqrtV + linearTerm;
     }
@@ -62,7 +62,7 @@ library PeggedSwapMath {
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         uint256 sqrtU = Math.sqrt(u * ONE);
 
-        // a * u / ONE - safe: a ≤ 500e27, u ≤ u* ≤ 4·ONE = 4e27 → 2e57 < 1e77
+        // a * u / ONE - safe: a ≤ 5000e27 = 5e30, u ≤ u* ≤ 4·ONE = 4e27 → 2e58 < 1e77
         uint256 au = a * u / ONE;
 
         // Calculate rightSide = c - √u - au
@@ -94,7 +94,7 @@ library PeggedSwapMath {
         //
         // This form is stable for all values of a, including when a → 0.
 
-        // 4 * a * rightSide / ONE - safe: 4a ≤ 2e30, rightSide ≤ invariantC ≤ ~1002·ONE ≈ 1e30 → 2e60 < 1e77
+        // 4 * a * rightSide / ONE - safe: 4a ≤ 2e31, rightSide ≤ invariantC ≤ ~10002·ONE ≈ 1e31 → 2e62 < 1e77
         uint256 fourARightSide = 4 * a * rightSide / ONE;
 
         uint256 discriminant = ONE + fourARightSide;
@@ -105,10 +105,10 @@ library PeggedSwapMath {
 
         uint256 denominator = ONE + sqrtDiscriminant;
 
-        // 2 * rightSide * ONE - safe: rightSide ≤ ~1e30, ONE = 1e27 → 2e57 < 1e77
+        // 2 * rightSide * ONE - safe: rightSide ≤ ~1e31, ONE = 1e27 → 2e58 < 1e77
         uint256 w = 2 * rightSide * ONE / denominator;
 
-        // w² / ONE - safe: w ≤ √2·ONE ≈ 1.5e27 (since v ≤ 2·ONE in peg zone) → 2.25e54 < 1e77
+        // w² / ONE - safe: w = √v ≤ 2·ONE (since v ≤ u* ≤ 4·ONE for any A ≥ 0; tighter at large A) → 4e54 < 1e77
         v = w * w / ONE;
     }
 
