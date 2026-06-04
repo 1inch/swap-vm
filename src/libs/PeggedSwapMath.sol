@@ -10,6 +10,8 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 /// @dev Uses 1e27 scale for higher precision (reduces rounding error by ~10^9)
 library PeggedSwapMath {
     uint256 internal constant ONE = 1e27;
+    // A is the linear width
+    uint256 internal constant MAX_LINEAR_WIDTH = 500 * ONE;
 
     error PeggedSwapMathNoSolution();
     error PeggedSwapMathInvalidInput();
