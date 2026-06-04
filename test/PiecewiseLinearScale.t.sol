@@ -64,7 +64,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
     /// @notice Unscale Verification
     /// @dev The `unscaleValue` MUST return the minimal value scaling which back would give the same scaled result
-    function test_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public {
+    function testFuzz_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public {
         value = bound(value, 0, type(uint232).max);
 
         uint256 unscaled = PiecewiseLinearScaleArgsBuilder.unscaleValue(value, scale);
@@ -80,7 +80,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
     /// @notice Dutch auction via a descending piecewise-linear scale sample
     /// @dev Maker has a limited `makingAmount` of `tokenB` and wishes to sell it for at least `takingAmount` of `tokenA`
-    function test_PiecewiseLinearScale_DutchExample_MakerExactIn(
+    function testFuzz_PiecewiseLinearScale_DutchExample_MakerExactIn(
         uint256 makingAmount,
         uint256 takingAmount,
         uint8 pointsCountSeed,
@@ -160,7 +160,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
     /// @notice Dutch auction via a ascending piecewise-linear scale sample
     /// @dev Maker want exact `takingAmount` of `tokenA` and ready to pay `makingAmount` of `tokenB` at max
-    function test_PiecewiseLinearScale_DutchExample_MakerExactOut(
+    function testFuzz_PiecewiseLinearScale_DutchExample_MakerExactOut(
         uint256 makingAmount,
         uint256 takingAmount,
         uint8 pointsCountSeed,
