@@ -226,7 +226,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
 
     // ==================== FUZZ TESTS ====================
 
-    function test_UnwrapWeth_Fuzz(
+    function testFuzz_UnwrapWeth(
         bool makerUnwrapWeth,
         bool takerUnwrapWeth,
         bool isExactIn,
