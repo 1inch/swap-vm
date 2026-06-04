@@ -420,23 +420,30 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
     // ========================================
 
-    /// @notice linearWidth > 5000*ONE must revert at build time. One wei above the cap is
-    ///         enough — the <= 5000*ONE branch is implicitly covered by every other test in
-    ///         this file that uses linearWidth = 5000e27.
+    /// @notice linearWidth > 5000*ONE must revert at swap EXECUTION, not just off-chain.
+    ///         build() only encodes; a program can embed any args directly, so the on-chain
+    ///         decode in parse() is what protects maker funds. One wei above the cap is enough —
+    ///         the <= 5000*ONE branch is covered by every other test using linearWidth = 5000e27.
     function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
-        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100_000e18,
+            balanceB: 100_000e18,
+            x0: 100_000e18,
+            y0: 100_000e18,
+            linearWidth: 5000e27 + 1, // one wei above the cap
+            feeInBps: 0
+        });
 
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
         vm.expectRevert(abi.encodeWithSelector(
             PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
             5000e27 + 1
         ));
-        wrapper.buildArgs(PeggedSwapArgsBuilder.Args({
-            x0: 100e18,
-            y0: 100e18,
-            linearWidth: 5000e27 + 1,
-            rateLt: 1,
-            rateGt: 1
-        }));
+        swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
     }
 
     // ========================================
