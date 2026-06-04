@@ -24,11 +24,12 @@ library SeriesEpochManagerArgsBuilder {
 }
 
 /**
- * @notice Managing epoch for series of orders, order is executable only at specified epoch
- * @dev Each maker keeps an independent, monotonically increasing epoch per `seriesId`. An order pins
- * itself to a `(seriesId, epoch)` via the `_validateSeriesEpochXD` instruction. The maker can cancel a
- * whole batch at once by advancing that series' epoch, after which every order pinned to the old
- * epoch fails validation
+ * @notice Managing epoch for series of orders, an order is executable only at specified epoch
+ * @dev Each maker keeps an independent, monotonically increasing epoch per `seriesId`
+ * An order pins itself to a `(seriesId, epoch)` via the `_validateSeriesEpochXD` instruction
+ * - The maker can cancel a whole batch at once by advancing that series' epoch
+ * - The maker can plan orders for future epochs
+ * - The maker can move over epochs sequentially or skip up to 254 epochs
  */
 contract SeriesEpochManager {
     using ContextLib for Context;
@@ -39,14 +40,14 @@ contract SeriesEpochManager {
     /// @notice Current epoch per maker per series. Orders pinned to a lower epoch are invalidated
     mapping(address maker => mapping(uint256 seriesId => uint256 epoch)) public seriesEpoch;
 
-    /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current batch)
+    /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current epoch)
     function seriesEpochIncrease(uint256 seriesId) external {
         unchecked {
             seriesEpoch[msg.sender][seriesId]++;
         }
     }
 
-    /// @notice Advances the caller's epoch for `seriesId` by `amount`
+    /// @notice Advances the caller's epoch for `seriesId` by `amount` (invalidates multiple epochs at once)
     /// @dev `amount` is bounded to [1, 255]
     function seriesEpochAdvance(uint256 seriesId, uint256 amount) external {
         if (amount == 0 || amount > 255) revert SeriesEpochManagerAdvanceEpochFailed();
