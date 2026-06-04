@@ -111,7 +111,7 @@ contract PeggedSwap {
         // ║  Where:                                                                   ║
         // ║    - x, y are current reserves (in SwapVM: balanceIn, balanceOut)         ║
         // ║    - X₀, Y₀ are initial reserves (normalization factors)                  ║
-        // ║    - A is linear width parameter (0 to 500e+27, inclusive)                ║
+        // ║    - A is linear width parameter (0 to 5000e+27, inclusive)               ║
         // ║    - Curvature p=0.5 is hardcoded for analytical solution                 ║
         // ║                                                                           ║
         // ║  Rate multipliers:                                                        ║

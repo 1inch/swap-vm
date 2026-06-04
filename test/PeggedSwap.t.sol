@@ -243,7 +243,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 poolSize = 100000e18;
         uint256 swapSize = 5000e18; // 5% of pool
 
-        // Test different A values spanning the full allowed range (A < 500)
+        // Test different A values spanning the full allowed range (A <= 5000)
         uint256[8] memory linearWidths = [
             uint256(0),        // Pure sqrt, max slippage
             0.1e27,            // Low A, unpegged
@@ -251,8 +251,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             2e27,              // Medium-high A
             10e27,             // LST/LRT range
             50e27,             // LST/LRT range upper
-            200e27,            // Tight stablecoin pair
-            500e27             // At cap
+            500e27,            // Tight stablecoin / Curve A≈250 equivalent
+            5000e27            // At cap
         ];
 
         uint256 previousOut = 0;
@@ -317,13 +317,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     }
 
     function test_PeggedSwap_EdgeCase_A_Max() public {
-        // Maximum allowed A: linearWidth <= 500*ONE
+        // Maximum allowed A: linearWidth <= 5000*ONE
         PoolSetup memory setup = PoolSetup({
             balanceA: 100000e18,
             balanceB: 100000e18,
             x0: 100000e18,
             y0: 100000e18,
-            linearWidth: 500e27,
+            linearWidth: 5000e27,
             feeInBps: 0
         });
 
@@ -333,7 +333,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         _assertSwapQuoteConsistency(order, amountIn, true);
     }
 
-    /// @notice A=500 (at cap): output must be extremely close to amountIn (near-zero slippage)
+    /// @notice A=5000 (at cap): output must be extremely close to amountIn (near-zero slippage)
     ///         and the rounding-protection direction must still hold.
     function test_PeggedSwap_HighA_TightPeg_ExactIn() public {
         PoolSetup memory setup = PoolSetup({
@@ -341,7 +341,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             balanceB: 100_000e18,
             x0: 100_000e18,
             y0: 100_000e18,
-            linearWidth: 500e27, // at cap
+            linearWidth: 5000e27, // at cap
             feeInBps: 0
         });
 
@@ -355,15 +355,15 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
 
         assertEq(swappedIn, amountIn);
-        // For 1% trade, slippage should be ≤ ~3 bps at A=500 (Curve A≈250 territory)
+        // For 1% trade at A=5000, slippage is essentially 0 (linear approx: ε≈Δ/(1+2A) ≈ 1e-5 ≈ 0.1 bp)
         // amountOut must round DOWN ≤ amountIn (maker protection)
         assertLe(swappedOut, amountIn, "Output must not exceed input");
-        assertGe(swappedOut, amountIn * 9997 / 10000, "Slippage > 3 bps at A=500 for 1% trade is unexpected");
+        assertGe(swappedOut, amountIn * 9999 / 10000, "Slippage > 1 bp at A=5000 for 1% trade is unexpected");
     }
 
     /// @notice Sweep across the now-allowed A range and verify quote==swap consistency for ExactIn and ExactOut
     function test_PeggedSwap_QuoteSwapConsistency_AcrossA() public {
-        uint256[6] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27];
+        uint256[7] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < as_.length; i++) {
             PoolSetup memory setup = PoolSetup({
@@ -385,7 +385,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 poolSize = 100_000e18;
         uint256 amountIn = 1_000e18;
 
-        uint256[6] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27];
+        uint256[7] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < as_.length; i++) {
             PoolSetup memory setup = PoolSetup({
@@ -420,20 +420,20 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
     // ========================================
 
-    /// @notice linearWidth > 500*ONE must revert at build time. One wei above the cap is
-    ///         enough — the <= 500*ONE branch is implicitly covered by every other test in
-    ///         this file that uses linearWidth = 500e27.
+    /// @notice linearWidth > 5000*ONE must revert at build time. One wei above the cap is
+    ///         enough — the <= 5000*ONE branch is implicitly covered by every other test in
+    ///         this file that uses linearWidth = 5000e27.
     function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
         PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
 
         vm.expectRevert(abi.encodeWithSelector(
             PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
-            500e27 + 1
+            5000e27 + 1
         ));
         wrapper.buildArgs(PeggedSwapArgsBuilder.Args({
             x0: 100e18,
             y0: 100e18,
-            linearWidth: 500e27 + 1,
+            linearWidth: 5000e27 + 1,
             rateLt: 1,
             rateGt: 1
         }));
@@ -824,8 +824,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         // Highly asymmetric pairs
         uint256[5] memory us = [uint256(1), 1e15, 1e24, ONE, 2 * ONE];
         uint256[5] memory vs = [2 * ONE, ONE, 1e15, 1e24, uint256(1)];
-        // Span the full allowed A range: 0, low, medium, high (LST/LRT), tight (stable), near cap
-        uint256[6] memory as_ = [uint256(0), 0.01e27, 2e27, 50e27, 200e27, 500e27];
+        // Span the full allowed A range: 0, low, medium, high (LST/LRT), tight (stable), tight-Curve, cap
+        uint256[7] memory as_ = [uint256(0), 0.01e27, 2e27, 50e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < us.length; i++) {
             for (uint256 j = 0; j < as_.length; j++) {
@@ -856,8 +856,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             [uint256(1), uint256(1)]     // both 1 wei
         ];
 
-        // Span A from 0 to near-cap to ensure round-trip protection holds across all allowed widths
-        uint256[6] memory as_ = [uint256(0), 0.01e27, 0.8e27, 10e27, 200e27, 500e27];
+        // Span A from 0 to the cap to ensure round-trip protection holds across all allowed widths
+        uint256[7] memory as_ = [uint256(0), 0.01e27, 0.8e27, 10e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < pairs.length; i++) {
             uint256 u = pairs[i][0];
@@ -885,7 +885,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
         uint256 ONE = PeggedSwapMath.ONE;
 
-        uint256[5] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27];
+        uint256[6] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27, 5000e27];
 
         for (uint256 j = 0; j < as_.length; j++) {
             uint256 a = as_[j];
@@ -994,7 +994,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
         uint256 ONE = PeggedSwapMath.ONE;
 
-        uint256[5] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27];
+        uint256[6] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27, 5000e27];
 
         for (uint256 j = 0; j < as_.length; j++) {
             uint256 a = as_[j];
@@ -1062,7 +1062,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 poolSize = 1000e18;
 
         // Test with A values spanning 0 (pure sqrt) → cap
-        uint256[4] memory linearWidths = [uint256(0), 0.8e27, 50e27, 500e27];
+        uint256[5] memory linearWidths = [uint256(0), 0.8e27, 50e27, 500e27, 5000e27];
 
         for (uint256 w = 0; w < linearWidths.length; w++) {
             PoolSetup memory setup = PoolSetup({
