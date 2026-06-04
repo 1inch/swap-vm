@@ -2,6 +2,7 @@ import { defineConfig, configVariable } from "hardhat/config";
 import hardhatIgnition from "@nomicfoundation/hardhat-ignition";
 import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
 import hardhatVerify from "@nomicfoundation/hardhat-verify";
+import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 
 // Migrated from foundry.toml [profile.default] (== [profile.ci]).
 //
@@ -34,7 +35,12 @@ const swapVmCompiler = {
 };
 
 export default defineConfig({
-  plugins: [hardhatIgnition, hardhatKeystore, hardhatVerify],
+  plugins: [
+    hardhatIgnoreWarnings,
+    hardhatIgnition,
+    hardhatKeystore,
+    hardhatVerify,
+  ],
   solidity: {
     // Compile contracts and Solidity tests as two separate jobs. This lets
     // `hardhat ignition deploy` skip the (heavy, via-IR) test compilation entirely
@@ -91,6 +97,23 @@ export default defineConfig({
   verify: {
     etherscan: {
       apiKey: configVariable("ETHERSCAN_API_KEY"),
+    },
+  },
+  // Silence noise-only solc warnings
+  warnings: {
+    // Test contracts are oversized by design (large fixtures / inherited routers)
+    // and never deployed
+    "test/**/*": {
+      "initcode-size": "off",
+    },
+    // Test-only debug routers (Simulator mixin) that live under src/ but are
+    // only used by test/*.t.sol
+    "src/routers/*Debug.sol": {
+      "code-size": "off",
+    },
+    // EIP-1153 transient-storage advisory from a vendored dependency, not our code
+    "npm/@1inch/**/*": {
+      "transient-storage": "off",
     },
   },
 });
