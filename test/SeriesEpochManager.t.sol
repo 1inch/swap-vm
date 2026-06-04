@@ -55,7 +55,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         );
     }
 
-    function test_EpochManager_Counters() public {
+    function test_SeriesEpochManager_Counters() public {
         vm.startPrank(maker);
 
         assertEq(swapVM.seriesEpoch(maker, 0), 0);
@@ -107,7 +107,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         assertEq(swapVM.seriesEpoch(maker, 1), 8);
     }
 
-    function test_EpochManager_Basic() public {
+    function test_SeriesEpochManager_Basic() public {
         ISwapVM.Order memory orderA = _epochOrder(0, 1, 0); // series 0, epoch 1
         ISwapVM.Order memory orderB = _epochOrder(0, 2, 0); // series 0, epoch 2
         ISwapVM.Order memory orderC = _epochOrder(1, 2, 0); // series 0, epoch 2
@@ -173,7 +173,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, false);
     }
 
-    function testFuzz_EpochManager(uint256 ordersCount, uint8[17] memory seriesSeed, uint8[17] memory epochSeed, uint256 scheduleSeed) public {
+    function testFuzz_SeriesEpochManager(uint256 ordersCount, uint8[17] memory seriesSeed, uint8[17] memory epochSeed, uint256 scheduleSeed) public {
         ordersCount = bound(ordersCount, 10, 17);
 
         ISwapVM.Order[] memory orders = new ISwapVM.Order[](ordersCount);
