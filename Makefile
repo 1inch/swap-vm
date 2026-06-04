@@ -212,44 +212,27 @@ get-outputs:
 
 update:; forge update
 
-build:; forge build
+build:; npx hardhat compile
 
-tests :; forge test -vvv --gas-report
+tests :; npx hardhat test solidity --gas-stats
 
-coverage :; mkdir -p coverage && FOUNDRY_PROFILE=default forge coverage --report lcov --ir-minimum --report-file coverage/lcov.info
+coverage :; npx hardhat test solidity --coverage
 
-snapshot :; forge snapshot --no-match-test "testFuzz_*"
+snapshot :; npx hardhat test solidity --snapshot
 
-snapshot-check :; forge snapshot --check --no-match-test "testFuzz_*"
+snapshot-check :; npx hardhat test solidity --snapshot-check
 
-gas-snapshot :; forge test --match-path "test/gas/*.t.sol" -vv && echo "\n=== LimitSwap Gas ===" && cat snapshots/LimitSwapGas.json && echo "\n=== AMM Gas ===" && cat snapshots/AMMGas.json
+gas-snapshot :; npx hardhat test solidity --snapshot
 
-gas-snapshot-check :; @{ \
-	cp snapshots/LimitSwapGas.json snapshots/LimitSwapGas.json.old 2>/dev/null || true; \
-	cp snapshots/AMMGas.json snapshots/AMMGas.json.old 2>/dev/null || true; \
-	forge test --match-path "test/gas/*.t.sol" -vv; \
-	if diff -q snapshots/LimitSwapGas.json snapshots/LimitSwapGas.json.old >/dev/null 2>&1 && \
-	   diff -q snapshots/AMMGas.json snapshots/AMMGas.json.old >/dev/null 2>&1; then \
-		echo "✅ Gas snapshots match"; \
-		rm -f snapshots/*.old; \
-	else \
-		echo "❌ Gas snapshots differ!"; \
-		echo "=== LimitSwapGas diff ==="; \
-		diff snapshots/LimitSwapGas.json.old snapshots/LimitSwapGas.json || true; \
-		echo "=== AMMGas diff ==="; \
-		diff snapshots/AMMGas.json.old snapshots/AMMGas.json || true; \
-		rm -f snapshots/*.old; \
-		exit 1; \
-	fi; \
-}
+gas-snapshot-check :; npx hardhat test solidity --snapshot-check
 
 format :; forge fmt
 
-clean :; forge clean
+clean :; npx hardhat clean
 
 lint :; forge fmt --check
 
-anvil :;  anvil --fork-url $(NODE_URL) --steps-tracing --chain-id $(OPS_CHAIN_ID) --host 127.0.0.1 --port 8546 -vvvvv
+node :; npx hardhat node --fork $(NODE_URL) --chain-id $(OPS_CHAIN_ID) --hostname 127.0.0.1 --port 8546
 
 balance :; cast balance $(ADDRESS) --rpc-url $(RPC_URL) | cast from-wei
 
@@ -262,4 +245,4 @@ help:
 .PHONY: deploy-swap-vm deploy-swap-vm-aqua deploy-swap-vm-limit deploy-swap-vm-router-impl verify-swap-vm verify-swap-vm-aqua \
         verify-swap-vm-limit verify-swap-vm-router-impl save-deployments contract-address validate-swap-vm-router validate-verify \
         validate process-aqua-address process-swap-vm-router-name process-swap-vm-router-version upsert-constant \
-        get get-outputs update build tests coverage snapshot snapshot-check format clean lint anvil balance balance-erc20 help
+        get get-outputs update build tests coverage snapshot snapshot-check format clean lint node balance balance-erc20 help
