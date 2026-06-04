@@ -48,7 +48,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function _epochProgram(uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_validateEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
+            p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
             p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), uint256(2e18)]))),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             p.build(_salt, abi.encodePacked(salt))
@@ -58,53 +58,53 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function test_EpochManager_Counters() public {
         vm.startPrank(maker);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 0);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 0);
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+        assertEq(swapVM.seriesEpoch(maker, 1), 0);
 
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 0);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 1);
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+        assertEq(swapVM.seriesEpoch(maker, 1), 1);
 
-        swapVM.increaseEpoch(2);
+        swapVM.seriesEpochIncrease(2);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 0);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 1);
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+        assertEq(swapVM.seriesEpoch(maker, 1), 1);
 
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 0);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 2);
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+        assertEq(swapVM.seriesEpoch(maker, 1), 2);
 
-        swapVM.increaseEpoch(0);
+        swapVM.seriesEpochIncrease(0);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 1);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 2);
+        assertEq(swapVM.seriesEpoch(maker, 0), 1);
+        assertEq(swapVM.seriesEpoch(maker, 1), 2);
 
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 1);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 3);
+        assertEq(swapVM.seriesEpoch(maker, 0), 1);
+        assertEq(swapVM.seriesEpoch(maker, 1), 3);
 
-        swapVM.increaseEpoch(0);
+        swapVM.seriesEpochIncrease(0);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 2);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 3);
+        assertEq(swapVM.seriesEpoch(maker, 0), 2);
+        assertEq(swapVM.seriesEpoch(maker, 1), 3);
 
-        swapVM.advanceEpoch(0, 7);
+        swapVM.seriesEpochAdvance(0, 7);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 9);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 3);
+        assertEq(swapVM.seriesEpoch(maker, 0), 9);
+        assertEq(swapVM.seriesEpoch(maker, 1), 3);
 
-        swapVM.advanceEpoch(0, 7);
+        swapVM.seriesEpochAdvance(0, 7);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 16);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 3);
+        assertEq(swapVM.seriesEpoch(maker, 0), 16);
+        assertEq(swapVM.seriesEpoch(maker, 1), 3);
 
-        swapVM.advanceEpoch(1, 5);
+        swapVM.seriesEpochAdvance(1, 5);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 16);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 8);
+        assertEq(swapVM.seriesEpoch(maker, 0), 16);
+        assertEq(swapVM.seriesEpoch(maker, 1), 8);
     }
 
     function test_EpochManager_Basic() public {
@@ -119,7 +119,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, false);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
         // series 0 - epoch 0
         // series 1 - epoch 1
@@ -128,7 +128,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, false);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
         // series 0 - epoch 0
         // series 1 - epoch 2
@@ -137,7 +137,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, true);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(0);
+        swapVM.seriesEpochIncrease(0);
 
         // series 0 - epoch 1
         // series 1 - epoch 2
@@ -146,7 +146,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, true);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(1);
+        swapVM.seriesEpochIncrease(1);
 
         // series 0 - epoch 1
         // series 1 - epoch 3
@@ -155,7 +155,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, false);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(0);
+        swapVM.seriesEpochIncrease(0);
 
         // series 0 - epoch 2
         // series 1 - epoch 3
@@ -164,7 +164,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         _tryExecute(orderC, false);
 
         vm.prank(maker);
-        swapVM.increaseEpoch(0);
+        swapVM.seriesEpochIncrease(0);
 
         // series 0 - epoch 3
         // series 1 - epoch 3
@@ -187,8 +187,8 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
         uint256[2] memory epochCounter;
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), 0);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), 0);
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+        assertEq(swapVM.seriesEpoch(maker, 1), 0);
 
         // Epoch 0 in both series: nothing executable
         for (uint256 i; i < orders.length; i++) {
@@ -202,10 +202,10 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             ++epochCounter[scheduleSeed % 2];
 
             vm.prank(maker);
-            swapVM.increaseEpoch(scheduleSeed % 2);
+            swapVM.seriesEpochIncrease(scheduleSeed % 2);
 
-            assertEq(swapVM.epochSeriesEpochManager(maker, 0), epochCounter[0]);
-            assertEq(swapVM.epochSeriesEpochManager(maker, 1), epochCounter[1]);
+            assertEq(swapVM.seriesEpoch(maker, 0), epochCounter[0]);
+            assertEq(swapVM.seriesEpoch(maker, 1), epochCounter[1]);
 
             scheduleSeed >>= 1;
 
@@ -216,12 +216,12 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
         // Advance epoch for all orders invalidation
         vm.prank(maker);
-        swapVM.advanceEpoch(0, 6);
+        swapVM.seriesEpochAdvance(0, 6);
         vm.prank(maker);
-        swapVM.advanceEpoch(1, 6);
+        swapVM.seriesEpochAdvance(1, 6);
 
-        assertEq(swapVM.epochSeriesEpochManager(maker, 0), epochCounter[0] + 6);
-        assertEq(swapVM.epochSeriesEpochManager(maker, 1), epochCounter[1] + 6);
+        assertEq(swapVM.seriesEpoch(maker, 0), epochCounter[0] + 6);
+        assertEq(swapVM.seriesEpoch(maker, 1), epochCounter[1] + 6);
 
         for (uint256 i; i < orders.length; i++) {
             _tryExecute(orders[i], false);

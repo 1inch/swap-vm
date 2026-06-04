@@ -26,7 +26,7 @@ library SeriesEpochManagerArgsBuilder {
 /**
  * @notice Managing epoch for series of orders, order is executable only at specified epoch
  * @dev Each maker keeps an independent, monotonically increasing epoch per `seriesId`. An order pins
- * itself to a `(seriesId, epoch)` via the `_validateEpochXD` instruction. The maker can cancel a
+ * itself to a `(seriesId, epoch)` via the `_validateSeriesEpochXD` instruction. The maker can cancel a
  * whole batch at once by advancing that series' epoch, after which every order pinned to the old
  * epoch fails validation
  */
@@ -37,22 +37,22 @@ contract SeriesEpochManager {
     error SeriesEpochManagerAdvanceEpochFailed();
 
     /// @notice Current epoch per maker per series. Orders pinned to a lower epoch are invalidated
-    mapping(address maker => mapping(uint256 seriesId => uint256 epoch)) public epochSeriesEpochManager;
+    mapping(address maker => mapping(uint256 seriesId => uint256 epoch)) public seriesEpoch;
 
     /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current batch)
-    function increaseEpoch(uint256 seriesId) external {
+    function seriesEpochIncrease(uint256 seriesId) external {
         unchecked {
-            epochSeriesEpochManager[msg.sender][seriesId]++;
+            seriesEpoch[msg.sender][seriesId]++;
         }
     }
 
     /// @notice Advances the caller's epoch for `seriesId` by `amount`
     /// @dev `amount` is bounded to [1, 255]
-    function advanceEpoch(uint256 seriesId, uint256 amount) external {
+    function seriesEpochAdvance(uint256 seriesId, uint256 amount) external {
         if (amount == 0 || amount > 255) revert SeriesEpochManagerAdvanceEpochFailed();
         unchecked {
-            uint256 newEpoch = epochSeriesEpochManager[msg.sender][seriesId] + amount;
-            epochSeriesEpochManager[msg.sender][seriesId] = newEpoch;
+            uint256 newEpoch = seriesEpoch[msg.sender][seriesId] + amount;
+            seriesEpoch[msg.sender][seriesId] = newEpoch;
         }
     }
 
@@ -61,10 +61,10 @@ contract SeriesEpochManager {
     /// @dev The instruction is compatible with any order type
     /// @param args.seriesId | 4 bytes (uint32)
     /// @param args.epoch    | 4 bytes (uint32)
-    function _validateEpochXD(Context memory ctx, bytes calldata args) internal view {
+    function _validateSeriesEpochXD(Context memory ctx, bytes calldata args) internal view {
         (uint256 seriesId, uint256 expectedEpoch) = SeriesEpochManagerArgsBuilder.parse(args);
 
-        uint256 currentEpoch = epochSeriesEpochManager[ctx.query.maker][seriesId];
+        uint256 currentEpoch = seriesEpoch[ctx.query.maker][seriesId];
         require(currentEpoch == expectedEpoch, SeriesEpochManagerWrongEpoch(ctx.query.maker, seriesId, expectedEpoch, currentEpoch));
     }
 }

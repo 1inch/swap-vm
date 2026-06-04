@@ -93,7 +93,7 @@ contract LimitOpcodes is
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
             Fee._aquaDynamicProtocolFeeAmountInXD,
-            SeriesEpochManager._validateEpochXD
+            SeriesEpochManager._validateSeriesEpochXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array
