@@ -41,12 +41,14 @@ contract SeriesEpochManager {
 
     /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current batch)
     function increaseEpoch(uint256 seriesId) external {
-        advanceEpoch(seriesId, 1);
+        unchecked {
+            epochSeriesEpochManager[msg.sender][seriesId]++;
+        }
     }
 
     /// @notice Advances the caller's epoch for `seriesId` by `amount`
     /// @dev `amount` is bounded to [1, 255]
-    function advanceEpoch(uint256 seriesId, uint256 amount) public {
+    function advanceEpoch(uint256 seriesId, uint256 amount) external {
         if (amount == 0 || amount > 255) revert SeriesEpochManagerAdvanceEpochFailed();
         unchecked {
             uint256 newEpoch = epochSeriesEpochManager[msg.sender][seriesId] + amount;
