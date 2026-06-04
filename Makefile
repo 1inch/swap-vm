@@ -139,7 +139,7 @@ process-swap-vm-router-version:
 		@$(MAKE) OPS_GEN_VAL='$(OPS_SWAP_VM_ROUTER_VERSION)' OPS_GEN_KEY='swapVmRouterVersion' upsert-constant
 
 process-weth-address:
-    @if [ -n "$$OPS_WETH_ADDRESS" ]; then $(MAKE) OPS_GEN_VAL='"$(OPS_WETH_ADDRESS)"' OPS_GEN_KEY='weth' upsert-constant; fi
+	@if [ -n "$$OPS_WETH_ADDRESS" ]; then $(MAKE) OPS_GEN_VAL='"$(OPS_WETH_ADDRESS)"' OPS_GEN_KEY='weth' upsert-constant; fi
 
 upsert-constant:
 		@{ \
