@@ -23,8 +23,8 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
-/// @title WhitelistGas tests
-contract WhitelistGas is Test, LimitOpcodesDebug {
+/// @title Whitelist tests
+contract WhitelistTest is Test, LimitOpcodesDebug {
     using ProgramBuilder for Program;
 
     Aqua public immutable aqua;
@@ -107,7 +107,7 @@ contract WhitelistGas is Test, LimitOpcodesDebug {
     function test_Whitelist_Multiple() public {
         bytes memory takerData = _buildTakerData();
 
-        for (uint256 length; length < 26; ++length) {
+        for (uint256 length = 1; length < 26; ++length) {
             ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Multiple, length));
 
             for (uint256 i; i < length; ++i) {
@@ -124,6 +124,32 @@ contract WhitelistGas is Test, LimitOpcodesDebug {
             vm.prank(address(0xaffacfed));
             vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
             swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        }
+    }
+
+    function test_Whitelist_Multiple_GasBenchmark() public {
+        // Warmup account
+        address(swapVM).staticcall("");
+
+        for (uint256 length = 1; length < 26; ++length) {
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Multiple, length));
+            bytes memory takerData = _buildTakerData();
+
+            uint256 amountIn = 10_000_000;
+
+            uint256 usage;
+            uint256 worst;
+
+            for (uint256 i; i < length; ++i) {
+                vm.prank(ALLOWED_TAKERS[i]);
+                uint256 gas = gasleft();
+                swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerData);
+                uint256 temp = gas - gasleft();
+                usage += temp;
+                if (worst < temp) worst = temp;
+            }
+
+            console.log(usage / length, worst, length);
         }
     }
 

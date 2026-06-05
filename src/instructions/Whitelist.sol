@@ -8,7 +8,8 @@ import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol
 import { Context, ContextLib } from "../libs/VM.sol";
 
 library WhitelistArgsBuilder {
-    /// @dev For single taker it is efficient to pack full address
+    error WhitelistEmptyList();
+
     function buildWhitelistSingleTaker(address allowedTaker) internal pure returns (bytes memory) {
         return abi.encodePacked(allowedTaker);
     }
@@ -19,8 +20,10 @@ library WhitelistArgsBuilder {
         }
     }
 
-    /// @dev Due to args length limitiation, for multiple takers only last 80 bits of each address is packed
+    /// @dev Due to args length limitiation, for multiple takers only last 80 bits of each address are packed
     function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory) {
+        require(allowedTakers.length > 0, WhitelistEmptyList());
+
         uint256 len = allowedTakers.length * 10;
         bytes memory res = new bytes(len);
 
@@ -50,6 +53,12 @@ library WhitelistArgsBuilder {
 }
 
 /// @notice Set of functions for Taker validation
+/// @dev Taker whitelist functionality, the opcodes can be included in whatever place of the program
+/// @dev Partial account validation trade-off:
+/// - For packing multiple takers whitelist, only last 80 bits of each address are used
+/// - Mining 80 bits of Ethereum address is not truly impossible but would take years of millions GPUs time
+/// - Consider theoretical possibility of such address being mined for an address known for years,
+///   avoid orders with "free money" relying on the `_whitelistMultipleTakers` opcode
 contract Whitelist {
     using WhitelistArgsBuilder for bytes;
 
@@ -63,7 +72,7 @@ contract Whitelist {
     }
 
     /// @notice Allows order to be executed only by one of specified Takers
-    /// @param args.allowedTakers[N] | 10 * N bytes last 10 bytes of each address is used
+    /// @param args.allowedTakers[N] | 10 * N bytes, last 10 bytes of each address are used
     function _whitelistMultipleTakers(Context memory ctx, bytes calldata args) internal pure {
         uint80 sender = WhitelistArgsBuilder.wrapToPackedAddress(ctx.query.taker);
 
