@@ -43,7 +43,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         tokenB = new TokenMock("Token B", "TKB");
     }
 
-    /// @dev staticBalances -> piecewise bump on balanceIn -> print registers
+    /// @dev staticBalances -> piecewise bump on balanceIn -> limit swap
     function _buildProgram(
         uint256 balanceIn,
         uint256 balanceOut,
@@ -57,14 +57,13 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             scaleIn
                 ? p.build(_piecewiseLinearScaleBalanceIn1D, PiecewiseLinearScaleArgsBuilder.build(timestamps, scales))
                 : p.build(_piecewiseLinearScaleBalanceOut1D, PiecewiseLinearScaleArgsBuilder.build(timestamps, scales)),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            p.build(_printSwapRegisters)
+            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
     /// @notice Unscale Verification
     /// @dev The `unscaleValue` MUST return the minimal value scaling which back would give the same scaled result
-    function testFuzz_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public {
+    function testFuzz_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public pure {
         value = bound(value, 0, type(uint232).max);
 
         uint256 unscaled = PiecewiseLinearScaleArgsBuilder.unscaleValue(value, scale);
@@ -239,6 +238,42 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             vm.warp((timestamps[k - 1] + timestamps[k] + 1) / 2);
             (, uint256 amountOutMidRight,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
             assertApproxEqAbs((amountOutMidLeft + amountOutMidRight) / 2, (amountOutPast + amountOutNext) / 2, (makingAmount >> 24) + 1);
+        }
+    }
+
+    function test_PiecewiseLinearScale_GasBenchmark() public {
+        uint256 balanceIn = 1000e18;
+        uint256 balanceOut = 4000e18;
+
+        for (uint256 length = 2; length < 32; ++length) {
+            uint40[] memory timestamps = new uint40[](length);
+            uint24[] memory scales = new uint24[](length);
+
+            timestamps[0] = 50;
+            scales[0] = type(uint24).max;
+            for (uint256 i = 1; i < length; ++i) {
+                timestamps[i] = timestamps[i - 1] + 100;
+                scales[i] = scales[0];
+            }
+
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamps, scales, true));
+            bytes memory takerDataExactIn = _buildTakerData(true);
+
+            uint256 amountIn = 10_000_000;
+
+            uint256 usage;
+            uint256 worst;
+
+            for (uint256 i = 1; i < length; ++i) {
+                vm.warp(i * 100);
+                uint256 gas = gasleft();
+                swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+                uint256 temp = gas - gasleft();
+                usage += temp;
+                if (worst < temp) worst = temp;
+            }
+
+            console.log(usage / (length - 1), worst, length);
         }
     }
 

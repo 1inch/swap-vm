@@ -114,32 +114,23 @@ contract PiecewiseLinearScale {
         uint256 max = points.length / 8 - 1;
 
         uint256 blockTs = block.timestamp;
-        if (points.pointTs(max) < blockTs) {
-            return 1 << 24;
-        }
-        if (points.pointTs(0) > blockTs) {
-            return 1 << 24;
+        if (blockTs < points.pointTs(0)) return 1 << 24;
+        if (points.pointTs(max) < blockTs) return 1 << 24;
+
+        // For `num == max`, that's always false and loop exits, guaranteed by if statement above
+        // For `num == 0` that could be false if `pointTs(0) == blockTs`, so starting from `num == 1`
+        uint256 num = 1;
+        while (points.pointTs(num) < blockTs) {
+            unchecked { num++; }
         }
 
-        uint256 num;
-        while (num < max) {
-            unchecked {
-                uint256 mid = (num + max) / 2;
-                if (points.pointTs(mid) <= blockTs) {
-                    num = mid + 1;
-                } else {
-                    max = mid;
-                }
-            }
-        }
-
-        uint256 currentPointTs = points.pointTs(num - 1);
+        uint256 prevPointTs = points.pointTs(num - 1);
         uint256 nextPointTs = points.pointTs(num);
 
         // scale is in [1; 2 ** 24] range
         scale = (
-            (blockTs - currentPointTs) * points.pointScale(num) +
+            (blockTs - prevPointTs) * points.pointScale(num) +
             (nextPointTs - blockTs) * points.pointScale(num - 1)
-        ) / (nextPointTs - currentPointTs) + 1;
+        ) / (nextPointTs - prevPointTs) + 1;
     }
 }
