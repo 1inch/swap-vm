@@ -115,7 +115,7 @@ library TakerTraitsLib {
         uint256 index0 = args.threshold.length;
         uint256 index1 = (index0 + (args.to != address(0) && args.to != args.taker ? 20 : 0));
         uint256 index2 = (index1 + (args.deadline != 0 ? 5 : 0));
-        uint256 index3 = (index2 + args.preTransferInHookData.length.toUint16());
+        uint256 index3 = (index2 + args.preTransferInHookData.length).toUint16();
         uint256 index4 = (index3 + args.postTransferInHookData.length).toUint16();
         uint256 index5 = (index4 + args.preTransferOutHookData.length).toUint16();
         uint256 index6 = (index5 + args.postTransferOutHookData.length).toUint16();
