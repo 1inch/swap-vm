@@ -242,6 +242,9 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     }
 
     function test_PiecewiseLinearScale_GasBenchmark() public {
+        // Warmup account
+        address(swapVM).staticcall("");
+
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
