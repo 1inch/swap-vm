@@ -82,7 +82,6 @@ library PiecewiseLinearScaleArgsBuilder {
  * - Scaling is applied to token balances (reserves), not the amounts, this follows Exact In/Out Symmetry SwapVM Invariant
  * - Scaling basis points are 2 ** 24 (comparing to 10 ** 7 in Fusion), this uses the computation field efficiently
  * - Scaling range is (0; 1] (comparing to (~0.373; 1] in Fusion), this contributes to instruction generalization to be not bounded by case-specific limitations
- * - Interval is chosen using binary search instead of looping over each, this contributes to instruction generalization allowing more intervals
  * - The price adjustment is applied only at specified time ranges to allow multiple adjesment insructions apply at different time ranges without forced overlap
  * - For dutch auction selling specified amount, the order balance would not equal the amount, the amount should be reached as a result of final scaling,
  *   the `unscaleValue(amount, finalScale)` provides the value which would result in desired amount after scaling
