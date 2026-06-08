@@ -20,6 +20,7 @@ import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
+import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 
 contract LimitOpcodes is
     Controls,
@@ -33,14 +34,15 @@ contract LimitOpcodes is
     Fee,
     FeeExperimental,
     Extruction,
-    Whitelist
+    Whitelist,
+    SeriesEpochManager
 {
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[44] memory instructions = [
+        function(Context memory, bytes calldata) internal[45] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -94,7 +96,8 @@ contract LimitOpcodes is
             Fee._dynamicProtocolFeeAmountInXD,
             Fee._aquaDynamicProtocolFeeAmountInXD,
             Whitelist._whitelistSingleTaker,
-            Whitelist._whitelistMultipleTakers
+            Whitelist._whitelistMultipleTakers,
+            SeriesEpochManager._validateSeriesEpochXD
         ];
 
         // Efficiently turning static memory array into dynamic memory array
