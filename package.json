@@ -32,5 +32,8 @@
   "bugs": {
     "url": "https://github.com/1inch/swap-vm/issues"
   },
-  "homepage": "https://github.com/1inch/swap-vm#readme"
+  "homepage": "https://github.com/1inch/swap-vm#readme",
+  "devDependencies": {
+    "@1inch/limit-order-protocol-contract": "^4.3.3"
+  }
 }
