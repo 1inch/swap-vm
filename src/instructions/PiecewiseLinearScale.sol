@@ -51,14 +51,14 @@ library PiecewiseLinearScaleArgsBuilder {
 
     /// @notice Parse specific point timestamp
     function pointTs(bytes calldata args, uint256 n) internal pure returns (uint40 ts) {
-        assembly {
+        assembly ("memory-safe") {
             ts := shr(216, calldataload(add(args.offset, mul(n, 8))))
         }
     }
 
     /// @notice Parse specific point scale
     function pointScale(bytes calldata args, uint256 n) internal pure returns (uint24 scale) {
-        assembly {
+        assembly ("memory-safe") {
             scale := shr(232, calldataload(add(args.offset, add(mul(n, 8), 5))))
         }
     }
