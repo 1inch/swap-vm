@@ -25,7 +25,7 @@ library WhitelistArgsBuilder {
     function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory args) {
         require(allowedTakers.length > 0, WhitelistEmptyList());
 
-        for(uint256 i; i < allowedTakers.length; i++) {
+        for (uint256 i; i < allowedTakers.length; i++) {
             args = abi.encodePacked(args, uint80(uint160(allowedTakers[i])));
         }
     }
