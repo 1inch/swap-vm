@@ -22,24 +22,12 @@ library WhitelistArgsBuilder {
     }
 
     /// @dev Due to args length limitiation, for multiple takers only last 80 bits of each address are packed
-    function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory) {
+    function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory args) {
         require(allowedTakers.length > 0, WhitelistEmptyList());
 
-        uint256 len = allowedTakers.length * 10;
-        bytes memory res = new bytes(len);
-
-        assembly ("memory-safe") {
-            let ptr := add(allowedTakers, add(32, 22))
-            let dst := add(res, 32)
-            let fin := add(dst, len)
-            for { } lt(dst, fin) { } {
-                mcopy(dst, ptr, 10)
-                ptr := add(ptr, 32)
-                dst := add(dst, 10)
-            }
+        for(uint256 i; i < allowedTakers.length; i++) {
+            args = abi.encodePacked(args, uint80(uint160(allowedTakers[i])));
         }
-
-        return res;
     }
 
     function parseWhitelistMultipleTakers(bytes calldata args, uint256 id) internal pure returns (uint80 allowedTaker) {
