@@ -34,6 +34,10 @@ library ControlsArgsBuilder {
         return abi.encodePacked(token);
     }
 
+    function buildTxOriginTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
+        return abi.encodePacked(token);
+    }
+
     function buildTakerTokenBalanceGte(address token, uint256 minAmount) internal pure returns (bytes memory) {
         return abi.encodePacked(token, minAmount);
     }
@@ -58,6 +62,7 @@ contract Controls {
 
     error DeadlineReached(address taker, uint256 deadline);
     error TakerTokenBalanceIsZero(address taker, address token);
+    error TxOriginTokenBalanceIsZero(address txOrigin, address token);
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
     error TakerTokenBalanceSupplyShareIsLessThanRequired(address taker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
 
@@ -110,6 +115,15 @@ contract Controls {
         address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
+    }
+
+    /// @dev Checks if tx.origin holds any amount of the specified token (NFTs are natively supported)
+    /// @dev Unlike _onlyTakerTokenBalanceNonZero, this checks tx.origin instead of ctx.query.taker
+    /// @param args.token | 20 bytes
+    function _onlyTxOriginTokenBalanceNonZero(Context memory /* ctx */, bytes calldata args) internal view {
+        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        uint256 balance = IERC20(token).balanceOf(tx.origin);
+        require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
     }
 
     /// @dev Checks if the taker holds at least a certain amount of tokens
