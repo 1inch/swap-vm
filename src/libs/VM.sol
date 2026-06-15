@@ -121,16 +121,29 @@ library ContextLib {
         bytes calldata programBytes = ctx.program();
         require(ctx.vm.nextPC < programBytes.length, RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));
 
-        for (uint256 pc = ctx.vm.nextPC; pc < programBytes.length; ) {
+        for (uint256 pcs = ctx.vm.nextPC; pcs < programBytes.length; ) {
             unchecked {
-                uint256 opcode = uint8(programBytes[pc++]);
-                uint256 argsLength = uint8(programBytes[pc++]);
-                uint256 nextPC = pc + argsLength;
-                bytes calldata args = programBytes[pc:nextPC];
+                uint256 opcode;
+                assembly ("memory-safe") {
+                    opcode := shr(248, calldataload(add(programBytes.offset, pcs)))
+                }
+                ++pcs;
 
-                ctx.vm.nextPC = nextPC;
-                ctx.vm.dispatch(ctx, opcode, args);
-                pc = ctx.vm.nextPC;
+                uint256 argsLength;
+                assembly ("memory-safe") {
+                    argsLength := shr(248, calldataload(add(programBytes.offset, pcs)))
+                }
+                ++pcs;
+
+                bytes calldata args;
+                assembly ("memory-safe") {
+                    args.offset := add(programBytes.offset, pcs)
+                    args.length := argsLength
+                }
+
+                ctx.vm.nextPC = pcs + argsLength;
+                _runOpcode(ctx, opcode, args);
+                pcs = ctx.vm.nextPC;
             }
         }
 
