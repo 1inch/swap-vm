@@ -41,9 +41,61 @@ contract Opcodes is
     Extruction,
     PeggedSwap
 {
+    error UnknownOpcode(uint256 opcode);
+
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
+
+    /// @notice Opcode dispatcher used on the hot path (set once into the VM context, called per instruction).
+    /// @dev    Replaces the per-call function-pointer table built by {_opcodes}, avoiding the array
+    ///         allocation on every swap/quote. Indices MUST mirror {_opcodes} exactly; the full test
+    ///         suite builds programs from {_opcodes} via ProgramBuilder and executes them through this
+    ///         dispatcher, so any divergence fails loudly. Reserved/unknown opcodes revert.
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+        // Hot path first: the most common opcodes are checked before the long tail so a simple
+        // limit/AMM order pays the fewest branch comparisons. Opcode VALUES are unchanged (they are
+        // still mirrored from {_opcodes}); only the search order differs.
+        if (opcode == 17) Balances._staticBalancesXD(ctx, args);
+        else if (opcode == 22) XYCSwap._xycSwapXD(ctx, args);
+        else if (opcode == 25) LimitSwap._limitSwap1D(ctx, args);
+        else if (opcode == 26) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == 10) Controls._jump(ctx, args);
+        else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
+        else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
+        else if (opcode == 13) Controls._deadline(ctx, args);
+        else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
+        else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
+        else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
+        else if (opcode == 18) Balances._dynamicBalancesXD(ctx, args);
+        else if (opcode == 19) Invalidators._invalidateBit1D(ctx, args);
+        else if (opcode == 20) Invalidators._invalidateTokenIn1D(ctx, args);
+        else if (opcode == 21) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == 23) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == 24) Decay._decayXD(ctx, args);
+        else if (opcode == 27) MinRate._requireMinRate1D(ctx, args);
+        else if (opcode == 28) MinRate._adjustMinRate1D(ctx, args);
+        else if (opcode == 29) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
+        else if (opcode == 30) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
+        else if (opcode == 31) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
+        else if (opcode == 32) TWAPSwap._twap(ctx, args);
+        else if (opcode == 33) Extruction._extruction(ctx, args);
+        else if (opcode == 34) Controls._salt(ctx, args);
+        else if (opcode == 35) Fee._flatFeeAmountInXD(ctx, args);
+        else if (opcode == 36) FeeExperimental._flatFeeAmountOutXD(ctx, args);
+        else if (opcode == 37) FeeExperimental._progressiveFeeInXD(ctx, args);
+        else if (opcode == 38) FeeExperimental._progressiveFeeOutXD(ctx, args);
+        else if (opcode == 39) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 40) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 41) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
+        else if (opcode == 42) Fee._protocolFeeAmountInXD(ctx, args);
+        else if (opcode == 43) Fee._aquaProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 44) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 45) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        // solhint-disable-next-line no-empty-blocks
+        else if (opcode < 10) { /* reserved slots 0-9 are no-ops, mirroring _notInstruction */ }
+        else revert UnknownOpcode(opcode);
+    }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
         function(Context memory, bytes calldata) internal[47] memory instructions = [

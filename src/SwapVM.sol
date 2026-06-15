@@ -125,7 +125,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
                 takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                opcodes: _instructions()
+                dispatch: _dispatch
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -171,7 +171,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
                 takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                opcodes: _instructions()
+                dispatch: _dispatch
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -289,6 +289,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
     }
 
-    /// @dev Override this function in router to provide supported instruction list
-    function _instructions() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory) { }
+    /// @dev Override in the opcode set to dispatch an opcode index to its instruction handler.
+    ///      Replaces the per-call function-pointer table: it is set once into the VM context and
+    ///      invoked by {ContextLib.runLoop} for every instruction.
+    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual;
 }
