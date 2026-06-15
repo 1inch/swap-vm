@@ -16,6 +16,8 @@ import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
+import { VMLoop } from "../VMLoop.sol";
+
 contract AquaOpcodes is
     Controls,
     XYCSwap,
@@ -23,7 +25,8 @@ contract AquaOpcodes is
     Decay,
     Fee,
     PeggedSwap,
-    Extruction
+    Extruction,
+    VMLoop
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -31,9 +34,11 @@ contract AquaOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+
     /// @notice Opcode dispatcher used on the hot path (see {Opcodes._runOpcode} for rationale).
     /// @dev Indices MUST mirror {_opcodes} exactly; the test suite is the agreement check.
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
         // Hot path first (see {Opcodes._runOpcode}): opcode VALUES are unchanged, only search order.
         if (opcode == 17) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == 10) Controls._jump(ctx, args);

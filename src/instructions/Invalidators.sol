@@ -24,7 +24,7 @@ library InvalidatorsArgsBuilder {
 /// @title Invalidators - Order invalidation mechanisms for SwapVM
 /// @notice Provides mechanisms to track and prevent order replay or overfilling
 /// @dev Supports three invalidation strategies: bit-based, token-in based, and token-out based
-contract Invalidators {
+abstract contract Invalidators {
     using ContextLib for Context;
 
     error InvalidatorsBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
@@ -45,6 +45,8 @@ contract Invalidators {
     mapping(address maker =>
         mapping(bytes32 orderHash =>
             mapping(address token => uint256 filled))) public tokenOutInvalidators;
+
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
 
     function invalidateBit(uint256 bitIndex) external {
         bitInvalidators[msg.sender][bitIndex >> 8] |= (1 << (bitIndex & 0xFF));
@@ -84,7 +86,7 @@ contract Invalidators {
     function _invalidateTokenIn1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountIn computed in case of !isExactIn
         if (ctx.swap.amountIn == 0) {
-            ctx.runLoop();
+            _runLoop(ctx);
         }
 
         require(ctx.swap.amountIn > 0, InvalidateTokenInExpectsAmountInToBeComputed());
@@ -105,7 +107,7 @@ contract Invalidators {
     function _invalidateTokenOut1D(Context memory ctx, bytes calldata /* args */) internal {
         // Wait till amountOut computed in case of isExactIn
         if (ctx.swap.amountOut == 0) {
-            ctx.runLoop();
+            _runLoop(ctx);
         }
 
         require(ctx.swap.amountOut > 0, InvalidateTokenOutExpectsAmountOutToBeComputed());

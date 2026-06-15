@@ -27,7 +27,7 @@ library MinRateArgsBuilder {
     }
 }
 
-contract MinRate {
+abstract contract MinRate {
     using Math for uint256;
     using ContextLib for Context;
 
@@ -35,13 +35,15 @@ contract MinRate {
     error MinRateExpectedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error MinRateRunLoopExpectToComputeSwapAmounts(uint256 amountIn, uint256 amountOut);
 
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+
     /// @param args.rateLt | 8 bytes (uint64)
     /// @param args.rateGt | 8 bytes (uint64)
     function _requireMinRate1D(Context memory ctx, bytes calldata args) internal {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
         (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
 
         // Checking that: actual_rate >= required_rate
         // But, instead of: swapAmountIn / swapAmountOut >= rateIn / rateOut use cross-multiplication:
@@ -60,7 +62,7 @@ contract MinRate {
         uint256 amountOut = ctx.swap.amountOut;
 
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, MinRateRunLoopExpectToComputeSwapAmounts(ctx.swap.amountIn, ctx.swap.amountOut));
 
         // Checking that: actual_rate < required_rate

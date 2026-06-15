@@ -64,7 +64,7 @@ library DecayingOffsetLib {
 }
 
 /// @dev You can to call _decayXD to readjust balanceIn/Out for swap
-contract Decay {
+abstract contract Decay {
     using ContextLib for Context;
     using DecayingOffsetLib for DecayingOffset;
 
@@ -75,6 +75,8 @@ contract Decay {
     mapping(bytes32 orderHash =>
         mapping(address token =>
             mapping(bool buyOrSell => DecayingOffset))) internal _offsets;
+
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
 
     /// @notice Applies virtual balance adjustment based on time since last trade (Mooniswap-style MEV protection)
     /// @dev Gradually restores reserves to actual values over decay period
@@ -91,7 +93,7 @@ contract Decay {
         ctx.swap.balanceIn += _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].getOffset(period);
         ctx.swap.balanceOut -= _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
             _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(swapAmountIn, period);

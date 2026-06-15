@@ -39,7 +39,7 @@ library BalancesArgsBuilder {
     }
 }
 
-contract Balances {
+abstract contract Balances {
     using Calldata for bytes;
     using ContextLib for Context;
 
@@ -50,6 +50,8 @@ contract Balances {
 
     mapping(bytes32 orderHash =>
         mapping(address token => uint256)) public balances;
+
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
 
     /// @dev Sets ctx.swap.balanceIn/Out from provided initial balances
     /// @param args.tokensCount       | 2 bytes
@@ -91,7 +93,7 @@ contract Balances {
             _initBalances(ctx, tokensCount, tokens, initialBalances);
         }
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
             balances[ctx.query.orderHash][ctx.query.tokenIn] += swapAmountIn;

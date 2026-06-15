@@ -53,7 +53,7 @@ library FeeArgsBuilder {
     }
 }
 
-contract Fee {
+abstract contract Fee {
     using SafeERC20 for IERC20;
     using ContextLib for Context;
 
@@ -68,6 +68,8 @@ contract Fee {
         _AQUA = IAqua(aqua);
     }
 
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     function _flatFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
         uint256 feeBps = FeeArgsBuilder.parseFlatFee(args);
@@ -78,11 +80,11 @@ contract Fee {
             // Decrease amountIn by fee only during swap-instruction
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             ctx.swap.amountIn -= Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS);
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn += Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS - feeBps);
         }
     }
@@ -237,11 +239,11 @@ contract Fee {
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
             ctx.swap.amountIn -= feeAmountIn;
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            ctx.runLoop();
+            _runLoop(ctx);
             feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
             ctx.swap.amountIn += feeAmountIn;
         }

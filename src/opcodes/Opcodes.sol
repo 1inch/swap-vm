@@ -24,6 +24,8 @@ import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
+import { VMLoop } from "../VMLoop.sol";
+
 contract Opcodes is
     Controls,
     Balances,
@@ -39,7 +41,8 @@ contract Opcodes is
     Fee,
     FeeExperimental,
     Extruction,
-    PeggedSwap
+    PeggedSwap,
+    VMLoop
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -47,12 +50,14 @@ contract Opcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+
     /// @notice Opcode dispatcher used on the hot path (set once into the VM context, called per instruction).
     /// @dev    Replaces the per-call function-pointer table built by {_opcodes}, avoiding the array
     ///         allocation on every swap/quote. Indices MUST mirror {_opcodes} exactly; the full test
     ///         suite builds programs from {_opcodes} via ProgramBuilder and executes them through this
     ///         dispatcher, so any divergence fails loudly. Reserved/unknown opcodes revert.
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
         // Hot path first: the most common opcodes are checked before the long tail so a simple
         // limit/AMM order pays the fewest branch comparisons. Opcode VALUES are unchanged (they are
         // still mirrored from {_opcodes}); only the search order differs.

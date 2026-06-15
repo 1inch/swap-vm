@@ -22,6 +22,8 @@ import { Extruction } from "../instructions/Extruction.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
 import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 
+import { VMLoop } from "../VMLoop.sol";
+
 contract LimitOpcodes is
     Controls,
     Balances,
@@ -35,7 +37,8 @@ contract LimitOpcodes is
     FeeExperimental,
     Extruction,
     Whitelist,
-    SeriesEpochManager
+    SeriesEpochManager,
+    VMLoop
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -43,9 +46,11 @@ contract LimitOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    function _runLoop(Context memory ctx) internal virtual override(Balances, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+
     /// @notice Opcode dispatcher used on the hot path (see {Opcodes._runOpcode} for rationale).
     /// @dev Indices MUST mirror {_opcodes} exactly; the test suite is the agreement check.
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
         // Hot path first (see {Opcodes._runOpcode}): opcode VALUES are unchanged, only search order.
         if (opcode == 17) Balances._staticBalancesXD(ctx, args);
         else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);

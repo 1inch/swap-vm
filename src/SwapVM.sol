@@ -124,8 +124,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 isStaticContext: true,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                dispatch: _dispatch
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -148,7 +147,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
         }
 
-        (amountIn, amountOut) = ctx.runLoop();
+        (amountIn, amountOut) = _runLoop(ctx);
         order.traits.validate(tokenIn, tokenOut, amountIn);
         takerTraits.validate(takerData, amount, amountIn, amountOut);
     }
@@ -170,8 +169,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 isStaticContext: false,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                dispatch: _dispatch
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -198,7 +196,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
-        (amountIn, amountOut) = ctx.runLoop();
+        (amountIn, amountOut) = _runLoop(ctx);
         order.traits.validate(tokenIn, tokenOut, amountIn);
         takerTraits.validate(takerData, amount, amountIn, amountOut);
 
@@ -289,8 +287,5 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
     }
 
-    /// @dev Override in the opcode set to dispatch an opcode index to its instruction handler.
-    ///      Replaces the per-call function-pointer table: it is set once into the VM context and
-    ///      invoked by {ContextLib.runLoop} for every instruction.
-    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual;
+    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
 }

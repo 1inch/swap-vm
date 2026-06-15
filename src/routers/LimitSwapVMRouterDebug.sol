@@ -9,6 +9,7 @@ import { Simulator } from "@1inch/solidity-utils/contracts/mixins/Simulator.sol"
 import { Context } from "../libs/VM.sol";
 import { SwapVM } from "../SwapVM.sol";
 import { LimitOpcodesDebug } from "../opcodes/LimitOpcodesDebug.sol";
+import { LimitOpcodes } from "../opcodes/LimitOpcodes.sol";
 
 contract LimitSwapVMRouterDebug is Simulator, SwapVM, LimitOpcodesDebug {
     /// @notice Deploy router with Aqua and WETH addresses
@@ -19,7 +20,5 @@ contract LimitSwapVMRouterDebug is Simulator, SwapVM, LimitOpcodesDebug {
     /// @param version EIP-712 domain version
     constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) LimitOpcodesDebug(aqua) { }
 
-    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
-        _runOpcode(ctx, opcode, args);
-    }
+    function _runLoop(Context memory ctx) internal override(SwapVM, LimitOpcodes) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
 }
