@@ -32,7 +32,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
 
     constructor() FeeExperimental(address(0)) {}
 
-    function _runLoop(Context memory ctx) internal virtual override returns (uint256 swapAmountIn, uint256 swapAmountOut) {
+    function _runLoop(Context memory ctx) internal virtual override {
         bytes calldata programBytes = ctx.program();
         require(ctx.vm.nextPC < programBytes.length, ContextLib.RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));
 
@@ -51,8 +51,6 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         formula(ctx, args);
 
         pc = ctx.vm.nextPC;
-
-        return (ctx.swap.amountIn, ctx.swap.amountOut);
     }
     
     /**

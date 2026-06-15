@@ -51,7 +51,7 @@ abstract contract Balances {
     mapping(bytes32 orderHash =>
         mapping(address token => uint256)) public balances;
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     /// @dev Sets ctx.swap.balanceIn/Out from provided initial balances
     /// @param args.tokensCount       | 2 bytes
@@ -93,11 +93,11 @@ abstract contract Balances {
             _initBalances(ctx, tokensCount, tokens, initialBalances);
         }
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
+        _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
-            balances[ctx.query.orderHash][ctx.query.tokenIn] += swapAmountIn;
-            balances[ctx.query.orderHash][ctx.query.tokenOut] -= swapAmountOut;
+            balances[ctx.query.orderHash][ctx.query.tokenIn] += ctx.swap.amountIn;
+            balances[ctx.query.orderHash][ctx.query.tokenOut] -= ctx.swap.amountOut;
         }
     }
 

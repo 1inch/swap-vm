@@ -35,7 +35,7 @@ abstract contract MinRate {
     error MinRateExpectedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
     error MinRateRunLoopExpectToComputeSwapAmounts(uint256 amountIn, uint256 amountOut);
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     /// @param args.rateLt | 8 bytes (uint64)
     /// @param args.rateGt | 8 bytes (uint64)
@@ -43,13 +43,13 @@ abstract contract MinRate {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
         (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
+        _runLoop(ctx);
 
         // Checking that: actual_rate >= required_rate
         // But, instead of: swapAmountIn / swapAmountOut >= rateIn / rateOut use cross-multiplication:
         require(
-            swapAmountIn * rateOut >= rateIn * swapAmountOut,
-            MinRateFailed(swapAmountIn, swapAmountOut, rateIn, rateOut)
+            ctx.swap.amountIn * rateOut >= rateIn * ctx.swap.amountOut,
+            MinRateFailed(ctx.swap.amountIn, ctx.swap.amountOut, rateIn, rateOut)
         );
     }
 
@@ -62,12 +62,12 @@ abstract contract MinRate {
         uint256 amountOut = ctx.swap.amountOut;
 
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
+        _runLoop(ctx);
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, MinRateRunLoopExpectToComputeSwapAmounts(ctx.swap.amountIn, ctx.swap.amountOut));
 
         // Checking that: actual_rate < required_rate
         // But, instead of: swapAmountIn / swapAmountOut < rateIn / rateOut use cross-multiplication:
-        if (swapAmountIn * rateOut < rateIn * swapAmountOut) {
+        if (ctx.swap.amountIn * rateOut < rateIn * ctx.swap.amountOut) {
             if (ctx.query.isExactIn) {
                 ctx.swap.amountOut = amountIn * rateOut / rateIn;
             } else {

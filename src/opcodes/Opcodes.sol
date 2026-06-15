@@ -50,7 +50,7 @@ contract Opcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) { super._runLoop(ctx); }
 
     /// @notice Opcode dispatcher used on the hot path (set once into the VM context, called per instruction).
     /// @dev    Replaces the per-call function-pointer table built by {_opcodes}, avoiding the array

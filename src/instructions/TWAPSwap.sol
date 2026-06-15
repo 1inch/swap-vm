@@ -99,7 +99,7 @@ abstract contract TWAPSwap is LimitSwap {
 
     mapping(bytes32 orderHash => LastSwap) public twapLastSwaps;
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     constructor() {} // 0.01% decay per second for Dutch auction (price gets worse for maker) - price discovery
 

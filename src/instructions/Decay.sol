@@ -76,7 +76,7 @@ abstract contract Decay {
         mapping(address token =>
             mapping(bool buyOrSell => DecayingOffset))) internal _offsets;
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     /// @notice Applies virtual balance adjustment based on time since last trade (Mooniswap-style MEV protection)
     /// @dev Gradually restores reserves to actual values over decay period
@@ -93,11 +93,11 @@ abstract contract Decay {
         ctx.swap.balanceIn += _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].getOffset(period);
         ctx.swap.balanceOut -= _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = _runLoop(ctx);
+        _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
-            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(swapAmountIn, period);
-            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(swapAmountOut, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(ctx.swap.amountIn, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(ctx.swap.amountOut, period);
         }
     }
 }

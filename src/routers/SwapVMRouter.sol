@@ -22,5 +22,5 @@ contract SwapVMRouter is Simulator, SwapVM, Opcodes {
     /// @param version EIP-712 domain version
     constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) Opcodes(aqua) { }
 
-    function _runLoop(Context memory ctx) internal override(SwapVM, Opcodes) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+    function _runLoop(Context memory ctx) internal override(SwapVM, Opcodes) { super._runLoop(ctx); }
 }

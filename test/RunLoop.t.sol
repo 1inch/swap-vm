@@ -136,8 +136,10 @@ contract RunLoopTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory takerData = _signAndPackTakerData(order);
 
-        // Should revert with panic due to array out-of-bounds (0x32)
-        vm.expectRevert(stdError.indexOOBError);
+        // Considering out of bounds bytes exist but are zero
+        vm.expectRevert(
+            abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0)
+        );
         swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
     }
 

@@ -46,7 +46,7 @@ abstract contract Invalidators {
         mapping(bytes32 orderHash =>
             mapping(address token => uint256 filled))) public tokenOutInvalidators;
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     function invalidateBit(uint256 bitIndex) external {
         bitInvalidators[msg.sender][bitIndex >> 8] |= (1 << (bitIndex & 0xFF));

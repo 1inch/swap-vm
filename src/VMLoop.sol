@@ -21,9 +21,7 @@ abstract contract VMLoop {
     ///      but jump instructions cannot address positions >= 65,536. For custom control flow in
     ///      larger programs, use Extruction._extruction which supports arbitrary uint256 nextPC.
     /// @param ctx Execution context containing program and registers
-    /// @return swapAmountIn Final computed input amount
-    /// @return swapAmountOut Final computed output amount
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut) {
+    function _runLoop(Context memory ctx) internal virtual {
         bytes calldata programBytes = ctx.program();
         require(ctx.vm.nextPC < programBytes.length, ContextLib.RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));
 
@@ -52,7 +50,5 @@ abstract contract VMLoop {
                 pcs = ctx.vm.nextPC;
             }
         }
-
-        return (ctx.swap.amountIn, ctx.swap.amountOut);
     }
 }

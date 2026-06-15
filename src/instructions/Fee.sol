@@ -68,7 +68,7 @@ abstract contract Fee {
         _AQUA = IAqua(aqua);
     }
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     function _flatFeeAmountInXD(Context memory ctx, bytes calldata args) internal {

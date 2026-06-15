@@ -34,7 +34,7 @@ contract AquaOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) returns (uint256 swapAmountIn, uint256 swapAmountOut) { return super._runLoop(ctx); }
+    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) { super._runLoop(ctx); }
 
     /// @notice Opcode dispatcher used on the hot path (see {Opcodes._runOpcode} for rationale).
     /// @dev Indices MUST mirror {_opcodes} exactly; the test suite is the agreement check.

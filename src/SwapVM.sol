@@ -147,9 +147,12 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
         }
 
-        (amountIn, amountOut) = _runLoop(ctx);
-        order.traits.validate(tokenIn, tokenOut, amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+        _runLoop(ctx);
+
+        order.traits.validate(tokenIn, tokenOut, ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function swap(
@@ -196,9 +199,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
-        (amountIn, amountOut) = _runLoop(ctx);
-        order.traits.validate(tokenIn, tokenOut, amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+
+        _runLoop(ctx);
+
+        order.traits.validate(tokenIn, tokenOut, ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
 
         if (takerTraits.isFirstTransferFromTaker()) {
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
@@ -209,7 +214,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         _reentrancyGuards[orderHash].unlock();
-        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
+        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {
@@ -287,5 +294,5 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
     }
 
-    function _runLoop(Context memory ctx) internal virtual returns (uint256 swapAmountIn, uint256 swapAmountOut);
+    function _runLoop(Context memory ctx) internal virtual;
 }
