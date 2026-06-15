@@ -13,6 +13,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
+import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
@@ -153,8 +154,8 @@ contract RunLoopTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory takerData = _signAndPackTakerData(order);
 
-        // Should revert with panic due to array out-of-bounds (0x32)
-        vm.expectRevert(stdError.indexOOBError);
+        // Dispatcher rejects unknown/reserved opcodes with a typed error
+        vm.expectRevert(abi.encodeWithSelector(Opcodes.UnknownOpcode.selector, uint256(200)));
         swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
     }
 
