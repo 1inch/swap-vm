@@ -34,14 +34,15 @@ contract AquaOpcodes is
     /// @notice Opcode dispatcher used on the hot path (see {Opcodes._runOpcode} for rationale).
     /// @dev Indices MUST mirror {_opcodes} exactly; the test suite is the agreement check.
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
-        if (opcode == 10) Controls._jump(ctx, args);
+        // Hot path first (see {Opcodes._runOpcode}): opcode VALUES are unchanged, only search order.
+        if (opcode == 17) XYCSwap._xycSwapXD(ctx, args);
+        else if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
         else if (opcode == 13) Controls._deadline(ctx, args);
         else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
         else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
         else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
-        else if (opcode == 17) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == 18) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
         else if (opcode == 19) Decay._decayXD(ctx, args);
         else if (opcode == 20) Controls._salt(ctx, args);

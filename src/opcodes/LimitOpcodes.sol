@@ -46,19 +46,20 @@ contract LimitOpcodes is
     /// @notice Opcode dispatcher used on the hot path (see {Opcodes._runOpcode} for rationale).
     /// @dev Indices MUST mirror {_opcodes} exactly; the test suite is the agreement check.
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
-        if (opcode == 10) Controls._jump(ctx, args);
+        // Hot path first (see {Opcodes._runOpcode}): opcode VALUES are unchanged, only search order.
+        if (opcode == 17) Balances._staticBalancesXD(ctx, args);
+        else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);
+        else if (opcode == 22) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
         else if (opcode == 13) Controls._deadline(ctx, args);
         else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
         else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
         else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
-        else if (opcode == 17) Balances._staticBalancesXD(ctx, args);
         else if (opcode == 18) Invalidators._invalidateBit1D(ctx, args);
         else if (opcode == 19) Invalidators._invalidateTokenIn1D(ctx, args);
         else if (opcode == 20) Invalidators._invalidateTokenOut1D(ctx, args);
-        else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);
-        else if (opcode == 22) LimitSwap._limitSwapOnlyFull1D(ctx, args);
         else if (opcode == 23) MinRate._requireMinRate1D(ctx, args);
         else if (opcode == 24) MinRate._adjustMinRate1D(ctx, args);
         else if (opcode == 25) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
