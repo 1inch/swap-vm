@@ -11,34 +11,23 @@ library WhitelistArgsBuilder {
     error WhitelistEmptyList();
 
     function buildWhitelistSingleTaker(address allowedTaker) internal pure returns (bytes memory) {
-        return abi.encodePacked(allowedTaker);
+        return abi.encodePacked(uint80(uint160(allowedTaker)));
     }
 
-    function parseWhitelistSingleTaker(bytes calldata args) internal pure returns (address allowedTaker) {
+    /// @dev Due to calldata cost concern, only last 80 bits of address are packed
+    function parseWhitelistSingleTaker(bytes calldata args) internal pure returns (uint80 allowedTaker) {
         assembly ("memory-safe") {
-            allowedTaker := shr(96, calldataload(args.offset))
+            allowedTaker := shr(176, calldataload(args.offset))
         }
     }
 
     /// @dev Due to args length limitiation, for multiple takers only last 80 bits of each address are packed
-    function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory) {
+    function buildWhitelistMultipleTakers(address[] memory allowedTakers) internal pure returns (bytes memory args) {
         require(allowedTakers.length > 0, WhitelistEmptyList());
 
-        uint256 len = allowedTakers.length * 10;
-        bytes memory res = new bytes(len);
-
-        assembly ("memory-safe") {
-            let ptr := add(allowedTakers, add(32, 22))
-            let dst := add(res, 32)
-            let fin := add(dst, len)
-            for { } lt(dst, fin) { } {
-                mcopy(dst, ptr, 10)
-                ptr := add(ptr, 32)
-                dst := add(dst, 10)
-            }
+        for (uint256 i; i < allowedTakers.length; i++) {
+            args = abi.encodePacked(args, uint80(uint160(allowedTakers[i])));
         }
-
-        return res;
     }
 
     function parseWhitelistMultipleTakers(bytes calldata args, uint256 id) internal pure returns (uint80 allowedTaker) {
@@ -55,20 +44,22 @@ library WhitelistArgsBuilder {
 /// @notice Set of functions for Taker validation
 /// @dev Taker whitelist functionality, the opcodes can be included in whatever place of the program
 /// @dev Partial account validation trade-off:
-/// - For packing multiple takers whitelist, only last 80 bits of each address are used
+/// - For packing taker addresses, only last 80 bits of each address are used
 /// - Mining 80 bits of Ethereum address is not truly impossible but would take years of millions GPUs time
 /// - Consider theoretical possibility of such address being mined for an address known for years,
-///   avoid orders with "free money" relying on the `_whitelistMultipleTakers` opcode
+///   avoid orders with "free money" relying on the opcodes
 contract Whitelist {
     using WhitelistArgsBuilder for bytes;
 
     error WhitelistInvalidTaker();
 
     /// @notice Allows order to be executed only by the specified Taker
-    /// @param args.allowedTaker | 20 bytes
+    /// @param args.allowedTaker | 10 bytes, last 10 bytes of address are used
     function _whitelistSingleTaker(Context memory ctx, bytes calldata args) internal pure {
-        address allowedTaker = args.parseWhitelistSingleTaker();
-        require(ctx.query.taker == allowedTaker, WhitelistInvalidTaker());
+        uint80 sender = WhitelistArgsBuilder.wrapToPackedAddress(ctx.query.taker);
+        uint80 allowedTaker = args.parseWhitelistSingleTaker();
+
+        require(sender == allowedTaker, WhitelistInvalidTaker());
     }
 
     /// @notice Allows order to be executed only by one of specified Takers
