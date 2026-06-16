@@ -40,13 +40,17 @@ contract SeriesEpochManager {
     error SeriesEpochManagerWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
     error SeriesEpochManagerAdvanceEpochFailed();
 
+    event SeriesEpochManagerEpochIncreased(address indexed maker, uint256 series, uint256 newEpoch);
+
     /// @notice Current epoch per maker per series. Orders pinned to a lower epoch are invalidated
     mapping(address maker => mapping(uint256 seriesId => uint256 epoch)) public seriesEpoch;
 
     /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current epoch)
     function seriesEpochIncrease(uint256 seriesId) external {
         unchecked {
-            seriesEpoch[msg.sender][seriesId]++;
+            uint256 newEpoch = ++seriesEpoch[msg.sender][seriesId];
+
+            emit SeriesEpochManagerEpochIncreased(msg.sender, seriesId, newEpoch);
         }
     }
 
@@ -57,6 +61,8 @@ contract SeriesEpochManager {
         unchecked {
             uint256 newEpoch = seriesEpoch[msg.sender][seriesId] + amount;
             seriesEpoch[msg.sender][seriesId] = newEpoch;
+
+            emit SeriesEpochManagerEpochIncreased(msg.sender, seriesId, newEpoch);
         }
     }
 
