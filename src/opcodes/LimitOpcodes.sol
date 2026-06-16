@@ -21,6 +21,7 @@ import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
 import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
+import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
 import { VMLoop } from "../VMLoop.sol";
 
@@ -38,6 +39,7 @@ contract LimitOpcodes is
     Extruction,
     Whitelist,
     SeriesEpochManager,
+    PiecewiseLinearScale,
     VMLoop
 {
     error UnknownOpcode(uint256 opcode);
@@ -86,13 +88,15 @@ contract LimitOpcodes is
         else if (opcode == 41) Whitelist._whitelistSingleTaker(ctx, args);
         else if (opcode == 42) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 43) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
+        else if (opcode == 44) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
+        else if (opcode == 45) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
         // solhint-disable-next-line no-empty-blocks
         else if (opcode < 10) { /* reserved slots 0-9 are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[45] memory instructions = [
+        function(Context memory, bytes calldata) internal[47] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -147,7 +151,9 @@ contract LimitOpcodes is
             Fee._aquaDynamicProtocolFeeAmountInXD,
             Whitelist._whitelistSingleTaker,
             Whitelist._whitelistMultipleTakers,
-            SeriesEpochManager._validateSeriesEpochXD
+            SeriesEpochManager._validateSeriesEpochXD,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D
         ];
 
         // Efficiently turning static memory array into dynamic memory array
