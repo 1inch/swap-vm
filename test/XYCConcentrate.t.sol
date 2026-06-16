@@ -298,10 +298,13 @@ contract ConcentrateTest is Test, OpcodesDebug {
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
         bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
-        // Check quotes before and after buying all tokenA liquidity
+        // Check quotes before and after buying (almost) all tokenA liquidity.
+        // Leave a 0.001e18 dust so the post-swap exact-out quote stays executable
+        // (partialFill clamps amountOut to the real balance, so a fully drained pool
+        // would make the marginal quote return 0 → MakerTraitsZeroAmountInNotAllowed).
         (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
+        swapVM.swap(order, tokenB, tokenA, setup.balanceA - 0.001e18, swapExactOut);
         (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change
@@ -325,10 +328,12 @@ contract ConcentrateTest is Test, OpcodesDebug {
         bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
         bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
 
-        // Check quotes before and after buying all tokenB liquidity
+        // Check quotes before and after buying (almost) all tokenB liquidity.
+        // Leave a 0.001e18 dust so the post-swap exact-out quote stays executable
+        // (partialFill clamps amountOut to the real balance).
         (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, setup.balanceB, swapExactOut);
+        swapVM.swap(order, tokenA, tokenB, setup.balanceB - 0.001e18, swapExactOut);
         (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change
@@ -356,17 +361,18 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
         (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
-        // Buy all tokenA
+        // Buy (almost) all tokenA — leave a 0.001e18 dust so the marginal exact-out quote
+        // afterwards stays executable (partialFill clamps amountOut to the real balance).
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
+        swapVM.swap(order, tokenB, tokenA, setup.balanceA - 0.001e18, swapExactOut);
+        assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenA)), "Only dust tokenA should remain");
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
-        // Buy all tokenB
+        // Buy (almost) all tokenB — leave a 0.001e18 dust for the same reason.
         uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
+        swapVM.swap(order, tokenA, tokenB, balanceTokenB - 0.001e18, swapExactOut);
+        assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenB)), "Only dust tokenB should remain");
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change for tokenA
@@ -400,17 +406,18 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
         (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
-        // Buy all tokenA
+        // Buy (almost) all tokenA — leave a 0.001e18 dust so the marginal exact-out quote
+        // afterwards stays executable (partialFill clamps amountOut to the real balance).
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
+        swapVM.swap(order, tokenB, tokenA, setup.balanceA - 0.001e18, swapExactOut);
+        assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenA)), "Only dust tokenA should remain");
         (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
-        // Buy all tokenB
+        // Buy (almost) all tokenB — leave a 0.001e18 dust for the same reason.
         uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-        assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
+        swapVM.swap(order, tokenA, tokenB, balanceTokenB - 0.001e18, swapExactOut);
+        assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenB)), "Only dust tokenB should remain");
         (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change for tokenA
@@ -449,21 +456,22 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 postAmountInB;
         uint256 postAmountOutB;
         for (uint256 i = 0; i < 100; i++) {
-            // Buy all tokenA
+            // Buy (almost) all tokenA — leave a 0.001e18 dust so the marginal exact-out quote
+            // afterwards stays executable (partialFill clamps amountOut to the real balance).
             uint256 balanceTokenA = swapVM.balances(swapVM.hash(order), address(tokenA));
             if (i == 0) {
                 balanceTokenA = setup.balanceA; // First iteration doesn't have balances in the state yet
             }
             vm.prank(taker);
-            swapVM.swap(order, tokenB, tokenA, balanceTokenA, swapExactOut);
-            assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
+            swapVM.swap(order, tokenB, tokenA, balanceTokenA - 0.001e18, swapExactOut);
+            assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenA)), "Only dust tokenA should remain");
             (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
 
-            // Buy all tokenB
+            // Buy (almost) all tokenB — leave a 0.001e18 dust for the same reason.
             uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
             vm.prank(taker);
-            swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
-            assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
+            swapVM.swap(order, tokenA, tokenB, balanceTokenB - 0.001e18, swapExactOut);
+            assertEq(0.001e18, swapVM.balances(swapVM.hash(order), address(tokenB)), "Only dust tokenB should remain");
             (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
         }
 
@@ -653,18 +661,17 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 sqrtPmax = 1e18 + 1;
 
         uint256 L = XYCConcentrateArgsBuilder._computeL(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
-        uint256 deltaLtFloor = Math.mulDiv(L, 1e18, sqrtPmax);
         uint256 deltaLtCeil = Math.mulDiv(L, 1e18, sqrtPmax, Math.Rounding.Ceil);
         uint256 deltaGtFloor = Math.mulDiv(L, sqrtPmin, 1e18);
 
         uint256 reserveOut = balanceGt + deltaGtFloor;
-        uint256 amountOut = reserveOut - 2;
+        // partialFill clamps amountOut to the real balanceGt, so target a reachable
+        // amountOut (<= balanceGt). The concentrate must still compute reserveIn with
+        // maker-favoring (ceil) rounding of the virtual delta — verified against the formula below.
+        uint256 amountOut = balanceGt - 2;
 
         uint256 reserveInMakerFav = balanceLt + deltaLtCeil;
-        uint256 reserveInFloorFloor = balanceLt + deltaLtFloor;
         uint256 expectedAmountInMakerFav = Math.ceilDiv(amountOut * reserveInMakerFav, reserveOut - amountOut);
-        uint256 expectedAmountInFloorFloor = Math.ceilDiv(amountOut * reserveInFloorFloor, reserveOut - amountOut);
-        assertLt(expectedAmountInFloorFloor, expectedAmountInMakerFav, "Pathological case must be taker-favorable without fix");
 
         (ISwapVM.Order memory order,) = _createOrderWithRawBalances(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
         address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;

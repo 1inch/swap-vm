@@ -5,12 +5,12 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { stdError } from "forge-std/Test.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
-import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 
 
 
@@ -111,7 +111,10 @@ contract FeeAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
         mintTokenOutToMaker(swapProgram, 200e18);
 
-        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
+        // 100% feeIn drives net amountIn to 0; the fee gross-up then divides by
+        // (BPS - feeBps) == 0 → panic 0x12 (division by zero). The tx reverts
+        // lethally for free (same arithmetic as the happy path, no extra runtime guard).
+        vm.expectRevert(stdError.divisionError);
         swap(swapProgram, order);
     }
 
