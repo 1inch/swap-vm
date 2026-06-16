@@ -176,7 +176,7 @@ library TakerTraitsLib {
         require(takerDeadline == 0 || block.timestamp <= takerDeadline, TakerTraitsDeadlineExpired());
 
         if (traits.isExactIn()) {
-            require(takerAmount == amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
+            require(takerAmount >= amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
             (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
             if (hasThreshold) {
                 if (traits.isStrictThresholdAmount()) {
@@ -186,7 +186,7 @@ library TakerTraitsLib {
                 }
             }
         } else {
-            require(takerAmount == amountOut, TakerTraitsTakerAmountOutMismatch(takerAmount, amountOut));
+            require(takerAmount >= amountOut, TakerTraitsTakerAmountOutMismatch(takerAmount, amountOut));
             (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
             if (hasThreshold) {
                 if (traits.isStrictThresholdAmount()) {

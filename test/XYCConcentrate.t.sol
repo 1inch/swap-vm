@@ -207,6 +207,59 @@ contract ConcentrateTest is Test, OpcodesDebug {
         }));
     }
 
+    function test_PartialFill_ExactIn_AToB() public {
+        (ISwapVM.Order memory order, bytes memory sig) = _createOrder(MakerSetup({
+            balanceA: 9000e18, balanceB: 8000e18, flatFee: 0, priceBoundA: 0.01e18, priceBoundB: 25e18
+        }));
+        bytes memory data = _swappingTakerData(TakerSetup({ isExactIn: true }), sig);
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, data);
+        assertGt(amountOut, 0);
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0);
+        assertLt(amountIn, 1_000_000_000e18);
+    }
+
+    function test_PartialFill_ExactIn_BToA() public {
+        (ISwapVM.Order memory order, bytes memory sig) = _createOrder(MakerSetup({
+            balanceA: 9000e18, balanceB: 8000e18, flatFee: 0, priceBoundA: 0.01e18, priceBoundB: 25e18
+        }));
+        bytes memory data = _swappingTakerData(TakerSetup({ isExactIn: true }), sig);
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenB, tokenA, 1_000_000_000e18, data);
+        assertGt(amountOut, 0);
+        assertEq(swapVM.balances(swapVM.hash(order), tokenA), 0);
+        assertLt(amountIn, 1_000_000_000e18);
+    }
+
+    function test_PartialFill_ExactIn_AToB_WithFee() public {
+        (ISwapVM.Order memory order, bytes memory sig) = _createOrder(MakerSetup({
+            balanceA: 9000e18, balanceB: 8000e18, flatFee: 0.003e9, priceBoundA: 0.01e18, priceBoundB: 25e18
+        }));
+        bytes memory data = _swappingTakerData(TakerSetup({ isExactIn: true }), sig);
+        vm.prank(taker);
+        swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, data);
+        vm.prank(taker);
+        (uint256 amountInBack, uint256 amountOutBack,) = swapVM.swap(order, tokenB, tokenA, 1_000_000_000e18, data);
+        assertGt(amountOutBack, 0);
+        assertEq(swapVM.balances(swapVM.hash(order), tokenA), 0);
+        assertLt(amountInBack, 1_000_000_000e18);
+    }
+
+    function test_PartialFill_ExactIn_BToA_WithFee() public {
+        (ISwapVM.Order memory order, bytes memory sig) = _createOrder(MakerSetup({
+            balanceA: 9000e18, balanceB: 8000e18, flatFee: 0.003e9, priceBoundA: 0.01e18, priceBoundB: 25e18
+        }));
+        bytes memory data = _swappingTakerData(TakerSetup({ isExactIn: true }), sig);
+        vm.prank(taker);
+        swapVM.swap(order, tokenB, tokenA, 1_000_000_000e18, data);
+        vm.prank(taker);
+        (uint256 amountInBack, uint256 amountOutBack,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, data);
+        assertGt(amountOutBack, 0);
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0);
+        assertLt(amountInBack, 1_000_000_000e18);
+    }
+
+
     function test_QuoteAndSwapExactOutAmountsMatches() public {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,

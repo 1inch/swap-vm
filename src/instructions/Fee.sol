@@ -76,10 +76,9 @@ contract Fee {
         // This is the same _feeAmountIn call, just with rounding up.
         if (ctx.query.isExactIn) {
             // Decrease amountIn by fee only during swap-instruction
-            uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             ctx.swap.amountIn -= Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS);
             ctx.runLoop();
-            ctx.swap.amountIn = takerDefinedAmountIn;
+            ctx.swap.amountIn += Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS - feeBps);
         } else {
             // Increase amountIn by fee after swap-instruction
             ctx.runLoop();
@@ -234,11 +233,11 @@ contract Fee {
 
         if (ctx.query.isExactIn) {
             // Decrease amountIn by fee only during swap-instruction
-            uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
             ctx.swap.amountIn -= feeAmountIn;
             ctx.runLoop();
-            ctx.swap.amountIn = takerDefinedAmountIn;
+            feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
+            ctx.swap.amountIn += feeAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
             ctx.runLoop();
