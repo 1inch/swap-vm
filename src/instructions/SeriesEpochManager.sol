@@ -17,9 +17,12 @@ library SeriesEpochManagerArgsBuilder {
         return abi.encodePacked(seriesId, epoch);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 seriesId, uint256 epoch) {
-        seriesId = uint32(bytes4(args.slice(0, 4, SeriesEpochManagerMissingSeriesId.selector)));
-        epoch = uint32(bytes4(args.slice(4, 8, SeriesEpochManagerMissingEpoch.selector)));
+    function parse(bytes calldata args) internal pure returns (uint256 seriesId, uint32 epoch) {
+        assembly ("memory-safe") {
+            seriesId := shr(224, calldataload(args.offset))
+            // doing and(epoch, 0xffffffff) is less efficient than specifying epoch as uint32
+            epoch := shr(192, calldataload(args.offset))
+        }
     }
 }
 

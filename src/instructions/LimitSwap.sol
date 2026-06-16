@@ -23,7 +23,9 @@ library LimitSwapArgsBuilder {
     }
 
     function parse(bytes calldata args) internal pure returns (bool makerDirectionLt) {
-        makerDirectionLt = uint8(bytes1(args.slice(0, 1, LimitSwapArgsBuilderMissingMakerDirectionLt.selector))) != 0;
+        assembly ("memory-safe") {
+            makerDirectionLt := shr(248, calldataload(args.offset))
+        }
     }
 }
 

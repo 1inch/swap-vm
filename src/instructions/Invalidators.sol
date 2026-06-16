@@ -17,7 +17,9 @@ library InvalidatorsArgsBuilder {
     }
 
     function parseBitIndex(bytes calldata args) internal pure returns (uint256 bitIndex) {
-        bitIndex = uint32(bytes4(args.slice(0, 4, InvalidatorsMissingBitIndexArg.selector)));
+        assembly ("memory-safe") {
+            bitIndex := shr(224, calldataload(args.offset))
+        }
     }
 }
 
@@ -69,11 +71,15 @@ abstract contract Invalidators {
     /// @param args.bitIndex | 4 bytes (uint32)
     function _invalidateBit1D(Context memory ctx, bytes calldata args) internal {
         uint256 bitIndex = InvalidatorsArgsBuilder.parseBitIndex(args);
-        uint256 bitmap = bitInvalidators[ctx.query.maker][bitIndex >> 8];
+        uint slot = bitIndex >> 8;
+
+        uint256 bitmap = bitInvalidators[ctx.query.maker][slot];
         uint256 bit = (1 << (bitIndex & 0xFF));
-        require(bitmap & bit == 0, InvalidatorsBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
+
+        if (bitmap & bit != 0) revert InvalidatorsBitAlreadySet(ctx.query.maker, bitIndex, bitmap);
         if (!ctx.vm.isStaticContext) {
-            bitInvalidators[ctx.query.maker][bitIndex >> 8] |= bit;
+            bitmap |= bit;
+            bitInvalidators[ctx.query.maker][slot] = bitmap;
         }
     }
 
