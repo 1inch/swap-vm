@@ -25,6 +25,7 @@ library MakerTraitsLib {
     error MakerTraitsMissingHasPostTransferOutFlag();
     error MakerTraitsTokenInAndTokenOutMustBeDifferent();
     error MakerTraitsZeroAmountInNotAllowed();
+    error MakerTraitsIdenticalTokensNotAllowed();
 
     uint256 constant internal SHOULD_UNWRAP_BIT_FLAG = 1 << 255;
     uint256 constant internal USE_AQUA_INSTEAD_OF_SIGNATURE_BIT_FLAG = 1 << 254;
@@ -100,6 +101,8 @@ library MakerTraitsLib {
     /// @param args Order configuration arguments
     /// @return order Complete Order ready for execution or signing
     function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
+        require(args.tokenA != args.tokenB, MakerTraitsIdenticalTokensNotAllowed());
+
         bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
         bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);
         bool preTransferOutHasTarget = args.preTransferOutTarget != args.maker && args.preTransferOutTarget != address(0);
