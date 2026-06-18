@@ -97,11 +97,11 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         bytes memory takerData = _buildTakerData();
 
         vm.prank(ALLOWED_TAKERS[0]);
-        swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
 
         vm.prank(ALLOWED_TAKERS[1]);
         vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-        swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
     }
 
     function test_Whitelist_Multiple() public {
@@ -112,18 +112,18 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
             for (uint256 i; i < length; ++i) {
                 vm.prank(ALLOWED_TAKERS[i]);
-                swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
             }
 
             if (length < 25) {
                 vm.prank(ALLOWED_TAKERS[length]);
                 vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-                swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
             }
 
             vm.prank(address(0xaffacfed));
             vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-            swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+            swapVM.quote(order, SWAP_AMOUNT, takerData);
         }
     }
 
@@ -143,7 +143,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) {
                 vm.prank(ALLOWED_TAKERS[i]);
                 uint256 gas = gasleft();
-                swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerData);
+                swapVM.quote(order, amountIn, takerData);
                 uint256 temp = gas - gasleft();
                 usage += temp;
                 if (worst < temp) worst = temp;
@@ -176,6 +176,8 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
     function _buildOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -200,6 +202,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
     function _buildTakerData() private view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

@@ -132,8 +132,6 @@ contract MinRateTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -205,8 +203,6 @@ contract MinRateTest is Test, OpcodesDebug {
         // Quote required input
         (uint256 quotedIn,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             10e18,
             exactOutData
         );
@@ -353,7 +349,7 @@ contract MinRateTest is Test, OpcodesDebug {
         );
 
         ISwapVM.Order memory orderBtoA = _createOrder(bytecodeBtoA);
-        bytes memory exactInDataBtoA = _signAndPackTakerData(orderBtoA, true, 0);
+        bytes memory exactInDataBtoA = _signAndPackTakerData(orderBtoA, true, 0, false);
 
         uint256 amountOutBtoA = _executeSwap(
             swapVM,
@@ -420,8 +416,6 @@ contract MinRateTest is Test, OpcodesDebug {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -434,6 +428,8 @@ contract MinRateTest is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -460,6 +456,15 @@ contract MinRateTest is Test, OpcodesDebug {
         bool isExactIn,
         uint256 threshold
     ) private view returns (bytes memory) {
+        return _signAndPackTakerData(order, isExactIn, threshold, true);
+    }
+
+    function _signAndPackTakerData(
+        ISwapVM.Order memory order,
+        bool isExactIn,
+        uint256 threshold,
+        bool getTokenBForTokenA
+    ) private view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
@@ -468,6 +473,7 @@ contract MinRateTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

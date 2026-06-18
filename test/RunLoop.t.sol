@@ -124,7 +124,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         vm.expectRevert(
             abi.encodeWithSelector(ContextLib.RunLoopExcessiveCall.selector, 0, 0)
         );
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     /**
@@ -140,7 +140,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         vm.expectRevert(
             abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0)
         );
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     /**
@@ -158,7 +158,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Dispatcher rejects unknown/reserved opcodes with a typed error
         vm.expectRevert(abi.encodeWithSelector(Opcodes.UnknownOpcode.selector, uint256(200)));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     // ============================================
@@ -214,8 +214,6 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Use quote instead of swap
         (uint256 amountIn, uint256 amountOut, ) = swapVM.quote(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             takerData
         );
@@ -326,6 +324,8 @@ contract RunLoopTest is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -354,6 +354,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -380,6 +381,6 @@ contract RunLoopTest is Test, OpcodesDebug {
         returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash)
     {
         bytes memory takerData = _signAndPackTakerData(order);
-        return swapVM.swap(order, address(tokenA), address(tokenB), amount, takerData);
+        return swapVM.swap(order, amount, takerData);
     }
 }

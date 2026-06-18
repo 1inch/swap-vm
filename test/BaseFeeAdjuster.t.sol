@@ -110,8 +110,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             // Quote with current gas conditions - swap B to A
             (, uint256 quotedOut,) = swapVM.asView().quote(
                 order,
-                address(tokenB),
-                address(tokenA),
                 3000e18, // 3000 tokenB
                 exactInData
             );
@@ -183,8 +181,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
                 (, uint256 quotedOut,) = swapVM.asView().quote(
                     order,
-                    address(tokenB),
-                    address(tokenA),
                     3500e18, // 3500 tokenB
                     exactInData
                 );
@@ -233,8 +229,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         (, uint256 quotedOut,) = swapVM.asView().quote(
             order,
-            address(tokenB),
-            address(tokenA),
             3000e18, // 3000 tokenB input
             exactInData
         );
@@ -280,8 +274,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         (, uint256 outputLowGas,) = swapVM.asView().quote(
             order,
-            address(tokenB),
-            address(tokenA),
             3000e18,
             exactInData
         );
@@ -291,8 +283,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         (, uint256 outputBaseGas,) = swapVM.asView().quote(
             order,
-            address(tokenB),
-            address(tokenA),
             3000e18,
             exactInData
         );
@@ -330,11 +320,11 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         // Base case
         vm.fee(20 gwei);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-        (, uint256 baseOutput,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+        (, uint256 baseOutput,) = swapVM.asView().quote(order, 3000e18, exactInData);
 
         // High gas
         vm.fee(100 gwei);
-        (, uint256 adjustedOutput,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+        (, uint256 adjustedOutput,) = swapVM.asView().quote(order, 3000e18, exactInData);
 
         // Expected: 0.012 ETH gas cost = 1.2% of 1 ETH = 1.2% compensation
         uint256 expectedCompensation = 0.012e18;
@@ -370,12 +360,12 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
         vm.fee(20 gwei);
-        (, uint256 smallBase,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 300e18, exactInData);
-        (, uint256 largeBase,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+        (, uint256 smallBase,) = swapVM.asView().quote(order, 300e18, exactInData);
+        (, uint256 largeBase,) = swapVM.asView().quote(order, 3000e18, exactInData);
 
         vm.fee(100 gwei);
-        (, uint256 smallAdjusted,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 300e18, exactInData);
-        (, uint256 largeAdjusted,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 3000e18, exactInData);
+        (, uint256 smallAdjusted,) = swapVM.asView().quote(order, 300e18, exactInData);
+        (, uint256 largeAdjusted,) = swapVM.asView().quote(order, 3000e18, exactInData);
 
         uint256 smallPct = ((smallAdjusted - smallBase) * 100e18) / smallBase;
         uint256 largePct = ((largeAdjusted - largeBase) * 100e18) / largeBase;
@@ -412,10 +402,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         bytes memory exactOutData = _signAndPackTakerData(order, false, 0);
 
         vm.fee(20 gwei);
-        (uint256 baseInput,,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 1e18, exactOutData);
+        (uint256 baseInput,,) = swapVM.asView().quote(order, 1e18, exactOutData);
 
         vm.fee(100 gwei);
-        (uint256 adjustedInput,,) = swapVM.asView().quote(order, address(tokenB), address(tokenA), 1e18, exactOutData);
+        (uint256 adjustedInput,,) = swapVM.asView().quote(order, 1e18, exactOutData);
 
         // Expected: 36 USDC discount on 3000 USDC = 1.2%
         uint256 expectedDiscount = 36e18;
@@ -429,6 +419,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -463,6 +455,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: false,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

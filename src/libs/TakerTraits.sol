@@ -51,6 +51,9 @@ library TakerTraitsLib {
     /// @param signature Order signature (for non-Aqua orders)
     struct Args {
         address taker;
+
+        bool getTokenBForTokenA;
+
         bool isExactIn;
         bool shouldUnwrapWeth;
         bool isStrictThresholdAmount;
@@ -97,6 +100,7 @@ library TakerTraitsLib {
     uint16 constant internal IS_STRICT_THRESHOLD_BIT_FLAG = 0x0010;
     uint16 constant internal IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG = 0x0020;
     uint16 constant internal USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG = 0x0040;
+    uint16 constant internal GET_TOKEN_B_FOR_TOKEN_A = 0x0080;
 
     /// @notice Build taker traits and data from arguments
     /// @dev Packs traits, hooks, callbacks, and signature into single bytes
@@ -144,6 +148,7 @@ library TakerTraitsLib {
             (args.isFirstTransferFromTaker ? IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG : 0) |
             (args.useTransferFromAndAquaPush ? USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG : 0) |
             (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
+            (args.getTokenBForTokenA ? GET_TOKEN_B_FOR_TOKEN_A : 0) |
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0),
             args.threshold,
             (args.to != address(0) && args.to != args.taker ? abi.encodePacked(args.to) : bytes("")),
@@ -196,6 +201,10 @@ library TakerTraitsLib {
                 }
             }
         }
+    }
+
+    function isGetTokenBForTokenA(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & GET_TOKEN_B_FOR_TOKEN_A) != 0;
     }
 
     function isExactIn(TakerTraits traits) internal pure returns (bool) {

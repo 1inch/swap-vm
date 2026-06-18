@@ -92,7 +92,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapOrder(true);
 
         vm.startSnapshotGas("XYCSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -100,7 +100,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapOrder(false);
 
         vm.startSnapshotGas("XYCSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -108,7 +108,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapOrder(true);
 
         vm.startSnapshotGas("XYCSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -116,7 +116,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapOrder(false);
 
         vm.startSnapshotGas("XYCSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -126,7 +126,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowLiquidityOrder(true);
 
         vm.startSnapshotGas("ConcentrateGrowLiquidity_XYCSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -134,7 +134,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowLiquidityOrder(false);
 
         vm.startSnapshotGas("ConcentrateGrowLiquidity_XYCSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -142,7 +142,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowLiquidityOrder(true);
 
         vm.startSnapshotGas("ConcentrateGrowLiquidity_XYCSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -150,7 +150,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowLiquidityOrder(false);
 
         vm.startSnapshotGas("ConcentrateGrowLiquidity_XYCSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -158,7 +158,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowPriceRangeOrder(true);
 
         vm.startSnapshotGas("ConcentrateGrowPriceRange_XYCSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -166,7 +166,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateGrowPriceRangeOrder(true);
 
         vm.startSnapshotGas("ConcentrateGrowPriceRange_XYCSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -176,7 +176,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDecayXYCSwapOrder(true);
 
         vm.startSnapshotGas("Decay_XYCSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -184,7 +184,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDecayXYCSwapOrder(false);
 
         vm.startSnapshotGas("Decay_XYCSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -192,7 +192,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDecayXYCSwapOrder(true);
 
         vm.startSnapshotGas("Decay_XYCSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -200,7 +200,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDecayXYCSwapOrder(false);
 
         vm.startSnapshotGas("Decay_XYCSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -210,7 +210,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateDecayXYCSwapOrder(true);
 
         vm.startSnapshotGas("Concentrate_Decay_XYCSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -218,7 +218,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createConcentrateDecayXYCSwapOrder(true);
 
         vm.startSnapshotGas("Concentrate_Decay_XYCSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -228,7 +228,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapWithFeeOrder(true, true);
 
         vm.startSnapshotGas("XYCSwap_FlatFeeIn_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -236,7 +236,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapWithFeeOrder(true, true);
 
         vm.startSnapshotGas("XYCSwap_FlatFeeIn_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -244,7 +244,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapWithFeeOrder(false, true);
 
         vm.startSnapshotGas("XYCSwap_FlatFeeOut_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -252,7 +252,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createXYCSwapWithFeeOrder(false, true);
 
         vm.startSnapshotGas("XYCSwap_FlatFeeOut_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -262,7 +262,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createFullAMMOrder(true);
 
         vm.startSnapshotGas("FullAMM_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -270,7 +270,7 @@ contract AMMGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createFullAMMOrder(true);
 
         vm.startSnapshotGas("FullAMM_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -441,6 +441,8 @@ contract AMMGas is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -475,6 +477,7 @@ contract AMMGas is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

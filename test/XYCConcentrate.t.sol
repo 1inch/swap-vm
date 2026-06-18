@@ -44,6 +44,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
+    bytes internal _roundingSig;
+
     function assertNotApproxEqRel(uint256 left, uint256 right, uint256 maxDelta, string memory err) internal{
         if (left > right * (1e18 - maxDelta) / 1e18 && left < right * (1e18 + maxDelta) / 1e18) {
             // "%s: %s ~= %s (max delta: %s%%, real delta: %s%%)"
@@ -121,6 +123,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -159,9 +163,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
         bool isExactIn;
     }
 
-    function _quotingTakerData(TakerSetup memory takerSetup) internal view returns (bytes memory takerData) {
+    function _quotingTakerData(TakerSetup memory takerSetup, bool getTokenBForTokenA) internal view returns (bytes memory takerData) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -183,9 +188,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
         }));
     }
 
-    function _swappingTakerData(TakerSetup memory takerSetup, bytes memory signature) internal view returns (bytes memory) {
+    function _swappingTakerData(TakerSetup memory takerSetup, bytes memory signature, bool getTokenBForTokenA) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -217,15 +223,15 @@ contract ConcentrateTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
-        // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // Setup taker traits and data (tokenA -> tokenB => getTokenBForTokenA = true)
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }), true);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, true);
 
         // Buy all tokenB liquidity
         uint256 amountOut = setup.balanceB;
-        (uint256 quoteAmountIn,,) = swapVM.asView().quote(order, tokenA, tokenB, amountOut, quoteExactOut);
+        (uint256 quoteAmountIn,,) = swapVM.asView().quote(order, amountOut, quoteExactOut);
         vm.prank(taker);
-        (uint256 swapAmountIn,,) = swapVM.swap(order, tokenA, tokenB, amountOut, swapExactOut);
+        (uint256 swapAmountIn,,) = swapVM.swap(order, amountOut, swapExactOut);
 
         assertEq(swapAmountIn, quoteAmountIn, "Quoted amountIn should match swapped amountIn");
         assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
@@ -241,15 +247,15 @@ contract ConcentrateTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
-        // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // Setup taker traits and data (tokenB -> tokenA => getTokenBForTokenA = false)
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }), false);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, false);
 
         // Check quotes before and after buying all tokenA liquidity
-        (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
+        (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, 0.001e18, quoteExactOut);
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
-        (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
+        swapVM.swap(order, setup.balanceA, swapExactOut);
+        (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change
         uint256 preRate = preAmountIn * 1e18 / preAmountOut;
@@ -268,15 +274,15 @@ contract ConcentrateTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
-        // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // Setup taker traits and data (tokenA -> tokenB => getTokenBForTokenA = true)
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }), true);
+        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, true);
 
         // Check quotes before and after buying all tokenB liquidity
-        (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 preAmountIn, uint256 preAmountOut,) = swapVM.asView().quote(order, 0.001e18, quoteExactOut);
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, setup.balanceB, swapExactOut);
-        (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        swapVM.swap(order, setup.balanceB, swapExactOut);
+        (uint256 postAmountIn, uint256 postAmountOut,) = swapVM.asView().quote(order, 0.001e18, quoteExactOut);
 
         // Compute and compare rate change
         uint256 preRate = preAmountIn * 1e18 / preAmountOut;
@@ -296,25 +302,28 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // tokenB -> tokenA => getTokenBForTokenA = false ; tokenA -> tokenB => getTokenBForTokenA = true
+        bytes memory quoteExactOutBToA = _quotingTakerData(TakerSetup({ isExactIn: false }), false);
+        bytes memory quoteExactOutAToB = _quotingTakerData(TakerSetup({ isExactIn: false }), true);
+        bytes memory swapExactOutBToA = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, false);
+        bytes memory swapExactOutAToB = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, true);
 
         // Check tokenA and tokenB prices before
-        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
-        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
 
         // Buy all tokenA
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
+        swapVM.swap(order, setup.balanceA, swapExactOutBToA);
         assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
-        (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
+        (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
 
         // Buy all tokenB
         uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
+        swapVM.swap(order, balanceTokenB, swapExactOutAToB);
         assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
-        (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
 
         // Compute and compare rate change for tokenA
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
@@ -340,25 +349,28 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // tokenB -> tokenA => getTokenBForTokenA = false ; tokenA -> tokenB => getTokenBForTokenA = true
+        bytes memory quoteExactOutBToA = _quotingTakerData(TakerSetup({ isExactIn: false }), false);
+        bytes memory quoteExactOutAToB = _quotingTakerData(TakerSetup({ isExactIn: false }), true);
+        bytes memory swapExactOutBToA = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, false);
+        bytes memory swapExactOutAToB = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, true);
 
         // Check tokenA and tokenB prices before
-        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
-        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
 
         // Buy all tokenA
         vm.prank(taker);
-        swapVM.swap(order, tokenB, tokenA, setup.balanceA, swapExactOut);
+        swapVM.swap(order, setup.balanceA, swapExactOutBToA);
         assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
-        (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
+        (uint256 postAmountInA, uint256 postAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
 
         // Buy all tokenB
         uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
+        swapVM.swap(order, balanceTokenB, swapExactOutAToB);
         assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
-        (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 postAmountInB, uint256 postAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
 
         // Compute and compare rate change for tokenA
         uint256 preRateA = preAmountInA * 1e18 / preAmountOutA;
@@ -384,12 +396,15 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
         // Setup taker traits and data
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+        // tokenB -> tokenA => getTokenBForTokenA = false ; tokenA -> tokenB => getTokenBForTokenA = true
+        bytes memory quoteExactOutBToA = _quotingTakerData(TakerSetup({ isExactIn: false }), false);
+        bytes memory quoteExactOutAToB = _quotingTakerData(TakerSetup({ isExactIn: false }), true);
+        bytes memory swapExactOutBToA = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, false);
+        bytes memory swapExactOutAToB = _swappingTakerData(TakerSetup({ isExactIn: false }), signature, true);
 
         // Check tokenA and tokenB prices before
-        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
-        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+        (uint256 preAmountInA, uint256 preAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
+        (uint256 preAmountInB, uint256 preAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
 
         uint256 postAmountInA;
         uint256 postAmountOutA;
@@ -402,16 +417,16 @@ contract ConcentrateTest is Test, OpcodesDebug {
                 balanceTokenA = setup.balanceA; // First iteration doesn't have balances in the state yet
             }
             vm.prank(taker);
-            swapVM.swap(order, tokenB, tokenA, balanceTokenA, swapExactOut);
+            swapVM.swap(order, balanceTokenA, swapExactOutBToA);
             assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenA)), "All tokenA liquidity should be bought out");
-            (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, tokenB, tokenA, 0.001e18, quoteExactOut);
+            (postAmountInA, postAmountOutA,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutBToA);
 
             // Buy all tokenB
             uint256 balanceTokenB = swapVM.balances(swapVM.hash(order), address(tokenB));
             vm.prank(taker);
-            swapVM.swap(order, tokenA, tokenB, balanceTokenB, swapExactOut);
+            swapVM.swap(order, balanceTokenB, swapExactOutAToB);
             assertEq(0, swapVM.balances(swapVM.hash(order), address(tokenB)), "All tokenB liquidity should be bought out");
-            (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, tokenA, tokenB, 0.001e18, quoteExactOut);
+            (postAmountInB, postAmountOutB,) = swapVM.asView().quote(order, 0.001e18, quoteExactOutAToB);
         }
 
         // Compute and compare rate change for tokenA
@@ -442,7 +457,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
-        bytes memory takerData = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+        bytes memory takerData = _swappingTakerData(TakerSetup({ isExactIn: true }), signature, true);
+        _roundingSig = signature;
 
         // Test comprehensive rounding invariants
         RoundingInvariants.assertRoundingInvariants(
@@ -461,38 +477,26 @@ contract ConcentrateTest is Test, OpcodesDebug {
         SwapVM _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
-        address tokenOut,
+        address /* tokenOut */,
         uint256 amount,
-        bytes memory takerData
+        bytes memory /* takerData */
     ) internal returns (uint256 amountOut) {
         // Mint tokens to taker
         TokenMock(tokenIn).mint(taker, amount);
 
+        // Order tokenA=tokenA, tokenB=tokenB → getTokenBForTokenA = (tokenIn == tokenA).
+        bytes memory directionalData = _swappingTakerData(
+            TakerSetup({ isExactIn: true }), _roundingSig, tokenIn == address(tokenA)
+        );
+
         vm.prank(taker);
-        (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerData);
+        (, amountOut,) = _swapVM.swap(order, amount, directionalData);
     }
 
-    function test_ConcentrateGrowLiquidity_ImpossibleSwapTokenNotInActiveStrategy() public {
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 9000e18,
-            balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
-            priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
-            priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        vm.startPrank(taker);
-        TokenMock malToken = new TokenMock("Malicious token", "MTK");
-
-        // Setup taker traits and data
-        bytes memory swapExactOut = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
-
-        // Buy all tokenB liquidity
-        bytes memory tokenAddresses = abi.encodePacked(tokenA, tokenB);
-        vm.expectRevert(abi.encodeWithSelector(Balances.DynamicBalancesLoadingRequiresSettingBothBalances.selector, address(malToken), tokenB, tokenAddresses));
-        swapVM.swap(order, address(malToken), tokenB, setup.balanceB, swapExactOut);
-    }
+    // NOTE: test_ConcentrateGrowLiquidity_ImpossibleSwapTokenNotInActiveStrategy was removed.
+    // The new swap/quote API derives tokenIn/tokenOut from the order's tokens and the
+    // getTokenBForTokenA flag, so a taker can no longer inject an arbitrary (malicious)
+    // tokenIn that is absent from the active strategy. The scenario is now unreachable.
 
     /// @notice Helper to create order with custom spot price at bounds (resulting in zero balance for one token)
     function _createOrderAtBoundary(
@@ -512,6 +516,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -558,6 +564,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
 
         Program memory program = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -617,11 +625,10 @@ contract ConcentrateTest is Test, OpcodesDebug {
         address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
         address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
 
-        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }));
+        // Swap direction is tokenLt -> tokenGt => getTokenBForTokenA = (tokenLt == tokenA)
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false }), tokenLt == address(tokenA));
         (uint256 quotedAmountIn, uint256 quotedAmountOut,) = swapVM.asView().quote(
             order,
-            tokenLt,
-            tokenGt,
             amountOut,
             quoteExactOut
         );
@@ -650,12 +657,13 @@ contract ConcentrateTest is Test, OpcodesDebug {
         address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
         address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
 
-        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+        // Lt -> Gt => getTokenBForTokenA = (tokenLt == tokenA)
+        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature, tokenLt == address(tokenA));
 
         // Valid swap: Lt -> Gt (buying Gt at upper bound using Lt)
         uint256 swapAmount = 10e18;
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenLt, tokenGt, swapAmount, swapExactIn);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, swapAmount, swapExactIn);
         assertGt(amountOut, 0);
         assertEq(amountIn, swapAmount);
     }
@@ -675,12 +683,13 @@ contract ConcentrateTest is Test, OpcodesDebug {
         address tokenLt = address(tokenA) > address(tokenB) ? tokenB : tokenA;
         address tokenGt = address(tokenA) > address(tokenB) ? tokenA : tokenB;
 
-        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+        // Gt -> Lt => getTokenBForTokenA = (tokenGt == tokenA)
+        bytes memory swapExactIn = _swappingTakerData(TakerSetup({ isExactIn: true }), signature, tokenGt == address(tokenA));
 
         // Valid swap: Gt -> Lt (selling Gt to get Lt at lower bound)
         uint256 swapAmount = 10e18;
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenGt, tokenLt, swapAmount, swapExactIn);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, swapAmount, swapExactIn);
         assertGt(amountOut, 0);
         assertEq(amountIn, swapAmount);
     }

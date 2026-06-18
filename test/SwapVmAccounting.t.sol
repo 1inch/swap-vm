@@ -131,6 +131,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     function buildTakerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -159,7 +160,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         bytes memory takerData = buildTakerData(isExactIn, sig);
         vm.prank(taker);
-        (r.amountIn, r.amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn, r.amountOut,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
     }
 
     function deployAndDoubleSwap(bytes memory program, bool isExactIn) internal returns (DoubleSwapResult memory r) {
@@ -170,13 +171,13 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         bytes memory takerData = buildTakerData(isExactIn, sig);
 
         vm.prank(taker);
-        (r.amountIn1, r.amountOut1,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn1, r.amountOut1,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
         r.protocolFee1 = getProtocolFee();
 
         vm.warp(block.timestamp + 150);
 
         vm.prank(taker);
-        (r.amountIn2, r.amountOut2,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn2, r.amountOut2,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
         r.protocolFee2 = getProtocolFee();
     }
 
@@ -352,6 +353,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,

@@ -261,8 +261,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             2e18,
             exactInData
         );
@@ -310,8 +308,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
 
         try swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             2e18,
             exactInData
         ) returns (uint256, uint256 quotedOut, bytes32) {
@@ -539,8 +535,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         vm.expectRevert(); // Expecting TWAPSwapTradeAmountExceedLiquidity
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             100e18, // Trying to get ~40-50e18 but only ~10e18 available
             exactInData
         );
@@ -562,8 +556,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -576,6 +568,8 @@ contract TWAPSwapTest is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -610,6 +604,7 @@ contract TWAPSwapTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

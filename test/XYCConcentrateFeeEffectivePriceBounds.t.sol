@@ -85,6 +85,8 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
             : bytes("");
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: tokenUSD,
+            tokenB: tokenETH,
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -119,9 +121,10 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         signature = abi.encodePacked(r, s, v);
     }
 
-    function _takerData(bool isExactIn, bytes memory sig) internal view returns (bytes memory) {
+    function _takerData(bool isExactIn, bytes memory sig, bool getTokenBForTokenA) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -171,7 +174,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         // Expected effective: 2000 * 0.97 = 1940 USD/ETH (get less USD due to fee)
         uint256 ethToSell = 1e18;
         vm.prank(taker);
-        (, uint256 usdReceived,) = swapVM.swap(order, tokenETH, tokenUSD, ethToSell, _takerData(true, sig));
+        (, uint256 usdReceived,) = swapVM.swap(order, ethToSell, _takerData(true, sig, false));
 
         uint256 effectivePriceSell = (usdReceived * 1e18) / ethToSell;
         uint256 expectedPriceSell = (Pmin * 97) / 100; // 1940e18
@@ -182,7 +185,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         // Expected effective: 2000 / 0.97 = 2061.86 USD/ETH (pay more USD due to fee)
         uint256 ethToBuy = 1e18;
         vm.prank(taker);
-        (uint256 usdPaid,,) = swapVM.swap(order, tokenUSD, tokenETH, ethToBuy, _takerData(false, sig));
+        (uint256 usdPaid,,) = swapVM.swap(order, ethToBuy, _takerData(false, sig, true));
 
         uint256 effectivePriceBuy = (usdPaid * 1e18) / ethToBuy;
         uint256 expectedPriceBuy = (Pmin * 100) / 97; // ~2061.86e18
@@ -217,7 +220,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         // Expected effective: 4000 * 0.97 = 3880 USD/ETH (get less USD due to fee)
         uint256 ethToSell = 1e18;
         vm.prank(taker);
-        (, uint256 usdReceived,) = swapVM.swap(order, tokenETH, tokenUSD, ethToSell, _takerData(true, sig));
+        (, uint256 usdReceived,) = swapVM.swap(order, ethToSell, _takerData(true, sig, false));
 
         uint256 effectivePriceSell = (usdReceived * 1e18) / ethToSell;
         uint256 expectedPriceSell = (Pmax * 97) / 100; // 3880e18
@@ -228,7 +231,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         // Expected effective: 4000 / 0.97 = 4123.71 USD/ETH (pay more USD due to fee)
         uint256 ethToBuy = 1e18;
         vm.prank(taker);
-        (uint256 usdPaid,,) = swapVM.swap(order, tokenUSD, tokenETH, ethToBuy, _takerData(false, sig));
+        (uint256 usdPaid,,) = swapVM.swap(order, ethToBuy, _takerData(false, sig, true));
 
         uint256 effectivePriceBuy = (usdPaid * 1e18) / ethToBuy;
         uint256 expectedPriceBuy = (Pmax * 100) / 97; // ~4123.71e18

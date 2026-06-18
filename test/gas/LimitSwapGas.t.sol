@@ -80,7 +80,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapOrder(true);
 
         vm.startSnapshotGas("LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -88,7 +88,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapOrder(false);
 
         vm.startSnapshotGas("LimitSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -96,7 +96,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapOrder(true);
 
         vm.startSnapshotGas("LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -104,7 +104,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapOrder(false);
 
         vm.startSnapshotGas("LimitSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -114,7 +114,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(true, true);
 
         vm.startSnapshotGas("DutchAuctionIn_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -122,7 +122,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(true, false);
 
         vm.startSnapshotGas("DutchAuctionIn_LimitSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -130,7 +130,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(true, true);
 
         vm.startSnapshotGas("DutchAuctionIn_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -138,7 +138,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(true, false);
 
         vm.startSnapshotGas("DutchAuctionIn_LimitSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -146,7 +146,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(false, true);
 
         vm.startSnapshotGas("DutchAuctionOut_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -154,7 +154,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(false, false);
 
         vm.startSnapshotGas("DutchAuctionOut_LimitSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -162,7 +162,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(false, true);
 
         vm.startSnapshotGas("DutchAuctionOut_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -170,7 +170,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDutchAuctionOrder(false, false);
 
         vm.startSnapshotGas("DutchAuctionOut_LimitSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -181,7 +181,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         vm.warp(startTime + 1800); // 50% of duration unlocked
 
         vm.startSnapshotGas("TWAP_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -190,7 +190,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         vm.warp(startTime + 1800); // 50% of duration unlocked
 
         vm.startSnapshotGas("TWAP_LimitSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -199,7 +199,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         vm.warp(startTime + 1800); // 50% of duration unlocked
 
         vm.startSnapshotGas("TWAP_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -208,7 +208,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         vm.warp(startTime + 1800); // 50% of duration unlocked
 
         vm.startSnapshotGas("TWAP_LimitSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -218,7 +218,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createMinRateOrder(true);
 
         vm.startSnapshotGas("MinRate_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -226,7 +226,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createMinRateOrder(false);
 
         vm.startSnapshotGas("MinRate_LimitSwap_quote_exactOut");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -234,7 +234,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createMinRateOrder(true);
 
         vm.startSnapshotGas("MinRate_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -242,7 +242,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createMinRateOrder(false);
 
         vm.startSnapshotGas("MinRate_LimitSwap_swap_exactOut");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -252,7 +252,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, false);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeIn_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -260,7 +260,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, false);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeIn_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -270,7 +270,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true, false);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeOut_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -278,7 +278,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true, false);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeOut_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -288,7 +288,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, true);
 
         vm.startSnapshotGas("LimitSwap_ProgressiveFee_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -296,7 +296,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, true);
 
         vm.startSnapshotGas("LimitSwap_ProgressiveFee_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -306,7 +306,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDeadlineLimitSwapOrder(true);
 
         vm.startSnapshotGas("Deadline_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -314,7 +314,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createDeadlineLimitSwapOrder(true);
 
         vm.startSnapshotGas("Deadline_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -324,7 +324,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createSaltLimitSwapOrder(true);
 
         vm.startSnapshotGas("Salt_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -332,7 +332,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createSaltLimitSwapOrder(true);
 
         vm.startSnapshotGas("Salt_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -342,7 +342,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createInvalidateBitLimitSwapOrder(true);
 
         vm.startSnapshotGas("InvalidateBit_LimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -350,7 +350,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createInvalidateBitLimitSwapOrder(true);
 
         vm.startSnapshotGas("InvalidateBit_LimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -360,7 +360,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapInvalidateTokenInOrder(true);
 
         vm.startSnapshotGas("LimitSwap_InvalidateTokenIn_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -368,7 +368,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapInvalidateTokenInOrder(true);
 
         vm.startSnapshotGas("LimitSwap_InvalidateTokenIn_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -378,7 +378,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createFullLimitSwapOrder(true);
 
         vm.startSnapshotGas("FullLimitSwap_quote_exactIn");
-        swapVM.asView().quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -386,7 +386,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory takerData) = _createFullLimitSwapOrder(true);
 
         vm.startSnapshotGas("FullLimitSwap_swap_exactIn");
-        swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
 
@@ -525,6 +525,8 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -559,6 +561,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

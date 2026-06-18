@@ -123,8 +123,6 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             10e18,
             exactInData
         );
@@ -162,8 +160,6 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             10e18,
             exactInData
         );
@@ -216,8 +212,6 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
             (uint256 actualIn, uint256 actualOut,) = swapVM.swap(
                 order,
-                address(tokenA),
-                address(tokenB),
                 amountIn,
                 exactInData
             );
@@ -255,6 +249,8 @@ contract DutchAuctionTest is Test, OpcodesDebug {
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -289,6 +285,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

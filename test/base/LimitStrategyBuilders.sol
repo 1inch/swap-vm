@@ -96,6 +96,8 @@ abstract contract LimitStrategyBuilders is TestConstants, Test, LimitOpcodesDebu
 
     function createStrategy(bytes memory programBytes) public view returns (ISwapVM.Order memory order) {
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,

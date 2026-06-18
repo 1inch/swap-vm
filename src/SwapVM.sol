@@ -110,8 +110,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @dev Method can be executed in a static-call
     function quote(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
@@ -119,6 +117,12 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
         bool isExactIn = takerTraits.isExactIn();
+
+        address tokenIn;
+        address tokenOut;
+        if (takerTraits.isGetTokenBForTokenA()) (tokenIn, tokenOut) = order.traits.tokens(order.data);
+        else (tokenOut, tokenIn) = order.traits.tokens(order.data);
+
         Context memory ctx = Context({
             vm: VM({
                 isStaticContext: true,
@@ -157,8 +161,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
     function swap(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
@@ -167,6 +169,12 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
         bool isExactIn = takerTraits.isExactIn();
+
+        address tokenIn;
+        address tokenOut;
+        if (takerTraits.isGetTokenBForTokenA()) (tokenIn, tokenOut) = order.traits.tokens(order.data);
+        else (tokenOut, tokenIn) = order.traits.tokens(order.data);
+
         Context memory ctx = Context({
             vm: VM({
                 isStaticContext: false,

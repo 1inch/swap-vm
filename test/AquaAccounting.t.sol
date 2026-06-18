@@ -314,6 +314,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
@@ -364,12 +366,11 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         bool zeroForOne,
         bool isExactIn
     ) internal returns (uint256 amountIn, uint256 amountOut) {
-        (address tokenIn, address tokenOut) = zeroForOne
-            ? (address(tokenA), address(tokenB))
-            : (address(tokenB), address(tokenA));
+        address tokenIn = zeroForOne ? address(tokenA) : address(tokenB);
 
         bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(taker),
+            getTokenBForTokenA: zeroForOne,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -391,7 +392,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         }));
 
         TokenMock(tokenIn).mint(address(taker), amount * 2);
-        return taker.swap(order, tokenIn, tokenOut, amount, takerData);
+        return taker.swap(order, amount, takerData);
     }
 
     // ===== TEST GROUP 1: XYCSwap Tests =====

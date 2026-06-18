@@ -231,16 +231,18 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function _tryExecute(ISwapVM.Order memory order, bool shouldExecute) internal {
         bytes memory takerData = _takerData();
         if (shouldExecute) {
-            (, uint256 amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            (, uint256 amountOut,) = swapVM.quote(order, AMOUNT_IN, takerData);
             assertGt(amountOut, 0);
         } else {
             vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
-            swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            swapVM.quote(order, AMOUNT_IN, takerData);
         }
     }
 
     function _epochOrder(uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             receiver: address(0),
             shouldUnwrapWeth: false,
@@ -265,6 +267,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function _takerData() internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(this),
+            getTokenBForTokenA: true,
             isExactIn: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

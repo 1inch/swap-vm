@@ -79,7 +79,7 @@ contract TransferModesCombinationsTest is Test {
         // Execute swap
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = router.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, taker, true);
@@ -104,7 +104,7 @@ contract TransferModesCombinationsTest is Test {
 
         // Execute swap via taker contract
         (uint256 amountIn, uint256 amountOut) = takerContract.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, address(takerContract), true);
@@ -136,7 +136,7 @@ contract TransferModesCombinationsTest is Test {
         // Execute swap
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = router.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, taker, false);
@@ -169,7 +169,7 @@ contract TransferModesCombinationsTest is Test {
 
         // Execute swap via taker contract
         (uint256 amountIn, uint256 amountOut) = takerContract.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, address(takerContract), false);
@@ -196,6 +196,7 @@ contract TransferModesCombinationsTest is Test {
     function _buildTakerData(address takerAddr, bool useTransferFromAndAquaPush, bool hasCallback) internal pure returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
+            getTokenBForTokenA: false,
             isExactIn: true,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
@@ -220,6 +221,7 @@ contract TransferModesCombinationsTest is Test {
     function _buildTakerDataWithSignature(address takerAddr, bool hasCallback, bytes memory signature) internal pure returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
+            getTokenBForTokenA: false,
             isExactIn: true,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,

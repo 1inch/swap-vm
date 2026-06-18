@@ -116,6 +116,8 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         // === Create Order ===
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -148,6 +150,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
     function _quotingTakerData(TakerSetup memory takerSetup) internal view returns (bytes memory takerData) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: true,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -174,6 +177,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -216,7 +220,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
 
         vm.prank(taker);
-        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Protocol fee is collected from tokenIn (tokenA)
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
@@ -250,7 +254,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountOut = 50e18;
         vm.prank(taker);
-        (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactOutTakerDataSwap);
+        (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, amountOut, exactOutTakerDataSwap);
 
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
 
@@ -282,7 +286,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // No fee should be transferred
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
@@ -308,7 +312,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
         vm.prank(taker);
         vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
     }
 
     function test_DynamicProtocolFee_ProviderReturnsHighFee_Reverts() public {
@@ -330,7 +334,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
         vm.prank(taker);
         vm.expectRevert(abi.encodeWithSelector(Fee.FeeBpsOutOfRange.selector, 1.5e9));
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
     }
 
     function test_DynamicProtocolFee_ProviderReturnsFailedCall_Reverts() public {
@@ -350,7 +354,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
         vm.prank(taker);
         vm.expectRevert(Fee.FeeProtocolProviderFailedCall.selector);
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
     }
 
     function test_DynamicProtocolFee_ZeroProvider_NoFee() public {
@@ -370,7 +374,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // No fee should be transferred to protocol fee recipient
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
@@ -398,7 +402,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Both fees applied - verify protocol fee was collected
         uint256 protocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
@@ -427,7 +431,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         // First swap with 10% fee
         feeProvider.setFeeBpsAndRecipient(0.10e9, protocolFeeRecipient);
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         uint256 fee1 = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
         assertGt(fee1, 0, "Fee should be collected with 10% rate");
@@ -439,7 +443,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         // Change fee to 5%
         feeProvider.setFeeBpsAndRecipient(0.05e9, protocolFeeRecipient);
         vm.prank(taker);
-        swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         uint256 fee2 = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
         assertGt(fee2, 0, "Fee should be collected with 5% rate");

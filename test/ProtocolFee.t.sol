@@ -115,6 +115,8 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         // === Create Order ===
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -147,6 +149,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     function _quotingTakerData(TakerSetup memory takerSetup) internal view returns (bytes memory takerData) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: true,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -176,6 +179,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -213,7 +217,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Expected amount should be calculated from amountOut before fee deduction
         // NOTE: swap(...) returns amountOut after fee deduction
@@ -238,7 +242,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountOut = 50e18;
         vm.prank(taker);
-        (, uint256 amountOutAfterFee,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactInTakerDataSwap);
+        (, uint256 amountOutAfterFee,) = swapVM.swap(order, amountOut, exactInTakerDataSwap);
 
         // Expected amount should be calculated from amountOut before fee deduction
         // NOTE: swap(...) returns amountOut after fee deduction
@@ -266,7 +270,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Fee application order (actual execution order):
         // 1. XYC swap computes rawAmountOut
@@ -286,7 +290,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         // Check that amountOut with only flat fee is greater than amountOut with both fees
         setup.protocolFeeBps = 0;
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
-        (, uint256 amountOutWithOnlyFlatFee,) = swapVM.asView().quote(orderWithFlatFee, tokenA, tokenB, amountIn, exactInTakerData);
+        (, uint256 amountOutWithOnlyFlatFee,) = swapVM.asView().quote(orderWithFlatFee, amountIn, exactInTakerData);
         assertGt(amountOutWithOnlyFlatFee, amountOut, "Amount out with only flat fee should be greater than amount out with both fees");
     }
 
@@ -306,7 +310,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountOut = 50e18;
         vm.prank(taker);
-        (uint256 amountInAfterBothFee, uint256 amountOutAfterBothFee,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactInTakerDataSwap);
+        (uint256 amountInAfterBothFee, uint256 amountOutAfterBothFee,) = swapVM.swap(order, amountOut, exactInTakerDataSwap);
 
         // FlatFee is applied on amountIn for exactOut swaps, ProtocolFee on amountOut
         uint256 expectedFlatFee = (amountInAfterBothFee * setup.flatInFeeBps) / BPS;
@@ -323,7 +327,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         // Check that amountIn with only flat fee is less than amountIn with both fees
         setup.protocolFeeBps = 0;
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
-        (uint256 amountInAfterFlatFee,,) = swapVM.asView().quote(orderWithFlatFee, tokenA, tokenB, amountOut, exactInTakerData);
+        (uint256 amountInAfterFlatFee,,) = swapVM.asView().quote(orderWithFlatFee, amountOut, exactInTakerData);
         assertLt(amountInAfterFlatFee, amountInAfterBothFee, "Only flat fee should result in lower amountIn than both fees");
     }
 
@@ -346,7 +350,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
 
         vm.prank(taker);
-        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Protocol fee is collected from tokenIn (tokenA)
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
@@ -378,7 +382,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountOut = 50e18;
         vm.prank(taker);
-        (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, exactOutTakerDataSwap);
+        (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, amountOut, exactOutTakerDataSwap);
 
         // For ExactOut with protocol fee on amountIn:
         // feeAmount = baseAmountIn * feeBps / (BPS - feeBps)
@@ -411,7 +415,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
         // Both fees applied to amountIn
         uint256 protocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);

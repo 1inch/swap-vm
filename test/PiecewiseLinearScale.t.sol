@@ -116,44 +116,44 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         // At the initial point the whole `makingAmount` sells for exactly `balanceIn`, and one wei less in buys strictly less
         vm.warp(timestamp);
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), balanceIn, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, balanceIn, takerDataExactIn);
         assertEq(amountOut, makingAmount);
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), balanceIn - 1, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, balanceIn - 1, takerDataExactIn);
         assertLt(amountOut, makingAmount);
 
         // At the initial point the whole `makingAmount` buys for exactly `balanceIn`, and one wei less out requires less or equal in
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
         assertEq(amountIn, balanceIn);
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount - 1, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount - 1, takerDataExactOut);
         assertLe(amountIn, balanceIn);
 
         // At the final point the whole `makingAmount` sells for exactly `takingAmount`, and one wei less in buys strictly less
         vm.warp(timestamp + _sum(durations, last));
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount, takerDataExactIn);
         assertEq(amountOut, makingAmount);
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount - 1, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount - 1, takerDataExactIn);
         assertLt(amountOut, makingAmount);
 
         // At the final point the whole `makingAmount` buys for exactly `takingAmount`, and one wei less out requires less or equal in
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
         assertEq(amountIn, takingAmount);
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount - 1, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount - 1, takerDataExactOut);
         assertLe(amountIn, takingAmount);
 
         for (uint256 k = 1; k < pointsCount; k++) {
             vm.warp(timestamp + _sum(durations, k - 1));
-            (uint256 amountInPast,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+            (uint256 amountInPast,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
 
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
-            (uint256 amountInNext,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+            (uint256 amountInNext,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
             assertEq(amountInNext, PiecewiseLinearScaleArgsBuilder.scaleValue(balanceIn, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
-            (uint256 amountInMidLeft,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+            (uint256 amountInMidLeft,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k) + 1) / 2);
-            (uint256 amountInMidRight,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+            (uint256 amountInMidRight,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
             assertApproxEqAbs((amountInMidLeft + amountInMidRight) / 2, (amountInPast + amountInNext) / 2, (balanceIn >> 24) + 1);
         }
     }
@@ -199,45 +199,45 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         // At the initial point the whole `takingAmount` sells for exactly `balanceOutInitial`, and one wei less in sells strictly less
         vm.warp(timestamp);
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount, takerDataExactIn);
         assertEq(amountOut, balanceOutInitial);
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount - 1, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount - 1, takerDataExactIn);
         assertLt(amountOut, balanceOutInitial);
 
         // At the initial point the whole `takingAmount` buys for exactly `balanceOutInitial`, and one wei less out requires less or equal in
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), balanceOutInitial, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, balanceOutInitial, takerDataExactOut);
         assertEq(amountIn, takingAmount);
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), balanceOutInitial - 1, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, balanceOutInitial - 1, takerDataExactOut);
         assertLe(amountIn, takingAmount);
 
         // At the final point the whole `takingAmount` sells for exactly `makingAmount`, and one wei less in sells strictly less
         vm.warp(timestamp + _sum(durations, last));
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount, takerDataExactIn);
         assertEq(amountOut, makingAmount);
 
-        (, amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount - 1, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount - 1, takerDataExactIn);
         assertLt(amountOut, makingAmount);
 
         // At the final point the whole `makingAmount` buys for exactly `takingAmount`, and one wei less out requires less or equal in
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
         assertEq(amountIn, takingAmount);
-        (amountIn,,) = swapVM.quote(order, address(tokenA), address(tokenB), makingAmount - 1, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount - 1, takerDataExactOut);
         assertLe(amountIn, takingAmount);
 
         for (uint256 k = 1; k < pointsCount; k++) {
             vm.warp(timestamp + _sum(durations, k - 1));
-            (, uint256 amountOutPast,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+            (, uint256 amountOutPast,) = swapVM.quote(order, takingAmount, takerDataExactIn);
 
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
-            (, uint256 amountOutNext,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+            (, uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
             assertEq(amountOutNext, PiecewiseLinearScaleArgsBuilder.scaleValue(makingAmount, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
-            (, uint256 amountOutMidLeft,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+            (, uint256 amountOutMidLeft,) = swapVM.quote(order, takingAmount, takerDataExactIn);
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k) + 1) / 2);
-            (, uint256 amountOutMidRight,) = swapVM.quote(order, address(tokenA), address(tokenB), takingAmount, takerDataExactIn);
+            (, uint256 amountOutMidRight,) = swapVM.quote(order, takingAmount, takerDataExactIn);
             assertApproxEqAbs((amountOutMidLeft + amountOutMidRight) / 2, (amountOutPast + amountOutNext) / 2, (makingAmount >> 24) + 1);
         }
     }
@@ -272,7 +272,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             for (uint256 i = 0; i <= length; ++i) {
                 vm.warp(i * 100);
                 uint256 gas = gasleft();
-                swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+                swapVM.quote(order, amountIn, takerDataExactIn);
                 uint256 temp = gas - gasleft();
                 usage += temp;
                 if (worst < temp) worst = temp;
@@ -304,114 +304,114 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_201_007);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 24_874_999);
         }
         {
             vm.warp(1050);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 53_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 18_750_000);
         }
         {
             vm.warp(1100);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
         {
             vm.warp(1101);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_150_285);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_476_562);
         }
         {
             vm.warp(1270);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 117_431_196);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 8_515_625);
         }
         {
             vm.warp(1300);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 128_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 7_812_500);
         }
         {
             vm.warp(1301);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 128_256_518);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 7_796_875);
         }
         {
             vm.warp(1350);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 142_222_222);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 7_031_250);
         }
         {
             vm.warp(1400);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
         {
             vm.warp(1425);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 284_444_444);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_515_625);
         }
         {
             vm.warp(1450);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 256_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_906_250);
         }
         {
             vm.warp(1500);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 213_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 4_687_500);
         }
         {
             vm.warp(1501);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 213_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 4_687_500);
         }
         {
             vm.warp(100_000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 213_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 4_687_500);
         }
     }
@@ -434,30 +434,30 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
     }
@@ -481,30 +481,30 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
     }
@@ -529,51 +529,51 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 53_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 18_750_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
         {
             vm.warp(1003);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 213_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 4_687_500);
         }
         {
             vm.warp(1004);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 320_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_125_000);
         }
         {
             vm.warp(1005);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 320_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_125_000);
         }
     }
@@ -599,51 +599,51 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 53_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 18_750_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
         {
             vm.warp(1003);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 213_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 4_687_500);
         }
         {
             vm.warp(1004);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 320_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_125_000);
         }
         {
             vm.warp(1005);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 320_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 3_125_000);
         }
     }
@@ -667,37 +667,37 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 106_666_666);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 9_375_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
         {
             vm.warp(1003);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
     }
@@ -721,44 +721,44 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         {
             vm.warp(999);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1000);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 40_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 25_000_000);
         }
         {
             vm.warp(1001);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 53_333_333);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 18_750_000);
         }
         {
             vm.warp(1002);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 80_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 12_500_000);
         }
         {
             vm.warp(1003);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
         {
             vm.warp(1003);
-            (, uint256 amountOutCalc,) = swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerDataExactIn);
+            (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
             assertEq(amountOutCalc, 160_000_000);
-            (uint256 amountInCalc,,) = swapVM.quote(order, address(tokenA), address(tokenB), amountOut, takerDataExactOut);
+            (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
             assertEq(amountInCalc, 6_250_000);
         }
     }
@@ -771,6 +771,8 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
     function _buildOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             receiver: address(0),
             shouldUnwrapWeth: false,
@@ -795,6 +797,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     function _buildTakerData(bool exactIn) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(this),
+            getTokenBForTokenA: true,
             isExactIn: exactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

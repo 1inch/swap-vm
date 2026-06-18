@@ -109,6 +109,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             receiver: address(0),
             shouldUnwrapWeth: false,
@@ -130,9 +132,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         }));
     }
 
-    function _makeTakerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
+    function _makeTakerData(bool getTokenBForTokenA, bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
         return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -166,17 +169,17 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bool isExactIn
     ) internal {
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(isExactIn, signature);
+        bytes memory takerData = _makeTakerData(true, isExactIn, signature);
 
         // Quote
         (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
-            order, tokenA, tokenB, amount, takerData
+            order, amount, takerData
         );
 
         // Swap
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(
-            order, tokenA, tokenB, amount, takerData
+            order, amount, takerData
         );
 
         assertEq(swappedIn, quotedIn, "Quote/Swap amountIn mismatch");
@@ -201,11 +204,11 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         // Quote and swap
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
 
         // Sanity checks
         assertEq(swappedIn, amountIn);
@@ -262,10 +265,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerData = _makeTakerData(true, signature);
+            bytes memory takerData = _makeTakerData(true, true, signature);
 
             vm.prank(taker);
-            (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, swapSize, takerData);
+            (, uint256 amountOut,) = swapVM.swap(order, swapSize, takerData);
 
             // Higher A should give better output (less slippage)
             if (i > 0) {
@@ -292,10 +295,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         // Verify invariant preservation
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         uint256 x1 = setup.balanceA + amountIn;
         uint256 y1 = setup.balanceB - amountOut;
@@ -343,10 +346,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
 
         // Sanity checks
         assertEq(swappedIn, amountIn);
@@ -370,10 +373,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 100e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
 
         // Sanity checks
         assertEq(swappedIn, amountIn);
@@ -401,14 +404,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         uint256 swapAmount = 10e18;
 
         // Swap abundant for scarce (A → B)
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
-            order, tokenA, tokenB, swapAmount, takerData
+            order, swapAmount, takerData
         );
 
         // Verify reasonable output bounds for abundant→scarce swap
@@ -434,14 +437,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(false, true, signature);
 
         uint256 swapAmount = 10e18;
 
         // Swap scarce for abundant (B → A)
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
-            order, tokenB, tokenA, swapAmount, takerData
+            order, swapAmount, takerData
         );
 
         // Verify reasonable output bounds for scarce→abundant swap
@@ -482,16 +485,16 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 5000e18;
 
         bytes memory signatureNoFee = _signOrder(orderNoFee);
-        bytes memory takerDataNoFee = _makeTakerData(true, signatureNoFee);
+        bytes memory takerDataNoFee = _makeTakerData(true, true, signatureNoFee);
 
         bytes memory signatureWithFee = _signOrder(orderWithFee);
-        bytes memory takerDataWithFee = _makeTakerData(true, signatureWithFee);
+        bytes memory takerDataWithFee = _makeTakerData(true, true, signatureWithFee);
 
         vm.prank(taker);
-        (, uint256 amountOutNoFee,) = swapVM.swap(orderNoFee, tokenA, tokenB, amountIn, takerDataNoFee);
+        (, uint256 amountOutNoFee,) = swapVM.swap(orderNoFee, amountIn, takerDataNoFee);
 
         vm.prank(taker);
-        (, uint256 amountOutWithFee,) = swapVM.swap(orderWithFee, tokenA, tokenB, amountIn, takerDataWithFee);
+        (, uint256 amountOutWithFee,) = swapVM.swap(orderWithFee, amountIn, takerDataWithFee);
 
         assertLt(amountOutWithFee, amountOutNoFee, "Fee should reduce output");
     }
@@ -515,10 +518,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1e15; // 0.001 tokens - small but meaningful
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
 
         // Verify swap executed
         assertEq(swappedIn, amountIn);
@@ -560,10 +563,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountOut = 1e15; // 0.001 tokens - small but meaningful
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, signature);
+        bytes memory takerData = _makeTakerData(true, false, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountOut, takerData);
 
         // Verify swap executed
         assertEq(swappedOut, amountOut);
@@ -607,10 +610,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, 10e18, takerData);
 
         assertEq(swappedIn, 10e18, "Should accept all input");
         assertGt(swappedOut, 0, "Should produce output from non-empty reserve");
@@ -630,11 +633,11 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
         vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
-        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+        swapVM.swap(order, 10e18, takerData);
     }
 
     function test_PeggedSwap_Revert_BothBalancesZero() public {
@@ -650,11 +653,11 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
         vm.expectRevert(PeggedSwap.PeggedSwapBothBalancesZero.selector);
-        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+        swapVM.swap(order, 10e18, takerData);
     }
 
     function test_PeggedSwap_Revert_ExcessiveAmountOut() public {
@@ -669,14 +672,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, signature);
+        bytes memory takerData = _makeTakerData(true, false, signature);
 
         // Try to swap out more than available
         uint256 excessiveAmount = setup.balanceB + 1;
 
         vm.prank(taker);
         vm.expectRevert();  // Arithmetic underflow in y1 = y0 - amountOut * rateOut
-        swapVM.swap(order, tokenA, tokenB, excessiveAmount, takerData);
+        swapVM.swap(order, excessiveAmount, takerData);
     }
 
     // ========================================
@@ -960,7 +963,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerDataExactIn = _makeTakerData(true, signature);
+            bytes memory takerDataExactIn = _makeTakerData(true, true, signature);
 
             // Track cumulative taker in/out to verify maker never loses
             uint256 takerTotalIn = 0;
@@ -982,7 +985,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             for (uint256 i = 0; i < drainAmounts.length; i++) {
                 vm.prank(taker);
                 (uint256 amIn, uint256 amOut,) = swapVM.swap(
-                    order, tokenA, tokenB, drainAmounts[i], takerDataExactIn
+                    order, drainAmounts[i], takerDataExactIn
                 );
                 takerTotalIn += amIn;
                 takerTotalOut += amOut;
@@ -1016,13 +1019,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 if (balB == 0) break; // Already fully depleted
 
                 try swapVM.asView().quote(
-                    order, tokenA, tokenB, edgeAmounts[i], takerDataExactIn
+                    order, edgeAmounts[i], takerDataExactIn
                 ) returns (uint256, uint256 qOut, bytes32) {
                     if (qOut == 0) continue; // Skip dust that produces zero output
 
                     vm.prank(taker);
                     (uint256 amIn, uint256 amOut,) = swapVM.swap(
-                        order, tokenA, tokenB, edgeAmounts[i], takerDataExactIn
+                        order, edgeAmounts[i], takerDataExactIn
                     );
                     takerTotalIn += amIn;
                     takerTotalOut += amOut;
@@ -1035,7 +1038,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             // Phase 3: Reverse direction B→A to refill the depleted reserve
             // After depletion, reverse swaps must work
-            bytes memory takerDataExactInReverse = _makeTakerData(true, signature);
+            bytes memory takerDataExactInReverse = _makeTakerData(false, true, signature);
             uint256[] memory refillAmounts = new uint256[](7);
             refillAmounts[0] = 1;         // 1 wei — extreme edge
             refillAmounts[1] = 100;
@@ -1047,13 +1050,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             for (uint256 i = 0; i < refillAmounts.length; i++) {
                 try swapVM.asView().quote(
-                    order, tokenB, tokenA, refillAmounts[i], takerDataExactInReverse
+                    order, refillAmounts[i], takerDataExactInReverse
                 ) returns (uint256, uint256 qOut, bytes32) {
                     if (qOut == 0) continue;
 
                     vm.prank(taker);
                     (uint256 amIn, uint256 amOut,) = swapVM.swap(
-                        order, tokenB, tokenA, refillAmounts[i], takerDataExactInReverse
+                        order, refillAmounts[i], takerDataExactInReverse
                     );
                     // For B→A swaps: taker puts B in, gets A out
                     // From the pool's perspective: balB increases, balA decreases
@@ -1082,12 +1085,12 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 // Small A→B
                 uint256 smallAmtAB = (round + 1) * 3 + 1; // 4, 7, 10, 13, 16 wei
                 try swapVM.asView().quote(
-                    order, tokenA, tokenB, smallAmtAB, takerDataExactIn
+                    order, smallAmtAB, takerDataExactIn
                 ) returns (uint256, uint256 qOut, bytes32) {
                     if (qOut > 0) {
                         vm.prank(taker);
                         (uint256 amIn, uint256 amOut,) = swapVM.swap(
-                            order, tokenA, tokenB, smallAmtAB, takerDataExactIn
+                            order, smallAmtAB, takerDataExactIn
                         );
                         balA += amIn;
                         balB -= amOut;
@@ -1097,12 +1100,12 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 // Small B→A
                 uint256 smallAmtBA = (round + 1) * 5 + 2; // 7, 12, 17, 22, 27 wei
                 try swapVM.asView().quote(
-                    order, tokenB, tokenA, smallAmtBA, takerDataExactInReverse
+                    order, smallAmtBA, takerDataExactInReverse
                 ) returns (uint256, uint256 qOut, bytes32) {
                     if (qOut > 0) {
                         vm.prank(taker);
                         (uint256 amIn, uint256 amOut,) = swapVM.swap(
-                            order, tokenB, tokenA, smallAmtBA, takerDataExactInReverse
+                            order, smallAmtBA, takerDataExactInReverse
                         );
                         balB += amIn;
                         balA -= amOut;

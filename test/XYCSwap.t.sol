@@ -97,6 +97,8 @@ contract XYCSwapTest is Test, OpcodesDebug {
         }
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -127,6 +129,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
 
         return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -163,7 +166,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
         uint256 expectedOut = (amountIn * poolB) / (poolA + amountIn);
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), amountIn, takerData);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         assertEq(amountOut, expectedOut, "Output should match x*y=k formula");
     }
@@ -181,7 +184,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
         uint256 expectedOut = (amountInAfterFee * poolB) / (poolA + amountInAfterFee);
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), amountIn, takerData);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         assertEq(amountOut, expectedOut, "Output should account for fee");
     }
@@ -195,11 +198,11 @@ contract XYCSwapTest is Test, OpcodesDebug {
 
         // First swap
         vm.prank(taker);
-        (, uint256 amountOut1,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+        (, uint256 amountOut1,) = swapVM.swap(order, 10e18, takerData);
 
         // Second swap (state has changed)
         vm.prank(taker);
-        (, uint256 amountOut2,) = swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+        (, uint256 amountOut2,) = swapVM.swap(order, 10e18, takerData);
 
         assertLt(amountOut2, amountOut1, "Second swap should get worse rate");
     }
@@ -269,12 +272,51 @@ contract XYCSwapTest is Test, OpcodesDebug {
         SwapVM _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
-        address tokenOut,
+        address /* tokenOut */,
         uint256 amount,
-        bytes memory takerData
+        bytes memory /* takerData */
     ) internal returns (uint256 amountOut) {
+        // Rebuild taker data with the correct direction for this leg.
+        // Order tokenA=tokenA, tokenB=tokenB → getTokenBForTokenA = (tokenIn == tokenA).
+        bytes memory directionalData = _signAndPackDirectional(order, true, 0, tokenIn == address(tokenA));
         vm.prank(taker);
-        (, amountOut,) = _swapVM.swap(order, tokenIn, tokenOut, amount, takerData);
+        (, amountOut,) = _swapVM.swap(order, amount, directionalData);
+    }
+
+    function _signAndPackDirectional(
+        ISwapVM.Order memory order,
+        bool isExactIn,
+        uint256 threshold,
+        bool getTokenBForTokenA
+    ) internal view returns (bytes memory) {
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
+
+        return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: address(0),
+            getTokenBForTokenA: getTokenBForTokenA,
+            isExactIn: isExactIn,
+            shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            threshold: thresholdData,
+            to: taker,
+            deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: signature
+        })));
     }
 }
 

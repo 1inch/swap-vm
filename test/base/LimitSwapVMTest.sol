@@ -107,9 +107,10 @@ contract LimitSwapVMTest is LimitStrategyBuilders {
         tokenOut.mint(maker, amountOut);
     }
 
-    function takerData(address takerAddress, bool isExactIn) internal pure returns (bytes memory) {
+    function takerData(address takerAddress, bool isExactIn, bool getTokenBForTokenA) internal pure returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddress,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
@@ -145,21 +146,19 @@ contract LimitSwapVMTest is LimitStrategyBuilders {
         SwapProgram memory swapProgram,
         ISwapVM.Order memory order
     ) public returns (uint256, uint256) {
-        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn));
-        (address tokenIn, address tokenOut) = getTokenAddresses(swapProgram);
+        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn, swapProgram.zeroForOne));
 
-        return swapProgram.taker.swap(order, tokenIn, tokenOut, swapProgram.amount, sigAndTakerData);
+        return swapProgram.taker.swap(order, swapProgram.amount, sigAndTakerData);
     }
 
     function quote(
         SwapProgram memory swapProgram,
         ISwapVM.Order memory order
     ) public view returns (uint256, uint256) {
-        (address tokenIn, address tokenOut) = getTokenAddresses(swapProgram);
-        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn));
+        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn, swapProgram.zeroForOne));
 
         (uint256 amountIn, uint256 amountOut,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, swapProgram.amount, sigAndTakerData
+            order, swapProgram.amount, sigAndTakerData
         );
 
         return (amountIn, amountOut);

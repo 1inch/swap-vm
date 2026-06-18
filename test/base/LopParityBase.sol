@@ -383,6 +383,10 @@ abstract contract LopParityBase is Test, LimitOpcodesDebug {
     ///         maker payload bytes are handed to the hook as LOP hands to its interaction.
     function _vmOrder(OrderSpec memory spec) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            // tokenA == takerAsset == tokenIn, tokenB == makerAsset == tokenOut (see header docs);
+            // a test may repoint takerAssetToken at WETH, so derive both from the repointable vars.
+            tokenA: takerAssetToken,
+            tokenB: makerAssetToken,
             maker: maker,
             // Maker receives tokenIn as ETH when set & tokenIn is WETH — the signature-path equivalent
             // of LOP's makerTraits.unwrapWeth() (see SwapVM._transferFrom; incompatible with Aqua).
@@ -414,6 +418,7 @@ abstract contract LopParityBase is Test, LimitOpcodesDebug {
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true, // takerAsset == tokenA == tokenIn
             isExactIn: !fs.byMakingAmount, // VM exactIn <=> LOP fills by taking amount
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -470,7 +475,7 @@ abstract contract LopParityBase is Test, LimitOpcodesDebug {
         bytes memory takerData = _vmTakerData(order, fs);
         // Measure only the swap call itself (the "end call"), not order building/signing above.
         uint256 g = gasleft();
-        try swapVM.swap(order, takerAssetToken, makerAssetToken, fs.amount, takerData)
+        try swapVM.swap(order, fs.amount, takerData)
             returns (uint256 amountIn, uint256 amountOut, bytes32)
         {
             uint256 used = g - gasleft();

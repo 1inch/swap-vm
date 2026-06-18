@@ -378,6 +378,8 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -412,6 +414,7 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -442,8 +445,6 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     ) private view returns (uint256 amountIn, uint256 amountOut) {
         (amountIn, amountOut,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             amount,
             takerData
         );
@@ -456,8 +457,6 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     ) private {
         (,uint256 amountOut,) = swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             amount,
             takerData
         );

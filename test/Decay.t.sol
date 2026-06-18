@@ -100,6 +100,8 @@ contract DecayTest is Test, OpcodesDebug {
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -131,12 +133,12 @@ contract DecayTest is Test, OpcodesDebug {
         address trader,
         ISwapVM.Order memory order,
         bytes memory signature,
-        address tokenIn,
-        address tokenOut,
+        bool getTokenBForTokenA,
         uint256 amountIn
     ) internal returns (uint256 actualAmountIn, uint256 actualAmountOut) {
         bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: trader,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -160,8 +162,6 @@ contract DecayTest is Test, OpcodesDebug {
         vm.prank(trader);
         (actualAmountIn, actualAmountOut,) = swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amountIn,
             takerData
         );
@@ -178,8 +178,7 @@ contract DecayTest is Test, OpcodesDebug {
             trader1,
             order,
             signature,
-            address(tokenA),
-            address(tokenB),
+            true,
             STANDARD_SWAP
         );
 
@@ -198,8 +197,7 @@ contract DecayTest is Test, OpcodesDebug {
             trader2,
             order,
             signature,
-            address(tokenA),
-            address(tokenB),
+            true,
             50e18 // smaller swap
         );
 
@@ -212,15 +210,14 @@ contract DecayTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order2, bytes memory signature2) = createDecayOrder();
 
         // First swap A->B
-        executeSwap(trader1, order2, signature2, address(tokenA), address(tokenB), STANDARD_SWAP);
+        executeSwap(trader1, order2, signature2, true, STANDARD_SWAP);
 
         // Opposite direction B->A
         (, uint256 outOpp) = executeSwap(
             trader2,
             order2,
             signature2,
-            address(tokenB),
-            address(tokenA),
+            false,
             50e18
         );
 
@@ -241,20 +238,19 @@ contract DecayTest is Test, OpcodesDebug {
 
         // Test 1: Immediate penalty
         (ISwapVM.Order memory order1, bytes memory signature1) = createDecayOrder();
-        executeSwap(trader1, order1, signature1, address(tokenA), address(tokenB), STANDARD_SWAP);
+        executeSwap(trader1, order1, signature1, true, STANDARD_SWAP);
         (uint256 inImmediate, uint256 outImmediate) = executeSwap(
             trader2,
             order1,
             signature1,
-            address(tokenB),
-            address(tokenA),
+            false,
             50e18
         );
         uint256 rateImmediate = (outImmediate * 1e18) / inImmediate;
 
         // Test 2: Half decay (150 seconds)
         (ISwapVM.Order memory order2, bytes memory signature2) = createDecayOrder();
-        executeSwap(trader1, order2, signature2, address(tokenA), address(tokenB), STANDARD_SWAP);
+        executeSwap(trader1, order2, signature2, true, STANDARD_SWAP);
 
         vm.warp(block.timestamp + DECAY_PERIOD / 2);
 
@@ -262,15 +258,14 @@ contract DecayTest is Test, OpcodesDebug {
             trader2,
             order2,
             signature2,
-            address(tokenB),
-            address(tokenA),
+            false,
             50e18
         );
         uint256 rateHalf = (outHalf * 1e18) / inHalf;
 
         // Test 3: Full decay (301 seconds)
         (ISwapVM.Order memory order3, bytes memory signature3) = createDecayOrder();
-        executeSwap(trader1, order3, signature3, address(tokenA), address(tokenB), STANDARD_SWAP);
+        executeSwap(trader1, order3, signature3, true, STANDARD_SWAP);
 
         vm.warp(block.timestamp + DECAY_PERIOD + 1);
 
@@ -278,8 +273,7 @@ contract DecayTest is Test, OpcodesDebug {
             trader2,
             order3,
             signature3,
-            address(tokenB),
-            address(tokenA),
+            false,
             50e18
         );
         uint256 rateFull = (outFull * 1e18) / inFull;
@@ -304,8 +298,7 @@ contract DecayTest is Test, OpcodesDebug {
             mevBot,
             order,
             signature,
-            address(tokenA),
-            address(tokenB),
+            true,
             200e18 // Large front-run
         );
 
@@ -314,8 +307,7 @@ contract DecayTest is Test, OpcodesDebug {
             trader1,
             order,
             signature,
-            address(tokenA),
-            address(tokenB),
+            true,
             50e18
         );
 
@@ -330,8 +322,7 @@ contract DecayTest is Test, OpcodesDebug {
             mevBot,
             order,
             signature,
-            address(tokenB),
-            address(tokenA),
+            false,
             mevOut1 // Try to swap back all B
         );
 

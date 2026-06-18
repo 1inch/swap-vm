@@ -75,6 +75,8 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -107,9 +109,10 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         sig = abi.encodePacked(r, s, v);
     }
 
-    function _td(bytes memory sig, bool isExactIn) internal view returns (bytes memory) {
+    function _td(bytes memory sig, bool isExactIn, bool getTokenBForTokenA) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -134,15 +137,16 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     /// @notice Helper: run N swap rounds (Lt→Gt and Gt→Lt alternating)
     function _runRoundTrips(
         ISwapVM.Order memory order,
-        bytes memory td,
+        bytes memory tdLtToGt,
+        bytes memory tdGtToLt,
         uint256 swapSizeLt,
         uint256 swapSizeGt,
         uint256 rounds
     ) internal {
         vm.startPrank(taker);
         for (uint256 i = 0; i < rounds; i++) {
-            swapVM.swap(order, tokenLt, tokenGt, swapSizeLt, td);
-            swapVM.swap(order, tokenGt, tokenLt, swapSizeGt, td);
+            swapVM.swap(order, swapSizeLt, tdLtToGt);
+            swapVM.swap(order, swapSizeGt, tdGtToLt);
         }
         vm.stopPrank();
     }
@@ -160,7 +164,9 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
         bytes32 h = swapVM.hash(order);
-        bytes memory td = _td(sig, true);
+        // Lt -> Gt => getTokenBForTokenA = true ; Gt -> Lt => getTokenBForTokenA = false
+        bytes memory td = _td(sig, true, true);
+        bytes memory tdGtToLt = _td(sig, true, false);
 
         // Value-balanced swap sizes at spot price
         uint256 pSpot = sqrtPspot * sqrtPspot / ONE;
@@ -181,7 +187,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 sumSmall = 0;
         vm.startPrank(taker);
         for (uint256 i = 0; i < 100; i++) {
-            (, uint256 out,) = swapVM.swap(order, tokenLt, tokenGt, atomicLt, td);
+            (, uint256 out,) = swapVM.swap(order, atomicLt, td);
             sumSmall += out;
         }
         vm.stopPrank();
@@ -190,7 +196,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         // 1 big swap (reset state first)
 
         vm.prank(taker);
-        (, uint256 oneBig,) = swapVM.swap(order, tokenLt, tokenGt, atomicLt * 100, td);
+        (, uint256 oneBig,) = swapVM.swap(order, atomicLt * 100, td);
 
         // Taker should NOT benefit from splitting
         assertLe(sumSmall, oneBig + 100, string.concat(label, ": accumulation exploit detected"));
@@ -199,7 +205,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 takerLtBefore = TokenMock(tokenLt).balanceOf(taker);
         uint256 takerGtBefore = TokenMock(tokenGt).balanceOf(taker);
 
-        _runRoundTrips(order, td, swapSizeLt, swapSizeGt, 50);
+        _runRoundTrips(order, td, tdGtToLt, swapSizeLt, swapSizeGt, 50);
 
         uint256 takerLtAfter = TokenMock(tokenLt).balanceOf(taker);
         uint256 takerGtAfter = TokenMock(tokenGt).balanceOf(taker);

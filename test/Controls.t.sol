@@ -118,10 +118,10 @@ contract ControlsTest is Test, OpcodesDebug {
         vm.warp(deadline + 1);
 
         // Should fail after deadline
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(DeadlineReached.selector, taker, deadline));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     /**
@@ -143,7 +143,7 @@ contract ControlsTest is Test, OpcodesDebug {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
 
         // Should fail without tokenC
         tokenA.mint(taker, 1e18);
@@ -152,7 +152,7 @@ contract ControlsTest is Test, OpcodesDebug {
             taker,
             address(tokenC)
         ));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
 
         // Give taker 1 wei of tokenC
         tokenC.mint(taker, 1);
@@ -182,7 +182,7 @@ contract ControlsTest is Test, OpcodesDebug {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
 
         // Should fail with insufficient balance
         tokenC.mint(taker, 999e18);
@@ -194,7 +194,7 @@ contract ControlsTest is Test, OpcodesDebug {
             999e18,
             minBalance
         ));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
 
         // Add 1e18 more to reach minimum
         tokenC.mint(taker, 1e18);
@@ -224,7 +224,7 @@ contract ControlsTest is Test, OpcodesDebug {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
 
         // Maker has 10000e18, taker needs 10% of total
         tokenC.mint(taker, 1000e18); // 9.09% of 11000e18
@@ -239,7 +239,7 @@ contract ControlsTest is Test, OpcodesDebug {
             tokenC.totalSupply(),
             minShareE18
         ));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
 
         // Increase share to > 10%
         tokenC.mint(taker, 200e18); // Now 10.9% of 11200e18
@@ -458,7 +458,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         uint256 amount = 1e18;
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         TokenMock(address(tokenA)).mint(taker, amount);
 
         vm.expectRevert(
@@ -466,8 +466,6 @@ contract ControlsTest is Test, OpcodesDebug {
         );
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             amount,
             takerData
         );
@@ -515,7 +513,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         uint256 amount = 1e18;
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         TokenMock(address(tokenA)).mint(taker, amount);
 
         // it may revert with different errors depending on where it jumps or
@@ -525,8 +523,6 @@ contract ControlsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             amount,
             takerData
         );
@@ -615,13 +611,12 @@ contract ControlsTest is Test, OpcodesDebug {
         address tokenOut,
         uint256 amount
     ) private returns (uint256) {
-        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+        bool getTokenBForTokenA = tokenIn == address(tokenA);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, getTokenBForTokenA);
         TokenMock(tokenIn).mint(taker, amount);
 
         (uint256 actualIn, uint256 actualOut,) = swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -632,6 +627,8 @@ contract ControlsTest is Test, OpcodesDebug {
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -656,7 +653,8 @@ contract ControlsTest is Test, OpcodesDebug {
     function _signAndPackTakerData(
         ISwapVM.Order memory order,
         bool isExactIn,
-        uint256 threshold
+        uint256 threshold,
+        bool getTokenBForTokenA
     ) private view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
@@ -666,6 +664,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

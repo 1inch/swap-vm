@@ -110,6 +110,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -144,6 +146,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -173,7 +177,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
 
     function _tdIn(bytes memory sig) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
-            taker: taker, isExactIn: true, shouldUnwrapWeth: false,
+            taker: taker, getTokenBForTokenA: true, isExactIn: true, shouldUnwrapWeth: false,
             isStrictThresholdAmount: false, isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false, threshold: "", to: address(0),
             deadline: 0, hasPreTransferInCallback: false, hasPreTransferOutCallback: false,
@@ -190,7 +194,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 amountIn
     ) internal view returns (uint256 amountOut) {
         // Re-extract sig from order for _tdIn — use asView which is stateless
-        (, amountOut,) = swapVM.asView().quote(order, tokenLt, tokenGt, amountIn, _tdIn(""));
+        (, amountOut,) = swapVM.asView().quote(order, amountIn, _tdIn(""));
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -210,8 +214,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         (ISwapVM.Order memory xycOrder,)  = _xycSwapOrder(capital, capital);
         (ISwapVM.Order memory concOrder,) = _concentrateOrder(capital, capital, SQRT_P_MIN, SQRT_P_MAX);
 
-        (, uint256 xycOut,)  = swapVM.asView().quote(xycOrder,  tokenLt, tokenGt, swapIn, _tdIn(""));
-        (, uint256 concOut,) = swapVM.asView().quote(concOrder, tokenLt, tokenGt, swapIn, _tdIn(""));
+        (, uint256 xycOut,)  = swapVM.asView().quote(xycOrder,  swapIn, _tdIn(""));
+        (, uint256 concOut,) = swapVM.asView().quote(concOrder, swapIn, _tdIn(""));
 
         assertGt(concOut, xycOut,
             "Concentrate must give more output than XYCSwap for same capital");
@@ -242,8 +246,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         (ISwapVM.Order memory xycOrder,)      = _xycSwapOrder(capital, capital);
         (ISwapVM.Order memory concHalfOrder,) = _concentrateOrder(halfCapital, halfCapital, SQRT_P_MIN, SQRT_P_MAX);
 
-        (, uint256 xycOut,)      = swapVM.asView().quote(xycOrder,      tokenLt, tokenGt, swapIn, _tdIn(""));
-        (, uint256 concHalfOut,) = swapVM.asView().quote(concHalfOrder, tokenLt, tokenGt, swapIn, _tdIn(""));
+        (, uint256 xycOut,)      = swapVM.asView().quote(xycOrder,      swapIn, _tdIn(""));
+        (, uint256 concHalfOut,) = swapVM.asView().quote(concHalfOrder, swapIn, _tdIn(""));
 
         // With R=2 and half capital: L = (K/2) / (1-0.5) = K. virtualLt = K = xycSwap.
         // Outputs must be within 1 unit (integer rounding).
@@ -266,8 +270,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         (ISwapVM.Order memory xycOrder,)  = _xycSwapOrder(capital, capital);
         (ISwapVM.Order memory concOrder,) = _concentrateOrder(capital, capital, SQRT_P_MIN, SQRT_P_MAX);
 
-        (, uint256 xycOut,)  = swapVM.asView().quote(xycOrder,  tokenLt, tokenGt, swapIn, _tdIn(""));
-        (, uint256 concOut,) = swapVM.asView().quote(concOrder, tokenLt, tokenGt, swapIn, _tdIn(""));
+        (, uint256 xycOut,)  = swapVM.asView().quote(xycOrder,  swapIn, _tdIn(""));
+        (, uint256 concOut,) = swapVM.asView().quote(concOrder, swapIn, _tdIn(""));
 
         // Slippage = 1 - amountOut/idealOut  (idealOut = amountIn at P=1, i.e. swapIn itself)
         // xycSlippage  = 1 - xycOut/swapIn
@@ -308,8 +312,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         (ISwapVM.Order memory wideOrder,)   = _concentrateOrder(capital, capital, SQRT_P_MIN,        SQRT_P_MAX);
         (ISwapVM.Order memory narrowOrder,) = _concentrateOrder(capital, capital, SQRT_P_MIN_NARROW, SQRT_P_MAX_NARROW);
 
-        (, uint256 wideOut,)   = swapVM.asView().quote(wideOrder,   tokenLt, tokenGt, swapIn, _tdIn(""));
-        (, uint256 narrowOut,) = swapVM.asView().quote(narrowOrder, tokenLt, tokenGt, swapIn, _tdIn(""));
+        (, uint256 wideOut,)   = swapVM.asView().quote(wideOrder,   swapIn, _tdIn(""));
+        (, uint256 narrowOut,) = swapVM.asView().quote(narrowOrder, swapIn, _tdIn(""));
 
         assertGt(narrowOut, wideOut,
             "Narrower range (R=10) must give more output than wider range (R=2) for same capital");

@@ -82,6 +82,8 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             : bytes("");
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: tokenUSD,
+            tokenB: tokenETH,
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -116,9 +118,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         signature = abi.encodePacked(r, s, v);
     }
 
-    function _takerData(bool isExactIn, bytes memory sig) internal view returns (bytes memory) {
+    function _takerData(bool isExactIn, bytes memory sig, bool getTokenBForTokenA) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
@@ -167,7 +170,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
 
         // Initialization
         vm.prank(taker);
-        swapVM.swap(mainOrder, tokenETH, tokenUSD, 1e18, _takerData(false, mainSig));
+        swapVM.swap(mainOrder, 1e18, _takerData(false, mainSig, false));
 
         uint256 swapAmountUSD = 1000e18;
         uint256 roundsToTest = 1000;
@@ -185,9 +188,9 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             bytes32 snap1Hash = swapVM.hash(snapshot1);
 
             vm.prank(taker);
-            swapVM.swap(mainOrder, tokenETH, tokenUSD, swapAmountUSD, _takerData(false, mainSig));
+            swapVM.swap(mainOrder, swapAmountUSD, _takerData(false, mainSig, false));
             vm.prank(taker);
-            swapVM.swap(snapshot1, tokenETH, tokenUSD, swapAmountUSD, _takerData(false, snap1Sig));
+            swapVM.swap(snapshot1, swapAmountUSD, _takerData(false, snap1Sig, false));
 
             uint256 mainUSD_after1 = swapVM.balances(mainHash, tokenUSD);
             uint256 mainETH_after1 = swapVM.balances(mainHash, tokenETH);
@@ -205,7 +208,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
 
             vm.prank(taker);
             (, uint256 ethReceived_main,) = swapVM.swap(
-                mainOrder, tokenUSD, tokenETH, swapAmountUSD, _takerData(true, mainSig)
+                mainOrder, swapAmountUSD, _takerData(true, mainSig, true)
             );
 
             uint256 flatFeeAmount = swapAmountUSD * FLAT_FEE_BPS / BPS;
@@ -213,7 +216,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
 
             vm.prank(taker);
             (, uint256 ethReceived_snap,) = swapVM.swap(
-                snapshot2, tokenUSD, tokenETH, amountInAfterFee, _takerData(true, snap2Sig)
+                snapshot2, amountInAfterFee, _takerData(true, snap2Sig, true)
             );
 
             assertApproxEqAbs(ethReceived_main, ethReceived_snap, 1e10, "AmountOut mismatch");
@@ -278,7 +281,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         bytes32 mainHash = swapVM.hash(mainOrder);
 
         vm.prank(taker);
-        swapVM.swap(mainOrder, tokenETH, tokenUSD, 1e18, _takerData(false, mainSig));
+        swapVM.swap(mainOrder, 1e18, _takerData(false, mainSig, false));
 
         uint256 swapAmountETH = 0.3e18;
         uint256 roundsToTest = 10;
@@ -296,9 +299,9 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             bytes32 snap1Hash = swapVM.hash(snapshot1);
 
             vm.prank(taker);
-            swapVM.swap(mainOrder, tokenUSD, tokenETH, swapAmountETH, _takerData(false, mainSig));
+            swapVM.swap(mainOrder, swapAmountETH, _takerData(false, mainSig, true));
             vm.prank(taker);
-            swapVM.swap(snapshot1, tokenUSD, tokenETH, swapAmountETH, _takerData(false, snap1Sig));
+            swapVM.swap(snapshot1, swapAmountETH, _takerData(false, snap1Sig, true));
 
             uint256 mainUSD_after1 = swapVM.balances(mainHash, tokenUSD);
             uint256 mainETH_after1 = swapVM.balances(mainHash, tokenETH);
@@ -315,12 +318,12 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             bytes32 snap2Hash = swapVM.hash(snapshot2);
 
             vm.prank(taker);
-            swapVM.swap(mainOrder, tokenETH, tokenUSD, swapAmountETH, _takerData(true, mainSig));
+            swapVM.swap(mainOrder, swapAmountETH, _takerData(true, mainSig, false));
 
             uint256 flatFeeAmount = swapAmountETH * FLAT_FEE_BPS / BPS;
             uint256 amountInAfterFee = swapAmountETH - flatFeeAmount;
             vm.prank(taker);
-            swapVM.swap(snapshot2, tokenETH, tokenUSD, amountInAfterFee, _takerData(true, snap2Sig));
+            swapVM.swap(snapshot2, amountInAfterFee, _takerData(true, snap2Sig, false));
 
             uint256 mainUSD_after2 = swapVM.balances(mainHash, tokenUSD);
             uint256 mainETH_after2 = swapVM.balances(mainHash, tokenETH);

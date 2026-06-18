@@ -48,6 +48,8 @@ contract DirectSwapVMHelper is OpcodesDebug {
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,

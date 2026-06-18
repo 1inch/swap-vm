@@ -81,8 +81,6 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -128,14 +126,14 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         smallOddAmounts[4] = 99;     // 99 wei
         smallOddAmounts[5] = 1337;   // 1337 wei
 
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
+        bytes memory exactInData = _signAndPackTakerData(order, true, true, 0);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, true, type(uint256).max);
 
         // Test small odd amounts for exactIn
         for (uint256 i = 0; i < smallOddAmounts.length; i++) {
             // Try to quote, it might revert for amounts that produce 0 output
             try swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactInData
+                order, smallOddAmounts[i], exactInData
             ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
                 // Log the results for debugging if needed
                 // ExactIn odd amount: smallOddAmounts[i] -> out: quotedOut
@@ -164,7 +162,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
             // Try to quote, might revert for amounts that are impossible to achieve
             try swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactOutData
+                order, smallOddAmounts[i], exactOutData
             ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
                 // Log the results for debugging if needed
                 // ExactOut odd amount: smallOddAmounts[i] -> in: quotedIn
@@ -220,14 +218,14 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         largeOddAmounts[3] = 5555555555555555555;         // ~5.55 ETH odd
         largeOddAmounts[4] = 99999999999999999999;        // ~100 ETH minus 1 wei
 
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
+        bytes memory exactInData = _signAndPackTakerData(order, true, true, 0);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, true, type(uint256).max);
 
         // Test large odd amounts
         for (uint256 i = 0; i < largeOddAmounts.length; i++) {
             // Test exactIn
             (, uint256 outQuoted,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), largeOddAmounts[i], exactInData
+                order, largeOddAmounts[i], exactInData
             );
 
             // Log the results for debugging if needed
@@ -240,7 +238,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             // Test exactOut with the same amount
             if (largeOddAmounts[i] <= balanceB) {
                 (uint256 inRequired, uint256 outGiven,) = swapVM.asView().quote(
-                    order, address(tokenA), address(tokenB), largeOddAmounts[i], exactOutData
+                    order, largeOddAmounts[i], exactOutData
                 );
 
                 // Log the results for debugging if needed
@@ -281,7 +279,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        bytes memory exactInData = _signAndPackTakerData(order, true, true, 0);
 
         // Test that rounding is consistent: X+1 should give at least as much as X
         uint256 baseAmount = 1000000000000000; // 0.001 ETH
@@ -291,10 +289,10 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             uint256 amountPlusOne = amount + 1;
 
             (,uint256 out1,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), amount, exactInData
+                order, amount, exactInData
             );
             (,uint256 out2,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), amountPlusOne, exactInData
+                order, amountPlusOne, exactInData
             );
 
             // More input should give at least as much output (monotonicity with rounding)
@@ -344,8 +342,8 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         testAmounts[2] = 1000e18;   // 10% of pool
 
         InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15); // Higher tolerance for PeggedSwap
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        config.exactInTakerData = _signAndPackTakerData(order, true, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, true, type(uint256).max);
         assertAllInvariantsWithConfig(
             swapVM,
             order,
@@ -400,8 +398,8 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         // Create config for reverse direction test
         InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15);
         config.testAmountsExactOut = testAmountsExactOut;
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        config.exactInTakerData = _signAndPackTakerData(order, true, address(tokenA) < address(tokenB), 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, address(tokenA) < address(tokenB), type(uint256).max);
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -457,8 +455,8 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         // Create config for reverse direction test
         InvariantConfig memory config = createInvariantConfig(testAmounts, 1e15);
         config.testAmountsExactOut = testAmountsExactOut;
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        config.exactInTakerData = _signAndPackTakerData(order, true, address(tokenA) < address(tokenB), 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, address(tokenA) < address(tokenB), type(uint256).max);
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -472,6 +470,8 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -496,6 +496,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     function _signAndPackTakerData(
         ISwapVM.Order memory order,
         bool isExactIn,
+        bool getTokenBForTokenA,
         uint256 threshold
     ) private view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
@@ -506,6 +507,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: getTokenBForTokenA,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

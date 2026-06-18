@@ -91,6 +91,7 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         // Create custom taker data with isFirstTransferFromTaker = true
         bytes memory customTakerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(swapProgram.taker),
+            getTokenBForTokenA: swapProgram.zeroForOne,
             isExactIn: swapProgram.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
@@ -112,13 +113,10 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         }));
 
         bytes memory sigAndTakerData = abi.encodePacked(customTakerData);
-        (address tokenIn, address tokenOut) = getTokenAddresses(swapProgram);
 
         // Perform swap with custom taker data
         (uint256 amountIn, uint256 amountOut) = swapProgram.taker.swap(
             order,
-            tokenIn,
-            tokenOut,
             swapProgram.amount,
             sigAndTakerData
         );

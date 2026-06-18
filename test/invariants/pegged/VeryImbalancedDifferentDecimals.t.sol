@@ -145,6 +145,8 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Create order (using maker and swapVM from parent setup)
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -170,8 +172,25 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+        // Test both directions with small swap amounts
+        uint256 swapAmount = 1e18;  // 1 token (18 decimals)
+
+        // Forward swap: abundant -> scarce
+        address tokenInForward = address(tokenA) < address(tokenB) ? address(tokenA) : address(tokenB);
+        address tokenOutForward = address(tokenA) < address(tokenB) ? address(tokenB) : address(tokenA);
+
+        if (balanceTokenA < balanceTokenB) {
+            // Swap: tokenA is scarce, so test tokenB (abundant) -> tokenA (scarce)
+            tokenInForward = address(tokenB);
+            tokenOutForward = address(tokenA);
+        }
+
+        // Direction flag: true when the swap input token is the order's tokenA
+        bool forwardBToA = tokenInForward == address(tokenA);
+
+        bytes memory exactInData = abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: forwardBToA,
             isExactIn: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
@@ -190,25 +209,34 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
             preTransferOutCallbackData: "",
             instructionsArgs: "",
             signature: signature
-        }));
+        })));
 
-        bytes memory exactInData = abi.encodePacked(takerTraits);
-
-        // Test both directions with small swap amounts
-        uint256 swapAmount = 1e18;  // 1 token (18 decimals)
-
-        // Forward swap: abundant -> scarce
-        address tokenInForward = address(tokenA) < address(tokenB) ? address(tokenA) : address(tokenB);
-        address tokenOutForward = address(tokenA) < address(tokenB) ? address(tokenB) : address(tokenA);
-
-        if (balanceTokenA < balanceTokenB) {
-            // Swap: tokenA is scarce, so test tokenB (abundant) -> tokenA (scarce)
-            tokenInForward = address(tokenB);
-            tokenOutForward = address(tokenA);
-        }
+        // Reverse direction reuses the same order but flips tokenIn/tokenOut
+        bytes memory exactInDataReverse = abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: address(0),
+            getTokenBForTokenA: !forwardBToA,
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            threshold: bytes(""),
+            to: address(this),
+            deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: signature
+        })));
 
         try swapVM.asView().quote(
-            order, tokenInForward, tokenOutForward, swapAmount, exactInData
+            order, swapAmount, exactInData
         ) returns (uint256, uint256 outForward, bytes32) {
             // The output should be reasonable - not wildly inflated
             // Before the fix, reverse swap in asymmetric pool would give absurd amounts
@@ -248,7 +276,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Test reverse direction as well
         try swapVM.asView().quote(
-            order, tokenOutForward, tokenInForward, swapAmount, exactInData
+            order, swapAmount, exactInDataReverse
         ) returns (uint256, uint256 outReverse, bytes32) {
             assertGt(outReverse, 0, "Reverse output should be non-zero");
 

@@ -79,8 +79,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -128,8 +126,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -216,8 +212,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -249,42 +243,36 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         exactOutData = _signAndPackTakerData(order, false, 40e18);
         (uint256 amountIn1,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             8e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn1);
-        swapVM.swap(order, address(tokenA), address(tokenB), 8e18, exactOutData);
+        swapVM.swap(order, 8e18, exactOutData);
 
         // Second fill - want 7 tokenB out
         exactOutData = _signAndPackTakerData(order, false, 35e18);
         (uint256 amountIn2,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             7e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn2);
-        swapVM.swap(order, address(tokenA), address(tokenB), 7e18, exactOutData);
+        swapVM.swap(order, 7e18, exactOutData);
 
         // Third fill - want 5 tokenB out (total 20)
         exactOutData = _signAndPackTakerData(order, false, 25e18);
         (uint256 amountIn3,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             5e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn3);
-        swapVM.swap(order, address(tokenA), address(tokenB), 5e18, exactOutData);
+        swapVM.swap(order, 5e18, exactOutData);
 
         // Fourth fill should fail - would exceed output balance
         exactOutData = _signAndPackTakerData(order, false, 1e18);
         vm.expectRevert();
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactOutData);
+        swapVM.swap(order, 1e18, exactOutData);
     }
 
     /**
@@ -319,8 +307,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -360,7 +346,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             // Should fail second time
             TokenMock(address(tokenA)).mint(taker, 1e18);
             vm.expectRevert();
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
     }
 
@@ -398,8 +384,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -429,8 +413,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order2,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData2
         );
@@ -469,7 +451,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             // Should fail - bit already invalidated
             TokenMock(address(tokenA)).mint(taker, 1e18);
             vm.expectRevert();
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
         {
             // Create order using bitToInvalidate2
@@ -486,7 +468,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             // Should fail - bit already invalidated
             TokenMock(address(tokenA)).mint(taker, 1e18);
             vm.expectRevert();
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
         {
             // Create order using bitToInvalidate3
@@ -503,7 +485,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             // Should fail - bit already invalidated
             TokenMock(address(tokenA)).mint(taker, 1e18);
             vm.expectRevert();
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
 
         {
@@ -520,7 +502,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
             // Should succeed - bit not invalidated
             TokenMock(address(tokenA)).mint(taker, 1e18);
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
         {
             // Create order using bitToKeep2
@@ -536,7 +518,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
             // Should succeed - bit not invalidated
             TokenMock(address(tokenA)).mint(taker, 1e18);
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
     }
 
@@ -564,8 +546,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -574,6 +554,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -608,6 +590,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,

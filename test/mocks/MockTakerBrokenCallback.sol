@@ -54,15 +54,11 @@ contract MockTakerBrokenCallback is ITakerCallbacks {
 
     function swap(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) public onlyOwner returns (uint256 amountIn, uint256 amountOut) {
         (amountIn, amountOut,) = SWAPVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerTraitsAndData
         );

@@ -84,8 +84,6 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -346,6 +344,8 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             maker: maker,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -380,6 +380,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
+            getTokenBForTokenA: true,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
