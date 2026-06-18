@@ -34,6 +34,14 @@ contract PeggedSwapMathWrapper {
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
     }
+
+    function buildArgs(PeggedSwapArgsBuilder.Args memory args) external pure returns (bytes memory) {
+        return PeggedSwapArgsBuilder.build(args);
+    }
+
+    function parseX0(bytes calldata data) external pure returns (uint256) {
+        return PeggedSwapArgsBuilder.parse(data).x0;
+    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
@@ -1121,5 +1129,197 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 assertGe(invFinal, invInit - 1, "Final invariant must not decrease");
             }
         }
+    }
+
+    // ========================================
+    // BUILDER / DECODER VALIDATION (negative input)
+    // ========================================
+
+    /// @notice parse() must reject zero initial balances (x0 or y0 == 0).
+    function test_PeggedSwap_Revert_Parse_ZeroInitialBalances() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        bytes memory zeroX0 = wrapper.buildArgs(PeggedSwapArgsBuilder.Args({ x0: 0, y0: 100e18, linearWidth: 0, rateLt: 1, rateGt: 1 }));
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidInitialBalances.selector, uint256(0), uint256(100e18)
+        ));
+        wrapper.parseX0(zeroX0);
+
+        bytes memory zeroY0 = wrapper.buildArgs(PeggedSwapArgsBuilder.Args({ x0: 100e18, y0: 0, linearWidth: 0, rateLt: 1, rateGt: 1 }));
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidInitialBalances.selector, uint256(100e18), uint256(0)
+        ));
+        wrapper.parseX0(zeroY0);
+    }
+
+    /// @notice parse() must reject zero rate multipliers (rateLt or rateGt == 0).
+    function test_PeggedSwap_Revert_Parse_ZeroRates() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+
+        bytes memory zeroLt = wrapper.buildArgs(PeggedSwapArgsBuilder.Args({ x0: 100e18, y0: 100e18, linearWidth: 0, rateLt: 0, rateGt: 1 }));
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidRates.selector, uint256(0), uint256(1)
+        ));
+        wrapper.parseX0(zeroLt);
+
+        bytes memory zeroGt = wrapper.buildArgs(PeggedSwapArgsBuilder.Args({ x0: 100e18, y0: 100e18, linearWidth: 0, rateLt: 1, rateGt: 0 }));
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidRates.selector, uint256(1), uint256(0)
+        ));
+        wrapper.parseX0(zeroGt);
+    }
+
+    /// @notice parse() must reject data shorter than the 160-byte minimum (5 * 32 bytes).
+    function test_PeggedSwap_Revert_Parse_ShortData() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        bytes memory shortData = new bytes(159); // one byte short of 5*32
+
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidArgsLength.selector, uint256(159)
+        ));
+        wrapper.parseX0(shortData);
+    }
+
+    /// @notice parse() must accept any buffer of 160 bytes or more, including over-long ones
+    ///         (extra trailing bytes are ignored, only the first 160 are read).
+    function test_PeggedSwap_Parse_LongData_Succeeds() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        // x0 in the first 32 bytes = 12345, plus extra trailing bytes (192 total).
+        bytes memory longData = abi.encodePacked(uint256(12345), uint256(2), uint256(3), uint256(4), uint256(5), uint256(6));
+        assertEq(longData.length, 192);
+        assertEq(wrapper.parseX0(longData), 12345, "parse must accept >=160 byte buffers");
+    }
+
+    // ========================================
+    // RECOMPUTE GUARDS (double-instruction)
+    // ========================================
+
+    /// @dev Build an order whose program runs PeggedSwap twice — the second invocation
+    ///      must trip the recompute guard.
+    function _createDoubleSwapOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
+        Program memory prog = ProgramBuilder.init(_opcodes());
+        bytes memory swapInstr = prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
+            PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
+                x0: setup.x0, y0: setup.y0, linearWidth: setup.linearWidth, rateLt: 1, rateGt: 1
+            })));
+        bytes memory programBytes = bytes.concat(
+            prog.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+                dynamic([tokenA, tokenB]), dynamic([setup.balanceA, setup.balanceB]))),
+            swapInstr,
+            swapInstr
+        );
+        return _buildOrder(programBytes);
+    }
+
+    function _buildOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            receiver: address(0),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: programBytes
+        }));
+    }
+
+    /// @notice Running PeggedSwap twice in ExactIn mode must revert: the second call sees
+    ///         amountOut != 0 and trips the recompute guard.
+    function test_PeggedSwap_Revert_Recompute_ExactIn() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18, balanceB: 1000e18, x0: 1000e18, y0: 1000e18, linearWidth: 0.8e27, feeInBps: 0
+        });
+        ISwapVM.Order memory order = _createDoubleSwapOrder(setup);
+        bytes memory takerData = _makeTakerData(true, _signOrder(order));
+
+        vm.prank(taker);
+        vm.expectRevert(PeggedSwap.PeggedSwapRecomputeDetected.selector);
+        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+    }
+
+    /// @notice Running PeggedSwap twice in ExactOut mode must revert: the second call sees
+    ///         amountIn != 0 and trips the recompute guard.
+    function test_PeggedSwap_Revert_Recompute_ExactOut() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18, balanceB: 1000e18, x0: 1000e18, y0: 1000e18, linearWidth: 0.8e27, feeInBps: 0
+        });
+        ISwapVM.Order memory order = _createDoubleSwapOrder(setup);
+        bytes memory takerData = _makeTakerData(false, _signOrder(order));
+
+        vm.prank(taker);
+        vm.expectRevert(PeggedSwap.PeggedSwapRecomputeDetected.selector);
+        swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
+    }
+
+    // ========================================
+    // LARGE-SWAP EXACT OUTPUT / INPUT
+    // ========================================
+
+    /// @notice Large ExactIn swap draining >50% of the out reserve. The output is checked
+    ///         against an independent PeggedSwapMath reference, confirming amountOut equals
+    ///         `y0 - y1` even when it exceeds half the pool.
+    function test_PeggedSwap_LargeSwap_ExactIn_ExactOutput() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18, balanceB: 1000e18, x0: 1000e18, y0: 1000e18, linearWidth: 0, feeInBps: 0
+        });
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 2000e18; // 2x reserve → drains most of B
+
+        bytes memory takerData = _makeTakerData(true, _signOrder(order));
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+
+        // Independent reference computed from the math library.
+        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(
+            setup.balanceA, setup.balanceB, setup.x0, setup.y0, setup.linearWidth
+        );
+        uint256 x1 = setup.balanceA + amountIn;
+        uint256 u1 = x1 * PeggedSwapMath.ONE / setup.x0;
+        uint256 v1 = PeggedSwapMath.solve(u1, setup.linearWidth, targetInvariant);
+        uint256 y1 = Math.ceilDiv(v1 * setup.y0, PeggedSwapMath.ONE);
+        uint256 expectedOut = setup.balanceB - y1;
+
+        assertEq(swappedIn, amountIn);
+        assertGt(swappedOut, setup.balanceB / 2, "Large swap must drain >50% of out reserve");
+        assertEq(swappedOut, expectedOut, "Output must equal y0 - y1 reference");
+    }
+
+    /// @notice Large ExactOut swap requiring input > the in reserve. The input is checked against
+    ///         an independent PeggedSwapMath reference, confirming amountIn equals `x1 - x0` even
+    ///         when it exceeds the in reserve.
+    function test_PeggedSwap_LargeSwap_ExactOut_ExactInput() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1000e18, balanceB: 1000e18, x0: 1000e18, y0: 1000e18, linearWidth: 0, feeInBps: 0
+        });
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountOut = 900e18; // drains 90% of B → requires input > reserve
+
+        bytes memory takerData = _makeTakerData(false, _signOrder(order));
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountOut, takerData);
+
+        uint256 targetInvariant = PeggedSwapMath.invariantFromReserves(
+            setup.balanceA, setup.balanceB, setup.x0, setup.y0, setup.linearWidth
+        );
+        uint256 y1 = setup.balanceB - amountOut;
+        uint256 v1 = y1 * PeggedSwapMath.ONE / setup.y0;
+        uint256 u1 = PeggedSwapMath.solve(v1, setup.linearWidth, targetInvariant);
+        uint256 x1 = Math.ceilDiv(u1 * setup.x0, PeggedSwapMath.ONE);
+        uint256 expectedIn = x1 - setup.balanceA;
+
+        assertEq(swappedOut, amountOut);
+        assertGt(swappedIn, setup.balanceA, "Large ExactOut must require input > in reserve");
+        assertEq(swappedIn, expectedIn, "Input must equal x1 - x0 reference");
     }
 }

@@ -207,6 +207,75 @@ contract ConcentrateTest is Test, OpcodesDebug {
         }));
     }
 
+    // ========================================
+    // RECOMPUTE GUARD (double-instruction)
+    // ========================================
+
+    /// @dev Build an order whose program runs XYCConcentrate twice (after Balances). Since
+    ///      XYCConcentrate is terminal and sets the swap amounts itself, the second invocation
+    ///      must trip the recompute guard.
+    function _makeDoubleConcentrateOrder() internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        uint256 sqrtPmin = Math.sqrt(0.01e18 * 1e18);
+        uint256 sqrtPmax = Math.sqrt(25e18 * 1e18);
+
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            8000e18, 9000e18, 1e18, sqrtPmin, sqrtPmax
+        );
+        uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
+        uint256 actualBalanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
+
+        Program memory program = ProgramBuilder.init(_opcodes());
+        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0), preTransferInData: "",
+            postTransferInTarget: address(0), postTransferInData: "",
+            preTransferOutTarget: address(0), preTransferOutData: "",
+            postTransferOutTarget: address(0), postTransferOutData: "",
+            program: bytes.concat(
+                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+                    dynamic([address(tokenA), address(tokenB)]),
+                    dynamic([actualBalanceA, actualBalanceB])
+                )),
+                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
+                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
+            )
+        }));
+
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Running XYCConcentrate twice in ExactIn mode must revert (amountOut already set).
+    function test_Concentrate_Revert_Recompute_ExactIn() public {
+        (ISwapVM.Order memory order, bytes memory signature) = _makeDoubleConcentrateOrder();
+        bytes memory swapData = _swappingTakerData(TakerSetup({ isExactIn: true }), signature);
+
+        vm.prank(taker);
+        vm.expectPartialRevert(XYCConcentrate.ConcentrateRecomputeDetected.selector);
+        swapVM.swap(order, tokenA, tokenB, 100e18, swapData);
+    }
+
+    /// @notice Running XYCConcentrate twice in ExactOut mode must revert (amountIn already set).
+    function test_Concentrate_Revert_Recompute_ExactOut() public {
+        (ISwapVM.Order memory order, bytes memory signature) = _makeDoubleConcentrateOrder();
+        bytes memory swapData = _swappingTakerData(TakerSetup({ isExactIn: false }), signature);
+
+        vm.prank(taker);
+        vm.expectPartialRevert(XYCConcentrate.ConcentrateRecomputeDetected.selector);
+        swapVM.swap(order, tokenA, tokenB, 100e18, swapData);
+    }
+
     function test_QuoteAndSwapExactOutAmountsMatches() public {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,

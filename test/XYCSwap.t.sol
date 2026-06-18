@@ -205,6 +205,70 @@ contract XYCSwapTest is Test, OpcodesDebug {
     }
 
     // ========================================
+    // NEGATIVE TESTS (REVERTS)
+    // ========================================
+
+    /// @notice XYCSwap must revert when either reserve is zero (no constant-product curve exists).
+    function test_XYCSwap_Revert_ZeroBalanceOut() public {
+        ISwapVM.Order memory order = _makeOrder(1000e18, 0, 0); // balanceB == 0
+        bytes memory takerData = _signAndPack(order, true, 0);
+
+        vm.prank(taker);
+        vm.expectPartialRevert(XYCSwap.XYCSwapRequiresBothBalancesNonZero.selector);
+        swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+    }
+
+    /// @dev Order whose program runs XYCSwap twice — the second invocation must trip the
+    ///      recompute guard.
+    function _makeDoubleSwapOrder(uint256 balanceA, uint256 balanceB) internal view returns (ISwapVM.Order memory) {
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
+                dynamic([address(tokenA), address(tokenB)]),
+                dynamic([balanceA, balanceB])
+            )),
+            program.build(_xycSwapXD),
+            program.build(_xycSwapXD)
+        );
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0), preTransferInData: "",
+            postTransferInTarget: address(0), postTransferInData: "",
+            preTransferOutTarget: address(0), preTransferOutData: "",
+            postTransferOutTarget: address(0), postTransferOutData: "",
+            program: bytecode
+        }));
+    }
+
+    /// @notice Running XYCSwap twice in ExactIn mode must revert (amountOut already set).
+    function test_XYCSwap_Revert_Recompute_ExactIn() public {
+        ISwapVM.Order memory order = _makeDoubleSwapOrder(1000e18, 1000e18);
+        bytes memory takerData = _signAndPack(order, true, 0);
+
+        vm.prank(taker);
+        vm.expectRevert(XYCSwap.XYCSwapRecomputeDetected.selector);
+        swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+    }
+
+    /// @notice Running XYCSwap twice in ExactOut mode must revert (amountIn already set).
+    function test_XYCSwap_Revert_Recompute_ExactOut() public {
+        ISwapVM.Order memory order = _makeDoubleSwapOrder(1000e18, 1000e18);
+        bytes memory takerData = _signAndPack(order, false, 0);
+
+        vm.prank(taker);
+        vm.expectRevert(XYCSwap.XYCSwapRecomputeDetected.selector);
+        swapVM.swap(order, address(tokenA), address(tokenB), 10e18, takerData);
+    }
+
+    // ========================================
     // ROUNDING INVARIANT TESTS
     // ========================================
 
