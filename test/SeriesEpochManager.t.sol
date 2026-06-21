@@ -33,15 +33,29 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     uint256 public makerPK = 0x1234;
     address public maker;
 
+    uint256 public maker2PK = 0x5678;
+    address public maker2;
+
     uint256 internal constant AMOUNT_IN = 1e15;
 
     constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
 
     function setUp() public {
         maker = vm.addr(makerPK);
+        maker2 = vm.addr(maker2PK);
         swapVM = new LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
+
+        tokenB.mint(maker, 100e18);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), 100e18);
+        tokenB.mint(maker2, 100e18);
+        vm.prank(maker2);
+        tokenB.approve(address(swapVM), 100e18);
+
+        tokenA.mint(address(this), 100e18);
+        tokenA.approve(address(swapVM), 100e18);
     }
 
     /// @dev Program: validate (seriesId, epoch) -> staticBalances -> limitSwap
@@ -228,20 +242,154 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         }
     }
 
+    function test_SeriesEpochManager_AdvanceBoundary_MinAmount() public {
+        ISwapVM.Order memory orderAtZero = _epochOrder(0, 0, 0);
+        ISwapVM.Order memory orderAtOne = _epochOrder(0, 1, 0);
+
+        // series 0 - epoch 0
+        _tryExecute(orderAtZero, true);
+        _tryExecute(orderAtOne, false);
+
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(0, 1);
+
+        assertEq(swapVM.seriesEpoch(maker, 0), 1);
+
+        // series 0 - epoch 1
+        _tryExecute(orderAtZero, false);
+        _tryExecute(orderAtOne, true);
+    }
+
+    function test_SeriesEpochManager_AdvanceBoundary_MaxAmount() public {
+        ISwapVM.Order memory orderAtZero = _epochOrder(0, 0, 0);
+        ISwapVM.Order memory orderAt254 = _epochOrder(0, 254, 0);
+        ISwapVM.Order memory orderAt255 = _epochOrder(0, 255, 0);
+
+        // series 0 - epoch 0
+        _tryExecute(orderAtZero, true);
+        _tryExecute(orderAt254, false);
+        _tryExecute(orderAt255, false);
+
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(0, 255);
+
+        assertEq(swapVM.seriesEpoch(maker, 0), 255);
+
+        // series 0 - epoch 255
+        _tryExecute(orderAtZero, false);
+        _tryExecute(orderAt254, false);
+        _tryExecute(orderAt255, true);
+    }
+
+    function test_SeriesEpochManager_AdvanceZeroReverts() public {
+        vm.prank(maker);
+        vm.expectRevert(SeriesEpochManager.SeriesEpochManagerAdvanceEpochFailed.selector);
+        swapVM.seriesEpochAdvance(0, 0);
+
+        assertEq(swapVM.seriesEpoch(maker, 0), 0);
+    }
+
+    function test_SeriesEpochManager_SkipManyEpochsCancelsIntermediates() public {
+        uint32[9] memory epochs = [uint32(1), 17, 64, 128, 200, 254, 255, 510, 513];
+
+        ISwapVM.Order[] memory orders = new ISwapVM.Order[](epochs.length);
+        for (uint256 i; i < epochs.length; i++) {
+            orders[i] = _epochOrder(731, epochs[i], uint64(i));
+            // series 0 - epoch 0: nothing is live yet
+            _tryExecute(orders[i], false);
+        }
+
+        // Jump straight to epoch 255, skipping all the epochs in between
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(731, 255);
+
+        assertEq(swapVM.seriesEpoch(maker, 731), 255);
+
+        // Only the order pinned to the final epoch survives; every intermediate order is dead
+        for (uint256 i; i < epochs.length; i++) {
+            _tryExecute(orders[i], epochs[i] == 255);
+        }
+
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(731, 255);
+
+        assertEq(swapVM.seriesEpoch(maker, 731), 510);
+
+        _tryExecute(orders[7], true);
+        _tryExecute(orders[8], false);
+
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(731, 3);
+
+        assertEq(swapVM.seriesEpoch(maker, 731), 513);
+
+        _tryExecute(orders[7], false);
+        _tryExecute(orders[8], true);
+    }
+
+    function test_SeriesEpochManager_DistinctMakers() public {
+        // Both orders pinned to epoch 0 of series 0, one per maker
+        ISwapVM.Order memory order1 = _epochOrderFor(maker, 755, 0, 0);
+        ISwapVM.Order memory order2 = _epochOrderFor(maker2, 755, 0, 1);
+
+        // Both makers start at epoch 0 -> both orders are live
+        _tryExecute(order1, true);
+        _tryExecute(order2, true);
+
+        // Advance the first maker only
+        vm.prank(maker);
+        swapVM.seriesEpochAdvance(755, 1);
+
+        assertEq(swapVM.seriesEpoch(maker, 755), 1);
+        assertEq(swapVM.seriesEpoch(maker2, 755), 0);
+
+        // First maker's order is now dead, second maker's order stays live
+        _tryExecute(order1, false);
+        _tryExecute(order2, true);
+
+        // Advance the second maker too
+        vm.prank(maker2);
+        swapVM.seriesEpochAdvance(755, 1);
+
+        assertEq(swapVM.seriesEpoch(maker, 755), 1);
+        assertEq(swapVM.seriesEpoch(maker2, 755), 1);
+
+        // Both makers have moved past epoch 0 -> both orders are dead
+        _tryExecute(order1, false);
+        _tryExecute(order2, false);
+    }
+
     function _tryExecute(ISwapVM.Order memory order, bool shouldExecute) internal {
-        bytes memory takerData = _takerData();
+        bytes memory takerData = _takerData(_signOrder(order));
         if (shouldExecute) {
-            (, uint256 amountOut,) = swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
-            assertGt(amountOut, 0);
+            (, uint256 amountOutQuote,) = swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            (, uint256 amountOutSwap,) = swapVM.swap(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            assertEq(amountOutQuote, amountOutSwap);
+            assertGt(amountOutSwap, 0);
         } else {
             vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
             swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+
+            vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
+            vm.prank(address(this));
+            swapVM.swap(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
         }
     }
 
+    function _signOrder(ISwapVM.Order memory order) internal view returns (bytes memory) {
+        uint256 pk = order.maker == maker ? makerPK : maker2PK;
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, orderHash);
+        return abi.encodePacked(r, s, v);
+    }
+
     function _epochOrder(uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (ISwapVM.Order memory) {
+        return _epochOrderFor(maker, seriesId, epoch, salt);
+    }
+
+    function _epochOrderFor(address orderMaker, uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
+            maker: orderMaker,
             receiver: address(0),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -262,7 +410,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         }));
     }
 
-    function _takerData() internal view returns (bytes memory) {
+    function _takerData(bytes memory signature) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(this),
             isExactIn: true,
@@ -282,7 +430,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             preTransferInCallbackData: "",
             preTransferOutCallbackData: "",
             instructionsArgs: "",
-            signature: ""
+            signature: signature
         }));
     }
 }

@@ -53,8 +53,8 @@ contract SeriesEpochManager {
 
     /// @notice Advances the caller's epoch for `seriesId` by `amount` (invalidates multiple epochs at once)
     /// @dev `amount` is bounded to [1, 255]
-    function seriesEpochAdvance(uint256 seriesId, uint256 amount) external {
-        if (amount == 0 || amount > 255) revert SeriesEpochManagerAdvanceEpochFailed();
+    function seriesEpochAdvance(uint256 seriesId, uint8 amount) external {
+        if (amount == 0) revert SeriesEpochManagerAdvanceEpochFailed();
         unchecked {
             uint256 newEpoch = seriesEpoch[msg.sender][seriesId] + amount;
             seriesEpoch[msg.sender][seriesId] = newEpoch;
