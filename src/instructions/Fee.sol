@@ -139,7 +139,7 @@ contract Fee {
     ///   break numerical consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
-    ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
+    ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
     ///   - Fee calculation and state changes happen AFTER external call
     ///   - feeProvider MUST NOT rely on intermediate swap state
     ///   CAUTION: Takers should verify feeProvider trustworthiness before executing.
@@ -188,7 +188,7 @@ contract Fee {
     ///   consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
-    ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
+    ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
     ///   - Fee calculation and state changes happen AFTER external call
     ///   - feeProvider MUST NOT rely on intermediate swap state
     ///   CAUTION: Takers should verify feeProvider trustworthiness before executing.
