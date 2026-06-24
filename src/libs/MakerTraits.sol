@@ -228,21 +228,13 @@ library MakerTraitsLib {
     }
 
     function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
-        return data.slice(
-            _getStartOffset(traits, slice),
-            _getStopOffset(traits, slice, data.length),
-            MakerTraitsMissingHookData.selector
-        );
-    }
-
-    function _getStartOffset(MakerTraits traits, OrderDataSlices slice) private pure returns (uint256) {
         unchecked {
-            return (slice == OrderDataSlices.PreTransferInHook) ? 0 : _getOffset(traits, uint256(slice) - 1);
+            return data.slice(
+                (slice == OrderDataSlices.PreTransferInHook) ? 0 : _getOffset(traits, uint256(slice) - 1),
+                (slice == OrderDataSlices.Program) ? data.length : _getOffset(traits, uint256(slice)),
+                MakerTraitsMissingHookData.selector
+            );
         }
-    }
-
-    function _getStopOffset(MakerTraits traits, OrderDataSlices slice, uint256 dataLength) private pure returns (uint256) {
-        return (slice == OrderDataSlices.Program) ? dataLength : _getOffset(traits, uint256(slice));
     }
 
     function _getOffset(MakerTraits traits, uint256 sliceNumber) private pure returns (uint256) {
