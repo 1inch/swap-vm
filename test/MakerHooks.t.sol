@@ -11,7 +11,6 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { dynamic } from "./utils/Dynamic.sol";
 
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
@@ -71,8 +70,9 @@ contract MakerHooksTest is Test, OpcodesDebug {
 
         swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         hooksContract = new MockMakerHooks();
 
@@ -98,7 +98,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(100e18), uint256(200e18)]))),
+                BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),
             p.build(LimitSwap._limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
             p.build(Controls._salt,
@@ -113,6 +113,8 @@ contract MakerHooksTest is Test, OpcodesDebug {
     ) internal view returns (ISwapVM.Order memory order, bytes32 orderHash, bytes memory signature) {
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -144,6 +146,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: _cfg.isFirstTransferFromTaker,
             useTransferFromAndAquaPush: false,
+            isAToB: false,
             threshold: _cfg.threshold,
             to: address(0),
             deadline: 0,
@@ -220,7 +223,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         bytes memory takerData = _buildTakerData(cfg, signature);
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 50e18, takerData);
 
         // Verify all hooks were called
         assertTrue(hooksContract.allHooksCalled(), "Not all hooks were called");
@@ -270,7 +273,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         {
             bytes memory takerData = _buildTakerData(cfg, signature);
             vm.prank(taker);
-            swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+            swapVM.swap(order, 50e18, takerData);
         }
 
         assertEq(hooksContract.preTransferInCallCount(), 1);
@@ -322,7 +325,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         {
             bytes memory takerData = _buildTakerData(cfg, signature);
             vm.prank(taker);
-            swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+            swapVM.swap(order, 50e18, takerData);
         }
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -391,7 +394,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
 
         vm.prank(taker);
         vm.expectRevert(expectedError);
-        swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+        swapVM.swap(order, 50e18, takerData);
     }
 
     function test_DifferentHookTargets_PreTransferOut() public {
@@ -408,7 +411,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         {
             bytes memory takerData = _buildTakerData(cfg, signature);
             vm.prank(taker);
-            swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+            swapVM.swap(order, 50e18, takerData);
         }
 
         // Verify hooks1 (preTransferIn)
@@ -445,7 +448,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         {
             bytes memory takerData = _buildTakerData(cfg, signature);
             vm.prank(taker);
-            swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+            swapVM.swap(order, 50e18, takerData);
         }
 
         // Verify hooks1 (preTransferIn)
@@ -500,7 +503,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
         {
             bytes memory takerData = _buildTakerData(cfg, signature);
             vm.prank(taker);
-            swapVM.swap(order, address(tokenB), address(tokenA), 50e18, takerData);
+            swapVM.swap(order, 50e18, takerData);
         }
 
         bytes memory lastMakerData;
@@ -559,7 +562,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             {
                 bytes memory takerData = _buildTakerData(cfg, signature);
                 vm.prank(taker);
-                swapVM.swap(order, address(tokenB), address(tokenA), amounts[i], takerData);
+                swapVM.swap(order, amounts[i], takerData);
             }
 
             bytes memory lastMakerData;

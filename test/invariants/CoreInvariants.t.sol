@@ -233,12 +233,12 @@ abstract contract CoreInvariants is Test {
     ) internal view {
         // ExactIn: amountIn → ?
         (, uint256 amountOut,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, amountIn, exactInTakerData
+            order, amountIn, exactInTakerData
         );
 
         // ExactOut: ? → amountOut
         (uint256 amountInBack,,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, amountOut, exactOutTakerData
+            order, amountOut, exactOutTakerData
         );
 
         uint256 diff = amountInBack > amountIn ?
@@ -343,7 +343,7 @@ abstract contract CoreInvariants is Test {
     ) internal {
         // First get the quote
         (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, amount, takerData
+            order, amount, takerData
         );
 
         assertGt(quotedIn, 0, "Quote returned zero input");
@@ -386,7 +386,7 @@ abstract contract CoreInvariants is Test {
 
         for (uint256 i = 0; i < amounts.length; i++) {
             (, uint256 amountOut,) = swapVM.asView().quote(
-                order, tokenIn, tokenOut, amounts[i], takerData
+                order, amounts[i], takerData
             );
 
             // Calculate price as output/input (with precision)
@@ -446,7 +446,7 @@ abstract contract CoreInvariants is Test {
 
         // Get spot price from a 1-token trade (scaled by token decimals)
         (, uint256 spotOut,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, oneTokenIn, exactInTakerData
+            order, oneTokenIn, exactInTakerData
         );
         // spotPrice = (spotOut * precision) / oneTokenIn
         uint256 spotPrice = (spotOut * precision) / oneTokenIn;
@@ -454,7 +454,7 @@ abstract contract CoreInvariants is Test {
         for (uint256 i = 0; i < amounts.length; i++) {
             // ExactIn: small amount shouldn't get better than spot price
             try swapVM.asView().quote(
-                order, tokenIn, tokenOut, amounts[i], exactInTakerData
+                order, amounts[i], exactInTakerData
             ) returns (uint256, uint256 amountOut, bytes32) {
                 if (amountOut > 0) {
                     // actualRate = (amountOut * precision) / amounts[i]
@@ -481,7 +481,7 @@ abstract contract CoreInvariants is Test {
 
             // ExactOut: small amount should cost at least spot price
             try swapVM.asView().quote(
-                order, tokenIn, tokenOut, amounts[i], exactOutTakerData
+                order, amounts[i], exactOutTakerData
             ) returns (uint256 amountIn, uint256, bytes32) {
                 if (amountIn > 0 && amounts[i] > 0) {
                     // inverseRate = (amountIn * precision) / amounts[i]
@@ -524,7 +524,7 @@ abstract contract CoreInvariants is Test {
         uint256 largeAmount = 1000000e18; // 1 million tokens
 
         try swapVM.asView().quote(
-            order, tokenIn, tokenOut, largeAmount, takerData
+            order, largeAmount, takerData
         ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
             // If it succeeds, ensure the amounts are reasonable
             assertGt(quotedIn, 0, "Large swap should have non-zero input");

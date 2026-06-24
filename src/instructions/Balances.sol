@@ -18,24 +18,13 @@ library BalancesArgsBuilder {
     error BalancesParsingMissingTokens();
     error BalancesParsingMissingInitialBalances();
 
-    function build(address[] memory tokens, uint256[] memory balances) internal pure returns (bytes memory) {
-        require(tokens.length == balances.length, BalancesArgsBuilderArraysLengthMismatch(tokens.length, balances.length));
-        bytes memory packed = abi.encodePacked((tokens.length).toUint16());
-        for (uint256 i = 0; i < tokens.length; i++) {
-            packed = abi.encodePacked(packed, tokens[i]);
-        }
-        return abi.encodePacked(packed, balances);
+    function build(uint256[2] memory balances) internal pure returns (bytes memory) {
+        return abi.encodePacked(balances[0], balances[1]);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) {
-        unchecked {
-            tokensCount = uint16(bytes2(args.slice(0, 2, BalancesParsingMissingTokensCount.selector)));
-            uint256 balancesOffset = 2 + 20 * tokensCount;
-            uint256 subargsOffset = balancesOffset + 32 * tokensCount;
-
-            tokens = args.slice(2, balancesOffset, BalancesParsingMissingTokens.selector);
-            initialBalances = args.slice(balancesOffset, subargsOffset, BalancesParsingMissingInitialBalances.selector);
-        }
+    function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
+        balanceA = uint256(bytes32(args.slice(0)));
+        balanceB = uint256(bytes32(args.slice(32)));
     }
 }
 
@@ -52,28 +41,17 @@ contract Balances {
         mapping(address token => uint256)) public balances;
 
     /// @dev Sets ctx.swap.balanceIn/Out from provided initial balances
-    /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokens[]  | 20 bytes * args.tokensCount
-    /// @param args.initialBalances[] | 32 bytes * args.tokensCount
+    /// @param args.initialBalances[2] | 32 bytes * 2
     function _staticBalancesXD(Context memory ctx, bytes calldata args) internal pure {
         require(ctx.swap.balanceIn == 0 && ctx.swap.balanceOut == 0, SetBalancesExpectZeroBalances(ctx.swap.balanceIn, ctx.swap.balanceOut));
 
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
-        bool foundTokenIn = false;
-        bool foundTokenOut = false;
-        for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokens.slice(i * 20)));
-            uint256 initialBalance = uint256(bytes32(initialBalances.slice(i * 32)));
-            if (token == ctx.query.tokenIn) {
-                ctx.swap.balanceIn = initialBalance;
-                foundTokenIn = true;
-            } else if (token == ctx.query.tokenOut) {
-                ctx.swap.balanceOut = initialBalance;
-                foundTokenOut = true;
-            }
-        }
+        uint256 balanceIn;
+        uint256 balanceOut;
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = BalancesArgsBuilder.parse(args);
+        else (balanceOut, balanceIn) = BalancesArgsBuilder.parse(args);
 
-        require(foundTokenIn && foundTokenOut, StaticBalancesRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
+        ctx.swap.balanceIn = balanceIn;
+        ctx.swap.balanceOut = balanceOut;
     }
 
     /// @dev Load or init ctx.swap.balanceIn/Out from provided initial balances,
@@ -82,67 +60,31 @@ contract Balances {
     ///   but does NOT update them after nested instructions complete. Quote may succeed while swap reverts
     ///   if balances were modified between quote and swap calls. Makers MUST NOT use backward jumps to
     ///   this instruction as it breaks numerical consistency between quote() and swap().
-    /// @param args.tokensCount       | 2 bytes
-    /// @param args.tokens[]  | 20 bytes * args.tokensCount
-    /// @param args.initialBalances[] | 32 bytes * args.tokensCount
+    /// @param args.initialBalances[2] | 32 bytes * 2
     function _dynamicBalancesXD(Context memory ctx, bytes calldata args) internal {
-        (uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) = BalancesArgsBuilder.parse(args);
-        if (!_loadBalances(ctx, tokensCount, tokens)) {
-            _initBalances(ctx, tokensCount, tokens, initialBalances);
+        require(ctx.swap.balanceIn == 0 && ctx.swap.balanceOut == 0, SetBalancesExpectZeroBalances(ctx.swap.balanceIn, ctx.swap.balanceOut));
+
+        uint256 balanceIn = balances[ctx.query.orderHash][ctx.query.tokenIn];
+        uint256 balanceOut = balances[ctx.query.orderHash][ctx.query.tokenOut];
+
+        if (balanceIn | balanceOut == 0) {
+            if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = BalancesArgsBuilder.parse(args);
+            else (balanceOut, balanceIn) = BalancesArgsBuilder.parse(args);
+
+            if (!ctx.vm.isStaticContext) {
+                balances[ctx.query.orderHash][ctx.query.tokenIn] = balanceIn;
+                balances[ctx.query.orderHash][ctx.query.tokenOut] = balanceOut;
+            }
         }
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        ctx.swap.balanceIn = balanceIn;
+        ctx.swap.balanceOut = balanceOut;
+
+        ctx.runLoop();
 
         if (!ctx.vm.isStaticContext) {
-            balances[ctx.query.orderHash][ctx.query.tokenIn] += swapAmountIn;
-            balances[ctx.query.orderHash][ctx.query.tokenOut] -= swapAmountOut;
+            balances[ctx.query.orderHash][ctx.query.tokenIn] += ctx.swap.amountIn;
+            balances[ctx.query.orderHash][ctx.query.tokenOut] -= ctx.swap.amountOut;
         }
-    }
-
-    function _loadBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokens) private view returns (bool hasNonZeroBalances) {
-        hasNonZeroBalances = false;
-        bool foundTokenIn = false;
-        bool foundTokenOut = false;
-        for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokens.slice(i * 20)));
-            uint256 balance = balances[ctx.query.orderHash][token];
-            hasNonZeroBalances = hasNonZeroBalances || (balance != 0);
-
-            if (token == ctx.query.tokenIn) {
-                ctx.swap.balanceIn = balance;
-                foundTokenIn = true;
-            } else if (token == ctx.query.tokenOut) {
-                ctx.swap.balanceOut = balance;
-                foundTokenOut = true;
-            }
-
-            if (foundTokenIn && foundTokenOut && hasNonZeroBalances) {
-                // Early exit when both balances loaded and at least one non-zero balance found means state is not uninitialized
-                return hasNonZeroBalances;
-            }
-        }
-        require(foundTokenIn && foundTokenOut, DynamicBalancesLoadingRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
-    }
-
-    function _initBalances(Context memory ctx, uint256 tokensCount, bytes calldata tokens, bytes calldata initialBalances) private {
-        bool foundTokenIn = false;
-        bool foundTokenOut = false;
-        for (uint256 i = 0; i < tokensCount; i++) {
-            address token = address(bytes20(tokens.slice(i * 20)));
-            uint256 initialBalance = uint256(bytes32(initialBalances.slice(i * 32)));
-            if (!ctx.vm.isStaticContext) {
-                balances[ctx.query.orderHash][token] = initialBalance;
-            }
-
-            if (token == ctx.query.tokenIn) {
-                ctx.swap.balanceIn = initialBalance;
-                foundTokenIn = true;
-            } else if (token == ctx.query.tokenOut) {
-                ctx.swap.balanceOut = initialBalance;
-                foundTokenOut = true;
-            }
-        }
-
-        require(foundTokenIn && foundTokenOut, DynamicBalancesInitRequiresSettingBothBalances(ctx.query.tokenIn, ctx.query.tokenOut, tokens));
     }
 }

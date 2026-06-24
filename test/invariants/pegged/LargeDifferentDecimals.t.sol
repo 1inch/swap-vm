@@ -21,8 +21,11 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         // Create tokens with correct decimals: 18 and 6
-        tokenA = TokenMock(address(new TokenMockDecimals("Token A", "TKA", 18)));
-        tokenB = TokenMock(address(new TokenMockDecimals("Token B", "TKB", 6)));
+        TokenMock token18 = TokenMock(address(new TokenMockDecimals("Token I", "TKI", 18)));
+        TokenMock token6 = TokenMock(address(new TokenMockDecimals("Token J", "TKJ", 6)));
+
+        // Sort so tokenA < tokenB (required by MakerTraitsLib)
+        (tokenA, tokenB) = address(token18) < address(token6) ? (token18, token6) : (token6, token18);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, type(uint128).max);
@@ -37,22 +40,22 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
         tokenB.approve(address(swapVM), type(uint256).max);
 
         // Large pool: 1M tokens each (in respective decimals)
-        // TokenA: 1M tokens with 18 decimals = 1e6 * 1e18 = 1e24
-        // TokenB: 1M tokens with 6 decimals = 1e6 * 1e6 = 1e12
-        balanceA = 1_000_000e18;   // 1M tokens with 18 decimals
-        balanceB = 1_000_000e6;    // 1M tokens with 6 decimals
-
-        // Determine rates based on actual token addresses
-        // TokenA has 18 decimals, TokenB has 6 decimals
-        // We need to scale TokenB by 1e12 to match TokenA
-        if (address(tokenA) < address(tokenB)) {
-            // tokenA is Lt, tokenB is Gt
-            rateLt = 1;      // TokenA (18 dec)
-            rateGt = 1e12;   // TokenB (6 dec) -> scales to 18
+        // token18: 1M tokens with 18 decimals = 1e24
+        // token6:  1M tokens with 6 decimals = 1e12
+        // balanceA/balanceB must follow ascending token address order (tokenA, tokenB).
+        // We need to scale the 6-decimal token by 1e12 to match the 18-decimal token.
+        if (address(token18) < address(token6)) {
+            // token18 is Lt (tokenA), token6 is Gt (tokenB)
+            balanceA = 1_000_000e18;   // 18 dec
+            balanceB = 1_000_000e6;    // 6 dec
+            rateLt = 1;      // token18 (18 dec)
+            rateGt = 1e12;   // token6 (6 dec) -> scales to 18
         } else {
-            // tokenB is Lt, tokenA is Gt
-            rateLt = 1e12;   // TokenB (6 dec) -> scales to 18
-            rateGt = 1;      // TokenA (18 dec)
+            // token6 is Lt (tokenA), token18 is Gt (tokenB)
+            balanceA = 1_000_000e6;    // 6 dec
+            balanceB = 1_000_000e18;   // 18 dec
+            rateLt = 1e12;   // token6 (6 dec) -> scales to 18
+            rateGt = 1;      // token18 (18 dec)
         }
 
         // x0 and y0 should match the initial balance * rate for normalization
@@ -63,16 +66,20 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
         // Standard linear width
         linearWidth = 0.8e27;
 
-        // Test amounts - reasonable sizes for 1M pool
+        // Test amounts - reasonable sizes for 1M pool.
+        // Input amounts are in tokenA (input) decimals, exactOut amounts in tokenB (output) decimals.
+        uint256 unitIn = address(token18) < address(token6) ? 1e18 : 1e6;   // tokenA decimals
+        uint256 unitOut = address(token18) < address(token6) ? 1e6 : 1e18;  // tokenB decimals
+
         testAmounts = new uint256[](3);
-        testAmounts[0] = 1000e18;    // 1K tokens
-        testAmounts[1] = 10_000e18;  // 10K tokens
-        testAmounts[2] = 100_000e18; // 100K tokens (10% of pool)
+        testAmounts[0] = 1000 * unitIn;    // 1K tokens
+        testAmounts[1] = 10_000 * unitIn;  // 10K tokens
+        testAmounts[2] = 100_000 * unitIn; // 100K tokens (10% of pool)
 
         testAmountsExactOut = new uint256[](3);
-        testAmountsExactOut[0] = 1000e6;    // 1K tokens (6 decimals)
-        testAmountsExactOut[1] = 10_000e6;  // 10K tokens
-        testAmountsExactOut[2] = 100_000e6; // 100K tokens
+        testAmountsExactOut[0] = 1000 * unitOut;    // 1K tokens
+        testAmountsExactOut[1] = 10_000 * unitOut;  // 10K tokens
+        testAmountsExactOut[2] = 100_000 * unitOut; // 100K tokens
 
         flatFeeInBps = 0.003e9;
         flatFeeOutBps = 0.003e9;

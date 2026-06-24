@@ -59,6 +59,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddress,
             isExactIn: isExactIn,
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
             hasPreTransferOutCallback: false,
@@ -80,7 +81,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
     }
 
     function _executeSwap() internal returns (uint256 amountIn, uint256 amountOut) {
-        return brokenTaker.swap(_order, address(tokenB), address(tokenA), SWAP_AMOUNT, _takerDataBytes);
+        return brokenTaker.swap(_order, SWAP_AMOUNT, _takerDataBytes);
     }
 
     /// @notice Test: Taker callback doesn't push any tokens to Aqua
