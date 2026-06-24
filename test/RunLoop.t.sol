@@ -120,10 +120,8 @@ contract RunLoopTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory takerData = _signAndPackTakerData(order);
 
-        // Empty program fails with RunLoopExcessiveCall(0, 0)
-        vm.expectRevert(
-            abi.encodeWithSelector(ContextLib.RunLoopExcessiveCall.selector, 0, 0)
-        );
+        // Empty program is valid, however, fails due to amount out is not set
+        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
         swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
     }
 
@@ -136,9 +134,33 @@ contract RunLoopTest is Test, OpcodesDebug {
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory takerData = _signAndPackTakerData(order);
 
-        // Should revert with panic due to array out-of-bounds (0x32)
-        vm.expectRevert(stdError.indexOOBError);
+        vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 2, 1));
         swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+    }
+
+    /**
+     * @notice Test program with missing args bytes (incomplete instruction)
+     */
+    function test_MissingArgsProgram() public {
+        {
+            bytes memory bytecode = hex"0101"; // Just an opcode and args length but no args
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory takerData = _signAndPackTakerData(order);
+
+            vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 3, 2));
+            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        }
+
+        {
+            bytes memory bytecode = hex"010203"; // Opcode, args length, partial args
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory takerData = _signAndPackTakerData(order);
+
+            vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 4, 3));
+            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        }
     }
 
     /**
