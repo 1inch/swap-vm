@@ -30,10 +30,7 @@ contract LimitOpcodes is
     Balances,
     Invalidators,
     LimitSwap,
-    MinRate,
-    DutchAuction,
     BaseFeeAdjuster,
-    TWAPSwap,
     Fee,
     FeeExperimental,
     Extruction,
@@ -48,7 +45,7 @@ contract LimitOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Balances, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) { super._runLoop(ctx); }
+    function _runLoop(Context memory ctx) internal virtual override(Balances, Fee, Invalidators, VMLoop) { super._runLoop(ctx); }
 
     /// @notice Opcode direct dispatcher
     /// @dev Indices MUST mirror {_opcodes} exactly
@@ -66,12 +63,7 @@ contract LimitOpcodes is
         else if (opcode == 20) Invalidators._invalidateTokenOut1D(ctx, args);
         else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);
         else if (opcode == 22) LimitSwap._limitSwapOnlyFull1D(ctx, args);
-        else if (opcode == 23) MinRate._requireMinRate1D(ctx, args);
-        else if (opcode == 24) MinRate._adjustMinRate1D(ctx, args);
-        else if (opcode == 25) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
-        else if (opcode == 26) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
         else if (opcode == 27) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
-        else if (opcode == 28) TWAPSwap._twap(ctx, args);
         else if (opcode == 29) Extruction._extruction(ctx, args);
         else if (opcode == 30) Controls._salt(ctx, args);
         else if (opcode == 35) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
@@ -119,16 +111,13 @@ contract LimitOpcodes is
             // LimitSwap - limit orders (specific trading type)
             LimitSwap._limitSwap1D,
             LimitSwap._limitSwapOnlyFull1D,
-            // MinRate - minimum exchange rate enforcement (common trading requirement)
-            MinRate._requireMinRate1D,
-            MinRate._adjustMinRate1D,
-            // DutchAuction - auction mechanism with limit order and time decay (specific trading type)
-            DutchAuction._dutchAuctionBalanceIn1D,
-            DutchAuction._dutchAuctionBalanceOut1D,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             // BaseFeeAdjuster - gas-based price adjustment (dynamic pricing)
             BaseFeeAdjuster._baseFeeAdjuster1D,
-            // TWAPSwap - TWAP trading (complex trading strategy)
-            TWAPSwap._twap,
+            _notInstruction,
             // NOTE: Add new instructions here to maintain backward compatibility
             Extruction._extruction,
             Controls._salt,
