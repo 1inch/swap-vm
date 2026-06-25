@@ -102,11 +102,12 @@ contract Opcodes is
         else if (opcode == 48) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
+        else if (opcode == 51) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[52] memory instructions = [
+        function(Context memory, bytes calldata) internal[53] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -171,7 +172,8 @@ contract Opcodes is
             Whitelist._whitelistSingleTaker,
             Whitelist._whitelistMultipleTakers,
             PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
-            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D,
+            Controls._onlyTxOriginTokenBalanceNonZero
         ];
 
         // Efficiently turning static memory array into dynamic memory array
