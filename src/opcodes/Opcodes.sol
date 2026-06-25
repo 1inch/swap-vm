@@ -27,6 +27,8 @@ import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
+import { VMLoop } from "../VMLoop.sol";
+
 contract Opcodes is
     Controls,
     Balances,
@@ -45,7 +47,8 @@ contract Opcodes is
     PeggedSwap,
     SeriesEpochManager,
     Whitelist,
-    PiecewiseLinearScale
+    PiecewiseLinearScale,
+    VMLoop
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -53,9 +56,11 @@ contract Opcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) { super._runLoop(ctx); }
+
     /// @notice Opcode direct dispatcher
     /// @dev Indices MUST mirror {_opcodes} exactly
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
         if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
@@ -97,8 +102,6 @@ contract Opcodes is
         else if (opcode == 48) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        // solhint-disable-next-line no-empty-blocks
-        else if (opcode < 10) { /* reserved slots 0-9 are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 

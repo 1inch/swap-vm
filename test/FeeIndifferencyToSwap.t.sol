@@ -28,15 +28,24 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
 
     constructor() FeeExperimental(address(0)) {}
 
-    /// @dev Test-only dispatcher: runs the formula stashed in {_formulaPtr}
-    function _runFormula(Context memory ctx, uint256 /* opcode */, bytes calldata args) internal {
+    function _runLoop(Context memory ctx) internal virtual override {
+        bytes calldata programBytes = ctx.program();
+        require(ctx.vm.nextPC < programBytes.length, ContextLib.RunLoopExceedProgramLength(ctx.vm.nextPC, programBytes.length));
+
+        uint256 pc = ctx.vm.nextPC + 1;
+        uint256 argsLength = uint8(bytes1(programBytes[pc++]));
+        bytes calldata args = programBytes[pc : pc + argsLength];
+
+        ctx.vm.nextPC = pc + argsLength;
+        
         function(Context memory, bytes calldata) internal formula;
         uint256 ptr = _formulaPtr;
-        // memory-safe: only reloads a function pointer this contract stored earlier
         assembly ("memory-safe") {
             formula := ptr
         }
         formula(ctx, args);
+
+        pc = ctx.vm.nextPC;
     }
 
     /**
@@ -62,7 +71,6 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         ctx.query.isExactIn = exactIn;
 
         // Dispatch opcode 0 to the formula stashed in _formulaPtr (set by checkExactInExactOutSymmetry)
-        ctx.vm.dispatch = _runFormula;
         ctx.vm.nextPC = 0;
         ctx.vm.isStaticContext = true;
 

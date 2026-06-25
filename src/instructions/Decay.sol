@@ -62,7 +62,7 @@ library DecayingOffsetLib {
 }
 
 /// @dev You can to call _decayXD to readjust balanceIn/Out for swap
-contract Decay {
+abstract contract Decay {
     using ContextLib for Context;
     using DecayingOffsetLib for DecayingOffset;
 
@@ -89,11 +89,14 @@ contract Decay {
         ctx.swap.balanceIn += _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].getOffset(period);
         ctx.swap.balanceOut -= _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
-            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(swapAmountIn, period);
-            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(swapAmountOut, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(ctx.swap.amountIn, period);
+            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(ctx.swap.amountOut, period);
         }
     }
+
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

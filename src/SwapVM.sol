@@ -128,8 +128,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 isStaticContext: true,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                dispatch: _dispatch
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -152,9 +151,12 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
         }
 
-        (amountIn, amountOut) = ctx.runLoop();
-        order.traits.validate(amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+        _runLoop(ctx);
+
+        order.traits.validate(ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function swap(
@@ -178,8 +180,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 isStaticContext: false,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                dispatch: _dispatch
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -206,9 +207,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
-        (amountIn, amountOut) = ctx.runLoop();
-        order.traits.validate(amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+
+        _runLoop(ctx);
+
+        order.traits.validate(ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
 
         if (takerTraits.isFirstTransferFromTaker()) {
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
@@ -219,7 +222,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         _reentrancyGuards[orderHash].unlock();
-        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
+        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {
@@ -297,6 +302,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
     }
 
-    /// @dev Override in the opcode set to directly dispatch an opcode at specified index
-    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual;
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

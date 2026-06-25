@@ -16,6 +16,8 @@ import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
+import { VMLoop } from "../VMLoop.sol";
+
 contract AquaOpcodes is
     Controls,
     XYCSwap,
@@ -23,7 +25,8 @@ contract AquaOpcodes is
     Decay,
     Fee,
     PeggedSwap,
-    Extruction
+    Extruction,
+    VMLoop
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -31,9 +34,11 @@ contract AquaOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) { super._runLoop(ctx); }
+
     /// @notice Opcode direct dispatcher
     /// @dev Indices MUST mirror {_opcodes} exactly
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
         if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
@@ -52,8 +57,6 @@ contract AquaOpcodes is
         else if (opcode == 30) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 31) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == 32) Extruction._extruction(ctx, args);
-        // solhint-disable-next-line no-empty-blocks
-        else if (opcode < 10 || (opcode >= 22 && opcode <= 26)) { /* reserved slots are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 

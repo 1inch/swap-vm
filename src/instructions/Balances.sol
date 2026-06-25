@@ -23,7 +23,7 @@ library BalancesArgsBuilder {
     }
 }
 
-contract Balances {
+abstract contract Balances {
     using Calldata for bytes;
     using ContextLib for Context;
 
@@ -72,11 +72,14 @@ contract Balances {
         ctx.swap.balanceIn = balanceIn;
         ctx.swap.balanceOut = balanceOut;
 
-        ctx.runLoop();
+        _runLoop(ctx);
 
         if (!ctx.vm.isStaticContext) {
             balances[ctx.query.orderHash][ctx.query.tokenIn] += ctx.swap.amountIn;
             balances[ctx.query.orderHash][ctx.query.tokenOut] -= ctx.swap.amountOut;
         }
     }
+
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

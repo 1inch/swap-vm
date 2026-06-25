@@ -86,26 +86,19 @@ contract BestRouteSelector is OpcodesDebug {
                     isStaticContext: isStaticContext,
                     nextPC: 0,  // Start from beginning of strategy
                     programPtr: CalldataPtrLib.from(strategy),
-                    takerArgsPtr: CalldataPtrLib.from(takerData),
-                    dispatch: _runOpcode
+                    takerArgsPtr: CalldataPtrLib.from(takerData)
                 }),
                 query: query,
                 swap: swap  // Reset to initial balances for each strategy!
             });
 
             // Execute this strategy
-            (, uint256 amountOut) = ctx.runLoop();
+            _runLoop(ctx);
 
             // Check if this strategy is better
-            if (amountOut > bestAmountOut) {
-                bestAmountOut = amountOut;
-                bestResult = SwapRegisters({
-                    balanceIn: swap.balanceIn,
-                    balanceOut: swap.balanceOut,
-                    amountIn: swap.amountIn,
-                    amountOut: amountOut,
-                    amountNetPulled: swap.amountNetPulled
-                });
+            if (ctx.swap.amountOut > bestAmountOut) {
+                bestAmountOut = ctx.swap.amountOut;
+                bestResult = ctx.swap;
             }
         }
 
