@@ -160,17 +160,31 @@ contract PeggedSwap {
             // Solve for y1: given x1, find y1 that maintains invariant
             // x1 * ONE / x0 - safe: x1 ≤ 1e24, ONE = 1e27 → 1e51 < 1e77
             uint256 u1 = x1 * PeggedSwapMath.ONE / x0_init;  // Round DOWN u1
-            uint256 v1 = PeggedSwapMath.solve(u1, config.linearWidth, targetInvariant);
 
-            // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
-            // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
-            uint256 y1 = Math.ceilDiv(v1 * y0_init, PeggedSwapMath.ONE);
+            // Cap input at uMax (where v=0): drain output reserve, recompute amountIn
+            uint256 uMax = PeggedSwapMath.solve(0, config.linearWidth, targetInvariant);
+            if (u1 >= uMax) {
+                // Cap x1 at uMax, round UP (protects maker)
+                uint256 x1Capped = Math.ceilDiv(uMax * x0_init, PeggedSwapMath.ONE);
 
-            // Convert back from normalized scale: amountOut = (y0 - y1) / rateOut
-            // Round DOWN to protect maker
-            ctx.swap.amountOut = (y0 - y1) / rateOut;
+                ctx.swap.amountIn = Math.ceilDiv(x1Capped - x0, rateIn);
+                ctx.swap.amountOut = y0_raw; // drain output reserve
+            } else {
+                uint256 v1 = PeggedSwapMath.solve(u1, config.linearWidth, targetInvariant);
+
+                // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
+                // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
+                uint256 y1 = Math.ceilDiv(v1 * y0_init, PeggedSwapMath.ONE);
+
+                // Convert back from normalized scale: amountOut = (y0 - y1) / rateOut
+                // Round DOWN to protect maker
+                ctx.swap.amountOut = (y0 - y1) / rateOut;
+            }
         } else {
             require(ctx.swap.amountIn == 0, PeggedSwapRecomputeDetected());
+
+            if (ctx.swap.amountOut > y0_raw) ctx.swap.amountOut = y0_raw;
+
             // ExactOut: calculate x1 from y1 = y0 - amountOut (normalized)
             uint256 y1 = y0 - ctx.swap.amountOut * rateOut;
 

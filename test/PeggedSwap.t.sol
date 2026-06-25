@@ -232,6 +232,98 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     }
 
     // ========================================
+    // PARTIAL FILL TESTS
+    // ========================================
+
+    function test_PeggedSwap_PartialFill_ExactIn_AToB() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 9000e18,
+            balanceB: 8000e18,
+            x0: 9000e18,
+            y0: 8000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+
+        assertGt(amountOut, 0, "Output must be positive");
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+        assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
+    }
+
+    function test_PeggedSwap_PartialFill_ExactIn_BToA() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 9000e18,
+            balanceB: 8000e18,
+            x0: 9000e18,
+            y0: 8000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenB, tokenA, 1_000_000_000e18, takerData);
+
+        assertGt(amountOut, 0, "Output must be positive");
+        assertEq(swapVM.balances(swapVM.hash(order), tokenA), 0, "Output reserve must be fully drained");
+        assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
+    }
+
+    function test_PeggedSwap_PartialFill_ExactOut_AToB() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 9000e18,
+            balanceB: 8000e18,
+            x0: 9000e18,
+            y0: 8000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(false, signature);
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+
+        assertEq(amountOut, setup.balanceB, "Output clamped to reserve");
+        assertGt(amountIn, 0, "Input must be positive");
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+    }
+
+    function test_PeggedSwap_PartialFill_ExactIn_AToB_WithFee() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 9000e18,
+            balanceB: 8000e18,
+            x0: 9000e18,
+            y0: 8000e18,
+            linearWidth: 0.8e27,
+            feeInBps: 0.003e9
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, signature);
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+
+        assertGt(amountOut, 0, "Output must be positive");
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+        assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
+    }
+
+    // ========================================
     // LINEAR WIDTH (PARAMETER A) TESTS
     // ========================================
 
@@ -633,7 +725,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory takerData = _makeTakerData(true, signature);
 
         vm.prank(taker);
-        vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
+        vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
         swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
     }
 
@@ -657,7 +749,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         swapVM.swap(order, tokenA, tokenB, 10e18, takerData);
     }
 
-    function test_PeggedSwap_Revert_ExcessiveAmountOut() public {
+    function test_PeggedSwap_PartialFill_ExcessiveAmountOut() public {
         PoolSetup memory setup = PoolSetup({
             balanceA: 1000e18,
             balanceB: 1000e18,
@@ -671,12 +763,15 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory signature = _signOrder(order);
         bytes memory takerData = _makeTakerData(false, signature);
 
-        // Try to swap out more than available
+        // Request more output than available — partial fill clamps amountOut to balanceB
         uint256 excessiveAmount = setup.balanceB + 1;
 
         vm.prank(taker);
-        vm.expectRevert();  // Arithmetic underflow in y1 = y0 - amountOut * rateOut
-        swapVM.swap(order, tokenA, tokenB, excessiveAmount, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, excessiveAmount, takerData);
+
+        assertEq(amountOut, setup.balanceB, "Output clamped to reserve");
+        assertGt(amountIn, 0, "Input must be positive");
+        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve fully drained");
     }
 
     // ========================================
