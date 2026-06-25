@@ -13,17 +13,12 @@ library BalancesArgsBuilder {
     using SafeCast for uint256;
     using Calldata for bytes;
 
-    error BalancesArgsBuilderArraysLengthMismatch(uint256 tokensLength, uint256 balancesLength);
-    error BalancesParsingMissingTokensCount();
-    error BalancesParsingMissingTokens();
-    error BalancesParsingMissingInitialBalances();
-
     function build(uint256[2] memory balances) internal pure returns (bytes memory) {
         return abi.encodePacked(balances[0], balances[1]);
     }
 
     function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
-        balanceA = uint256(bytes32(args.slice(0)));
+        balanceA = uint256(bytes32(args));
         balanceB = uint256(bytes32(args.slice(32)));
     }
 }
@@ -33,9 +28,6 @@ contract Balances {
     using ContextLib for Context;
 
     error SetBalancesExpectZeroBalances(uint256 balanceIn, uint256 balanceOut);
-    error StaticBalancesRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
-    error DynamicBalancesLoadingRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
-    error DynamicBalancesInitRequiresSettingBothBalances(address tokenIn, address tokenOut, bytes tokens);
 
     mapping(bytes32 orderHash =>
         mapping(address token => uint256)) public balances;
