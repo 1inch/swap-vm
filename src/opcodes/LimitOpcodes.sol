@@ -74,10 +74,6 @@ contract LimitOpcodes is
         else if (opcode == 28) TWAPSwap._twap(ctx, args);
         else if (opcode == 29) Extruction._extruction(ctx, args);
         else if (opcode == 30) Controls._salt(ctx, args);
-        else if (opcode == 31) Fee._flatFeeAmountInXD(ctx, args);
-        else if (opcode == 32) FeeExperimental._flatFeeAmountOutXD(ctx, args);
-        else if (opcode == 33) FeeExperimental._progressiveFeeInXD(ctx, args);
-        else if (opcode == 34) FeeExperimental._progressiveFeeOutXD(ctx, args);
         else if (opcode == 35) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
         else if (opcode == 36) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
         else if (opcode == 37) Fee._protocolFeeAmountInXD(ctx, args);
@@ -136,10 +132,10 @@ contract LimitOpcodes is
             // NOTE: Add new instructions here to maintain backward compatibility
             Extruction._extruction,
             Controls._salt,
-            Fee._flatFeeAmountInXD,
-            FeeExperimental._flatFeeAmountOutXD,
-            FeeExperimental._progressiveFeeInXD,
-            FeeExperimental._progressiveFeeOutXD,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             FeeExperimental._protocolFeeAmountOutXD,
             FeeExperimental._aquaProtocolFeeAmountOutXD,
             Fee._protocolFeeAmountInXD,
