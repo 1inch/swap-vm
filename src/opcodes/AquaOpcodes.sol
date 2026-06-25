@@ -57,6 +57,7 @@ contract AquaOpcodes is
         else if (opcode == 30) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 31) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == 32) Extruction._extruction(ctx, args);
+        else if (opcode == 33) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 

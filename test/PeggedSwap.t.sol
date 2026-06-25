@@ -348,10 +348,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18; // 1% of pool
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
 
         assertEq(swappedIn, amountIn);
         // For 1% trade at A=5000, slippage is essentially 0 (linear approx: ε≈Δ/(1+2A) ≈ 1e-5 ≈ 0.1 bp)
@@ -398,10 +398,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerData = _makeTakerData(true, signature);
+            bytes memory takerData = _makeTakerData(true, true, signature);
 
             vm.prank(taker);
-            (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, takerData);
+            (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
             uint256 inv0 = PeggedSwapMath.invariantFromReserves(
                 poolSize, poolSize, setup.x0, setup.y0, setup.linearWidth
@@ -435,14 +435,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
         vm.expectRevert(abi.encodeWithSelector(
             PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
             5000e27 + 1
         ));
-        swapVM.swap(order, tokenA, tokenB, 1000e18, takerData);
+        swapVM.swap(order, 1000e18, takerData);
     }
 
     // ========================================

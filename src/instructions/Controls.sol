@@ -115,7 +115,7 @@ contract Controls {
     /// @dev Unlike _onlyTakerTokenBalanceNonZero, this checks tx.origin instead of ctx.query.taker
     /// @param args.token | 20 bytes
     function _onlyTxOriginTokenBalanceNonZero(Context memory /* ctx */, bytes calldata args) internal view {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        address token = address(bytes20(args));
         uint256 balance = IERC20(token).balanceOf(tx.origin);
         require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
     }
