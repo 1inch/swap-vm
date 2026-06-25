@@ -235,7 +235,7 @@ Program memory program = ProgramBuilder.init(_opcodes());
 bytes memory bytecode = bytes.concat(
     // Gate: taker must hold gateToken (or NFT) balance > 0
     program.build(_onlyTakerTokenBalanceNonZero,
-        ControlsArgsBuilder.buildTakerTokenBalanceNonZero(gateToken)), // Restrict execution to eligible takers
+        ControlsArgsBuilder.buildTokenBalanceNonZero(gateToken)), // Restrict execution to eligible takers
     // Regular limit-order path
     program.build(_staticBalancesXD, BalancesArgsBuilder.build(
         dynamic([tokenIn, tokenOut]),
