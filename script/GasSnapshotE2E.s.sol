@@ -248,7 +248,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(tokenA)))
+            p.build(_onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(tokenA)))
         );
     }
 
