@@ -132,7 +132,7 @@ contract ControlsTest is Test, OpcodesDebug {
         bytes memory bytecode = bytes.concat(
             // Require taker holds tokenC
             program.build(_onlyTakerTokenBalanceNonZero,
-                ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(tokenC))),
+                ControlsArgsBuilder.buildTokenBalanceNonZero(address(tokenC))),
             program.build(_staticBalancesXD,
                 BalancesArgsBuilder.build(
                     dynamic([address(tokenA), address(tokenB)]),

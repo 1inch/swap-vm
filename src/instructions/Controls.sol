@@ -30,7 +30,7 @@ library ControlsArgsBuilder {
         return abi.encodePacked(deadline);
     }
 
-    function buildTakerTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
+    function buildTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
         return abi.encodePacked(token);
     }
 
