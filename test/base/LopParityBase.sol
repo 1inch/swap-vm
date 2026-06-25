@@ -484,4 +484,37 @@ abstract contract LopParityBase is Test, LimitOpcodesDebug {
             res = FillResult({ ok: false, makerAssetOut: 0, takerAssetIn: 0, gasUsed: 0 });
         }
     }
+
+    // =============================================================================================
+    // Drift-free gas metering
+    // =============================================================================================
+    //
+    // Measuring `gasleft()` around the fill CALL inside a long benchmark loop is NOT stable: Solidity's
+    // free-memory pointer only grows within a call frame, so each iteration's freshly-built order/takerData
+    // push the metered CALL's calldata to ever-higher memory offsets, inflating its quadratic
+    // memory-expansion cost (~10-25 gas/iteration of upward drift, proportional to loop length).
+    //
+    // These helpers run each fill in its OWN external call frame (invoked as `this.meter*Fill(...)`), so the
+    // metered CALL always sits at the same low memory offset and the measurement is loop-length-independent
+    // and comparable across benchmarks. Order building/signing happens before `gasleft()` (not metered),
+    // exactly as the `_fill*` helpers do. State changes persist to the caller — wrap calls in
+    // vm.snapshotState/revertToState for per-order cold-slot isolation. Reverts if the fill fails.
+
+    /// @notice Gas of one SwapVM fill of `spec`/`fs`, metered in a fresh frame (no loop drift).
+    function meterVmFill(OrderSpec calldata spec, FillSpec calldata fs) external returns (uint256 gasUsed) {
+        ISwapVM.Order memory order = _vmOrder(spec);
+        bytes memory takerData = _vmTakerData(order, fs);
+        uint256 g = gasleft();
+        swapVM.swap(order, fs.amount, takerData);
+        gasUsed = g - gasleft();
+    }
+
+    /// @notice Gas of one LOP fill of `spec`/`fs`, metered in a fresh frame (no loop drift).
+    function meterLopFill(OrderSpec calldata spec, FillSpec calldata fs) external returns (uint256 gasUsed) {
+        (IOrderMixin.Order memory order, bytes32 r, bytes32 vs, bytes memory extension) = _lopOrder(spec);
+        TakerTraits tt = _lopTakerTraits(fs, extension.length);
+        uint256 g = gasleft();
+        lop.fillOrderArgs(order, r, vs, fs.amount, tt, extension);
+        gasUsed = g - gasleft();
+    }
 }

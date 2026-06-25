@@ -256,20 +256,18 @@ contract LopGasBenchTest is LopParityBase {
 
     // ---- metering ----------------------------------------------------------------------------------
 
-    /// @dev Gas of one SwapVM fill, metered in storage isolation so per-order slots are cold.
+    /// @dev Gas of one SwapVM fill, metered in storage isolation (snapshot/revert) so per-order slots are
+    ///      cold, and in a fresh external frame (meterVmFill) so the measurement doesn't drift with loop
+    ///      memory. Reverts if the fill fails.
     function _swapVmFillGas(OrderSpec memory order, FillSpec memory fill) internal returns (uint256 gasUsed) {
         uint256 snapshot = vm.snapshotState();
-        FillResult memory r = _fillVm(order, fill);
-        assertTrue(r.ok, "bench: SwapVM fill must succeed");
-        gasUsed = r.gasUsed;
+        gasUsed = this.meterVmFill(order, fill);
         vm.revertToState(snapshot);
     }
 
     function _lopFillGas(OrderSpec memory order, FillSpec memory fill) internal returns (uint256 gasUsed) {
         uint256 snapshot = vm.snapshotState();
-        FillResult memory r = _fillLop(order, fill);
-        assertTrue(r.ok, "bench: LOP fill must succeed");
-        gasUsed = r.gasUsed;
+        gasUsed = this.meterLopFill(order, fill);
         vm.revertToState(snapshot);
     }
 

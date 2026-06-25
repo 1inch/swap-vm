@@ -1,11 +1,12 @@
 [profile.default]
-solc_version   = "0.8.30"
-optimizer      = true
-optimizer_runs = 700
-via_ir         = true
-fs_permissions = [
+auto_detect_solc = true
+optimizer        = true
+optimizer_runs   = 700
+via_ir           = true
+fs_permissions   = [
     { access = "read-write", path = "./deployments" },
-    { access = "read-write", path = "./config" }
+    { access = "read-write", path = "./config" },
+    { access = "read", path = "./out" }
 ]
 
 [profile.default.optimizer_details]
@@ -21,7 +22,7 @@ int_types                    = "long"
 number_underscore            = "thousands"
 
 [profile.ci]
-solc_version   = "0.8.30"
+auto_detect_solc = true
 optimizer      = true
 optimizer_runs = 700
 via_ir         = true

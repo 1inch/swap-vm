@@ -3,3 +3,5 @@ forge-std/=node_modules/forge-std/src/
 @1inch/solidity-utils/=node_modules/@1inch/solidity-utils/
 @1inch/aqua/=node_modules/@1inch/aqua/
 @1inch/limit-order-protocol/=node_modules/@1inch/limit-order-protocol-contract/contracts/
+@1inch/fusion-protocol/=node_modules/@1inch/limit-order-settlement/contracts/
+@1inch/limit-order-protocol-contract/=node_modules/@1inch/limit-order-settlement/node_modules/@1inch/limit-order-protocol-contract/
