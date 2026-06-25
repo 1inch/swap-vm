@@ -23,6 +23,9 @@ import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
+import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
+import { Whitelist } from "../instructions/Whitelist.sol";
+import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
 contract Opcodes is
     Controls,
@@ -39,14 +42,17 @@ contract Opcodes is
     Fee,
     FeeExperimental,
     Extruction,
-    PeggedSwap
+    PeggedSwap,
+    SeriesEpochManager,
+    Whitelist,
+    PiecewiseLinearScale
 {
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[47] memory instructions = [
+        function(Context memory, bytes calldata) internal[52] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -106,7 +112,12 @@ contract Opcodes is
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            SeriesEpochManager._validateSeriesEpochXD,
+            Whitelist._whitelistSingleTaker,
+            Whitelist._whitelistMultipleTakers,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D
         ];
 
         // Efficiently turning static memory array into dynamic memory array
