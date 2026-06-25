@@ -144,7 +144,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Build program with NFT gate check and XYC swap
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(nftGate))),
+            program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
             program.build(XYCSwap._xycSwapXD),
             program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
@@ -238,7 +238,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Build program with tx.origin NFT gate check and XYC swap
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._onlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTxOriginTokenBalanceNonZero(address(nftGate))),
+            program.build(Controls._onlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
             program.build(XYCSwap._xycSwapXD),
             program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
