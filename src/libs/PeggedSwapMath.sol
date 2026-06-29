@@ -99,7 +99,9 @@ library PeggedSwapMath {
 
         uint256 discriminant = ONE + fourARightSide;
 
-        uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Ceil);
+        // Round the discriminant root DOWN: smaller √D → larger v.
+        // A larger v is the maker-favorable
+        uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Floor);
 
         require(sqrtDiscriminant >= ONE, PeggedSwapMathNoSolution());
 
