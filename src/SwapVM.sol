@@ -111,8 +111,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @dev Method can be executed in a static-call
     function quote(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
@@ -120,13 +118,18 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
         bool isExactIn = takerTraits.isExactIn();
+
+        address tokenIn;
+        address tokenOut;
+        if (takerTraits.isAToB()) (tokenIn, tokenOut) = order.traits.tokens(order.data);
+        else (tokenOut, tokenIn) = order.traits.tokens(order.data);
+
         Context memory ctx = Context({
             vm: VM({
                 isStaticContext: true,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                opcodes: _instructions()
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -149,15 +152,16 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
         }
 
-        (amountIn, amountOut) = ctx.runLoop();
-        order.traits.validate(tokenIn, tokenOut, amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+        _runLoop(ctx);
+
+        order.traits.validate(ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function swap(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
@@ -166,13 +170,18 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
         bool isExactIn = takerTraits.isExactIn();
+
+        address tokenIn;
+        address tokenOut;
+        if (takerTraits.isAToB()) (tokenIn, tokenOut) = order.traits.tokens(order.data);
+        else (tokenOut, tokenIn) = order.traits.tokens(order.data);
+
         Context memory ctx = Context({
             vm: VM({
                 isStaticContext: false,
                 nextPC: 0,
                 programPtr: CalldataPtrLib.from(order.traits.program(order.data)),
-                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData)),
-                opcodes: _instructions()
+                takerArgsPtr: CalldataPtrLib.from(takerTraits.instructionsArgs(takerData))
             }),
             query: SwapQuery({
                 orderHash: orderHash,
@@ -199,9 +208,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         uint256 originalAquaBalanceIn = ctx.swap.balanceIn;
-        (amountIn, amountOut) = ctx.runLoop();
-        order.traits.validate(tokenIn, tokenOut, amountIn);
-        takerTraits.validate(takerData, amount, amountIn, amountOut);
+
+        _runLoop(ctx);
+
+        order.traits.validate(ctx.swap.amountIn);
+        takerTraits.validate(takerData, amount, ctx.swap.amountIn, ctx.swap.amountOut);
 
         if (takerTraits.isFirstTransferFromTaker()) {
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
@@ -212,7 +223,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         _reentrancyGuards[orderHash].unlock();
-        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
+        emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, ctx.swap.amountIn, ctx.swap.amountOut);
+
+        return (ctx.swap.amountIn, ctx.swap.amountOut, orderHash);
     }
 
     function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {
@@ -290,6 +303,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
     }
 
-    /// @dev Override this function in router to provide supported instruction list
-    function _instructions() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory) { }
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

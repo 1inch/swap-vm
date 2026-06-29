@@ -52,8 +52,9 @@ contract TransferModesCombinationsTest is Test {
         taker = makeAddr("taker");
 
         // Deploy tokens
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
     // ==================== Combination 1: Aqua Maker + Taker AquaPush ====================
@@ -79,7 +80,7 @@ contract TransferModesCombinationsTest is Test {
         // Execute swap
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = router.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, taker, true);
@@ -104,7 +105,7 @@ contract TransferModesCombinationsTest is Test {
 
         // Execute swap via taker contract
         (uint256 amountIn, uint256 amountOut) = takerContract.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, address(takerContract), true);
@@ -136,7 +137,7 @@ contract TransferModesCombinationsTest is Test {
         // Execute swap
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = router.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, taker, false);
@@ -169,7 +170,7 @@ contract TransferModesCombinationsTest is Test {
 
         // Execute swap via taker contract
         (uint256 amountIn, uint256 amountOut) = takerContract.swap(
-            order, address(tokenB), address(tokenA), SWAP_AMOUNT, takerData
+            order, SWAP_AMOUNT, takerData
         );
 
         _verifySwapResults(amountIn, amountOut, address(takerContract), false);
@@ -197,6 +198,7 @@ contract TransferModesCombinationsTest is Test {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
             isExactIn: true,
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
             hasPreTransferOutCallback: false,
@@ -221,6 +223,7 @@ contract TransferModesCombinationsTest is Test {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
             isExactIn: true,
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
             hasPreTransferOutCallback: false,

@@ -9,7 +9,7 @@ import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { Context } from "../libs/VM.sol";
+import { Context, SwapRegisters } from "../libs/VM.sol";
 
 contract Debug {
     using CalldataPtrLib for CalldataPtr;
@@ -20,6 +20,7 @@ contract Debug {
         opcodes[2] = Debug._printContext;
         opcodes[3] = Debug._printFreeMemoryPointer;
         opcodes[4] = Debug._printGasLeft;
+        opcodes[5] = Debug._patchSwapRegisters;
         return opcodes;
     }
 
@@ -60,6 +61,10 @@ contract Debug {
             ptr := mload(0x40)
         }
         console.log("Free memory pointer:", ptr);
+    }
+
+    function _patchSwapRegisters(Context memory ctx, bytes calldata args) internal pure {
+        ctx.swap = abi.decode(args, (SwapRegisters));
     }
 
     function _toHexString(bytes calldata data) private pure returns (string memory) {

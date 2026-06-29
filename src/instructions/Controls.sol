@@ -50,12 +50,6 @@ contract Controls {
     using Calldata for bytes;
     using ContextLib for Context;
 
-    error JumpMissingNextPCArg();
-    error ControlsMissingTokenArg();
-    error ControlsMissingMinAmountArg();
-    error ControlsMissingMinShareArg();
-    error ControlsMissingDeadlineArg();
-
     error DeadlineReached(address taker, uint256 deadline);
     error TakerTokenBalanceIsZero(address taker, address token);
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
@@ -69,7 +63,7 @@ contract Controls {
     ///      For jumps to positions >= 65,536, use Extruction with custom control flow logic.
     /// @param args.nextPC | 2 bytes (uint16)
     function _jump(Context memory ctx, bytes calldata args) internal pure {
-        uint256 nextPC = uint16(bytes2(args.slice(0, 2, JumpMissingNextPCArg.selector)));
+        uint256 nextPC = uint16(bytes2(args));
         ctx.setNextPC(nextPC);
     }
 
@@ -78,9 +72,9 @@ contract Controls {
     /// @param args.token  | 20 bytes
     /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        address token = address(bytes20(args));
         if (token == ctx.query.tokenIn) {
-            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
+            uint256 nextPC = uint16(bytes2(args.slice(20)));
             ctx.setNextPC(nextPC);
         }
     }
@@ -90,9 +84,9 @@ contract Controls {
     /// @param args.token  | 20 bytes
     /// @param args.nextPC | 2 bytes (uint16)
     function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        address token = address(bytes20(args));
         if (token == ctx.query.tokenOut) {
-            uint256 nextPC = uint16(bytes2(args.slice(20, 22, JumpMissingNextPCArg.selector)));
+            uint256 nextPC = uint16(bytes2(args.slice(20)));
             ctx.setNextPC(nextPC);
         }
     }
@@ -100,14 +94,14 @@ contract Controls {
     /// @dev Reverts if the deadline has been reached
     /// @param args.deadline | 5 bytes
     function _deadline(Context memory ctx, bytes calldata args) internal view {
-        uint256 deadline = uint40(bytes5(args.slice(0, 5, ControlsMissingDeadlineArg.selector)));
+        uint256 deadline = uint40(bytes5(args));
         require(block.timestamp <= deadline, DeadlineReached(ctx.query.taker, deadline));
     }
 
     /// @dev Checks if the taker holds any amount of the specified token (NFTs are natively supported)
     /// @param args.token | 20 bytes
     function _onlyTakerTokenBalanceNonZero(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
+        address token = address(bytes20(args));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
     }
@@ -116,8 +110,8 @@ contract Controls {
     /// @param args.token     | 20 bytes
     /// @param args.minAmount | 32 bytes
     function _onlyTakerTokenBalanceGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
-        uint256 minAmount = uint256(bytes32(args.slice(20, 52, ControlsMissingMinAmountArg.selector)));
+        address token = address(bytes20(args));
+        uint256 minAmount = uint256(bytes32(args.slice(20)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance >= minAmount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, minAmount));
     }
@@ -126,8 +120,8 @@ contract Controls {
     /// @param args.token       | 20 bytes
     /// @param args.minShareE18 | 8 bytes
     function _onlyTakerTokenSupplyShareGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args.slice(0, 20, ControlsMissingTokenArg.selector)));
-        uint256 minShareE18 = uint64(bytes8(args.slice(20, 28, ControlsMissingMinShareArg.selector)));
+        address token = address(bytes20(args));
+        uint256 minShareE18 = uint64(bytes8(args.slice(20)));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
         // balance * 1e18 / totalSupply >= minShareE18

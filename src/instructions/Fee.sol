@@ -20,10 +20,6 @@ library FeeArgsBuilder {
     using Calldata for bytes;
 
     error FeeBpsOutOfRange(uint32 feeBps);
-    error FeeMissingFeeBPS();
-    error ProtocolFeeMissingFeeBPS();
-    error ProtocolFeeMissingTo();
-    error ProtocolFeeProviderMissingAddress();
 
     function buildFlatFee(uint32 feeBps) internal pure returns (bytes memory) {
         require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
@@ -40,20 +36,20 @@ library FeeArgsBuilder {
     }
 
     function parseFlatFee(bytes calldata args) internal pure returns (uint32 feeBps) {
-        feeBps = uint32(bytes4(args.slice(0, 4, FeeMissingFeeBPS.selector)));
+        feeBps = uint32(bytes4(args));
     }
 
     function parseProtocolFee(bytes calldata args) internal pure returns (uint32 feeBps, address to) {
-        feeBps = uint32(bytes4(args.slice(0, 4, ProtocolFeeMissingFeeBPS.selector)));
-        to = address(uint160(bytes20(args.slice(4, 24, ProtocolFeeMissingTo.selector))));
+        feeBps = uint32(bytes4(args));
+        to = address(uint160(bytes20(args.slice(4))));
     }
 
     function parseDynamicProtocolFee(bytes calldata args) internal pure returns (address feeProvider) {
-        feeProvider = address(uint160(bytes20(args.slice(0, 20, ProtocolFeeProviderMissingAddress.selector))));
+        feeProvider = address(uint160(bytes20(args)));
     }
 }
 
-contract Fee {
+abstract contract Fee {
     using SafeERC20 for IERC20;
     using ContextLib for Context;
 
@@ -78,11 +74,11 @@ contract Fee {
             // Decrease amountIn by fee only during swap-instruction
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             ctx.swap.amountIn -= Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS);
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn += Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS - feeBps);
         }
     }
@@ -237,13 +233,16 @@ contract Fee {
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
             ctx.swap.amountIn -= feeAmountIn;
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            ctx.runLoop();
+            _runLoop(ctx);
             feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
             ctx.swap.amountIn += feeAmountIn;
         }
     }
+
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

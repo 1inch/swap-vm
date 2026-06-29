@@ -14,14 +14,13 @@ import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/lib
 /// @param nextPC The program counter for the next instruction to execute
 /// @param programPtr Pointer to the program in calldata (offset and length)
 /// @param takerArgsPtr Pointer to the taker's data in calldata (offset and length)
-/// @param opcodes The set of instructions (functions) that can be executed by the VM
+/// @param dispatch Opcode dispatcher: maps an opcode index to its instruction handler and executes it
 /// @dev This struct is used to track the execution state of instructions during a swap
 struct VM {
     bool isStaticContext;
     uint256 nextPC;
     CalldataPtr programPtr; // Use ContextLib.program()
     CalldataPtr takerArgsPtr; // Use ContextLib.takerArgs()
-    function(Context memory, bytes calldata) internal[] opcodes;
 }
 
 /// @dev Represents the read-only swap information
@@ -71,8 +70,8 @@ library ContextLib {
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
-    /// @dev Program counter exceeds program length
-    error RunLoopExcessiveCall(uint256 pc, uint256 programLength);
+    /// @dev Program counter overflows program length
+    error RunLoopExceedProgramLength(uint256 pc, uint256 programLength);
 
     /// @notice Get the program bytecode from context
     /// @param ctx Execution context
@@ -104,34 +103,5 @@ library ContextLib {
         length = Math.min(length, data.length);
         ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length));
         return data.slice(0, length);
-    }
-
-    /// @notice Execute program instructions sequentially
-    /// @dev Iterates through bytecode, executing each instruction until program end
-    /// @dev LIMITATION: Program size is effectively limited to 65,535 bytes due to Controls
-    ///      jump instructions using uint16 addressing. Programs exceeding this size can execute,
-    ///      but jump instructions cannot address positions >= 65,536. For custom control flow in
-    ///      larger programs, use Extruction._extruction which supports arbitrary uint256 nextPC.
-    /// @param ctx Execution context containing program and registers
-    /// @return swapAmountIn Final computed input amount
-    /// @return swapAmountOut Final computed output amount
-    function runLoop(Context memory ctx) internal returns (uint256 swapAmountIn, uint256 swapAmountOut) {
-        bytes calldata programBytes = ctx.program();
-        require(ctx.vm.nextPC < programBytes.length, RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));
-
-        for (uint256 pc = ctx.vm.nextPC; pc < programBytes.length; ) {
-            unchecked {
-                uint256 opcode = uint8(programBytes[pc++]);
-                uint256 argsLength = uint8(programBytes[pc++]);
-                uint256 nextPC = pc + argsLength;
-                bytes calldata args = programBytes[pc:nextPC];
-
-                ctx.vm.nextPC = nextPC;
-                ctx.vm.opcodes[opcode](ctx, args);
-                pc = ctx.vm.nextPC;
-            }
-        }
-
-        return (ctx.swap.amountIn, ctx.swap.amountOut);
     }
 }

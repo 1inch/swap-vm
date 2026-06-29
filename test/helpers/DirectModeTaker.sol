@@ -28,12 +28,10 @@ contract DirectModeTaker {
 
     function swap(
         ISwapVM.Order calldata order,
-        address tokenIn,
-        address tokenOut,
         uint256 amount,
         bytes calldata takerTraitsAndData
     ) public onlyOwner returns (uint256 amountIn, uint256 amountOut) {
-        (amountIn, amountOut,) = SWAPVM.swap(order, tokenIn, tokenOut, amount, takerTraitsAndData);
+        (amountIn, amountOut,) = SWAPVM.swap(order, amount, takerTraitsAndData);
     }
 
     // Callback does nothing in direct mode - just validates it was called

@@ -12,22 +12,19 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library MinRateArgsBuilder {
     using Calldata for bytes;
 
-    error MinRateMissingRateAmountLtArg();
-    error MinRateMissingRateAmountGtArg();
-
     function build(address tokenA, address tokenB, uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
         (uint64 rateLt, uint64 rateGt) = tokenA < tokenB ? (rateA, rateB) : (rateB, rateA);
         return abi.encodePacked(rateLt, rateGt);
     }
 
     function parse(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint64 rateIn, uint64 rateOut) {
-        uint64 rateLt = uint64(bytes8(args.slice(0, 8, MinRateMissingRateAmountLtArg.selector)));
-        uint64 rateGt = uint64(bytes8(args.slice(8, 16, MinRateMissingRateAmountGtArg.selector)));
+        uint64 rateLt = uint64(bytes8(args));
+        uint64 rateGt = uint64(bytes8(args.slice(8)));
         (rateIn, rateOut) = tokenIn < tokenOut ? (rateLt, rateGt) : (rateGt, rateLt);
     }
 }
 
-contract MinRate {
+abstract contract MinRate {
     using Math for uint256;
     using ContextLib for Context;
 
@@ -41,13 +38,13 @@ contract MinRate {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
         (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
 
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        _runLoop(ctx);
 
         // Checking that: actual_rate >= required_rate
         // But, instead of: swapAmountIn / swapAmountOut >= rateIn / rateOut use cross-multiplication:
         require(
-            swapAmountIn * rateOut >= rateIn * swapAmountOut,
-            MinRateFailed(swapAmountIn, swapAmountOut, rateIn, rateOut)
+            ctx.swap.amountIn * rateOut >= rateIn * ctx.swap.amountOut,
+            MinRateFailed(ctx.swap.amountIn, ctx.swap.amountOut, rateIn, rateOut)
         );
     }
 
@@ -60,12 +57,12 @@ contract MinRate {
         uint256 amountOut = ctx.swap.amountOut;
 
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        _runLoop(ctx);
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, MinRateRunLoopExpectToComputeSwapAmounts(ctx.swap.amountIn, ctx.swap.amountOut));
 
         // Checking that: actual_rate < required_rate
         // But, instead of: swapAmountIn / swapAmountOut < rateIn / rateOut use cross-multiplication:
-        if (swapAmountIn * rateOut < rateIn * swapAmountOut) {
+        if (ctx.swap.amountIn * rateOut < rateIn * ctx.swap.amountOut) {
             if (ctx.query.isExactIn) {
                 ctx.swap.amountOut = amountIn * rateOut / rateIn;
             } else {
@@ -73,4 +70,7 @@ contract MinRate {
             }
         }
     }
+
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

@@ -24,7 +24,29 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
 
     uint256 constant ONE = 1e18;
 
+    uint256 private _formulaPtr;
+
     constructor() FeeExperimental(address(0)) {}
+
+    function _runLoop(Context memory ctx) internal virtual override {
+        bytes calldata programBytes = ctx.program();
+        require(ctx.vm.nextPC < programBytes.length, ContextLib.RunLoopExceedProgramLength(ctx.vm.nextPC, programBytes.length));
+
+        uint256 pc = ctx.vm.nextPC + 1;
+        uint256 argsLength = uint8(bytes1(programBytes[pc++]));
+        bytes calldata args = programBytes[pc : pc + argsLength];
+
+        ctx.vm.nextPC = pc + argsLength;
+        
+        function(Context memory, bytes calldata) internal formula;
+        uint256 ptr = _formulaPtr;
+        assembly ("memory-safe") {
+            formula := ptr
+        }
+        formula(ctx, args);
+
+        pc = ctx.vm.nextPC;
+    }
 
     /**
      * @notice Creates a mock Context with custom swap formula
@@ -32,14 +54,12 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
      * @param balanceOut Initial balance of output token
      * @param amount Swap amount (input for exactIn, output for exactOut)
      * @param exactIn Whether this is exactIn or exactOut swap
-     * @param instruction Swap instruction to use
      */
     function createContextWithSpecificInstruction(
         uint256 balanceIn,
         uint256 balanceOut,
         uint256 amount,
-        bool exactIn,
-        function(Context memory, bytes calldata) internal instruction
+        bool exactIn
     ) internal view returns (Context memory ctx) {
         // Setup SwapRegisters
         ctx.swap.balanceIn = balanceIn;
@@ -50,9 +70,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         // Setup SwapQuery
         ctx.query.isExactIn = exactIn;
 
-        // Setup VM with our custom opcodes
-        ctx.vm.opcodes = new function(Context memory, bytes calldata) internal[](256);
-        ctx.vm.opcodes[0] = instruction;
+        // Dispatch opcode 0 to the formula stashed in _formulaPtr (set by checkExactInExactOutSymmetry)
         ctx.vm.nextPC = 0;
         ctx.vm.isStaticContext = true;
 
@@ -80,18 +98,26 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         uint256 feeBps,
         bool isFeeIn
     ) internal {
+        // Stash the formula pointer so _runFormula (the VM dispatcher) can reach it.
+        function(Context memory, bytes calldata) internal formula = swapInstruction;
+        uint256 ptr;
+        assembly ("memory-safe") {
+            ptr := formula
+        }
+        _formulaPtr = ptr;
+
         uint256 inputAmount = 10e18; // Use smaller amount to avoid overflow
 
         // Step 1: ExactIn swap
         Context memory ctxExactIn = createContextWithSpecificInstruction(
-            balanceIn, balanceOut, inputAmount, true, swapInstruction
+            balanceIn, balanceOut, inputAmount, true
         );
 
         isFeeIn ? _feeAmountIn(ctxExactIn, feeBps) : _feeAmountOut(ctxExactIn, feeBps);
 
         // Step 2: ExactOut swap requesting the same outputAmount
         Context memory ctxExactOut = createContextWithSpecificInstruction(
-            balanceIn, balanceOut, ctxExactIn.swap.amountOut, false, swapInstruction
+            balanceIn, balanceOut, ctxExactIn.swap.amountOut, false
         );
 
         isFeeIn ? _feeAmountIn(ctxExactOut, feeBps) : _feeAmountOut(ctxExactOut, feeBps);

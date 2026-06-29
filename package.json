@@ -34,7 +34,8 @@
     "lint": "prettier --check \"{src,test,script,mocks}/**/*.sol\"",
     "format": "prettier --write \"{src,test,script,mocks}/**/*.sol\"",
     "snapshot": "npx hardhat test solidity --snapshot && grep -v '(runs: ' .gas-snapshot > .gas-snapshot.tmp && mv .gas-snapshot.tmp .gas-snapshot",
-    "snapshot:check": "npx hardhat test solidity --snapshot-check"
+    "snapshot:check": "npx hardhat test solidity --snapshot-check",
+    "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
   },
   "repository": {
     "type": "git",

@@ -82,7 +82,7 @@ library TWAPSwapArgsBuilder {
  *
  * The bump should ensure profitability after the mandatory waiting period.
  */
-contract TWAPSwap is LimitSwap {
+abstract contract TWAPSwap is LimitSwap {
     using Math for uint256;
     using Power for uint256;
     using ContextLib for Context;
@@ -153,7 +153,7 @@ contract TWAPSwap is LimitSwap {
         ctx.swap.balanceIn = baseAmountIn;
         ctx.swap.balanceOut = baseAmountOut * decay / 1e18;
 
-        ctx.runLoop(); // Reuse LimitSwap logic for final amount calculation
+        _runLoop(ctx); // Reuse LimitSwap logic for final amount calculation
 
         // Check minimum trade amount (only during TWAP duration) and available liquidity
         require(durationPassed >= args.duration || ctx.swap.amountOut >= args.minTradeAmountOut, TWAPSwapMinTradeAmountNotReached(ctx.swap.amountOut, args.minTradeAmountOut));
@@ -169,4 +169,7 @@ contract TWAPSwap is LimitSwap {
             });
         }
     }
+
+    /// @dev Override in the router to execute program bytecode
+    function _runLoop(Context memory ctx) internal virtual;
 }

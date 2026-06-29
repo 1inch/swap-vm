@@ -27,8 +27,8 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
 
     function createOrder(
         address maker,
-        TokenMock, // tokenA - unused but kept for interface consistency
-        TokenMock  // tokenB - unused but kept for interface consistency
+        TokenMock tokenA,
+        TokenMock tokenB
     ) external view returns (ISwapVM.Order memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
@@ -38,6 +38,8 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,

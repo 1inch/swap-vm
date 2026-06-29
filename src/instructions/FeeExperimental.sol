@@ -18,7 +18,6 @@ library FeeArgsBuilderExperimental {
     using Calldata for bytes;
 
     error FeeBpsOutOfRange(uint32 feeBps);
-    error ProgressiveFeeMissingFeeBPS();
 
     function buildProgressiveFee(uint32 feeBps) internal pure returns (bytes memory) {
         require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
@@ -26,11 +25,11 @@ library FeeArgsBuilderExperimental {
     }
 
     function parseProgressiveFee(bytes calldata args) internal pure returns (uint32 feeBps) {
-        feeBps = uint32(bytes4(args.slice(0, 4, ProgressiveFeeMissingFeeBPS.selector)));
+        feeBps = uint32(bytes4(args));
     }
 }
 
-contract FeeExperimental is Fee {
+abstract contract FeeExperimental is Fee {
     using SafeERC20 for IERC20;
     using ContextLib for Context;
 
@@ -55,10 +54,10 @@ contract FeeExperimental is Fee {
                 (BPS * ctx.swap.amountIn * ctx.swap.balanceIn) /
                 (BPS * ctx.swap.balanceIn + feeBps * ctx.swap.amountIn)
             );
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
-            ctx.runLoop();
+            _runLoop(ctx);
 
             // Increase amountIn by fee after swap-instruction
             // Formula: dx = dx_eff / (1 - λ * dx_eff / x)
@@ -75,7 +74,7 @@ contract FeeExperimental is Fee {
         uint256 feeBps = FeeArgsBuilderExperimental.parseProgressiveFee(args);
 
         if (ctx.query.isExactIn) {
-            ctx.runLoop();
+            _runLoop(ctx);
 
             // Decrease amountOut by fee after swap-instruction
             // Formula: dy_eff = dy / (1 + λ * dy / y)
@@ -93,7 +92,7 @@ contract FeeExperimental is Fee {
                 (BPS * ctx.swap.amountOut * ctx.swap.balanceOut),
                 (BPS * ctx.swap.balanceOut - feeBps * ctx.swap.amountOut)
             );
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
     }
@@ -135,7 +134,7 @@ contract FeeExperimental is Fee {
 
         if (ctx.query.isExactIn) {
             // Decrease amountOut by fee after passing to swap-instruction
-            ctx.runLoop();
+            _runLoop(ctx);
             feeAmountOut = ctx.swap.amountOut * feeBps / BPS;
             ctx.swap.amountOut -= feeAmountOut;
         } else {
@@ -143,7 +142,7 @@ contract FeeExperimental is Fee {
             uint256 takerDefinedAmountOut = ctx.swap.amountOut;
             feeAmountOut = ctx.swap.amountOut * feeBps / (BPS - feeBps);
             ctx.swap.amountOut += feeAmountOut;
-            ctx.runLoop();
+            _runLoop(ctx);
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
     }

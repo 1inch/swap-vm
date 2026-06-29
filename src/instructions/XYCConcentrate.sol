@@ -16,8 +16,6 @@ library XYCConcentrateArgsBuilder {
     using Calldata for bytes;
 
     error ConcentrateInvalidPriceBounds(uint256 sqrtPriceMin, uint256 sqrtPriceMax);
-    error ConcentrateMissingSqrtPriceMin();
-    error ConcentrateMissingSqrtPriceMax();
 
     /// @notice Build args for the 2D price-bounds concentrate instruction
     /// @param sqrtPriceMin sqrt(P_min) in 1e18 fixed-point, where P = tokenGt/tokenLt
@@ -28,8 +26,8 @@ library XYCConcentrateArgsBuilder {
     }
 
     function parse2D(bytes calldata args) internal pure returns (uint256 sqrtPriceMin, uint256 sqrtPriceMax) {
-        sqrtPriceMin = uint256(bytes32(args.slice(0, 32, ConcentrateMissingSqrtPriceMin.selector)));
-        sqrtPriceMax = uint256(bytes32(args.slice(32, 64, ConcentrateMissingSqrtPriceMax.selector)));
+        sqrtPriceMin = uint256(bytes32(args));
+        sqrtPriceMax = uint256(bytes32(args.slice(32)));
     }
 
     /// @notice Compute the implied spot price and liquidity from real balances and price bounds

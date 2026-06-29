@@ -21,7 +21,6 @@ import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.s
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 
 /// @title Whitelist tests
 contract WhitelistTest is Test, LimitOpcodesDebug {
@@ -54,8 +53,9 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         taker = address(this);
         swapVM = new LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 1e30);
@@ -97,11 +97,11 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         bytes memory takerData = _buildTakerData();
 
         vm.prank(ALLOWED_TAKERS[0]);
-        swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
 
         vm.prank(ALLOWED_TAKERS[1]);
         vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-        swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
     }
 
     function test_Whitelist_Multiple() public {
@@ -112,18 +112,18 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
             for (uint256 i; i < length; ++i) {
                 vm.prank(ALLOWED_TAKERS[i]);
-                swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
             }
 
             if (length < 25) {
                 vm.prank(ALLOWED_TAKERS[length]);
                 vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-                swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
             }
 
             vm.prank(address(0xaffacfed));
             vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-            swapVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+            swapVM.quote(order, SWAP_AMOUNT, takerData);
         }
     }
 
@@ -143,7 +143,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) {
                 vm.prank(ALLOWED_TAKERS[i]);
                 uint256 gas = gasleft();
-                swapVM.quote(order, address(tokenA), address(tokenB), amountIn, takerData);
+                swapVM.quote(order, amountIn, takerData);
                 uint256 temp = gas - gasleft();
                 usage += temp;
                 if (worst < temp) worst = temp;
@@ -160,7 +160,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory code = bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([BALANCE_A, BALANCE_B]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -177,6 +177,8 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
     function _buildOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -201,6 +203,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: true,
+            isAToB: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
