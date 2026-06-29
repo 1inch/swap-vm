@@ -59,24 +59,23 @@ library PeggedSwapMath {
     /// @return v Normalized y value (y/Y₀) scaled by ONE
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
-        return solveWithSqrtU(Math.sqrt(u * ONE), a * u / ONE, a, invariantC);
+        uint256 invariantU = Math.sqrt(u * ONE) + a * u / ONE;
+        require(invariantC >= invariantU, PeggedSwapMathInvalidInput());
+        return solveWithInvariant(invariantU, a, invariantC);
     }
 
-    /// @notice solve() variant for callers that already computed √u and au
-    /// @dev Identical to solve() but skips recomputing √u and au; lets a caller that already has them
-    ///      (e.g. from a capacity check) avoid the expensive sqrt and the extra mul/div.
-    /// @param sqrtU Precomputed √(u·ONE), scaled by sqrt(ONE)
-    /// @param au Precomputed a·u/ONE
+    /// @notice solve() variant for callers that already computed the u-side invariant term (√u + au)
+    /// @dev Identical to solve() but skips recomputing √u + au; lets a caller that already has it
+    ///      (e.g. from a capacity check √u + au >= c) avoid the expensive sqrt and the extra adds.
+    /// @dev PRECONDITION: invariantC >= invariantU. Callers must guarantee this (e.g. by a prior
+    ///      capacity check); otherwise the subtraction below reverts on underflow.
+    /// @param invariantU u-side invariant contribution = √u + au, scaled by sqrt(ONE)
     /// @param a Linear width parameter scaled by ONE
     /// @param invariantC Target invariant constant scaled by sqrt(ONE)
     /// @return v Normalized y value (y/Y₀) scaled by ONE
-    function solveWithSqrtU(uint256 sqrtU, uint256 au, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        // Calculate rightSide = c - √u - au
-        // Need to check: invariantC >= sqrtU + au
-        uint256 sqrtUPlusAu = sqrtU + au;
-        require(invariantC >= sqrtUPlusAu, PeggedSwapMathInvalidInput());
-
-        uint256 rightSide = invariantC - sqrtUPlusAu;
+    function solveWithInvariant(uint256 invariantU, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
+        // rightSide = c - (√u + au); precondition invariantC >= invariantU holds (see @dev)
+        uint256 rightSide = invariantC - invariantU;
 
         if (a == 0) {
             // Equation becomes: √v = rightSide, so v = rightSide²
