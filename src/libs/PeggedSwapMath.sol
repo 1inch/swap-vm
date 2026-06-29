@@ -58,11 +58,19 @@ library PeggedSwapMath {
     /// @param invariantC Target invariant constant scaled by sqrt(ONE)
     /// @return v Normalized y value (y/Y₀) scaled by ONE
     function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        uint256 sqrtU = Math.sqrt(u * ONE);
-
         // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
-        uint256 au = a * u / ONE;
+        return solveWithSqrtU(Math.sqrt(u * ONE), a * u / ONE, a, invariantC);
+    }
 
+    /// @notice solve() variant for callers that already computed √u and au
+    /// @dev Identical to solve() but skips recomputing √u and au; lets a caller that already has them
+    ///      (e.g. from a capacity check) avoid the expensive sqrt and the extra mul/div.
+    /// @param sqrtU Precomputed √(u·ONE), scaled by sqrt(ONE)
+    /// @param au Precomputed a·u/ONE
+    /// @param a Linear width parameter scaled by ONE
+    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
+    /// @return v Normalized y value (y/Y₀) scaled by ONE
+    function solveWithSqrtU(uint256 sqrtU, uint256 au, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
         // Calculate rightSide = c - √u - au
         // Need to check: invariantC >= sqrtU + au
         uint256 sqrtUPlusAu = sqrtU + au;

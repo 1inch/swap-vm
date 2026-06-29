@@ -161,16 +161,25 @@ contract PeggedSwap {
             // x1 * ONE / x0 - safe: x1 ≤ 1e24, ONE = 1e27 → 1e51 < 1e77
             uint256 u1 = x1 * PeggedSwapMath.ONE / x0_init;  // Round DOWN u1
 
-            // Cap input at uMax (where v=0): drain output reserve, recompute amountIn
-            uint256 uMax = PeggedSwapMath.solve(0, config.linearWidth, targetInvariant);
-            if (u1 >= uMax) {
+            // Capacity check without a dedicated solve(uMax):
+            // g(u) = √u + a·u is strictly increasing and g(uMax) = targetInvariant,
+            // so u1 >= uMax  ⟺  √u1 + a·u1 >= targetInvariant  ⟺  solve(u1) has no solution.
+            // This avoids solving for uMax on the common path; we only pay for it on drain.
+            uint256 sqrtU1 = Math.sqrt(u1 * PeggedSwapMath.ONE);
+            // a * u1 / ONE - safe: a ≤ 2e27, u1 ≤ 2e27 → 4e54 < 1e77
+            uint256 au1 = config.linearWidth * u1 / PeggedSwapMath.ONE;
+
+            if (sqrtU1 + au1 >= targetInvariant) {
+                // Input exceeds capacity (v would be ≤ 0): drain output reserve, recompute amountIn.
                 // Cap x1 at uMax, round UP (protects maker)
+                uint256 uMax = PeggedSwapMath.solve(0, config.linearWidth, targetInvariant);
                 uint256 x1Capped = Math.ceilDiv(uMax * x0_init, PeggedSwapMath.ONE);
 
                 ctx.swap.amountIn = Math.ceilDiv(x1Capped - x0, rateIn);
                 ctx.swap.amountOut = y0_raw; // drain output reserve
             } else {
-                uint256 v1 = PeggedSwapMath.solve(u1, config.linearWidth, targetInvariant);
+                // Reuse sqrtU1 and au1 from the capacity check above (avoids recomputing sqrt + mul/div)
+                uint256 v1 = PeggedSwapMath.solveWithSqrtU(sqrtU1, au1, config.linearWidth, targetInvariant);
 
                 // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
                 // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
