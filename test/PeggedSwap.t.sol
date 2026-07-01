@@ -24,7 +24,10 @@ import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
     function solve(uint256 u, uint256 a, uint256 invariantC) external pure returns (uint256) {
-        return PeggedSwapMath.solve(u, a, invariantC);
+        // solve() now takes rightSide = C - (√u + au); compute + bounds-check here so tests can pass raw u
+        uint256 invariantU = Math.sqrt(u * PeggedSwapMath.ONE) + a * u / PeggedSwapMath.ONE;
+        require(invariantC >= invariantU, PeggedSwapMath.PeggedSwapMathInvalidInput());
+        return PeggedSwapMath.solve(invariantC - invariantU, a);
     }
 
     function computeInvariant(uint256 u, uint256 v, uint256 a) external pure returns (uint256) {
@@ -621,7 +624,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         );
         uint256 x1 = setup.balanceA + amountIn;
         uint256 u1 = (x1 * PeggedSwapMath.ONE) / setup.x0;
-        uint256 v1 = PeggedSwapMath.solve(u1, setup.linearWidth, targetInvariant);
+        uint256 invariantU1 = Math.sqrt(u1 * PeggedSwapMath.ONE) + setup.linearWidth * u1 / PeggedSwapMath.ONE;
+        uint256 v1 = PeggedSwapMath.solve(targetInvariant - invariantU1, setup.linearWidth);
 
         // Without protection: regular division (rounds DOWN y1 → rounds UP amountOut)
         uint256 y1_vulnerable = (v1 * setup.y0) / PeggedSwapMath.ONE;
@@ -666,7 +670,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         );
         uint256 y1 = setup.balanceB - amountOut;
         uint256 v1 = (y1 * PeggedSwapMath.ONE) / setup.y0;
-        uint256 u1 = PeggedSwapMath.solve(v1, setup.linearWidth, targetInvariant);
+        uint256 invariantV1 = Math.sqrt(v1 * PeggedSwapMath.ONE) + setup.linearWidth * v1 / PeggedSwapMath.ONE;
+        uint256 u1 = PeggedSwapMath.solve(targetInvariant - invariantV1, setup.linearWidth);
 
         // Without protection: regular division (rounds DOWN x1 → rounds DOWN amountIn)
         uint256 x1_vulnerable = (u1 * setup.x0) / PeggedSwapMath.ONE;

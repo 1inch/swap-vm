@@ -53,30 +53,12 @@ library PeggedSwapMath {
     /// @dev Let w = √v, then: aw² + w = [c - √u - au]
     /// @dev Quadratic in w: aw² + w - rightSide = 0
     /// @dev Solution: w = (-1 + √(1 + 4a * rightSide)) / (2a)
-    /// @param u Normalized x value (x/X₀) scaled by ONE
+    /// @dev Takes rightSide = c - (√u + au) directly. The caller computes it, which lets callers that
+    ///      already know c >= (√u+au) (e.g. from a capacity check) skip a redundant bounds check.
+    /// @param rightSide c - (√u + au), scaled by sqrt(ONE); caller MUST guarantee it's non-negative
     /// @param a Linear width parameter scaled by ONE
-    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
     /// @return v Normalized y value (y/Y₀) scaled by ONE
-    function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
-        uint256 invariantU = Math.sqrt(u * ONE) + a * u / ONE;
-        require(invariantC >= invariantU, PeggedSwapMathInvalidInput());
-        return solveWithInvariant(invariantU, a, invariantC);
-    }
-
-    /// @notice solve() variant for callers that already computed the u-side invariant term (√u + au)
-    /// @dev Identical to solve() but skips recomputing √u + au; lets a caller that already has it
-    ///      (e.g. from a capacity check √u + au >= c) avoid the expensive sqrt and the extra adds.
-    /// @dev PRECONDITION: invariantC >= invariantU. Callers must guarantee this (e.g. by a prior
-    ///      capacity check); otherwise the subtraction below reverts on underflow.
-    /// @param invariantU u-side invariant contribution = √u + au, scaled by sqrt(ONE)
-    /// @param a Linear width parameter scaled by ONE
-    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
-    /// @return v Normalized y value (y/Y₀) scaled by ONE
-    function solveWithInvariant(uint256 invariantU, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        // rightSide = c - (√u + au); precondition invariantC >= invariantU holds (see @dev)
-        uint256 rightSide = invariantC - invariantU;
-
+    function solve(uint256 rightSide, uint256 a) internal pure returns (uint256 v) {
         if (a == 0) {
             // Equation becomes: √v = rightSide, so v = rightSide²
             v = (rightSide * rightSide) / ONE;

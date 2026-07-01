@@ -171,15 +171,15 @@ contract PeggedSwap {
             // This avoids solving for uMax on the common path; we only pay for it on drain.
             if (invariantU1 >= targetInvariant) {
                 // Input exceeds capacity (v would be ≤ 0): drain output reserve, recompute amountIn.
-                // Cap x1 at uMax, round UP (protects maker)
-                uint256 uMax = PeggedSwapMath.solve(0, config.linearWidth, targetInvariant);
+                // Cap x1 at uMax (v=0 → rightSide = targetInvariant), round UP (protects maker)
+                uint256 uMax = PeggedSwapMath.solve(targetInvariant, config.linearWidth);
                 uint256 x1Capped = Math.ceilDiv(uMax * x0_init, PeggedSwapMath.ONE);
 
                 ctx.swap.amountIn = Math.ceilDiv(x1Capped - x0, rateIn);
                 ctx.swap.amountOut = y0_raw; // drain output reserve
             } else {
-                // Reuse invariantU1 from the capacity check above (avoids recomputing sqrt + mul/div)
-                uint256 v1 = PeggedSwapMath.solveWithInvariant(invariantU1, config.linearWidth, targetInvariant);
+                uint256 rightSide = targetInvariant - invariantU1;
+                uint256 v1 = PeggedSwapMath.solve(rightSide, config.linearWidth);
 
                 // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
                 // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
@@ -200,7 +200,10 @@ contract PeggedSwap {
             // Solve for x1: given y1, find x1 that maintains invariant
             // y1 * ONE / y0 - safe: y1 ≤ 1e24, ONE = 1e27 → 1e51 < 1e77
             uint256 v1 = y1 * PeggedSwapMath.ONE / y0_init;  // Round DOWN v1
-            uint256 u1 = PeggedSwapMath.solve(v1, config.linearWidth, targetInvariant);
+
+            uint256 invariantV1 = Math.sqrt(v1 * PeggedSwapMath.ONE) + config.linearWidth * v1 / PeggedSwapMath.ONE;
+            require(targetInvariant >= invariantV1, PeggedSwapMath.PeggedSwapMathInvalidInput());
+            uint256 u1 = PeggedSwapMath.solve(targetInvariant - invariantV1, config.linearWidth);
 
             // Round UP x1 (normalized) to ensure amountIn rounds UP (protects maker)
             // u1 * x0 - safe: u1 ≤ 2e27, x0 ≤ 1e27 → 2e54 < 1e77
