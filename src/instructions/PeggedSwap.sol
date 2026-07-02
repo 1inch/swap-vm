@@ -186,7 +186,14 @@ contract PeggedSwap {
 
             // Convert back from normalized scale: amountIn = (x1 - x0) / rateIn
             // Round UP to protect maker
-            ctx.swap.amountIn = Math.ceilDiv(x1 - x0, rateIn);
+            uint256 amountIn = Math.ceilDiv(x1 - x0, rateIn);
+
+            // least 1 wei of tokenIn for any nonzero output (maker-favorable, matches the ceilDiv intent).
+            if (amountIn == 0 && ctx.swap.amountOut != 0) {
+                amountIn = 1;
+            }
+
+            ctx.swap.amountIn = amountIn;
         }
     }
 }
