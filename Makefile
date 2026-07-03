@@ -243,6 +243,16 @@ gas-snapshot-check :; @{ \
 	fi; \
 }
 
+snapshot-e2e :; @{ \
+	{ \
+		anvil --port 8585 --code-size-limit 65536 --print-traces & ANVIL_PID=$$!; \
+		until cast block-number --rpc-url http://localhost:8585 > /dev/null; do sleep 0.1; done; \
+		forge script script/GasSnapshotE2E.s.sol --rpc-url http://localhost:8585 --broadcast --slow --disable-code-size-limit --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --non-interactive > /dev/null; \
+		kill $$ANVIL_PID; \
+	} | grep -iE 'gas used|\[[0-9]+\]' > snapshots/GasSnapshotE2E.txt; \
+	rm -rf broadcast/GasSnapshotE2E.s.sol; \
+}
+
 format :; forge fmt
 
 clean :; forge clean
@@ -262,4 +272,4 @@ help:
 .PHONY: deploy-swap-vm deploy-swap-vm-aqua deploy-swap-vm-limit deploy-swap-vm-router-impl verify-swap-vm verify-swap-vm-aqua \
         verify-swap-vm-limit verify-swap-vm-router-impl save-deployments contract-address validate-swap-vm-router validate-verify \
         validate process-aqua-address process-swap-vm-router-name process-swap-vm-router-version upsert-constant \
-        get get-outputs update build tests coverage snapshot snapshot-check format clean lint anvil balance balance-erc20 help
+        get get-outputs update build tests coverage snapshot snapshot-check snapshot-e2e format clean lint anvil balance balance-erc20 help
