@@ -71,8 +71,8 @@ library ContextLib {
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
-    /// @dev Program counter exceeds program length
-    error RunLoopExcessiveCall(uint256 pc, uint256 programLength);
+    /// @dev Program counter overflows program length
+    error RunLoopExceedProgramLength(uint256 pc, uint256 programLength);
 
     /// @notice Get the program bytecode from context
     /// @param ctx Execution context
@@ -117,19 +117,34 @@ library ContextLib {
     /// @return swapAmountOut Final computed output amount
     function runLoop(Context memory ctx) internal returns (uint256 swapAmountIn, uint256 swapAmountOut) {
         bytes calldata programBytes = ctx.program();
-        require(ctx.vm.nextPC < programBytes.length, RunLoopExcessiveCall(ctx.vm.nextPC, programBytes.length));
 
-        for (uint256 pc = ctx.vm.nextPC; pc < programBytes.length; ) {
-            unchecked {
-                uint256 opcode = uint8(programBytes[pc++]);
-                uint256 argsLength = uint8(programBytes[pc++]);
-                uint256 nextPC = pc + argsLength;
-                bytes calldata args = programBytes[pc:nextPC];
+        uint256 length = programBytes.length;
+        uint256 pcs = ctx.vm.nextPC;
+        while (pcs < length) {
+            uint256 opcode;
+            bytes calldata args;
 
-                ctx.vm.nextPC = nextPC;
-                ctx.vm.dispatch(ctx, opcode, args);
-                pc = ctx.vm.nextPC;
+            assembly ("memory-safe") {
+                let word := calldataload(add(programBytes.offset, pcs))
+
+                opcode := shr(248, word)
+                let argsLength := and(shr(240, word), 0xff)
+
+                pcs := add(pcs, 2)
+
+                args.offset := add(programBytes.offset, pcs)
+                args.length := argsLength
+
+                pcs := add(pcs, argsLength)
             }
+
+            // Program counter should not exceed program length
+            // In case this happened, parsed args read out-of-bounds
+            if (pcs > length) revert RunLoopExceedProgramLength(pcs, length);
+
+            ctx.vm.nextPC = pcs;
+            ctx.vm.dispatch(ctx, opcode, args);
+            pcs = ctx.vm.nextPC;
         }
 
         return (ctx.swap.amountIn, ctx.swap.amountOut);
