@@ -90,6 +90,8 @@ library WhitelistArgsBuilder {
 /// - Mining 80 bits of an Ethereum address is not truly impossible but would take millions of GPU-years time
 /// - Consider theoretical possibility of such address being mined for an address known for years,
 ///   avoid orders with "free money" relying on the opcodes
+/// - The Oorschot–Wiener (birthday) attack can efficiently (though computationally expensively) find 80-bit collisions,
+///   however, this supposes attacker controls the both accounts, which means whitelist bypass is not a security break
 contract Whitelist {
     using WhitelistArgsBuilder for bytes;
     using Calldata for bytes;
