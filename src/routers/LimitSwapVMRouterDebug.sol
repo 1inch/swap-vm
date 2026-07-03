@@ -19,7 +19,8 @@ contract LimitSwapVMRouterDebug is Simulator, SwapVM, LimitOpcodesDebug {
     /// @param version EIP-712 domain version
     constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) LimitOpcodesDebug(aqua) { }
 
-    function _instructions() internal pure override returns (function(Context memory, bytes calldata) internal[] memory) {
-        return _opcodes();
+    /// @dev Dispatches an opcode to its handler for VM execution
+    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
+        _runOpcode(ctx, opcode, args);
     }
 }

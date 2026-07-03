@@ -14,14 +14,14 @@ import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/lib
 /// @param nextPC The program counter for the next instruction to execute
 /// @param programPtr Pointer to the program in calldata (offset and length)
 /// @param takerArgsPtr Pointer to the taker's data in calldata (offset and length)
-/// @param opcodes The set of instructions (functions) that can be executed by the VM
+/// @param dispatch Opcode dispatcher: maps an opcode index to its instruction handler and executes it
 /// @dev This struct is used to track the execution state of instructions during a swap
 struct VM {
     bool isStaticContext;
     uint256 nextPC;
     CalldataPtr programPtr; // Use ContextLib.program()
     CalldataPtr takerArgsPtr; // Use ContextLib.takerArgs()
-    function(Context memory, bytes calldata) internal[] opcodes;
+    function(Context memory, uint256, bytes calldata) internal dispatch;
 }
 
 /// @dev Represents the read-only swap information
@@ -127,7 +127,7 @@ library ContextLib {
                 bytes calldata args = programBytes[pc:nextPC];
 
                 ctx.vm.nextPC = nextPC;
-                ctx.vm.opcodes[opcode](ctx, args);
+                ctx.vm.dispatch(ctx, opcode, args);
                 pc = ctx.vm.nextPC;
             }
         }
