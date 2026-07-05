@@ -5,7 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode } from "../libs/Opcodes.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
 
 import { Controls } from "../instructions/Controls.sol";
 import { Balances } from "../instructions/Balances.sol";

@@ -7,7 +7,7 @@ pragma solidity 0.8.30;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Context } from "../../src/libs/VM.sol";
-import { Opcode } from "../../src/libs/Opcodes.sol";
+import { Opcode } from "../../src/libs/OpcodeList.sol";
 
 type Program is uint256;
 

@@ -2,7 +2,7 @@
 pragma solidity 0.8.30;
 
 import { Test } from "forge-std/Test.sol";
-import { Opcode } from "../src/libs/Opcodes.sol";
+import { Opcode } from "../src/libs/OpcodeList.sol";
 
 contract OpcodeEnumCheckTest is Test {
     function test_EnumValuesMatchHexLabels() public pure {
