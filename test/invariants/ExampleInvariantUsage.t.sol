@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -100,11 +100,11 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      */
     function test_LimitOrderInvariants() public {
         // Build limit order program
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),  // 1:2 rate
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -128,13 +128,13 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 2: Test an AMM with fees maintains invariants
      */
     function test_AMMWithFeesInvariants() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
-            program.build(_xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -164,13 +164,13 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 3: Test progressive fees with custom configuration
      */
     function test_ProgressiveFeeInvariants() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(_progressiveFeeInXD,
+            program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(0.1e9)), // 10% progressive
-            program.build(_xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -200,11 +200,11 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 4: Test specific invariants individually
      */
     function test_SpecificInvariants() public view {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -253,11 +253,11 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      */
     function test_SkipCertainInvariants() public {
         // Create a flat-rate order (no price impact)
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1000e18), uint256(2000e18)])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 

@@ -24,7 +24,7 @@ import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /**
  * @title SwapVmAccounting
@@ -219,31 +219,31 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint32 flatFeeInBps,
         bool includeConcentrate
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
             : bytes("");
 
         bytes memory concentrateCode = includeConcentrate
-            ? p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+            ? p.build(Opcode.XYCConcentrateSwap,
                      defaultConcentrateArgs())
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
         bytes memory swapCode = includeConcentrate
             ? concentrateCode
-            : p.build(XYCSwap._xycSwapXD);
+            : p.build(Opcode.XYCSwap);
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
+            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
             flatFeeCode,
             swapCode,
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
         ); 
     }
 
@@ -251,23 +251,23 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint32 protocolFeeBps,
         uint32 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
         return bytes.concat(
-            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
+            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
             protocolFeeCode, // WRONG: protocolFee after balances
             flatFeeCode,
-            p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+            p.build(Opcode.XYCConcentrateSwap,
                    defaultConcentrateArgs()),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -276,24 +276,24 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint16 decayPeriod,
         uint32 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-            p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),
+            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
-            p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+            p.build(Opcode.XYCConcentrateSwap,
                    defaultConcentrateArgs()),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -302,23 +302,23 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint16 decayPeriod,
         uint32 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-            p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),
+            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
-            p.build(XYCSwap._xycSwapXD),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            p.build(Opcode.XYCSwap),
+            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -328,23 +328,23 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint32 flatFeeInBps,
         PeggedSwapArgsBuilder.Args memory peggedArgs
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Fee._protocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Balances._dynamicBalancesXD, _dynamicBalancesArgs()),
-            p.build(Decay._decayXD, DecayArgsBuilder.build(decayPeriod)),
+            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
-            p.build(PeggedSwap._peggedSwapGrowPriceRange2D, PeggedSwapArgsBuilder.build(peggedArgs)),
-            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
+            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
         );
     }
 

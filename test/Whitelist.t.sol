@@ -18,7 +18,7 @@ import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 
@@ -158,17 +158,17 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         address[] memory allowedTakers = new address[](length);
         for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
 
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory code = bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
         // console.logBytes(WhitelistArgsBuilder.buildWhitelistMultipleTakers(allowedTakers));
         if (whitelistType == WhitelistType.Single) {
-            code = bytes.concat(code, p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(allowedTakers[0])));
+            code = bytes.concat(code, p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildWhitelistSingleTaker(allowedTakers[0])));
         } else if (whitelistType == WhitelistType.Multiple) {
-            code = bytes.concat(code, p.build(_whitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(allowedTakers)));
+            code = bytes.concat(code, p.build(Opcode.WhitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(allowedTakers)));
         }
 
         return code;

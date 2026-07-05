@@ -8,7 +8,7 @@ import { Vm } from "forge-std/Vm.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { dynamic } from "../utils/Dynamic.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 
 import { ISwapVM } from "../../src/SwapVM.sol";
 import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
@@ -38,13 +38,13 @@ contract DirectSwapVMHelper is OpcodesDebug {
         uint256 balanceA,
         uint256 balanceB
     ) external view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Balances._staticBalancesXD,
+            p.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
-            p.build(LimitSwap._limitSwap1D,
+            p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Controls._salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
+            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

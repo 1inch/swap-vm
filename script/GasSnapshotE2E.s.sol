@@ -32,10 +32,10 @@ import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { BestRouteSelector } from "../test/mocks/BestRouteSelector.sol";
-import { Program, ProgramBuilder } from "../test/utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../test/utils/ProgramBuilder.sol";
 import { dynamic } from "../test/utils/Dynamic.sol";
 
-contract GasSnapshotE2E is Script, OpcodesDebug {
+contract GasSnapshotE2E is Script {
     using ProgramBuilder for Program;
 
     uint256 internal constant AMOUNT = 1e18;
@@ -50,7 +50,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     TokenMock internal tokenA;
     TokenMock internal tokenB;
 
-    constructor() OpcodesDebug(address(0)) {}
+    constructor() {}
 
     function run() external {
         maker = vm.addr(MAKER_PK);
@@ -149,250 +149,250 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         _fill(_vmProgramXYCDecay());
     }
 
-    function _vmProgramJust() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJust() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustStaticBalances() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustStaticBalances() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustDynamicBalances() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustDynamicBalances() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustInvalidateBit() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustInvalidateBit() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(15))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(15))
         );
     }
 
-    function _vmProgramJustInvalidateToken() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustInvalidateToken() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_invalidateTokenIn1D)
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.InvalidateTokenIn)
         );
     }
 
-    function _vmProgramJustEpoch() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustEpoch() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(10, 0))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(10, 0))
         );
     }
 
     function _vmProgramJustPrivateOrder() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker))
         );
     }
 
     function _vmProgramJustWhitelistMultipleTakers() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_whitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(dynamic([taker, address(0x33)])))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.WhitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(dynamic([taker, address(0x33)])))
         );
     }
 
-    function _vmProgramJustBaseFeeAdjuster() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustBaseFeeAdjuster() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_baseFeeAdjuster1D, BaseFeeAdjusterArgsBuilder.build(25 gwei, 3500e18, 150_000, 99e16))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.BaseFeeAdjuster, BaseFeeAdjusterArgsBuilder.build(25 gwei, 3500e18, 150_000, 99e16))
         );
     }
 
-    function _vmProgramJustJump() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustJump() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_jump, ControlsArgsBuilder.buildJump(uint16(4))),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.Jump, ControlsArgsBuilder.buildJump(uint16(4))),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
     function _vmProgramJustJumpIfTokenIn() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_jumpIfTokenIn, ControlsArgsBuilder.buildJumpIfToken(address(tokenA), 24)),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.JumpIfTokenIn, ControlsArgsBuilder.buildJumpIfToken(address(tokenA), 24)),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustDeadline() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustDeadline() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_deadline, ControlsArgsBuilder.buildDeadline(type(uint32).max))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(type(uint32).max))
         );
     }
 
     function _vmProgramJustOnlyTakerTokenBalanceNonZero() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(tokenA)))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.OnlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(tokenA)))
         );
     }
 
     function _vmProgramJustOnlyTakerTokenBalanceGte() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_onlyTakerTokenBalanceGte, ControlsArgsBuilder.buildTakerTokenBalanceGte(address(tokenA), 1))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.OnlyTakerTokenBalanceGte, ControlsArgsBuilder.buildTakerTokenBalanceGte(address(tokenA), 1))
         );
     }
 
     function _vmProgramJustOnlyTakerTokenSupplyShareGte() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_onlyTakerTokenSupplyShareGte, ControlsArgsBuilder.buildTakerTokenSupplyShareGte(address(tokenA), 0))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.OnlyTakerTokenSupplyShareGte, ControlsArgsBuilder.buildTakerTokenSupplyShareGte(address(tokenA), 0))
         );
     }
 
-    function _vmProgramJustSalt() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustSalt() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_salt, ControlsArgsBuilder.buildSalt(uint64(42)))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
+            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(42)))
         );
     }
 
     function _vmProgramJustRequireMinRate() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_requireMinRate1D, MinRateArgsBuilder.build(address(tokenA), address(tokenB), 1e18, 2.2e18)),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.RequireMinRate, MinRateArgsBuilder.build(address(tokenA), address(tokenB), 1e18, 2.2e18)),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustFlatFeeAmountIn() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustFlatFeeAmountIn() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.10e9)),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.10e9)),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustProgressiveFeeIn() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustProgressiveFeeIn() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(0.10e9)),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.10e9)),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
-    function _vmProgramJustPiecewiseLinearScaleBalanceIn() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustPiecewiseLinearScaleBalanceIn() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_piecewiseLinearScaleBalanceIn1D, PiecewiseLinearScaleArgsBuilder.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1]))),
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
+            p.build(Opcode.PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleArgsBuilder.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1]))),
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
 
     function _vmProgramJustLimitSwap() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
     function _vmProgramJustLimitSwapFull() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_limitSwapOnlyFull1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.LimitSwapFullAmount, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
-    function _vmProgramJustXYC() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustXYC() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_xycSwapXD)
+            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.XYCSwap)
         );
     }
 
-    function _vmProgramJustXYCConcentrate() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustXYCConcentrate() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(0.1e18, 5e18))
+            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(0.1e18, 5e18))
         );
     }
 
-    function _vmProgramJustPeggedSwap() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramJustPeggedSwap() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: 0, amountNetPulled: 0}))),
-            p.build(_peggedSwapGrowPriceRange2D, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({x0: 50e18, y0: 50e18, linearWidth: 0.02e9, rateLt: 1, rateGt: 1})))
+            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: 0, amountNetPulled: 0}))),
+            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({x0: 50e18, y0: 50e18, linearWidth: 0.02e9, rateLt: 1, rateGt: 1})))
         );
     }
 
     function _vmProgramLimitOrderSimple() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(14)),
-            p.build(_limitSwapOnlyFull1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(14)),
+            p.build(Opcode.LimitSwapFullAmount, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
     function _vmProgramLimitOrderPrivate() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker)),
-            p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker)),
+            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
     function _vmProgramLimitEpochPartial() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
-            p.build(_invalidateTokenIn1D, InvalidatorsArgsBuilder.buildInvalidateBit(12)),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
+            p.build(Opcode.InvalidateTokenIn, InvalidatorsArgsBuilder.buildInvalidateBit(12)),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 
-    function _vmProgramXYCSimple() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramXYCSimple() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
-            p.build(_xycSwapXD)
+            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
+            p.build(Opcode.XYCSwap)
         );
     }
 
-    function _vmProgramXYCDecay() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+    function _vmProgramXYCDecay() internal pure returns (bytes memory) {
+        Program p;
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
-            p.build(_decayXD, DecayArgsBuilder.build(155)),
-            p.build(_xycSwapXD)
+            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
+            p.build(Opcode.Decay, DecayArgsBuilder.build(155)),
+            p.build(Opcode.XYCSwap)
         );
     }
 

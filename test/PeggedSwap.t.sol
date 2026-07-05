@@ -17,7 +17,7 @@ import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwa
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
@@ -87,14 +87,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
-        Program memory prog = ProgramBuilder.init(_opcodes());
+        Program prog;
 
         bytes memory programBytes = bytes.concat(
-            prog.build(Balances._dynamicBalancesXD,
+            prog.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            setup.feeInBps > 0 ? prog.build(Fee._flatFeeAmountInXD,
+            setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
+            prog.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: setup.x0,
                     y0: setup.y0,

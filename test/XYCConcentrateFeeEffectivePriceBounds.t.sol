@@ -27,7 +27,7 @@ import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
     using SafeCast for uint256;
@@ -77,10 +77,10 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 sqrtPriceMax,
         uint32 feeBps
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory feeInstruction = feeBps > 0
-            ? program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBps))
+            ? program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps))
             : bytes("");
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -104,9 +104,9 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(balanceETH), balanceUSD])),
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceETH), balanceUSD])),
                 feeInstruction,
-                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
                 )
             )
