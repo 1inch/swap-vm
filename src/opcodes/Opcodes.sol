@@ -58,6 +58,9 @@ contract Opcodes is
     /// @notice Opcode direct dispatcher
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
              if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
+        else if (opcode == uint256(Opcode.Stop)) Controls._stop(ctx, args);
+        else if (opcode == uint256(Opcode.Revert)) Controls._revert(ctx, args);
+        else if (opcode == uint256(Opcode.JumpIfDirection)) Controls._jumpIfDirection(ctx, args);
         else if (opcode == uint256(Opcode.JumpIfTokenIn)) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == uint256(Opcode.JumpIfTokenOut)) Controls._jumpIfTokenOut(ctx, args);
         else if (opcode == uint256(Opcode.Deadline)) Controls._deadline(ctx, args);

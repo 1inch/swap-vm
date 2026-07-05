@@ -18,8 +18,20 @@ library ControlsArgsBuilder {
         return salt;
     }
 
+    function buildRevert(bytes4 exception) internal pure returns (bytes memory) {
+        return abi.encodePacked(exception);
+    }
+
+    function buildRevert(bytes memory exception) internal pure returns (bytes memory) {
+        return exception;
+    }
+
     function buildJump(uint16 nextPC) internal pure returns (bytes memory) {
         return abi.encodePacked(nextPC);
+    }
+
+    function buildJumpIfDirection(address tokenIn, address tokenOut, uint16 nextPC) internal pure returns (bytes memory) {
+        return abi.encodePacked(tokenIn < tokenOut, nextPC);
     }
 
     function buildJumpIfToken(address token, uint16 nextPC) internal pure returns (bytes memory) {
@@ -50,6 +62,7 @@ contract Controls {
     using Calldata for bytes;
     using ContextLib for Context;
 
+    error InstructionRevert(bytes);
     error DeadlineReached(address taker, uint256 deadline);
     error TakerTokenBalanceIsZero(address taker, address token);
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
@@ -65,6 +78,27 @@ contract Controls {
     function _jump(Context memory ctx, bytes calldata args) internal pure {
         uint256 nextPC = uint16(bytes2(args));
         ctx.setNextPC(nextPC);
+    }
+
+    /// @dev Unconditional revert with specified reason encoded
+    function _revert(Context memory, bytes calldata args) internal pure {
+        revert InstructionRevert(args);
+    }
+
+    /// @dev Unconditional succesful execution stop
+    function _stop(Context memory ctx, bytes calldata) internal pure {
+        // VM has nothing to execute out of program bounds
+        ctx.setNextPC(type(uint256).max);
+    }
+
+    /// @dev Jumps if swap direction matches the expected one
+    function _jumpIfDirection(Context memory ctx, bytes calldata args) internal pure {
+        bool expectedDirection = bytes1(args) != 0;
+        bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
+        if (expectedDirection == swapDirection) {
+            uint256 nextPC = uint16(bytes2(args.slice(1)));
+            ctx.setNextPC(nextPC);
+        }
     }
 
     /// @dev Jumps if tokenIn is the specified token

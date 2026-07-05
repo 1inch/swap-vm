@@ -578,6 +578,222 @@ contract ControlsTest is Test, OpcodesDebug {
         assertGt(amountOut, 0, "Multiple jumps should work");
     }
 
+    /**
+     * @notice Test stop instruction halts execution before subsequent instructions
+     */
+    function test_Stop() public {
+        Program program;
+
+        bytes memory bytecode = bytes.concat(
+            program.build(Opcode.StaticBalances,
+                BalancesArgsBuilder.build(
+                    [uint256(100e18), uint256(100e18)]
+                )),
+            program.build(Opcode.LimitSwap,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            program.build(Opcode.Stop),
+            // Would revert the whole swap if Stop did not halt execution
+            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(bytes4(0xdeadbeef)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+        assertGt(amountOut, 0, "Stop should halt execution before Revert");
+    }
+
+    /**
+     * @notice Test stop at program start leaves amounts at zero
+     */
+    function test_Stop_BeforeSwapComputed_Reverts() public {
+        Program program;
+
+        bytes memory bytecode = bytes.concat(
+            program.build(Opcode.Stop),
+            program.build(Opcode.StaticBalances,
+                BalancesArgsBuilder.build(
+                    [uint256(100e18), uint256(100e18)]
+                )),
+            program.build(Opcode.LimitSwap,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
+        tokenA.mint(taker, 1e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0)
+        );
+        swapVM.swap(order, 1e18, takerData);
+    }
+
+    /**
+     * @notice Test revert instruction with a short (selector-style) reason
+     */
+    function test_Revert() public {
+        Program program;
+
+        bytes4 exception = 0xdeadbeef;
+        bytes memory bytecode = bytes.concat(
+            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(exception)),
+            program.build(Opcode.StaticBalances,
+                BalancesArgsBuilder.build(
+                    [uint256(100e18), uint256(100e18)]
+                )),
+            program.build(Opcode.LimitSwap,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
+        tokenA.mint(taker, 1e18);
+
+        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, abi.encodePacked(exception)));
+        swapVM.swap(order, 1e18, takerData);
+    }
+
+    /**
+     * @notice Test revert instruction with an arbitrary-length reason
+     */
+    function test_Revert_LongReason() public {
+        Program program;
+
+        bytes memory exception = bytes("order is one-directional");
+        bytes memory bytecode = bytes.concat(
+            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(exception))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
+        tokenA.mint(taker, 1e18);
+
+        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, exception));
+        swapVM.swap(order, 1e18, takerData);
+    }
+
+    /**
+     * @notice Test jumpIfDirection instruction skips fee only for the matching direction
+     */
+    function test_JumpIfDirection() public {
+        Program program;
+
+        // Expected direction A->B (tokenA < tokenB); offset calculated after sizing
+        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), 0));
+        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory balancesInstr = program.build(Opcode.StaticBalances,
+            BalancesArgsBuilder.build(
+                [uint256(100e18), uint256(100e18)]
+            ));
+        bytes memory swapInstr = program.build(Opcode.XYCSwap);
+
+        uint16 offset = uint16(jumpInstr.length + feeInstr.length);
+        jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), offset));
+
+        bytes memory bytecode = bytes.concat(
+            jumpInstr,       // If direction is A->B, jump over fee
+            feeInstr,        // Applied only for B->A
+            balancesInstr,
+            swapInstr
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        uint256 snapshot = vm.snapshot();
+        // A->B matches the expected direction: fee skipped
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+        assertEq(amountOut, 990099009900990099, "Should get ~1e18 without fee");
+        vm.revertTo(snapshot);
+
+        // B->A does not match: fee applied
+        amountOut = _executeSwap(order, address(tokenB), address(tokenA), 1e18);
+        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+    }
+
+    /**
+     * @notice Test jumpIfDirection with the reversed expected direction
+     */
+    function test_JumpIfDirection_Reversed() public {
+        Program program;
+
+        // Expected direction B->A; offset calculated after sizing
+        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenB), address(tokenA), 0));
+        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory balancesInstr = program.build(Opcode.StaticBalances,
+            BalancesArgsBuilder.build(
+                [uint256(100e18), uint256(100e18)]
+            ));
+        bytes memory swapInstr = program.build(Opcode.XYCSwap);
+
+        uint16 offset = uint16(jumpInstr.length + feeInstr.length);
+        jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenB), address(tokenA), offset));
+
+        bytes memory bytecode = bytes.concat(
+            jumpInstr,       // If direction is B->A, jump over fee
+            feeInstr,        // Applied only for A->B
+            balancesInstr,
+            swapInstr
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        uint256 snapshot = vm.snapshot();
+        // B->A matches the expected direction: fee skipped
+        uint256 amountOut = _executeSwap(order, address(tokenB), address(tokenA), 1e18);
+        assertEq(amountOut, 990099009900990099, "Should get ~1e18 without fee");
+        vm.revertTo(snapshot);
+
+        // A->B does not match: fee applied
+        amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+    }
+
+    /**
+     * @notice Test one-directional order built from jumpIfDirection + revert
+     */
+    function test_JumpIfDirection_OneWayOrder() public {
+        Program program;
+
+        bytes4 wrongDirection = 0xbad0d14a;
+        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), 0));
+        bytes memory revertInstr = program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(wrongDirection));
+        bytes memory balancesInstr = program.build(Opcode.StaticBalances,
+            BalancesArgsBuilder.build(
+                [uint256(100e18), uint256(100e18)]
+            ));
+        bytes memory swapInstr = program.build(Opcode.XYCSwap);
+
+        uint16 offset = uint16(jumpInstr.length + revertInstr.length);
+        jumpInstr = program.build(Opcode.JumpIfDirection,
+            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), offset));
+
+        bytes memory bytecode = bytes.concat(
+            jumpInstr,       // A->B jumps over the revert
+            revertInstr,     // B->A hits the revert
+            balancesInstr,
+            swapInstr
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        uint256 snapshot = vm.snapshot();
+        // Allowed direction works
+        uint256 amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
+        assertGt(amountOut, 0, "Allowed direction should swap");
+        vm.revertTo(snapshot);
+
+        // Disallowed direction reverts
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, false);
+        tokenB.mint(taker, 1e18);
+        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, abi.encodePacked(wrongDirection)));
+        swapVM.swap(order, 1e18, takerData);
+    }
+
     // Helper functions
     function _buildSimpleSwapWithSalt(uint64 salt) private view returns (bytes memory) {
         Program program;
