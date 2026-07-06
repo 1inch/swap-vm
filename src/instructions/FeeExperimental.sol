@@ -29,7 +29,7 @@ library FeeArgsBuilderExperimental {
     }
 }
 
-abstract contract FeeExperimental is Fee {
+contract FeeExperimental is Fee {
     using SafeERC20 for IERC20;
     using ContextLib for Context;
 
@@ -54,10 +54,10 @@ abstract contract FeeExperimental is Fee {
                 (BPS * ctx.swap.amountIn * ctx.swap.balanceIn) /
                 (BPS * ctx.swap.balanceIn + feeBps * ctx.swap.amountIn)
             );
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
-            _runLoop(ctx);
+            ctx.runLoop();
 
             // Increase amountIn by fee after swap-instruction
             // Formula: dx = dx_eff / (1 - λ * dx_eff / x)
@@ -74,7 +74,7 @@ abstract contract FeeExperimental is Fee {
         uint256 feeBps = FeeArgsBuilderExperimental.parseProgressiveFee(args);
 
         if (ctx.query.isExactIn) {
-            _runLoop(ctx);
+            ctx.runLoop();
 
             // Decrease amountOut by fee after swap-instruction
             // Formula: dy_eff = dy / (1 + λ * dy / y)
@@ -92,7 +92,7 @@ abstract contract FeeExperimental is Fee {
                 (BPS * ctx.swap.amountOut * ctx.swap.balanceOut),
                 (BPS * ctx.swap.balanceOut - feeBps * ctx.swap.amountOut)
             );
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
     }
@@ -134,7 +134,7 @@ abstract contract FeeExperimental is Fee {
 
         if (ctx.query.isExactIn) {
             // Decrease amountOut by fee after passing to swap-instruction
-            _runLoop(ctx);
+            ctx.runLoop();
             feeAmountOut = ctx.swap.amountOut * feeBps / BPS;
             ctx.swap.amountOut -= feeAmountOut;
         } else {
@@ -142,7 +142,7 @@ abstract contract FeeExperimental is Fee {
             uint256 takerDefinedAmountOut = ctx.swap.amountOut;
             feeAmountOut = ctx.swap.amountOut * feeBps / (BPS - feeBps);
             ctx.swap.amountOut += feeAmountOut;
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountOut = takerDefinedAmountOut;
         }
     }
