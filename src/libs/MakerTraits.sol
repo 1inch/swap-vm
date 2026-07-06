@@ -207,8 +207,7 @@ library MakerTraitsLib {
         // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
         assembly ("memory-safe") {
             tokenA := shr(96, calldataload(data.offset))
-            // This leaves 12 dirty bytes out of address type bound, that's fine for solidity processing but manual asm should process carefully 
-            tokenB := calldataload(add(data.offset, 8))
+            tokenB := shr(96, calldataload(add(data.offset, 20)))
         }
     }
 
