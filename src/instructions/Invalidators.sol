@@ -10,14 +10,12 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library InvalidatorsArgsBuilder {
     using Calldata for bytes;
 
-    error InvalidatorsMissingBitIndexArg();
-
     function buildInvalidateBit(uint32 bitIndex) internal pure returns (bytes memory) {
         return abi.encodePacked(bitIndex);
     }
 
     function parseBitIndex(bytes calldata args) internal pure returns (uint256 bitIndex) {
-        bitIndex = uint32(bytes4(args.slice(0, 4, InvalidatorsMissingBitIndexArg.selector)));
+        bitIndex = uint32(bytes4(args));
     }
 }
 

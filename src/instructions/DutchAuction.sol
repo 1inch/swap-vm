@@ -14,9 +14,6 @@ library DutchAuctionArgsBuilder {
     using Calldata for bytes;
 
     error DutchAuctionDecayFactorShouldBeLessThanOneE18(uint168 decayFactor);
-    error DutchAuctionMissingStartTime();
-    error DutchAuctionMissingDuration();
-    error DutchAuctionMissingDecayFactor();
 
     /// @notice Build instruction arguments for DutchAuction
     /// @param startTime Auction start timestamp (seconds)
@@ -41,9 +38,9 @@ library DutchAuctionArgsBuilder {
         uint16 duration,
         uint64 decayFactor
     ) {
-        startTime = uint40(bytes5(args.slice(0, 5, DutchAuctionMissingStartTime.selector)));
-        duration = uint16(bytes2(args.slice(5, 7, DutchAuctionMissingDuration.selector)));
-        decayFactor = uint64(bytes8(args.slice(7, 15, DutchAuctionMissingDecayFactor.selector)));
+        startTime = uint40(bytes5(args));
+        duration = uint16(bytes2(args.slice(5)));
+        decayFactor = uint64(bytes8(args.slice(7)));
     }
 }
 
