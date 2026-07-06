@@ -24,7 +24,7 @@ library MinRateArgsBuilder {
     }
 }
 
-abstract contract MinRate {
+contract MinRate {
     using Math for uint256;
     using ContextLib for Context;
 
@@ -38,13 +38,13 @@ abstract contract MinRate {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
         (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
 
-        _runLoop(ctx);
+        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
 
         // Checking that: actual_rate >= required_rate
         // But, instead of: swapAmountIn / swapAmountOut >= rateIn / rateOut use cross-multiplication:
         require(
-            ctx.swap.amountIn * rateOut >= rateIn * ctx.swap.amountOut,
-            MinRateFailed(ctx.swap.amountIn, ctx.swap.amountOut, rateIn, rateOut)
+            swapAmountIn * rateOut >= rateIn * swapAmountOut,
+            MinRateFailed(swapAmountIn, swapAmountOut, rateIn, rateOut)
         );
     }
 
@@ -57,12 +57,12 @@ abstract contract MinRate {
         uint256 amountOut = ctx.swap.amountOut;
 
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        _runLoop(ctx);
+        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
         require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, MinRateRunLoopExpectToComputeSwapAmounts(ctx.swap.amountIn, ctx.swap.amountOut));
 
         // Checking that: actual_rate < required_rate
         // But, instead of: swapAmountIn / swapAmountOut < rateIn / rateOut use cross-multiplication:
-        if (ctx.swap.amountIn * rateOut < rateIn * ctx.swap.amountOut) {
+        if (swapAmountIn * rateOut < rateIn * swapAmountOut) {
             if (ctx.query.isExactIn) {
                 ctx.swap.amountOut = amountIn * rateOut / rateIn;
             } else {
@@ -70,7 +70,4 @@ abstract contract MinRate {
             }
         }
     }
-
-    /// @dev Override in the router to execute program bytecode
-    function _runLoop(Context memory ctx) internal virtual;
 }
