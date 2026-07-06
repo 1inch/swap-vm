@@ -16,8 +16,6 @@ import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-import { VMLoop } from "../VMLoop.sol";
-
 contract AquaOpcodes is
     Controls,
     XYCSwap,
@@ -25,8 +23,7 @@ contract AquaOpcodes is
     Decay,
     Fee,
     PeggedSwap,
-    Extruction,
-    VMLoop
+    Extruction
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -34,11 +31,9 @@ contract AquaOpcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) { super._runLoop(ctx); }
-
     /// @notice Opcode direct dispatcher
     /// @dev Indices MUST mirror {_opcodes} exactly
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
         if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);

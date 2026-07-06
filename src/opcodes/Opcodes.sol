@@ -27,8 +27,6 @@ import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
-import { VMLoop } from "../VMLoop.sol";
-
 contract Opcodes is
     Controls,
     Balances,
@@ -47,8 +45,7 @@ contract Opcodes is
     PeggedSwap,
     SeriesEpochManager,
     Whitelist,
-    PiecewiseLinearScale,
-    VMLoop
+    PiecewiseLinearScale
 {
     error UnknownOpcode(uint256 opcode);
 
@@ -56,11 +53,9 @@ contract Opcodes is
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) { super._runLoop(ctx); }
-
     /// @notice Opcode direct dispatcher
     /// @dev Indices MUST mirror {_opcodes} exactly
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
         if (opcode == 10) Controls._jump(ctx, args);
         else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
