@@ -9,7 +9,6 @@ import { Simulator } from "@1inch/solidity-utils/contracts/mixins/Simulator.sol"
 import { Context } from "../libs/VM.sol";
 import { SwapVM } from "../SwapVM.sol";
 import { AquaOpcodesDebug } from "../opcodes/AquaOpcodesDebug.sol";
-import { AquaOpcodes } from "../opcodes/AquaOpcodes.sol";
 
 contract AquaSwapVMRouterDebug is Simulator, SwapVM, AquaOpcodesDebug {
     /// @notice Deploy router with Aqua and WETH addresses
@@ -21,5 +20,7 @@ contract AquaSwapVMRouterDebug is Simulator, SwapVM, AquaOpcodesDebug {
     constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) AquaOpcodesDebug(aqua) { }
 
     /// @dev Dispatches an opcode to its handler for VM execution
-    function _runLoop(Context memory ctx) internal override(SwapVM, AquaOpcodes) { super._runLoop(ctx); }
+    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
+        _runOpcode(ctx, opcode, args);
+    }
 }
