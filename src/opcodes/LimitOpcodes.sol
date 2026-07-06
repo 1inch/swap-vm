@@ -77,12 +77,12 @@ contract LimitOpcodes is
         else if (opcode == 43) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 44) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 45) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        else if (opcode == 51) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
+        else if (opcode == 46) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[53] memory instructions = [
+        function(Context memory, bytes calldata) internal[48] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -137,12 +137,6 @@ contract LimitOpcodes is
             Whitelist._whitelistMultipleTakers,
             PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
             PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D,
-            // gap: opcodes 46-50 unused by the limit set
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
             Controls._onlyTxOriginTokenBalanceNonZero
         ];
 
