@@ -253,7 +253,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program memory program = ProgramBuilder.init(_opcodes());
 
         // Build individual instructions
-        bytes memory jumpInstr = program.build(_jump, ControlsArgsBuilder.buildJump(9)); // Will jump past deadline (3 bytes for jump instruction + 6 bytes for deadline)
+        bytes memory jumpInstr = program.build(_jump, ControlsArgsBuilder.buildJump(11)); // Will jump past deadline (4 bytes for jump instruction + 7 bytes for deadline)
         bytes memory deadlineInstr = program.build(_deadline, ControlsArgsBuilder.buildDeadline(uint40(block.timestamp - 1)));
         bytes memory balancesInstr = program.build(_staticBalancesXD,
             BalancesArgsBuilder.build(

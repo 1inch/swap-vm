@@ -97,8 +97,6 @@ contract Opcodes is
         else if (opcode == 48) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        // solhint-disable-next-line no-empty-blocks
-        else if (opcode < 10) { /* reserved slots 0-9 are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 

@@ -28,10 +28,7 @@ contract LimitOpcodes is
     Balances,
     Invalidators,
     LimitSwap,
-    MinRate,
-    DutchAuction,
     BaseFeeAdjuster,
-    TWAPSwap,
     Fee,
     FeeExperimental,
     Extruction,
@@ -61,18 +58,9 @@ contract LimitOpcodes is
         else if (opcode == 20) Invalidators._invalidateTokenOut1D(ctx, args);
         else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);
         else if (opcode == 22) LimitSwap._limitSwapOnlyFull1D(ctx, args);
-        else if (opcode == 23) MinRate._requireMinRate1D(ctx, args);
-        else if (opcode == 24) MinRate._adjustMinRate1D(ctx, args);
-        else if (opcode == 25) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
-        else if (opcode == 26) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
         else if (opcode == 27) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
-        else if (opcode == 28) TWAPSwap._twap(ctx, args);
         else if (opcode == 29) Extruction._extruction(ctx, args);
         else if (opcode == 30) Controls._salt(ctx, args);
-        else if (opcode == 31) Fee._flatFeeAmountInXD(ctx, args);
-        else if (opcode == 32) FeeExperimental._flatFeeAmountOutXD(ctx, args);
-        else if (opcode == 33) FeeExperimental._progressiveFeeInXD(ctx, args);
-        else if (opcode == 34) FeeExperimental._progressiveFeeOutXD(ctx, args);
         else if (opcode == 35) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
         else if (opcode == 36) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
         else if (opcode == 37) Fee._protocolFeeAmountInXD(ctx, args);
@@ -84,8 +72,6 @@ contract LimitOpcodes is
         else if (opcode == 43) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == 44) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 45) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        // solhint-disable-next-line no-empty-blocks
-        else if (opcode < 10) { /* reserved slots 0-9 are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 
@@ -120,23 +106,20 @@ contract LimitOpcodes is
             // LimitSwap - limit orders (specific trading type)
             LimitSwap._limitSwap1D,
             LimitSwap._limitSwapOnlyFull1D,
-            // MinRate - minimum exchange rate enforcement (common trading requirement)
-            MinRate._requireMinRate1D,
-            MinRate._adjustMinRate1D,
-            // DutchAuction - auction mechanism with limit order and time decay (specific trading type)
-            DutchAuction._dutchAuctionBalanceIn1D,
-            DutchAuction._dutchAuctionBalanceOut1D,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             // BaseFeeAdjuster - gas-based price adjustment (dynamic pricing)
             BaseFeeAdjuster._baseFeeAdjuster1D,
-            // TWAPSwap - TWAP trading (complex trading strategy)
-            TWAPSwap._twap,
+            _notInstruction,
             // NOTE: Add new instructions here to maintain backward compatibility
             Extruction._extruction,
             Controls._salt,
-            Fee._flatFeeAmountInXD,
-            FeeExperimental._flatFeeAmountOutXD,
-            FeeExperimental._progressiveFeeInXD,
-            FeeExperimental._progressiveFeeOutXD,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             FeeExperimental._protocolFeeAmountOutXD,
             FeeExperimental._aquaProtocolFeeAmountOutXD,
             Fee._protocolFeeAmountInXD,

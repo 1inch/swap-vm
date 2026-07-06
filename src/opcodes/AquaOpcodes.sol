@@ -52,8 +52,6 @@ contract AquaOpcodes is
         else if (opcode == 30) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 31) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == 32) Extruction._extruction(ctx, args);
-        // solhint-disable-next-line no-empty-blocks
-        else if (opcode < 10 || (opcode >= 22 && opcode <= 26)) { /* reserved slots are no-ops, mirroring _notInstruction */ }
         else revert UnknownOpcode(opcode);
     }
 
