@@ -33,7 +33,7 @@
     "build": "npx hardhat compile",
     "lint": "prettier --check \"{src,test,script,mocks}/**/*.sol\"",
     "format": "prettier --write \"{src,test,script,mocks}/**/*.sol\"",
-    "snapshot": "npx hardhat test solidity --snapshot && grep -v '(runs: ' .gas-snapshot > .gas-snapshot.tmp && mv .gas-snapshot.tmp .gas-snapshot",
+    "snapshot": "npx hardhat test solidity --snapshot --grep test_",
     "snapshot:check": "npx hardhat test solidity --snapshot-check",
     "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
   },
