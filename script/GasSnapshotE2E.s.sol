@@ -103,7 +103,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramJustStaticBalances() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -111,7 +111,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramJustDynamicBalances() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -151,7 +151,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramJustLimitSwap() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
@@ -159,7 +159,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramJustLimitSwapFull() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_limitSwapOnlyFull1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
@@ -167,7 +167,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramJustXYC() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_xycSwapXD)
         );
     }
@@ -175,7 +175,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramLimitOrderSimple() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(14)),
             p.build(_limitSwapOnlyFull1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -184,7 +184,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramLimitOrderPrivate() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker)),
             p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
@@ -194,7 +194,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramLimitEpochPartial() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
             p.build(_invalidateTokenIn1D, InvalidatorsArgsBuilder.buildInvalidateBit(12)),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
@@ -204,7 +204,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramXYCSimple() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
             p.build(_xycSwapXD)
         );
@@ -213,7 +213,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _vmProgramXYCDecay() internal view returns (bytes memory) {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
-            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), 1e18]))),
+            p.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
             p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
             p.build(_decayXD, DecayArgsBuilder.build(155)),
             p.build(_xycSwapXD)
@@ -228,8 +228,9 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _setUp() internal {
         vm.startBroadcast();
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenB, tokenA) = (tokenA, tokenB);
 
         aqua = new Aqua();
         swapVM = new SwapVMRouterDebug(address(aqua), address(0), maker, "SwapVM", "1.0.0");
@@ -254,6 +255,8 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
     function _fill(bytes memory program) internal {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -281,6 +284,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -297,6 +301,6 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         }));
 
         vm.broadcast(TAKER_PK);
-        swapVM.swap(order, address(tokenA), address(tokenB), AMOUNT, takerData);
+        swapVM.swap(order, AMOUNT, takerData);
     }
 }

@@ -76,6 +76,8 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -94,8 +96,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
-                    dynamic([tokenLt, tokenGt]),
-                    dynamic([bLt, bGt])
+                    [uint256(bLt), bGt]
                 )),
                 p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
@@ -107,7 +108,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         sig = abi.encodePacked(r, s, v);
     }
 
-    function _td(bytes memory sig, bool isExactIn) internal view returns (bytes memory) {
+    function _td(bytes memory sig, bool isExactIn, bool isAToB) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
@@ -115,6 +116,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -134,15 +136,16 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     /// @notice Helper: run N swap rounds (Lt→Gt and Gt→Lt alternating)
     function _runRoundTrips(
         ISwapVM.Order memory order,
-        bytes memory td,
+        bytes memory tdAToB,
+        bytes memory tdBToA,
         uint256 swapSizeLt,
         uint256 swapSizeGt,
         uint256 rounds
     ) internal {
         vm.startPrank(taker);
         for (uint256 i = 0; i < rounds; i++) {
-            swapVM.swap(order, tokenLt, tokenGt, swapSizeLt, td);
-            swapVM.swap(order, tokenGt, tokenLt, swapSizeGt, td);
+            swapVM.swap(order, swapSizeLt, tdAToB);
+            swapVM.swap(order, swapSizeGt, tdBToA);
         }
         vm.stopPrank();
     }
@@ -160,7 +163,8 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
         bytes32 h = swapVM.hash(order);
-        bytes memory td = _td(sig, true);
+        bytes memory tdAToB = _td(sig, true, true);
+        bytes memory tdBToA = _td(sig, true, false);
 
         // Value-balanced swap sizes at spot price
         uint256 pSpot = sqrtPspot * sqrtPspot / ONE;
@@ -181,7 +185,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 sumSmall = 0;
         vm.startPrank(taker);
         for (uint256 i = 0; i < 100; i++) {
-            (, uint256 out,) = swapVM.swap(order, tokenLt, tokenGt, atomicLt, td);
+            (, uint256 out,) = swapVM.swap(order, atomicLt, tdAToB);
             sumSmall += out;
         }
         vm.stopPrank();
@@ -190,7 +194,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         // 1 big swap (reset state first)
 
         vm.prank(taker);
-        (, uint256 oneBig,) = swapVM.swap(order, tokenLt, tokenGt, atomicLt * 100, td);
+        (, uint256 oneBig,) = swapVM.swap(order, atomicLt * 100, tdAToB);
 
         // Taker should NOT benefit from splitting
         assertLe(sumSmall, oneBig + 100, string.concat(label, ": accumulation exploit detected"));
@@ -199,7 +203,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 takerLtBefore = TokenMock(tokenLt).balanceOf(taker);
         uint256 takerGtBefore = TokenMock(tokenGt).balanceOf(taker);
 
-        _runRoundTrips(order, td, swapSizeLt, swapSizeGt, 50);
+        _runRoundTrips(order, tdAToB, tdBToA, swapSizeLt, swapSizeGt, 50);
 
         uint256 takerLtAfter = TokenMock(tokenLt).balanceOf(taker);
         uint256 takerGtAfter = TokenMock(tokenGt).balanceOf(taker);

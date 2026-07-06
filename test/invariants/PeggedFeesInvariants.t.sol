@@ -20,7 +20,6 @@ import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
-import { dynamic } from "../utils/Dynamic.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
 
@@ -115,8 +114,9 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, type(uint128).max);
@@ -162,8 +162,6 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -191,10 +189,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
             // Balances
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([_balanceA, _balanceB])
-                )),
+                BalancesArgsBuilder.build([_balanceA, _balanceB])),
 
             // Regular fees AFTER balances
             (fees.flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
@@ -432,6 +427,8 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -470,6 +467,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

@@ -25,7 +25,6 @@ import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwa
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 
 /**
  * @title SwapVmAccounting
@@ -57,8 +56,9 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     constructor() OpcodesDebug(address(new Aqua())) {}
 
     function setUp() public {
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
         balancesContract = Balances(address(swapVM));
@@ -128,10 +128,11 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return abi.encodePacked(r, s, v);
     }
 
-    function buildTakerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
+    function buildTakerData(bool isExactIn, bool isAToB, bytes memory signature) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
+            isAToB: isAToB,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
@@ -157,9 +158,9 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         bytes memory sig = signOrder(order);
         r.orderHash = swapVM.hash(order);
 
-        bytes memory takerData = buildTakerData(isExactIn, sig);
+        bytes memory takerData = buildTakerData(isExactIn, true, sig);
         vm.prank(taker);
-        (r.amountIn, r.amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn, r.amountOut,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
     }
 
     function deployAndDoubleSwap(bytes memory program, bool isExactIn) internal returns (DoubleSwapResult memory r) {
@@ -167,16 +168,16 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         bytes memory sig = signOrder(order);
         r.orderHash = swapVM.hash(order);
 
-        bytes memory takerData = buildTakerData(isExactIn, sig);
+        bytes memory takerData = buildTakerData(isExactIn, true, sig);
 
         vm.prank(taker);
-        (r.amountIn1, r.amountOut1,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn1, r.amountOut1,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
         r.protocolFee1 = getProtocolFee();
 
         vm.warp(block.timestamp + 150);
 
         vm.prank(taker);
-        (r.amountIn2, r.amountOut2,) = swapVM.swap(order, address(tokenA), address(tokenB), SWAP_AMOUNT, takerData);
+        (r.amountIn2, r.amountOut2,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
         r.protocolFee2 = getProtocolFee();
     }
 
@@ -209,11 +210,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== PROGRAM BUILDERS =====
     // Order: protocolFee -> dynamicBalances -> [decay?] -> [concentrate?] -> flatFee -> swap / peggedSwap -> salt
 
-    function _dynamicBalancesArgs() internal view returns (bytes memory) {
-        return BalancesArgsBuilder.build(
-            dynamic([address(tokenA), address(tokenB)]),
-            dynamic([INITIAL_BALANCE_A, INITIAL_BALANCE_B])
-        );
+    function _dynamicBalancesArgs() internal pure returns (bytes memory) {
+        return BalancesArgsBuilder.build([uint256(INITIAL_BALANCE_A), INITIAL_BALANCE_B]);
     }
 
     function buildProgram(
@@ -353,6 +351,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,

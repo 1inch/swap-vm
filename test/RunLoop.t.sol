@@ -26,7 +26,6 @@ import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
 import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 import { Context, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
 import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
 
@@ -57,8 +56,9 @@ contract RunLoopTest is Test, OpcodesDebug {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens
         tokenA.mint(maker, 10000e18);
@@ -90,10 +90,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Create a valid program that properly terminates
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(100e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
             // Multiple instructions to verify PC advances correctly
             program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(1))),
             program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(2))),
@@ -122,7 +119,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Empty program is valid, however, fails due to amount out is not set
         vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     /**
@@ -135,7 +132,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         bytes memory takerData = _signAndPackTakerData(order);
 
         vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 2, 1));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     /**
@@ -149,7 +146,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             bytes memory takerData = _signAndPackTakerData(order);
 
             vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 3, 2));
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+            swapVM.swap(order, 1e18, takerData);
         }
 
         {
@@ -159,7 +156,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             bytes memory takerData = _signAndPackTakerData(order);
 
             vm.expectRevert(abi.encodeWithSelector(ContextLib.RunLoopExceedProgramLength.selector, 4, 3));
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+            swapVM.swap(order, 1e18, takerData);
         }
     }
 
@@ -178,7 +175,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Dispatcher rejects unknown/reserved opcodes with a typed error
         vm.expectRevert(abi.encodeWithSelector(Opcodes.UnknownOpcode.selector, uint256(200)));
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, takerData);
+        swapVM.swap(order, 1e18, takerData);
     }
 
     // ============================================
@@ -193,10 +190,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(100e18)])
-                )), // Level 0: DynamicBalances → runLoop
+                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])), // Level 0: DynamicBalances → runLoop
             program.build(_decayXD, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
             program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
             program.build(_requireMinRate1D,
@@ -220,10 +214,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(100e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
             program.build(_decayXD, DecayArgsBuilder.build(3600)),
             program.build(_xycSwapXD)
         );
@@ -234,8 +225,6 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Use quote instead of swap
         (uint256 amountIn, uint256 amountOut, ) = swapVM.quote(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             takerData
         );
@@ -255,10 +244,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         Program memory program = ProgramBuilder.init(_opcodes());
 
         bytes memory bytecode = program.build(_dynamicBalancesXD,
-            BalancesArgsBuilder.build(
-                dynamic([address(tokenA), address(tokenB)]),
-                dynamic([uint256(100e18), uint256(100e18)])
-            ));
+            BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)]));
 
         // Add 20 salt instructions (harmless, just increase program length)
         for (uint64 i = 0; i < 20; i++) {
@@ -321,10 +307,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Main program: Balances → BestRouteSelector
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(100e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
             program.build(_extruction, selectorArgs)
         );
 
@@ -347,6 +330,8 @@ contract RunLoopTest is Test, OpcodesDebug {
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -379,6 +364,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: bytes(""),
             to: taker,
             deadline: 0,
@@ -400,6 +386,6 @@ contract RunLoopTest is Test, OpcodesDebug {
         returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash)
     {
         bytes memory takerData = _signAndPackTakerData(order);
-        return swapVM.swap(order, address(tokenA), address(tokenB), amount, takerData);
+        return swapVM.swap(order, amount, takerData);
     }
 }

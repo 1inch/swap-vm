@@ -21,7 +21,6 @@ import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -51,8 +50,9 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         protocolFeeCollector = address(0x1234567890123456789012345678901234567890);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, 1e30);
@@ -84,8 +84,6 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -109,10 +107,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_limitSwap1D,
@@ -143,10 +138,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_flatFeeAmountOutXD,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_limitSwap1D,
@@ -178,10 +170,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_protocolFeeAmountOutXD,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
             program.build(_limitSwap1D,
@@ -213,10 +202,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             // Multiple fees
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
@@ -250,10 +236,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_flatFeeAmountInXD,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(_limitSwap1D,
@@ -288,10 +271,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_dutchAuctionBalanceIn1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_flatFeeAmountInXD,
@@ -330,10 +310,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_dutchAuctionBalanceOut1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_flatFeeAmountOutXD,
@@ -372,10 +349,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_dutchAuctionBalanceIn1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_protocolFeeAmountOutXD,
@@ -415,10 +389,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(1e30), uint256(2e30)])
-                )),
+                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             program.build(_dutchAuctionBalanceOut1D,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(_flatFeeAmountInXD,
@@ -502,6 +473,8 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -540,6 +513,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

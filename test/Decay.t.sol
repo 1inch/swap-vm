@@ -53,8 +53,9 @@ contract DecayTest is Test, OpcodesDebug {
         swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
-        tokenA = address(new TokenMock("Token A", "TKA"));
-        tokenB = address(new TokenMock("Token B", "TKB"));
+        tokenA = address(new TokenMock("Token I", "TKI"));
+        tokenB = address(new TokenMock("Token J", "TKJ"));
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup initial balances
         TokenMock(tokenA).mint(maker, 10000e18);
@@ -91,7 +92,7 @@ contract DecayTest is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
             p.build(Balances._dynamicBalancesXD,
-                BalancesArgsBuilder.build(dynamic([tokenA, tokenB]), dynamic([INITIAL_LIQUIDITY, INITIAL_LIQUIDITY]))),
+                BalancesArgsBuilder.build([uint256(INITIAL_LIQUIDITY), INITIAL_LIQUIDITY])),
             p.build(Decay._decayXD,
                 DecayArgsBuilder.build(DECAY_PERIOD)),
             p.build(XYCSwap._xycSwapXD, ""),
@@ -101,6 +102,8 @@ contract DecayTest is Test, OpcodesDebug {
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: tokenA,
+            tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -135,6 +138,7 @@ contract DecayTest is Test, OpcodesDebug {
         address tokenOut,
         uint256 amountIn
     ) internal returns (uint256 actualAmountIn, uint256 actualAmountOut) {
+        bool isAToB = tokenIn < tokenOut;
         bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: trader,
             isExactIn: true,
@@ -142,6 +146,7 @@ contract DecayTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -160,8 +165,6 @@ contract DecayTest is Test, OpcodesDebug {
         vm.prank(trader);
         (actualAmountIn, actualAmountOut,) = swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amountIn,
             takerData
         );
