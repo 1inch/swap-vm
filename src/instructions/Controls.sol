@@ -100,6 +100,8 @@ contract Controls {
     }
 
     /// @dev Checks if the taker holds any amount of the specified token (NFTs are natively supported)
+    /// @dev Since EIP-7702, user may delegate it's account to certain code, potentially sharing authorization
+    ///   given even by soulbound NFT with other users
     /// @param args.token | 20 bytes
     function _onlyTakerTokenBalanceNonZero(Context memory ctx, bytes calldata args) internal view {
         address token = address(bytes20(args));
@@ -108,7 +110,10 @@ contract Controls {
     }
 
     /// @dev Checks if tx.origin holds any amount of the specified token (NFTs are natively supported)
-    /// @dev Unlike _onlyTakerTokenBalanceNonZero, this checks tx.origin instead of ctx.query.taker
+    /// @dev The opcode allows authorized user to fill the order through 3rd-party contracts
+    ///   Validations through tx.origin are considered weak due to possible transaction flow interception
+    ///   E.g. authorized user performs transaction to 3rd-party protocol with no order filling intention,
+    ///   the 3rd-party protocol may use the authorization to fill the order
     /// @param args.token | 20 bytes
     function _onlyTxOriginTokenBalanceNonZero(Context memory /* ctx */, bytes calldata args) internal view {
         address token = address(bytes20(args));
