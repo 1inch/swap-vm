@@ -249,10 +249,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
         assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
@@ -271,10 +271,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, false, signature);
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenB, tokenA, 1_000_000_000e18, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
         assertEq(swapVM.balances(swapVM.hash(order), tokenA), 0, "Output reserve must be fully drained");
@@ -293,10 +293,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, signature);
+        bytes memory takerData = _makeTakerData(false, true, signature);
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertEq(amountOut, setup.balanceB, "Output clamped to reserve");
         assertGt(amountIn, 0, "Input must be positive");
@@ -315,10 +315,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, signature);
+        bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, 1_000_000_000e18, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
         assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
