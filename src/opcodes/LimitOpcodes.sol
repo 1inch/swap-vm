@@ -28,10 +28,7 @@ contract LimitOpcodes is
     Balances,
     Invalidators,
     LimitSwap,
-    MinRate,
-    DutchAuction,
     BaseFeeAdjuster,
-    TWAPSwap,
     Fee,
     FeeExperimental,
     Extruction,
@@ -39,9 +36,44 @@ contract LimitOpcodes is
     Whitelist,
     PiecewiseLinearScale
 {
+    error UnknownOpcode(uint256 opcode);
+
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
+
+    /// @notice Opcode direct dispatcher
+    /// @dev Indices MUST mirror {_opcodes} exactly
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+        if (opcode == 10) Controls._jump(ctx, args);
+        else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
+        else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
+        else if (opcode == 13) Controls._deadline(ctx, args);
+        else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
+        else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
+        else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
+        else if (opcode == 17) Balances._staticBalancesXD(ctx, args);
+        else if (opcode == 18) Invalidators._invalidateBit1D(ctx, args);
+        else if (opcode == 19) Invalidators._invalidateTokenIn1D(ctx, args);
+        else if (opcode == 20) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == 21) LimitSwap._limitSwap1D(ctx, args);
+        else if (opcode == 22) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == 27) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
+        else if (opcode == 29) Extruction._extruction(ctx, args);
+        else if (opcode == 30) Controls._salt(ctx, args);
+        else if (opcode == 35) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 36) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 37) Fee._protocolFeeAmountInXD(ctx, args);
+        else if (opcode == 38) Fee._aquaProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 39) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 40) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 41) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
+        else if (opcode == 42) Whitelist._whitelistSingleTaker(ctx, args);
+        else if (opcode == 43) Whitelist._whitelistMultipleTakers(ctx, args);
+        else if (opcode == 44) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
+        else if (opcode == 45) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
+        else revert UnknownOpcode(opcode);
+    }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
         function(Context memory, bytes calldata) internal[47] memory instructions = [
@@ -74,23 +106,20 @@ contract LimitOpcodes is
             // LimitSwap - limit orders (specific trading type)
             LimitSwap._limitSwap1D,
             LimitSwap._limitSwapOnlyFull1D,
-            // MinRate - minimum exchange rate enforcement (common trading requirement)
-            MinRate._requireMinRate1D,
-            MinRate._adjustMinRate1D,
-            // DutchAuction - auction mechanism with limit order and time decay (specific trading type)
-            DutchAuction._dutchAuctionBalanceIn1D,
-            DutchAuction._dutchAuctionBalanceOut1D,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             // BaseFeeAdjuster - gas-based price adjustment (dynamic pricing)
             BaseFeeAdjuster._baseFeeAdjuster1D,
-            // TWAPSwap - TWAP trading (complex trading strategy)
-            TWAPSwap._twap,
+            _notInstruction,
             // NOTE: Add new instructions here to maintain backward compatibility
             Extruction._extruction,
             Controls._salt,
-            Fee._flatFeeAmountInXD,
-            FeeExperimental._flatFeeAmountOutXD,
-            FeeExperimental._progressiveFeeInXD,
-            FeeExperimental._progressiveFeeOutXD,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
+            _notInstruction,
             FeeExperimental._protocolFeeAmountOutXD,
             FeeExperimental._aquaProtocolFeeAmountOutXD,
             Fee._protocolFeeAmountInXD,

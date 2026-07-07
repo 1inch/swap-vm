@@ -23,7 +23,7 @@ library MakerTraitsLib {
     error MakerTraitsMissingHasPostTransferInFlag();
     error MakerTraitsMissingHasPreTransferOutFlag();
     error MakerTraitsMissingHasPostTransferOutFlag();
-    error MakerTraitsTokenInAndTokenOutMustBeDifferent();
+    error MakerTraitsTokensNotSorted();
     error MakerTraitsZeroAmountInNotAllowed();
 
     uint256 constant internal SHOULD_UNWRAP_BIT_FLAG = 1 << 255;
@@ -72,6 +72,10 @@ library MakerTraitsLib {
     struct Args {
         address maker;
         address receiver;
+
+        address tokenA;
+        address tokenB;
+
         bool shouldUnwrapWeth;
         bool useAquaInsteadOfSignature;
         bool allowZeroAmountIn;
@@ -96,6 +100,8 @@ library MakerTraitsLib {
     /// @param args Order configuration arguments
     /// @return order Complete Order ready for execution or signing
     function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
+        require(args.tokenA < args.tokenB, MakerTraitsTokensNotSorted());
+
         bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
         bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);
         bool preTransferOutHasTarget = args.preTransferOutTarget != args.maker && args.preTransferOutTarget != address(0);
@@ -113,7 +119,7 @@ library MakerTraitsLib {
             require(args.hasPostTransferOutHook, MakerTraitsMissingHasPostTransferOutFlag());
         }
 
-        uint256 index0 = ((preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length).toUint16();
+        uint256 index0 = (40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length).toUint16();
         uint256 index1 = (index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length).toUint16();
         uint256 index2 = (index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length).toUint16();
         uint256 index3 = (index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length).toUint16();
@@ -143,6 +149,7 @@ library MakerTraitsLib {
                 uint160(args.receiver)
             ),
             data: bytes.concat(
+                abi.encodePacked(args.tokenA, args.tokenB),
                 preTransferInHasTarget ? abi.encodePacked(args.preTransferInTarget) : bytes(""),
                 args.preTransferInData,
                 postTransferInHasTarget ? abi.encodePacked(args.postTransferInTarget) : bytes(""),
@@ -156,8 +163,7 @@ library MakerTraitsLib {
         });
     }
 
-    function validate(MakerTraits traits, address tokenIn, address tokenOut, uint256 amountIn) internal pure {
-        require(tokenIn != tokenOut, MakerTraitsTokenInAndTokenOutMustBeDifferent());
+    function validate(MakerTraits traits, uint256 amountIn) internal pure {
         require(amountIn > 0 || traits.allowZeroAmountIn(), MakerTraitsZeroAmountInNotAllowed());
     }
 
@@ -196,6 +202,15 @@ library MakerTraitsLib {
 
     // Slices getters
 
+    function tokens(MakerTraits traits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
+        // In case there are not enough bytes in `data`, this block would fill missing bytes with zeros
+        // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
+        assembly ("memory-safe") {
+            tokenA := shr(96, calldataload(data.offset))
+            tokenB := shr(96, calldataload(add(data.offset, 20)))
+        }
+    }
+
     function program(MakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
         return _getDataSlice(traits, data, OrderDataSlices.Program);
     }
@@ -228,21 +243,13 @@ library MakerTraitsLib {
     }
 
     function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
-        return data.slice(
-            _getStartOffset(traits, slice),
-            _getStopOffset(traits, slice, data.length),
-            MakerTraitsMissingHookData.selector
-        );
-    }
-
-    function _getStartOffset(MakerTraits traits, OrderDataSlices slice) private pure returns (uint256) {
         unchecked {
-            return (slice == OrderDataSlices.PreTransferInHook) ? 0 : _getOffset(traits, uint256(slice) - 1);
+            return data.slice(
+                (slice == OrderDataSlices.PreTransferInHook) ? 40 : _getOffset(traits, uint256(slice) - 1),
+                (slice == OrderDataSlices.Program) ? data.length : _getOffset(traits, uint256(slice)),
+                MakerTraitsMissingHookData.selector
+            );
         }
-    }
-
-    function _getStopOffset(MakerTraits traits, OrderDataSlices slice, uint256 dataLength) private pure returns (uint256) {
-        return (slice == OrderDataSlices.Program) ? dataLength : _getOffset(traits, uint256(slice));
     }
 
     function _getOffset(MakerTraits traits, uint256 sliceNumber) private pure returns (uint256) {

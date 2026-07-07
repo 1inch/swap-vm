@@ -18,7 +18,6 @@ library FeeArgsBuilderExperimental {
     using Calldata for bytes;
 
     error FeeBpsOutOfRange(uint32 feeBps);
-    error ProgressiveFeeMissingFeeBPS();
 
     function buildProgressiveFee(uint32 feeBps) internal pure returns (bytes memory) {
         require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
@@ -26,7 +25,7 @@ library FeeArgsBuilderExperimental {
     }
 
     function parseProgressiveFee(bytes calldata args) internal pure returns (uint32 feeBps) {
-        feeBps = uint32(bytes4(args.slice(0, 4, ProgressiveFeeMissingFeeBPS.selector)));
+        feeBps = uint32(bytes4(args));
     }
 }
 

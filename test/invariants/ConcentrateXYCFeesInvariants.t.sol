@@ -90,8 +90,9 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, type(uint128).max);
@@ -150,8 +151,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -181,10 +180,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
             // Balances
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([_balanceA, _balanceB])
-                )),
+                BalancesArgsBuilder.build([_balanceA, _balanceB])),
 
             // Flat fee BEFORE concentrate (concentrate is terminal)
             (_flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
@@ -197,6 +193,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function _config(ISwapVM.Order memory order) internal view returns (InvariantConfig memory) {
+        return _config(order, true);
+    }
+
+    function _config(ISwapVM.Order memory order, bool aToB) internal view returns (InvariantConfig memory) {
         InvariantConfig memory config = _getDefaultConfig();
         config.testAmounts = testAmounts;
         config.testAmountsExactOut = testAmountsExactOut;
@@ -206,8 +206,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         config.skipMonotonicity = skipMonotonicity;
         config.skipSpotPrice = skipSpotPrice;
         config.monotonicityToleranceBps = monotonicityToleranceBps;
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0, aToB);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max, aToB);
         return config;
     }
 
@@ -301,6 +301,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -326,6 +328,15 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         bool isExactIn,
         uint256 threshold
     ) internal view returns (bytes memory) {
+        return _signAndPackTakerData(order, isExactIn, threshold, true);
+    }
+
+    function _signAndPackTakerData(
+        ISwapVM.Order memory order,
+        bool isExactIn,
+        uint256 threshold,
+        bool aToB
+    ) internal view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
@@ -339,6 +350,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: aToB,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

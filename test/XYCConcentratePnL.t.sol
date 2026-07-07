@@ -18,7 +18,6 @@ import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/X
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 
 contract XYCConcentratePnLTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
@@ -92,6 +91,8 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -109,10 +110,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
-                    dynamic([tokenLt, tokenGt]),
-                    dynamic([bLt, bGt])
-                )),
+                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
                 p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
@@ -124,6 +122,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
     }
 
     function _td(bytes memory sig, bool isExactIn) internal view returns (bytes memory) {
+        return _td(sig, isExactIn, true);
+    }
+
+    function _td(bytes memory sig, bool isExactIn, bool isAToB) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
@@ -131,6 +133,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -162,10 +165,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         string memory label
     ) internal returns (uint256 amountOut) {
         bytes memory td = _td(sig, true);
-        (uint256 qIn, uint256 qOut,) = swapVM.asView().quote(order, tokenLt, tokenGt, amount, td);
+        (uint256 qIn, uint256 qOut,) = swapVM.asView().quote(order, amount, td);
         uint256 snap = vm.snapshot();
         vm.prank(taker);
-        (uint256 sIn, uint256 sOut,) = swapVM.swap(order, tokenLt, tokenGt, amount, td);
+        (uint256 sIn, uint256 sOut,) = swapVM.swap(order, amount, td);
         vm.revertTo(snap);
         assertEq(sIn,  qIn,  string.concat(label, ": exactIn amountIn"));
         assertEq(sOut, qOut, string.concat(label, ": exactIn amountOut"));
@@ -180,10 +183,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         string memory label
     ) internal {
         bytes memory td = _td(sig, false);
-        (uint256 qIn,  uint256 qOut,) = swapVM.asView().quote(order, tokenLt, tokenGt, exactOutAmount, td);
+        (uint256 qIn,  uint256 qOut,) = swapVM.asView().quote(order, exactOutAmount, td);
         uint256 snap = vm.snapshot();
         vm.prank(taker);
-        (uint256 sIn, uint256 sOut,) = swapVM.swap(order, tokenLt, tokenGt, exactOutAmount, td);
+        (uint256 sIn, uint256 sOut,) = swapVM.swap(order, exactOutAmount, td);
         vm.revertTo(snap);
         assertEq(sIn,  qIn,  string.concat(label, ": exactOut amountIn"));
         assertEq(sOut, qOut, string.concat(label, ": exactOut amountOut"));
@@ -231,7 +234,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         ISwapVM.Order memory order,
         bytes memory tdIn
     ) internal view returns (uint256 rate) {
-        (, uint256 preOut,) = swapVM.asView().quote(order, tokenLt, tokenGt, 1e18, tdIn);
+        (, uint256 preOut,) = swapVM.asView().quote(order, 1e18, tdIn);
         rate = preOut; // Gt per 1e18 Lt (denominator cancels)
     }
 
@@ -240,7 +243,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         ISwapVM.Order memory order,
         bytes memory tdIn
     ) internal view returns (uint256 rate) {
-        (, uint256 postOut,) = swapVM.asView().quote(order, tokenLt, tokenGt, 1e18, tdIn);
+        (, uint256 postOut,) = swapVM.asView().quote(order, 1e18, tdIn);
         rate = postOut;
     }
 
@@ -266,9 +269,10 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         // post-exhaust marginal exact-in quote stays executable AND its natural output
         // (~P_min·1e18 ≈ 0.04e18) is not clamped by partialFill to the remaining balance.
         // The pool is still ~1e-5 fraction full, so the measured price stays ≈ P_min.
+        // tokenLt -> tokenGt (buy Gt): isAToB = true.
         uint256 dust = 1e18;
         vm.prank(taker);
-        swapVM.swap(order, tokenLt, tokenGt, bGt - dust, _td(sig, false));
+        swapVM.swap(order, bGt - dust, _td(sig, false));
         assertEq(swapVM.balances(swapVM.hash(order), tokenGt), dust,
             string.concat(label, ": only dust Gt should remain"));
 
@@ -299,14 +303,17 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
     ///         so neither token is exhausted over many rounds.
     function _runBalancedRoundTrips(
         ISwapVM.Order memory order,
-        bytes memory td,
+        bytes memory sig,
         uint256 swapSizeLt,
         uint256 swapSizeGt
     ) internal {
+        // tokenLt -> tokenGt: isAToB = true; tokenGt -> tokenLt: isAToB = false.
+        bytes memory tdLtToGt = _td(sig, true, true);
+        bytes memory tdGtToLt = _td(sig, true, false);
         vm.startPrank(taker);
         for (uint256 i = 0; i < ROUNDS; i++) {
-            swapVM.swap(order, tokenLt, tokenGt, swapSizeLt, td);
-            swapVM.swap(order, tokenGt, tokenLt, swapSizeGt, td);
+            swapVM.swap(order, swapSizeLt, tdLtToGt);
+            swapVM.swap(order, swapSizeGt, tdGtToLt);
         }
         vm.stopPrank();
     }
@@ -341,7 +348,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 swapSizeLt = Math.mulDiv(swapSizeGt, ONE, pSpot);
         if (swapSizeLt < 1e14) { swapSizeLt = 1e14; swapSizeGt = Math.mulDiv(1e14, pSpot, ONE); }
 
-        _runBalancedRoundTrips(order, _td(sig, true), swapSizeLt, swapSizeGt);
+        _runBalancedRoundTrips(order, sig, swapSizeLt, swapSizeGt);
 
         bytes32 h = swapVM.hash(order);
         (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
@@ -370,11 +377,13 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
 
         uint256 swapSize = avail / 50; // 2 000e18
-        bytes memory td  = _td(sig, true);
+        // tokenLt -> tokenGt: isAToB = true; tokenGt -> tokenLt: isAToB = false.
+        bytes memory tdLtToGt = _td(sig, true, true);
+        bytes memory tdGtToLt = _td(sig, true, false);
         vm.startPrank(taker);
         for (uint256 i = 0; i < ROUNDS; i++) {
-            swapVM.swap(order, tokenLt, tokenGt, swapSize, td);
-            swapVM.swap(order, tokenGt, tokenLt, swapSize, td);
+            swapVM.swap(order, swapSize, tdLtToGt);
+            swapVM.swap(order, swapSize, tdGtToLt);
         }
         vm.stopPrank();
 
@@ -422,6 +431,8 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: tokenLt,
+            tokenB: tokenGt,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -439,10 +450,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
-                    dynamic([tokenLt, tokenGt]),
-                    dynamic([bLt, bGt])
-                )),
+                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
                 p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
                 p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
@@ -457,14 +465,17 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
     ///      Appropriate when P_spot = 1.0 so both tokens have equal value.
     function _runUniformRoundTrips(
         ISwapVM.Order memory order,
-        bytes memory td,
+        bytes memory sig,
         uint256 swapSize,
         uint256 rounds
     ) internal {
+        // tokenLt -> tokenGt: isAToB = true; tokenGt -> tokenLt: isAToB = false.
+        bytes memory tdLtToGt = _td(sig, true, true);
+        bytes memory tdGtToLt = _td(sig, true, false);
         vm.startPrank(taker);
         for (uint256 i = 0; i < rounds; i++) {
-            swapVM.swap(order, tokenLt, tokenGt, swapSize, td);
-            swapVM.swap(order, tokenGt, tokenLt, swapSize, td);
+            swapVM.swap(order, swapSize, tdLtToGt);
+            swapVM.swap(order, swapSize, tdGtToLt);
         }
         vm.stopPrank();
     }
@@ -494,7 +505,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 swapSize = actualLt / 50;
         if (swapSize < 1e15) swapSize = 1e15;
 
-        _runUniformRoundTrips(order, _td(sig, true), swapSize, ROUNDS_C);
+        _runUniformRoundTrips(order, sig, swapSize, ROUNDS_C);
 
         uint256 finalTVL = swapVM.balances(h, tokenLt) + swapVM.balances(h, tokenGt);
         assertTrue(int256(finalTVL) >= int256(initialTVL),
@@ -519,7 +530,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory sig) = _createOrderC(bLt, bGt, SQRT_P_MIN_C, SQRT_P_MAX_C);
         bytes32 h = swapVM.hash(order);
 
-        _runUniformRoundTrips(order, _td(sig, true), 1_000e18, ROUNDS_C);
+        _runUniformRoundTrips(order, sig, 1_000e18, ROUNDS_C);
 
         uint256 finalTVL = swapVM.balances(h, tokenLt) + swapVM.balances(h, tokenGt);
         assertTrue(int256(finalTVL) < int256(initialTVL),

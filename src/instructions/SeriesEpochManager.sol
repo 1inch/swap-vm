@@ -10,16 +10,13 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library SeriesEpochManagerArgsBuilder {
     using Calldata for bytes;
 
-    error SeriesEpochManagerMissingSeriesId();
-    error SeriesEpochManagerMissingEpoch();
-
     function buildEpochValidation(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
         return abi.encodePacked(seriesId, epoch);
     }
 
     function parse(bytes calldata args) internal pure returns (uint256 seriesId, uint256 epoch) {
-        seriesId = uint32(bytes4(args.slice(0, 4, SeriesEpochManagerMissingSeriesId.selector)));
-        epoch = uint32(bytes4(args.slice(4, 8, SeriesEpochManagerMissingEpoch.selector)));
+        seriesId = uint32(bytes4(args));
+        epoch = uint32(bytes4(args.slice(4)));
     }
 }
 

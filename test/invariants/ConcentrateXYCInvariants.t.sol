@@ -47,8 +47,9 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, 100000e18);
@@ -98,8 +99,6 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -119,10 +118,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
+                BalancesArgsBuilder.build([balanceA, balanceB])),
             program.build(_xycConcentrateGrowLiquidity2D,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
@@ -158,10 +154,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
             Program memory program = ProgramBuilder.init(_opcodes());
             bytes memory bytecode = bytes.concat(
                 program.build(_dynamicBalancesXD,
-                    BalancesArgsBuilder.build(
-                        dynamic([address(tokenA), address(tokenB)]),
-                        dynamic([balanceA, balanceB])
-                    )),
+                    BalancesArgsBuilder.build([balanceA, balanceB])),
                 program.build(_xycConcentrateGrowLiquidity2D,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
             );
@@ -186,6 +179,8 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -224,6 +219,7 @@ contract ConcentrateXYCInvariants is Test, OpcodesDebug, CoreInvariants {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

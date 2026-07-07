@@ -19,7 +19,6 @@ import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { SeriesEpochManager, SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 
 /// @title SeriesEpochManager tests
 contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
@@ -44,8 +43,9 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         maker = vm.addr(makerPK);
         maker2 = vm.addr(maker2PK);
         swapVM = new LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         tokenB.mint(maker, 100e18);
         vm.prank(maker);
@@ -63,7 +63,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([uint256(1e18), uint256(2e18)]))),
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), uint256(2e18)])),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             p.build(_salt, abi.encodePacked(salt))
         );
@@ -362,17 +362,17 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function _tryExecute(ISwapVM.Order memory order, bool shouldExecute) internal {
         bytes memory takerData = _takerData(_signOrder(order));
         if (shouldExecute) {
-            (, uint256 amountOutQuote,) = swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
-            (, uint256 amountOutSwap,) = swapVM.swap(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            (, uint256 amountOutQuote,) = swapVM.quote(order, AMOUNT_IN, takerData);
+            (, uint256 amountOutSwap,) = swapVM.swap(order, AMOUNT_IN, takerData);
             assertEq(amountOutQuote, amountOutSwap);
             assertGt(amountOutSwap, 0);
         } else {
             vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
-            swapVM.quote(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            swapVM.quote(order, AMOUNT_IN, takerData);
 
             vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
             vm.prank(address(this));
-            swapVM.swap(order, address(tokenA), address(tokenB), AMOUNT_IN, takerData);
+            swapVM.swap(order, AMOUNT_IN, takerData);
         }
     }
 
@@ -390,6 +390,8 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
     function _epochOrderFor(address orderMaker, uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: orderMaker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             receiver: address(0),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
@@ -418,6 +420,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: "",
             to: address(this),
             deadline: 0,

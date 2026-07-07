@@ -18,7 +18,6 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
-import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -46,8 +45,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, 1000000e18);
@@ -81,8 +81,6 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -103,10 +101,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
+                BalancesArgsBuilder.build([balanceA, balanceB])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -135,7 +130,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         for (uint256 i = 0; i < smallOddAmounts.length; i++) {
             // Try to quote, it might revert for amounts that produce 0 output
             try swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactInData
+                order, smallOddAmounts[i], exactInData
             ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
                 // Log the results for debugging if needed
                 // ExactIn odd amount: smallOddAmounts[i] -> out: quotedOut
@@ -164,7 +159,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
             // Try to quote, might revert for amounts that are impossible to achieve
             try swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), smallOddAmounts[i], exactOutData
+                order, smallOddAmounts[i], exactOutData
             ) returns (uint256 quotedIn, uint256 quotedOut, bytes32) {
                 // Log the results for debugging if needed
                 // ExactOut odd amount: smallOddAmounts[i] -> in: quotedIn
@@ -196,10 +191,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
+                BalancesArgsBuilder.build([balanceA, balanceB])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -227,7 +219,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         for (uint256 i = 0; i < largeOddAmounts.length; i++) {
             // Test exactIn
             (, uint256 outQuoted,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), largeOddAmounts[i], exactInData
+                order, largeOddAmounts[i], exactInData
             );
 
             // Log the results for debugging if needed
@@ -240,7 +232,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             // Test exactOut with the same amount
             if (largeOddAmounts[i] <= balanceB) {
                 (uint256 inRequired, uint256 outGiven,) = swapVM.asView().quote(
-                    order, address(tokenA), address(tokenB), largeOddAmounts[i], exactOutData
+                    order, largeOddAmounts[i], exactOutData
                 );
 
                 // Log the results for debugging if needed
@@ -266,10 +258,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
+                BalancesArgsBuilder.build([balanceA, balanceB])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -291,10 +280,10 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             uint256 amountPlusOne = amount + 1;
 
             (,uint256 out1,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), amount, exactInData
+                order, amount, exactInData
             );
             (,uint256 out2,) = swapVM.asView().quote(
-                order, address(tokenA), address(tokenB), amountPlusOne, exactInData
+                order, amountPlusOne, exactInData
             );
 
             // More input should give at least as much output (monotonicity with rounding)
@@ -319,10 +308,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([balanceA, balanceB])
-                )),
+                BalancesArgsBuilder.build([balanceA, balanceB])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -370,10 +356,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([tokenOut, tokenIn]),
-                    dynamic([balanceOut, balanceIn])
-                )),
+                BalancesArgsBuilder.build([balanceIn, balanceOut])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,
@@ -427,10 +410,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_dynamicBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([tokenOut, tokenIn]),
-                    dynamic([balanceOut, balanceIn])
-                )),
+                BalancesArgsBuilder.build([balanceIn, balanceOut])),
             program.build(_peggedSwapGrowPriceRange2D,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,
@@ -473,6 +453,8 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -511,6 +493,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,
