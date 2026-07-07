@@ -47,18 +47,47 @@ library PeggedSwapMath {
         return invariant(u, v, a);
     }
 
+    /// @notice Single-coordinate invariant contribution: √u + a·u
+    /// @dev This is the term g(u) that both `solve` and the PeggedSwap capacity check depend on.
+    ///      Kept here as the single source of truth so callers never re-derive √u + au inline.
+    /// @param u Normalized coordinate (x/X₀ or y/Y₀) scaled by ONE
+    /// @param a Linear width parameter scaled by ONE
+    /// @return g(u) = √u + a·u, scaled by sqrt(ONE)
+    function gTerm(uint256 u, uint256 a) internal pure returns (uint256) {
+        // a * u / ONE - safe: a ≤ 2e27, u ≤ 2e27 → 4e54 < 1e77
+        return Math.sqrt(u * ONE) + a * u / ONE;
+    }
+
     /// @notice Solve for v analytically using square root curve (p=0.5)
     /// @dev √u + √v + a(u + v) = c
     /// @dev Rearranges to: √v + av = c - √u - au
     /// @dev Let w = √v, then: aw² + w = [c - √u - au]
     /// @dev Quadratic in w: aw² + w - rightSide = 0
     /// @dev Solution: w = (-1 + √(1 + 4a * rightSide)) / (2a)
-    /// @dev Takes rightSide = c - (√u + au) directly. The caller computes it, which lets callers that
-    ///      already know c >= (√u+au) (e.g. from a capacity check) skip a redundant bounds check.
-    /// @param rightSide c - (√u + au), scaled by sqrt(ONE); caller MUST guarantee it's non-negative
+    /// @dev Self-guarding: computes the u-side term g(u) and checks c >= g(u).
+    /// @param u Normalized x value (x/X₀) scaled by ONE
     /// @param a Linear width parameter scaled by ONE
+    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
     /// @return v Normalized y value (y/Y₀) scaled by ONE
-    function solve(uint256 rightSide, uint256 a) internal pure returns (uint256 v) {
+    function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
+        uint256 invariantU = gTerm(u, a);
+        require(invariantC >= invariantU, PeggedSwapMathInvalidInput());
+        return solveWithInvariant(invariantU, a, invariantC);
+    }
+
+    /// @notice solve() variant for callers that already computed the u-side term g(u) = √u + au
+    /// @dev Identical to solve() but skips recomputing √u + au; lets a caller that already has it
+    ///      (e.g. from a capacity check g(u) >= c) avoid the extra sqrt.
+    /// @dev PRECONDITION: invariantC >= invariantU. Callers MUST guarantee this (e.g. via a prior
+    ///      capacity check); otherwise the rightSide subtraction reverts on underflow.
+    /// @param invariantU u-side invariant contribution g(u) = √u + au, scaled by sqrt(ONE)
+    /// @param a Linear width parameter scaled by ONE
+    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
+    /// @return v Normalized y value (y/Y₀) scaled by ONE
+    function solveWithInvariant(uint256 invariantU, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
+        // rightSide = c - (√u + au); precondition invariantC >= invariantU holds (see @dev)
+        uint256 rightSide = invariantC - invariantU;
+
         if (a == 0) {
             // Equation becomes: √v = rightSide, so v = rightSide²
             v = (rightSide * rightSide) / ONE;
