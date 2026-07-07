@@ -52,11 +52,12 @@ contract AquaOpcodes is
         else if (opcode == 30) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 31) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == 32) Extruction._extruction(ctx, args);
+        else if (opcode == 33) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[34] memory instructions = [
+        function(Context memory, bytes calldata) internal[35] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -96,7 +97,8 @@ contract AquaOpcodes is
             Fee._dynamicProtocolFeeAmountInXD,
             Fee._aquaDynamicProtocolFeeAmountInXD,
             PeggedSwap._peggedSwapGrowPriceRange2D,
-            Extruction._extruction
+            Extruction._extruction,
+            Controls._onlyTxOriginTokenBalanceNonZero
         ];
 
         // Efficiently turning static memory array into dynamic memory array
