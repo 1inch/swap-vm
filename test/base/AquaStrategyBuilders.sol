@@ -70,8 +70,9 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         maker = vm.addr(makerPrivateKey);
 
         // Deploy mock tokens
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
     function buildProgram(MakerSetup memory setup) internal view virtual returns (bytes memory) {
@@ -108,6 +109,8 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     ) public view returns (ISwapVM.Order memory order) {
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,

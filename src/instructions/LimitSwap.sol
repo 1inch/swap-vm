@@ -12,8 +12,6 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library LimitSwapArgsBuilder {
     using Calldata for bytes;
 
-    error LimitSwapArgsBuilderMissingMakerDirectionLt();
-
     /// @notice Build instruction arguments for LimitSwap
     /// @param tokenIn Input token address
     /// @param tokenOut Output token address
@@ -23,7 +21,7 @@ library LimitSwapArgsBuilder {
     }
 
     function parse(bytes calldata args) internal pure returns (bool makerDirectionLt) {
-        makerDirectionLt = uint8(bytes1(args.slice(0, 1, LimitSwapArgsBuilderMissingMakerDirectionLt.selector))) != 0;
+        makerDirectionLt = uint8(bytes1(args)) != 0;
     }
 }
 

@@ -41,7 +41,7 @@ contract DirectSwapVMHelper is OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
             p.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([balanceA, balanceB]))),
+                BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
             p.build(LimitSwap._limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
             p.build(Controls._salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
@@ -49,6 +49,8 @@ contract DirectSwapVMHelper is OpcodesDebug {
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,

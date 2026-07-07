@@ -12,17 +12,14 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library MinRateArgsBuilder {
     using Calldata for bytes;
 
-    error MinRateMissingRateAmountLtArg();
-    error MinRateMissingRateAmountGtArg();
-
     function build(address tokenA, address tokenB, uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
         (uint64 rateLt, uint64 rateGt) = tokenA < tokenB ? (rateA, rateB) : (rateB, rateA);
         return abi.encodePacked(rateLt, rateGt);
     }
 
     function parse(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint64 rateIn, uint64 rateOut) {
-        uint64 rateLt = uint64(bytes8(args.slice(0, 8, MinRateMissingRateAmountLtArg.selector)));
-        uint64 rateGt = uint64(bytes8(args.slice(8, 16, MinRateMissingRateAmountGtArg.selector)));
+        uint64 rateLt = uint64(bytes8(args));
+        uint64 rateGt = uint64(bytes8(args.slice(8)));
         (rateIn, rateOut) = tokenIn < tokenOut ? (rateLt, rateGt) : (rateGt, rateLt);
     }
 }

@@ -26,12 +26,12 @@ library ExactInOutSymmetry {
     ) internal view {
         // ExactIn: amountIn → ?
         (, uint256 amountOut,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, amountIn, takerDataExactIn
+            order, amountIn, takerDataExactIn
         );
 
         // ExactOut: ? → amountOut
         (uint256 amountInBack,,) = swapVM.asView().quote(
-            order, tokenIn, tokenOut, amountOut, takerDataExactOut
+            order, amountOut, takerDataExactOut
         );
 
         uint256 diff = amountInBack > amountIn ?

@@ -62,8 +62,9 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     constructor() AquaOpcodesDebug(address(aqua)) {}
 
     function setUp() public {
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
@@ -315,6 +316,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
@@ -375,6 +378,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: zeroForOne,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -391,7 +395,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         }));
 
         TokenMock(tokenIn).mint(address(taker), amount * 2);
-        return taker.swap(order, tokenIn, tokenOut, amount, takerData);
+        return taker.swap(order, amount, takerData);
     }
 
     // ===== TEST GROUP 1: XYCSwap Tests =====
