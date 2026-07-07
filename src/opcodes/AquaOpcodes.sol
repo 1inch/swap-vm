@@ -15,8 +15,6 @@ import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-import { VMLoop } from "../VMLoop.sol";
-
 contract AquaOpcodes is
     Controls,
     XYCSwap,
@@ -24,17 +22,14 @@ contract AquaOpcodes is
     Decay,
     Fee,
     PeggedSwap,
-    Extruction,
-    VMLoop
+    Extruction
 {
     error UnknownOpcode(uint256 opcode);
 
     constructor(address aqua) Fee(aqua) {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Fee, Decay, VMLoop) { super._runLoop(ctx); }
-
     /// @notice Opcode direct dispatcher
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
              if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
         else if (opcode == uint256(Opcode.JumpIfTokenIn)) Controls._jumpIfTokenIn(ctx, args);
         else if (opcode == uint256(Opcode.JumpIfTokenOut)) Controls._jumpIfTokenOut(ctx, args);
@@ -53,6 +48,7 @@ contract AquaOpcodes is
         else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.PeggedSwap)) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }

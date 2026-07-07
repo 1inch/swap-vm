@@ -23,5 +23,7 @@ contract SwapVMRouter is Simulator, SwapVM, Opcodes {
     constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) Opcodes(aqua) { }
 
     /// @dev Dispatches an opcode to its handler for VM execution
-    function _runLoop(Context memory ctx) internal override(SwapVM, Opcodes) { super._runLoop(ctx); }
+    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
+        _runOpcode(ctx, opcode, args);
+    }
 }

@@ -26,8 +26,6 @@ import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
-import { VMLoop } from "../VMLoop.sol";
-
 contract Opcodes is
     Controls,
     Balances,
@@ -46,17 +44,14 @@ contract Opcodes is
     PeggedSwap,
     SeriesEpochManager,
     Whitelist,
-    PiecewiseLinearScale,
-    VMLoop
+    PiecewiseLinearScale
 {
     error UnknownOpcode(uint256 opcode);
 
     constructor(address aqua) FeeExperimental(aqua) {}
 
-    function _runLoop(Context memory ctx) internal virtual override(Balances, Decay, Fee, Invalidators, MinRate, TWAPSwap, VMLoop) { super._runLoop(ctx); }
-
     /// @notice Opcode direct dispatcher
-    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual override {
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
              if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
         else if (opcode == uint256(Opcode.Stop)) Controls._stop(ctx, args);
         else if (opcode == uint256(Opcode.Revert)) Controls._revert(ctx, args);
@@ -101,6 +96,7 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.WhitelistMultipleTakers)) Whitelist._whitelistMultipleTakers(ctx, args);
         else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceIn)) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceOut)) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }

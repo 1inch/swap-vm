@@ -42,7 +42,7 @@ library ControlsArgsBuilder {
         return abi.encodePacked(deadline);
     }
 
-    function buildTakerTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
+    function buildTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
         return abi.encodePacked(token);
     }
 
@@ -65,6 +65,7 @@ contract Controls {
     error InstructionRevert(bytes);
     error DeadlineReached(address taker, uint256 deadline);
     error TakerTokenBalanceIsZero(address taker, address token);
+    error TxOriginTokenBalanceIsZero(address txOrigin, address token);
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
     error TakerTokenBalanceSupplyShareIsLessThanRequired(address taker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
 
@@ -133,11 +134,25 @@ contract Controls {
     }
 
     /// @dev Checks if the taker holds any amount of the specified token (NFTs are natively supported)
+    /// @dev Since EIP-7702, user may delegate it's account to certain code, potentially sharing authorization
+    ///   given even by soulbound NFT with other users
     /// @param args.token | 20 bytes
     function _onlyTakerTokenBalanceNonZero(Context memory ctx, bytes calldata args) internal view {
         address token = address(bytes20(args));
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
+    }
+
+    /// @dev Checks if tx.origin holds any amount of the specified token (NFTs are natively supported)
+    /// @dev The opcode allows authorized user to fill the order through 3rd-party contracts
+    ///   Validations through tx.origin are considered weak due to possible transaction flow interception
+    ///   E.g. authorized user performs transaction to 3rd-party protocol with no order filling intention,
+    ///   the 3rd-party protocol may use the authorization to fill the order
+    /// @param args.token | 20 bytes
+    function _onlyTxOriginTokenBalanceNonZero(Context memory /* ctx */, bytes calldata args) internal view {
+        address token = address(bytes20(args));
+        uint256 balance = IERC20(token).balanceOf(tx.origin);
+        require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
     }
 
     /// @dev Checks if the taker holds at least a certain amount of tokens

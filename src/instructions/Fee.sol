@@ -49,7 +49,7 @@ library FeeArgsBuilder {
     }
 }
 
-abstract contract Fee {
+contract Fee {
     using SafeERC20 for IERC20;
     using ContextLib for Context;
 
@@ -74,11 +74,11 @@ abstract contract Fee {
             // Decrease amountIn by fee only during swap-instruction
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             ctx.swap.amountIn -= Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS);
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountIn += Math.ceilDiv(ctx.swap.amountIn * feeBps, BPS - feeBps);
         }
     }
@@ -233,16 +233,13 @@ abstract contract Fee {
             uint256 takerDefinedAmountIn = ctx.swap.amountIn;
             feeAmountIn = ctx.swap.amountIn * feeBps / BPS;
             ctx.swap.amountIn -= feeAmountIn;
-            _runLoop(ctx);
+            ctx.runLoop();
             ctx.swap.amountIn = takerDefinedAmountIn;
         } else {
             // Increase amountIn by fee after swap-instruction
-            _runLoop(ctx);
+            ctx.runLoop();
             feeAmountIn = ctx.swap.amountIn * feeBps / (BPS - feeBps);
             ctx.swap.amountIn += feeAmountIn;
         }
     }
-
-    /// @dev Override in the router to execute program bytecode
-    function _runLoop(Context memory ctx) internal virtual;
 }
