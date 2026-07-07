@@ -23,6 +23,9 @@ import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
+import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
+import { Whitelist } from "../instructions/Whitelist.sol";
+import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
 
 contract Opcodes is
     Controls,
@@ -39,14 +42,66 @@ contract Opcodes is
     Fee,
     FeeExperimental,
     Extruction,
-    PeggedSwap
+    PeggedSwap,
+    SeriesEpochManager,
+    Whitelist,
+    PiecewiseLinearScale
 {
+    error UnknownOpcode(uint256 opcode);
+
     constructor(address aqua) FeeExperimental(aqua) {}
 
     function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
 
+    /// @notice Opcode direct dispatcher
+    /// @dev Indices MUST mirror {_opcodes} exactly
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
+        if (opcode == 10) Controls._jump(ctx, args);
+        else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
+        else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
+        else if (opcode == 13) Controls._deadline(ctx, args);
+        else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
+        else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
+        else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
+        else if (opcode == 17) Balances._staticBalancesXD(ctx, args);
+        else if (opcode == 18) Balances._dynamicBalancesXD(ctx, args);
+        else if (opcode == 19) Invalidators._invalidateBit1D(ctx, args);
+        else if (opcode == 20) Invalidators._invalidateTokenIn1D(ctx, args);
+        else if (opcode == 21) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == 22) XYCSwap._xycSwapXD(ctx, args);
+        else if (opcode == 23) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == 24) Decay._decayXD(ctx, args);
+        else if (opcode == 25) LimitSwap._limitSwap1D(ctx, args);
+        else if (opcode == 26) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == 27) MinRate._requireMinRate1D(ctx, args);
+        else if (opcode == 28) MinRate._adjustMinRate1D(ctx, args);
+        else if (opcode == 29) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
+        else if (opcode == 30) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
+        else if (opcode == 31) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
+        else if (opcode == 32) TWAPSwap._twap(ctx, args);
+        else if (opcode == 33) Extruction._extruction(ctx, args);
+        else if (opcode == 34) Controls._salt(ctx, args);
+        else if (opcode == 35) Fee._flatFeeAmountInXD(ctx, args);
+        else if (opcode == 36) FeeExperimental._flatFeeAmountOutXD(ctx, args);
+        else if (opcode == 37) FeeExperimental._progressiveFeeInXD(ctx, args);
+        else if (opcode == 38) FeeExperimental._progressiveFeeOutXD(ctx, args);
+        else if (opcode == 39) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 40) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
+        else if (opcode == 41) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
+        else if (opcode == 42) Fee._protocolFeeAmountInXD(ctx, args);
+        else if (opcode == 43) Fee._aquaProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 44) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 45) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == 46) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
+        else if (opcode == 47) Whitelist._whitelistSingleTaker(ctx, args);
+        else if (opcode == 48) Whitelist._whitelistMultipleTakers(ctx, args);
+        else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
+        else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
+        else revert UnknownOpcode(opcode);
+    }
+
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[47] memory instructions = [
+        function(Context memory, bytes calldata) internal[52] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -106,7 +161,12 @@ contract Opcodes is
             Fee._protocolFeeAmountInXD,
             Fee._aquaProtocolFeeAmountInXD,
             Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            SeriesEpochManager._validateSeriesEpochXD,
+            Whitelist._whitelistSingleTaker,
+            Whitelist._whitelistMultipleTakers,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
+            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D
         ];
 
         // Efficiently turning static memory array into dynamic memory array

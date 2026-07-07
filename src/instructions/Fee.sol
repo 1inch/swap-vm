@@ -20,10 +20,6 @@ library FeeArgsBuilder {
     using Calldata for bytes;
 
     error FeeBpsOutOfRange(uint32 feeBps);
-    error FeeMissingFeeBPS();
-    error ProtocolFeeMissingFeeBPS();
-    error ProtocolFeeMissingTo();
-    error ProtocolFeeProviderMissingAddress();
 
     function buildFlatFee(uint32 feeBps) internal pure returns (bytes memory) {
         require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
@@ -40,16 +36,16 @@ library FeeArgsBuilder {
     }
 
     function parseFlatFee(bytes calldata args) internal pure returns (uint32 feeBps) {
-        feeBps = uint32(bytes4(args.slice(0, 4, FeeMissingFeeBPS.selector)));
+        feeBps = uint32(bytes4(args));
     }
 
     function parseProtocolFee(bytes calldata args) internal pure returns (uint32 feeBps, address to) {
-        feeBps = uint32(bytes4(args.slice(0, 4, ProtocolFeeMissingFeeBPS.selector)));
-        to = address(uint160(bytes20(args.slice(4, 24, ProtocolFeeMissingTo.selector))));
+        feeBps = uint32(bytes4(args));
+        to = address(uint160(bytes20(args.slice(4))));
     }
 
     function parseDynamicProtocolFee(bytes calldata args) internal pure returns (address feeProvider) {
-        feeProvider = address(uint160(bytes20(args.slice(0, 20, ProtocolFeeProviderMissingAddress.selector))));
+        feeProvider = address(uint160(bytes20(args)));
     }
 }
 

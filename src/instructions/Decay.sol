@@ -12,14 +12,12 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library DecayArgsBuilder {
     using Calldata for bytes;
 
-    error DecayMissingPeriodArg();
-
     function build(uint16 decayPeriod) internal pure returns (bytes memory) {
         return abi.encodePacked(decayPeriod);
     }
 
     function parse(bytes calldata args) internal pure returns (uint16 period) {
-        period = uint16(bytes2(args.slice(0, 2, DecayMissingPeriodArg.selector)));
+        period = uint16(bytes2(args));
     }
 }
 

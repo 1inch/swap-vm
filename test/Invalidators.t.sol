@@ -20,7 +20,6 @@ import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
-import { dynamic } from "./utils/Dynamic.sol";
 
 
 /**
@@ -47,8 +46,9 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         taker = address(this);
         swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup tokens and approvals for maker
         tokenA.mint(maker, 10000e18);
@@ -79,8 +79,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         // Execute the swap
         (uint256 actualIn, uint256 actualOut,) = swapVM.swap(
             order,
-            tokenIn,
-            tokenOut,
             amount,
             takerData
         );
@@ -102,10 +100,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             program.build(_invalidateBit1D,
                 InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 200e18])),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -128,8 +123,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -148,10 +141,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             program1.build(_invalidateBit1D,
                 InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex1)),
             program1.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(50e18), uint256(100e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(50e18), 100e18])),
             program1.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -161,10 +151,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             program2.build(_invalidateBit1D,
                 InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex2)),
             program2.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(50e18), uint256(100e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(50e18), 100e18])),
             program2.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -190,10 +177,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(10e18), uint256(20e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(10e18), 20e18])),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program.build(_invalidateTokenIn1D)
@@ -216,8 +200,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -231,10 +213,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(20e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 20e18])),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program.build(_invalidateTokenOut1D)
@@ -249,42 +228,36 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         exactOutData = _signAndPackTakerData(order, false, 40e18);
         (uint256 amountIn1,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             8e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn1);
-        swapVM.swap(order, address(tokenA), address(tokenB), 8e18, exactOutData);
+        swapVM.swap(order, 8e18, exactOutData);
 
         // Second fill - want 7 tokenB out
         exactOutData = _signAndPackTakerData(order, false, 35e18);
         (uint256 amountIn2,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             7e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn2);
-        swapVM.swap(order, address(tokenA), address(tokenB), 7e18, exactOutData);
+        swapVM.swap(order, 7e18, exactOutData);
 
         // Third fill - want 5 tokenB out (total 20)
         exactOutData = _signAndPackTakerData(order, false, 25e18);
         (uint256 amountIn3,,) = swapVM.asView().quote(
             order,
-            address(tokenA),
-            address(tokenB),
             5e18,
             exactOutData
         );
         TokenMock(address(tokenA)).mint(taker, amountIn3);
-        swapVM.swap(order, address(tokenA), address(tokenB), 5e18, exactOutData);
+        swapVM.swap(order, 5e18, exactOutData);
 
         // Fourth fill should fail - would exceed output balance
         exactOutData = _signAndPackTakerData(order, false, 1e18);
         vm.expectRevert();
-        swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactOutData);
+        swapVM.swap(order, 1e18, exactOutData);
     }
 
     /**
@@ -298,10 +271,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             program.build(_invalidateBit1D,
                 InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 200e18])),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program.build(_invalidateTokenIn1D),
@@ -319,8 +289,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -343,10 +311,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
                 program.build(_invalidateBit1D,
                     InvalidatorsArgsBuilder.buildInvalidateBit(bitIndices[i])),
                 program.build(_staticBalancesXD,
-                    BalancesArgsBuilder.build(
-                        dynamic([address(tokenA), address(tokenB)]),
-                        dynamic([uint256(10e18), uint256(20e18)])
-                    )),
+                    BalancesArgsBuilder.build([uint256(10e18), 20e18])),
                 program.build(_limitSwap1D,
                     LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
             );
@@ -360,7 +325,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             // Should fail second time
             TokenMock(address(tokenA)).mint(taker, 1e18);
             vm.expectRevert();
-            swapVM.swap(order, address(tokenA), address(tokenB), 1e18, exactInData);
+            swapVM.swap(order, 1e18, exactInData);
         }
     }
 
@@ -382,10 +347,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             program.build(_invalidateBit1D,
                 InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate))),
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 200e18])),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
@@ -398,8 +360,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -408,10 +368,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         Program memory program2 = ProgramBuilder.init(_opcodes());
         bytes memory bytecode2 = bytes.concat(
             program2.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(200e18)])
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 200e18])),
             program2.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program2.build(_invalidateTokenIn1D)
@@ -429,11 +386,113 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order2,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData2
         );
+    }
+
+    function test_ExternalInvalidationMultiBits() public {
+        // Get invalidators contract address from SwapVM
+        Invalidators invalidators = Invalidators(address(swapVM));
+
+        // Pre-invalidate a bit as maker
+        uint248 slot = 5;
+        uint256 bitToInvalidate1 = (slot << 8) + 1;
+        uint256 bitToKeep1 = (slot << 8) + 2;
+        uint256 bitToInvalidate2 = (slot << 8) + 3;
+        uint256 bitToKeep2 = (slot << 8) + 4;
+        uint256 bitToInvalidate3 = (slot << 8) + 5;
+
+        vm.prank(maker);
+        invalidators.invalidateBit(bitToInvalidate1);
+        vm.prank(maker);
+        invalidators.invalidateBits(slot, 32 + 8);
+
+        // Check that 3rd and 5th bits are invalidated in addition to 1st
+        {
+            // Create order using bitToInvalidate1
+            Program memory program = ProgramBuilder.init(_opcodes());
+            bytes memory bytecode = bytes.concat(
+                program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate1))),
+                program.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(100e18), 200e18])),
+                program.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            );
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+            // Should fail - bit already invalidated
+            TokenMock(address(tokenA)).mint(taker, 1e18);
+            vm.expectRevert();
+            swapVM.swap(order, 1e18, exactInData);
+        }
+        {
+            // Create order using bitToInvalidate2
+            Program memory program = ProgramBuilder.init(_opcodes());
+            bytes memory bytecode = bytes.concat(
+                program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate2))),
+                program.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(100e18), 200e18])),
+                program.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            );
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+            // Should fail - bit already invalidated
+            TokenMock(address(tokenA)).mint(taker, 1e18);
+            vm.expectRevert();
+            swapVM.swap(order, 1e18, exactInData);
+        }
+        {
+            // Create order using bitToInvalidate3
+            Program memory program = ProgramBuilder.init(_opcodes());
+            bytes memory bytecode = bytes.concat(
+                program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate3))),
+                program.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(100e18), 200e18])),
+                program.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            );
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+            // Should fail - bit already invalidated
+            TokenMock(address(tokenA)).mint(taker, 1e18);
+            vm.expectRevert();
+            swapVM.swap(order, 1e18, exactInData);
+        }
+
+        {
+            // Create order using bitToKeep1
+            Program memory program = ProgramBuilder.init(_opcodes());
+            bytes memory bytecode = bytes.concat(
+                program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToKeep1))),
+                program.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(100e18), 200e18])),
+                program.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            );
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+            // Should succeed - bit not invalidated
+            TokenMock(address(tokenA)).mint(taker, 1e18);
+            swapVM.swap(order, 1e18, exactInData);
+        }
+        {
+            // Create order using bitToKeep2
+            Program memory program = ProgramBuilder.init(_opcodes());
+            bytes memory bytecode = bytes.concat(
+                program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToKeep2))),
+                program.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(100e18), 200e18])),
+                program.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            );
+
+            ISwapVM.Order memory order = _createOrder(bytecode);
+            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+            // Should succeed - bit not invalidated
+            TokenMock(address(tokenA)).mint(taker, 1e18);
+            swapVM.swap(order, 1e18, exactInData);
+        }
     }
 
     /**
@@ -443,10 +502,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory bytecode = bytes.concat(
             program.build(_staticBalancesXD,
-                BalancesArgsBuilder.build(
-                    dynamic([address(tokenA), address(tokenB)]),
-                    dynamic([uint256(100e18), uint256(0)]) // Zero output balance
-                )),
+                BalancesArgsBuilder.build([uint256(100e18), 0]) // Zero output balance
+                ),
             program.build(_limitSwap1D,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program.build(_invalidateTokenOut1D)
@@ -460,8 +517,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         vm.expectRevert();
         swapVM.swap(
             order,
-            address(tokenA),
-            address(tokenB),
             1e18,
             exactInData
         );
@@ -471,6 +526,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -509,6 +566,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

@@ -6,8 +6,6 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { EthReceiver } from "@1inch/solidity-utils/contracts/mixins/EthReceiver.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { dynamic } from "./utils/Dynamic.sol";
-
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
@@ -40,7 +38,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
 
         weth = new WETHMock();
         swapVM = new SwapVMRouter(address(0), address(weth), msg.sender, "SwapVM", "1.0.0");
-        token = new TokenMock("Token B", "TKB");
+        token = new TokenMock("Token J", "TKJ");
 
         token.mint(maker, 1_000_000e18);
         token.mint(taker, 1_000_000e18);
@@ -62,17 +60,21 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         address tokenA,
         address tokenB
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        // MakerTraits requires tokenA < tokenB; balances are symmetric so ordering of values is irrelevant
+        (address lowerToken, address higherToken) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+
         Program memory program = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
             program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
-                dynamic([tokenA, tokenB]),
-                dynamic([uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)])
+                [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
             )),
             program.build(XYCSwap._xycSwapXD)
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: lowerToken,
+            tokenB: higherToken,
             shouldUnwrapWeth: makerUnwrapWeth,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -100,12 +102,14 @@ contract UnwrapWethTest is Test, OpcodesDebug {
     function _buildTakerData(
         bool isExactIn,
         bool takerUnwrapWeth,
+        bool isAToB,
         address recipient,
         bytes memory signature
     ) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
+            isAToB: isAToB,
             shouldUnwrapWeth: takerUnwrapWeth,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
@@ -147,13 +151,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         _prepareWeth(taker, amountIn);
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(true, address(0), address(weth), address(token));
-        bytes memory takerData = _buildTakerData(true, false, taker, signature);
+        bytes memory takerData = _buildTakerData(true, false, address(weth) < address(token), taker, signature);
 
         uint256 makerEthBefore = maker.balance;
         uint256 takerWethBefore = weth.balanceOf(taker);
 
         vm.prank(taker);
-        (uint256 actualAmountIn,,) = swapVM.swap(order, address(weth), address(token), amountIn, takerData);
+        (uint256 actualAmountIn,,) = swapVM.swap(order, amountIn, takerData);
 
         // Maker receives ETH (not WETH) and sends tokens
         assertEq(maker.balance - makerEthBefore, actualAmountIn, "Maker should receive ETH");
@@ -169,13 +173,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         _prepareWeth(taker, amountIn);
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(true, makerReceiver, address(weth), address(token));
-        bytes memory takerData = _buildTakerData(true, false, taker, signature);
+        bytes memory takerData = _buildTakerData(true, false, address(weth) < address(token), taker, signature);
 
         uint256 receiverEthBefore = makerReceiver.balance;
         uint256 makerEthBefore = maker.balance;
 
         vm.prank(taker);
-        (uint256 actualAmountIn,,) = swapVM.swap(order, address(weth), address(token), amountIn, takerData);
+        (uint256 actualAmountIn,,) = swapVM.swap(order, amountIn, takerData);
 
         assertEq(makerReceiver.balance - receiverEthBefore, actualAmountIn, "Receiver should receive ETH");
         assertEq(maker.balance, makerEthBefore, "Maker should not receive ETH");
@@ -189,13 +193,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         _prepareWeth(maker, ORDER_BALANCE);
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(0), address(token), address(weth));
-        bytes memory takerData = _buildTakerData(true, true, taker, signature);
+        bytes memory takerData = _buildTakerData(true, true, address(token) < address(weth), taker, signature);
 
         uint256 takerEthBefore = taker.balance;
         uint256 makerWethBefore = weth.balanceOf(maker);
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(token), address(weth), amountIn, takerData);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         // Taker receives ETH (not WETH)
         assertEq(taker.balance - takerEthBefore, amountOut, "Taker should receive ETH");
@@ -211,13 +215,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         _prepareWeth(maker, ORDER_BALANCE);
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(0), address(token), address(weth));
-        bytes memory takerData = _buildTakerData(true, true, takerRecipient, signature);
+        bytes memory takerData = _buildTakerData(true, true, address(token) < address(weth), takerRecipient, signature);
 
         uint256 recipientEthBefore = takerRecipient.balance;
         uint256 takerEthBefore = taker.balance;
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, address(token), address(weth), amountIn, takerData);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         assertEq(takerRecipient.balance - recipientEthBefore, amountOut, "Recipient should receive ETH");
         assertEq(taker.balance - takerEthBefore, 0, "Taker should not receive ETH");
@@ -226,7 +230,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
 
     // ==================== FUZZ TESTS ====================
 
-    function test_UnwrapWeth_Fuzz(
+    function testFuzz_UnwrapWeth(
         bool makerUnwrapWeth,
         bool takerUnwrapWeth,
         bool isExactIn,
@@ -259,13 +263,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         }
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(makerUnwrapWeth, address(0), tokenIn, tokenOut);
-        bytes memory takerData = _buildTakerData(isExactIn, takerUnwrapWeth, taker, signature);
+        bytes memory takerData = _buildTakerData(isExactIn, takerUnwrapWeth, tokenIn < tokenOut, taker, signature);
 
         uint256 makerEthBefore = maker.balance;
         uint256 takerEthBefore = taker.balance;
 
         vm.prank(taker);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, tokenIn, tokenOut, amount, takerData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, amount, takerData);
 
         if (makerUnwrapWeth) {
             assertEq(maker.balance - makerEthBefore, amountIn, "Maker should receive ETH when unwrapping");

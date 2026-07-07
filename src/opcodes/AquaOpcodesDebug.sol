@@ -15,4 +15,14 @@ contract AquaOpcodesDebug is AquaOpcodes, Debug {
     function _opcodes() internal pure override returns (function(Context memory, bytes calldata) internal[] memory) {
         return _injectDebugOpcodes(super._opcodes());
     }
+
+    function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
+        if (opcode == 0) Debug._printSwapRegisters(ctx, args);
+        else if (opcode == 1) Debug._printSwapQuery(ctx, args);
+        else if (opcode == 2) Debug._printContext(ctx, args);
+        else if (opcode == 3) Debug._printFreeMemoryPointer(ctx, args);
+        else if (opcode == 4) Debug._printGasLeft(ctx, args);
+        else if (opcode == 5) Debug._patchSwapRegisters(ctx, args);
+        else super._runOpcode(ctx, opcode, args);
+    }
 }

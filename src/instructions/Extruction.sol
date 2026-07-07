@@ -78,7 +78,6 @@ contract Extruction {
     using Calldata for bytes;
     using ContextLib for Context;
 
-    error ExtructionMissingTargetArg();
     error ExtructionChoppedExceededLength(bytes chopped, uint256 requested);
 
     /// @dev Calls an external contract to perform custom logic, potentially modifying the swap state
@@ -89,7 +88,7 @@ contract Extruction {
     /// @param args.target         | 20 bytes
     /// @param args.extructionArgs | N bytes
     function _extruction(Context memory ctx, bytes calldata args) internal {
-        address target = address(bytes20(args.slice(0, 20, ExtructionMissingTargetArg.selector)));
+        address target = address(bytes20(args));
         uint256 choppedLength;
 
         if (ctx.vm.isStaticContext) {

@@ -10,8 +10,6 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { dynamic } from "./utils/Dynamic.sol";
-
 import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
@@ -71,8 +69,9 @@ contract SwapVMTest is Test, OpcodesDebug {
         swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
-        tokenA = new TokenMock("Token A", "TKA");
-        tokenB = new TokenMock("Token B", "TKB");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         // Setup initial balances
         tokenA.mint(maker, 1000e18);
@@ -90,7 +89,7 @@ contract SwapVMTest is Test, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         bytes memory programBytes = bytes.concat(
             p.build(Balances._staticBalancesXD,
-                BalancesArgsBuilder.build(dynamic([address(tokenA), address(tokenB)]), dynamic([setup.balanceA, setup.balanceB]))),
+                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
             p.build(LimitSwap._limitSwap1D,
                 LimitSwapArgsBuilder.build(setup.tokenIn, setup.tokenOut)),
             setup.useInvalidator ? p.build(Invalidators._invalidateTokenOut1D) : bytes(""),
@@ -99,6 +98,8 @@ contract SwapVMTest is Test, OpcodesDebug {
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
@@ -128,6 +129,7 @@ contract SwapVMTest is Test, OpcodesDebug {
         TakerTraitsLib.Args memory args;
         args.taker = taker;
         args.isExactIn = true;
+        args.isAToB = false;
         args.isFirstTransferFromTaker = true;
         args.threshold = threshold > 0 ? abi.encodePacked(threshold) : bytes("");
         args.signature = signature;
@@ -168,8 +170,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut, bytes32 orderHash) = swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             amount,
             takerData
         );
@@ -262,8 +262,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.expectRevert(); // Should revert due to invalidator preventing overfill
         swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             60e18, // Try to spend 60 TokenB for 30 TokenA (but only 10 left)
             overFillTakerData
         );
@@ -285,8 +283,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.expectRevert(); // Should revert - order fully filled
         swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             1e18, // Try any amount
             takerData
         );
@@ -314,8 +310,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 amountIn1, uint256 amountOut1, bytes32 orderHash1) = swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             50e18,
             takerData
         );
@@ -328,8 +322,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 amountIn2, uint256 amountOut2, bytes32 orderHash2) = swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             50e18,
             takerData
         );
@@ -369,8 +361,6 @@ contract SwapVMTest is Test, OpcodesDebug {
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut, bytes32 orderHash) = swapVM.swap(
             order,
-            address(tokenB),
-            address(tokenA),
             100e18,
             takerData
         );

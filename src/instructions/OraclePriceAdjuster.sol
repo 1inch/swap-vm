@@ -15,10 +15,6 @@ library OraclePriceAdjusterArgsBuilder {
     using Calldata for bytes;
 
     error OrcaclePriceAdjustedMaxPriceDecayShouldBeLessThanOneE18(uint64 maxPriceDecay);
-    error OraclePriceAdjusterMissingOracleAddressArg();
-    error OraclePriceAdjusterMissingOracleDecimalsArg();
-    error OraclePriceAdjusterMissingMaxStalenessArg();
-    error OraclePriceAdjusterMissingMaxPriceDecayArg();
 
     /// @param maxPriceDecay Maximum price decay coefficient (64 bits), e.g., 0.95e18 = 5% max discount
     /// @param maxStaleness Maximum allowed staleness for oracle data in seconds (16 bits), 0 = no staleness check
@@ -45,10 +41,10 @@ library OraclePriceAdjusterArgsBuilder {
         uint8 oracleDecimals,
         address oracleAddress
     ) {
-        maxPriceDecay = uint64(bytes8(args.slice(0, 8, OraclePriceAdjusterMissingMaxPriceDecayArg.selector)));
-        maxStaleness = uint16(bytes2(args.slice(8, 10, OraclePriceAdjusterMissingMaxStalenessArg.selector)));
-        oracleDecimals = uint8(bytes1(args.slice(10, 11, OraclePriceAdjusterMissingOracleDecimalsArg.selector)));
-        oracleAddress = address(bytes20(args.slice(11, 31, OraclePriceAdjusterMissingOracleAddressArg.selector)));
+        maxPriceDecay = uint64(bytes8(args));
+        maxStaleness = uint16(bytes2(args.slice(8)));
+        oracleDecimals = uint8(bytes1(args.slice(10)));
+        oracleAddress = address(bytes20(args.slice(11)));
     }
 }
 

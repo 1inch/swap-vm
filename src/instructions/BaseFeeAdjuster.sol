@@ -12,11 +12,6 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library BaseFeeAdjusterArgsBuilder {
     using Calldata for bytes;
 
-    error BaseFeeAdjusterMissingBaseGasPriceArg();
-    error BaseFeeAdjusterMissingEthPriceArg();
-    error BaseFeeAdjusterMissingGasAmountArg();
-    error BaseFeeAdjusterMissingMaxPriceDecayArg();
-
     /// @param baseGasPrice Base gas price for comparison (64 bits)
     /// @param ethToToken1Price ETH price in token1 units (96 bits), e.g., 3000e18 for 1 ETH = 3000 USDC
     /// @param gasAmount Gas amount to compensate for (24 bits)
@@ -41,10 +36,10 @@ library BaseFeeAdjusterArgsBuilder {
         uint24 gasAmount,
         uint64 maxPriceDecay
     ) {
-        baseGasPrice = uint64(bytes8(args.slice(0, 8, BaseFeeAdjusterMissingBaseGasPriceArg.selector)));
-        ethToToken1Price = uint96(bytes12(args.slice(8, 20, BaseFeeAdjusterMissingEthPriceArg.selector)));
-        gasAmount = uint24(bytes3(args.slice(20, 23, BaseFeeAdjusterMissingGasAmountArg.selector)));
-        maxPriceDecay = uint64(bytes8(args.slice(23, 31, BaseFeeAdjusterMissingMaxPriceDecayArg.selector)));
+        baseGasPrice = uint64(bytes8(args));
+        ethToToken1Price = uint96(bytes12(args.slice(8)));
+        gasAmount = uint24(bytes3(args.slice(20)));
+        maxPriceDecay = uint64(bytes8(args.slice(23)));
     }
 }
 

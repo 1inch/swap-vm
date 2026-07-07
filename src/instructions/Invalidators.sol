@@ -10,14 +10,12 @@ import { Context, ContextLib } from "../libs/VM.sol";
 library InvalidatorsArgsBuilder {
     using Calldata for bytes;
 
-    error InvalidatorsMissingBitIndexArg();
-
     function buildInvalidateBit(uint32 bitIndex) internal pure returns (bytes memory) {
         return abi.encodePacked(bitIndex);
     }
 
     function parseBitIndex(bytes calldata args) internal pure returns (uint256 bitIndex) {
-        bitIndex = uint32(bytes4(args.slice(0, 4, InvalidatorsMissingBitIndexArg.selector)));
+        bitIndex = uint32(bytes4(args));
     }
 }
 
@@ -32,8 +30,12 @@ contract Invalidators {
     error InvalidatorsTokenInExceeded(uint256 prefilled, uint256 amountIn, uint256 balanceIn);
     error InvalidateTokenInExpectsAmountInToBeComputed();
 
-    error InvalidatorTokenOutExceeded(uint256 prefilled, uint256 amountOut, uint256 balanceOut);
+    error InvalidatorsTokenOutExceeded(uint256 prefilled, uint256 amountOut, uint256 balanceOut);
     error InvalidateTokenOutExpectsAmountOutToBeComputed();
+
+    event InvalidatorsBitUpdated(address indexed maker, uint256 slotIndex, uint256 slotValue);
+    event InvalidatorsTokenInFilled(address indexed maker, bytes32 orderHash);
+    event InvalidatorsTokenOutFilled(address indexed maker, bytes32 orderHash);
 
     mapping(address maker =>
         mapping(uint256 slotIndex => uint256 bitmap)) public bitInvalidators;
@@ -47,15 +49,30 @@ contract Invalidators {
             mapping(address token => uint256 filled))) public tokenOutInvalidators;
 
     function invalidateBit(uint256 bitIndex) external {
-        bitInvalidators[msg.sender][bitIndex >> 8] |= (1 << (bitIndex & 0xFF));
+        uint256 slot = bitIndex >> 8;
+        uint256 newSlotValue = bitInvalidators[msg.sender][slot] | (1 << (bitIndex & 0xFF));
+        bitInvalidators[msg.sender][slot] = newSlotValue;
+
+        emit InvalidatorsBitUpdated(msg.sender, slot, newSlotValue);
+    }
+
+    function invalidateBits(uint248 slot, uint256 mask) external {
+        uint256 newSlotValue = bitInvalidators[msg.sender][slot] | mask;
+        bitInvalidators[msg.sender][slot] = newSlotValue;
+
+        emit InvalidatorsBitUpdated(msg.sender, slot, newSlotValue);
     }
 
     function invalidateTokenIn(bytes32 orderHash, address tokenIn) external {
         tokenInInvalidators[msg.sender][orderHash][tokenIn] = type(uint256).max;
+
+        emit InvalidatorsTokenInFilled(msg.sender, orderHash);
     }
 
     function invalidateTokenOut(bytes32 orderHash, address tokenOut) external {
         tokenOutInvalidators[msg.sender][orderHash][tokenOut] = type(uint256).max;
+
+        emit InvalidatorsTokenOutFilled(msg.sender, orderHash);
     }
 
     /// @notice Invalidates order using a unique bit index (one-time execution)
@@ -111,7 +128,7 @@ contract Invalidators {
         require(ctx.swap.amountOut > 0, InvalidateTokenOutExpectsAmountOutToBeComputed());
         uint256 prefilled = tokenOutInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
         uint256 newFilled = prefilled + ctx.swap.amountOut;
-        require(newFilled <= ctx.swap.balanceOut, InvalidatorTokenOutExceeded(prefilled, ctx.swap.amountOut, ctx.swap.balanceOut));
+        require(newFilled <= ctx.swap.balanceOut, InvalidatorsTokenOutExceeded(prefilled, ctx.swap.amountOut, ctx.swap.balanceOut));
         if (!ctx.vm.isStaticContext) {
             tokenOutInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = newFilled;
         }
