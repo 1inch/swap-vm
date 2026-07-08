@@ -23,7 +23,7 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 
 /// @title Whitelist tests
-contract WhitelistTest is Test, LimitOpcodesDebug {
+contract PrivateOrderTest is Test, LimitOpcodesDebug {
     using ProgramBuilder for Program;
 
     Aqua public immutable aqua;
