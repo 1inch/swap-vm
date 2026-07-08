@@ -18,7 +18,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { Invalidators, InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract SwapVMTest is Test, OpcodesDebug {
@@ -93,7 +93,7 @@ contract SwapVMTest is Test, OpcodesDebug {
             p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(setup.tokenIn, setup.tokenOut)),
             setup.useInvalidator ? p.build(Opcode.InvalidateTokenOut) : bytes(""),
-            setup.salt != 0 ? p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(setup.salt))) : bytes("")
+            setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

@@ -16,7 +16,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 
@@ -503,8 +503,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
                 BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
             p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(salt))
+            Salt.build(salt)
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -549,8 +548,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
                 BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
             p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(salt))
+            Salt.build(salt)
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

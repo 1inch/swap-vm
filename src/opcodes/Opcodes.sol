@@ -5,9 +5,9 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode } from "../libs/OpcodeList.sol";
+import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
-import { Controls } from "../instructions/Controls.sol";
+import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../instructions/Controls.sol";
 import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
@@ -24,10 +24,9 @@ import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
 import { Whitelist } from "../instructions/Whitelist.sol";
-import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
 
 contract Opcodes is
-    Controls,
     Balances,
     Invalidators,
     XYCSwap,
@@ -43,25 +42,26 @@ contract Opcodes is
     Extruction,
     PeggedSwap,
     SeriesEpochManager,
-    Whitelist,
-    PiecewiseLinearScale
+    Whitelist
 {
+    using OpcodeOps for Opcode;
+
     error UnknownOpcode(uint256 opcode);
 
     constructor(address aqua) FeeExperimental(aqua) {}
 
     /// @notice Opcode direct dispatcher
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
-             if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
-        else if (opcode == uint256(Opcode.Stop)) Controls._stop(ctx, args);
-        else if (opcode == uint256(Opcode.Revert)) Controls._revert(ctx, args);
-        else if (opcode == uint256(Opcode.JumpIfDirection)) Controls._jumpIfDirection(ctx, args);
-        else if (opcode == uint256(Opcode.JumpIfTokenIn)) Controls._jumpIfTokenIn(ctx, args);
-        else if (opcode == uint256(Opcode.JumpIfTokenOut)) Controls._jumpIfTokenOut(ctx, args);
-        else if (opcode == uint256(Opcode.Deadline)) Controls._deadline(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceNonZero)) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceGte)) Controls._onlyTakerTokenBalanceGte(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenSupplyShareGte)) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
+             if (opcode == Jump.opcode.asU8()) Jump.exec(ctx, args);
+        else if (opcode == Stop.opcode.asU8()) Stop.exec(ctx, args);
+        else if (opcode == Revert.opcode.asU8()) Revert.exec(ctx, args);
+        else if (opcode == JumpIfDirection.opcode.asU8()) JumpIfDirection.exec(ctx, args);
+        else if (opcode == JumpIfTokenIn.opcode.asU8()) JumpIfTokenIn.exec(ctx, args);
+        else if (opcode == JumpIfTokenOut.opcode.asU8()) JumpIfTokenOut.exec(ctx, args);
+        else if (opcode == Deadline.opcode.asU8()) Deadline.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenBalanceNonZero.opcode.asU8()) OnlyTakerTokenBalanceNonZero.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenBalanceGte.opcode.asU8()) OnlyTakerTokenBalanceGte.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
         else if (opcode == uint256(Opcode.StaticBalances)) Balances._staticBalancesXD(ctx, args);
         else if (opcode == uint256(Opcode.DynamicBalances)) Balances._dynamicBalancesXD(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
@@ -79,7 +79,7 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
         else if (opcode == uint256(Opcode.TWAPSwap)) TWAPSwap._twap(ctx, args);
         else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
-        else if (opcode == uint256(Opcode.Salt)) Controls._salt(ctx, args);
+        else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountOut)) FeeExperimental._flatFeeAmountOutXD(ctx, args);
         else if (opcode == uint256(Opcode.ProgressiveFeeIn)) FeeExperimental._progressiveFeeInXD(ctx, args);
@@ -94,9 +94,9 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.ValidateSeriesEpoch)) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
         else if (opcode == uint256(Opcode.PrivateOrder)) Whitelist._whitelistSingleTaker(ctx, args);
         else if (opcode == uint256(Opcode.WhitelistMultipleTakers)) Whitelist._whitelistMultipleTakers(ctx, args);
-        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceIn)) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceOut)) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
+        else if (opcode == PiecewiseLinearScaleBalanceIn.opcode.asU8()) PiecewiseLinearScaleBalanceIn.exec(ctx, args);
+        else if (opcode == PiecewiseLinearScaleBalanceOut.opcode.asU8()) PiecewiseLinearScaleBalanceOut.exec(ctx, args);
+        else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }

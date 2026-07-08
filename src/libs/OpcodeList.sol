@@ -4,6 +4,12 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+library OpcodeOps {
+    function asU8(Opcode opcode) internal pure returns (uint8) {
+        return uint8(opcode);
+    }
+}
+
 /// @notice Opcode space layout (16-slot rows, _Ix slots keep numbering stable for future instructions)
 enum Opcode {
     /* 00 */ Stop,

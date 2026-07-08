@@ -20,7 +20,6 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
-import { Controls } from "../src/instructions/Controls.sol";
 import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";

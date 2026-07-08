@@ -13,7 +13,7 @@ import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
+import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Aqua SwapVM with AquaOpcodesDebug
 contract AquaSwapVMHelper is AquaOpcodesDebug {
@@ -33,7 +33,7 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
         Program p;
         bytes memory programBytes = bytes.concat(
             p.build(Opcode.XYCSwap),
-            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
+            Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({

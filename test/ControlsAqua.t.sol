@@ -13,7 +13,7 @@ import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -48,7 +48,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Build program with deadline check and XYC swap
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(deadline)),
+            Deadline.build(deadline),
             program.build(Opcode.XYCSwap),
             program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
@@ -93,8 +93,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                Controls.DeadlineReached.selector,
-                address(taker),
+                Deadline.DeadlineReached.selector,
                 deadline
             )
         );
@@ -132,8 +131,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Should revert immediately because deadline has already passed
         vm.expectRevert(
             abi.encodeWithSelector(
-                Controls.DeadlineReached.selector,
-                address(taker),
+                Deadline.DeadlineReached.selector,
                 deadline
             )
         );
@@ -144,7 +142,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Build program with NFT gate check and XYC swap
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.OnlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            OnlyTakerTokenBalanceNonZero.build(address(nftGate)),
             program.build(Opcode.XYCSwap),
             program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
@@ -218,7 +216,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Execute swap - should fail because taker doesn't have the NFT
         vm.expectRevert(
             abi.encodeWithSelector(
-                Controls.TakerTokenBalanceIsZero.selector,
+                OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector,
                 address(taker),
                 address(nftGate)
             )
@@ -238,7 +236,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Build program with tx.origin NFT gate check and XYC swap
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.OnlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            OnlyTxOriginTokenBalanceNonZero.build(address(nftGate)),
             program.build(Opcode.XYCSwap),
             program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
@@ -315,7 +313,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         vm.prank(address(this), trader);
         vm.expectRevert(
             abi.encodeWithSelector(
-                Controls.TxOriginTokenBalanceIsZero.selector,
+                OnlyTxOriginTokenBalanceNonZero.TxOriginTokenBalanceIsZero.selector,
                 trader,
                 address(nftGate)
             )

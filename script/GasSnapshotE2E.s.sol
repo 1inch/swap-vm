@@ -20,9 +20,9 @@ import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 import { WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
-import { PiecewiseLinearScaleArgsBuilder } from "../src/instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, PiecewiseLinearScale } from "../src/instructions/PiecewiseLinearScale.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
-import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
@@ -223,7 +223,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustJump() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.Jump, ControlsArgsBuilder.buildJump(uint16(4))),
+            Jump.build(uint16(4)),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -231,7 +231,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustJumpIfTokenIn() internal view returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.JumpIfTokenIn, ControlsArgsBuilder.buildJumpIfToken(address(tokenA), 24)),
+            JumpIfTokenIn.build(address(tokenA), 24),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -240,7 +240,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(type(uint32).max))
+            Deadline.build(type(uint32).max)
         );
     }
 
@@ -248,7 +248,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.OnlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(tokenA)))
+            OnlyTakerTokenBalanceNonZero.build(address(tokenA))
         );
     }
 
@@ -256,7 +256,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.OnlyTakerTokenBalanceGte, ControlsArgsBuilder.buildTakerTokenBalanceGte(address(tokenA), 1))
+            OnlyTakerTokenBalanceGte.build(address(tokenA), 1)
         );
     }
 
@@ -264,7 +264,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.OnlyTakerTokenSupplyShareGte, ControlsArgsBuilder.buildTakerTokenSupplyShareGte(address(tokenA), 0))
+            OnlyTakerTokenSupplyShareGte.build(address(tokenA), 0)
         );
     }
 
@@ -272,7 +272,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(42)))
+            Salt.build(uint64(42))
         );
     }
 
@@ -303,7 +303,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustPiecewiseLinearScaleBalanceIn() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleArgsBuilder.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1]))),
+            PiecewiseLinearScaleBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }

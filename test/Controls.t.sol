@@ -18,10 +18,9 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
-
 
 /**
  * @title Controls
@@ -99,7 +98,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(deadline)),
+            Deadline.build(deadline),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]
@@ -120,7 +119,7 @@ contract ControlsTest is Test, OpcodesDebug {
         // Should fail after deadline
         bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         tokenA.mint(taker, 1e18);
-        vm.expectRevert(abi.encodeWithSelector(DeadlineReached.selector, taker, deadline));
+        vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, deadline));
         swapVM.swap(order, 1e18, takerData);
     }
 
@@ -131,8 +130,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
         bytes memory bytecode = bytes.concat(
             // Require taker holds tokenC
-            program.build(Opcode.OnlyTakerTokenBalanceNonZero,
-                ControlsArgsBuilder.buildTokenBalanceNonZero(address(tokenC))),
+            OnlyTakerTokenBalanceNonZero.build(address(tokenC)),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]
@@ -147,7 +145,7 @@ contract ControlsTest is Test, OpcodesDebug {
         // Should fail without tokenC
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            TakerTokenBalanceIsZero.selector,
+            OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector,
             taker,
             address(tokenC)
         ));
@@ -169,8 +167,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.OnlyTakerTokenBalanceGte,
-                ControlsArgsBuilder.buildTakerTokenBalanceGte(address(tokenC), minBalance)),
+            OnlyTakerTokenBalanceGte.build(address(tokenC), minBalance),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]
@@ -186,7 +183,7 @@ contract ControlsTest is Test, OpcodesDebug {
         tokenC.mint(taker, 999e18);
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            TakerTokenBalanceIsLessThanRequired.selector,
+            OnlyTakerTokenBalanceGte.TakerTokenBalanceIsLessThanRequired.selector,
             taker,
             address(tokenC),
             999e18,
@@ -210,8 +207,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.OnlyTakerTokenSupplyShareGte,
-                ControlsArgsBuilder.buildTakerTokenSupplyShareGte(address(tokenC), minShareE18)),
+            OnlyTakerTokenSupplyShareGte.build(address(tokenC), minShareE18),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]
@@ -229,7 +225,7 @@ contract ControlsTest is Test, OpcodesDebug {
         // Should fail with insufficient share
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            TakerTokenBalanceSupplyShareIsLessThanRequired.selector,
+            OnlyTakerTokenSupplyShareGte.TakerTokenBalanceSupplyShareIsLessThanRequired.selector,
             taker,
             address(tokenC),
             1000e18,
@@ -253,8 +249,8 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         // Build individual instructions
-        bytes memory jumpInstr = program.build(Opcode.Jump, ControlsArgsBuilder.buildJump(11)); // Will jump past deadline (4 bytes for jump instruction + 7 bytes for deadline)
-        bytes memory deadlineInstr = program.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(uint40(block.timestamp - 1)));
+        bytes memory jumpInstr = Jump.build(11); // Will jump past deadline (4 bytes for jump instruction + 7 bytes for deadline)
+        bytes memory deadlineInstr = Deadline.build(uint40(block.timestamp - 1));
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
                 [uint256(100e18), uint256(100e18)]
@@ -264,9 +260,9 @@ contract ControlsTest is Test, OpcodesDebug {
 
         // Jump over the deadline instruction
         bytes memory bytecode = bytes.concat(
-            jumpInstr,       // PC=0: Jump to PC=9 (skips deadline)
-            deadlineInstr,   // PC=3: Should be skipped (expired deadline)
-            balancesInstr,   // PC=9: Jump lands here
+            jumpInstr,       // PC=0: Jump to PC=11 (skips deadline)
+            deadlineInstr,   // PC=4: Should be skipped (expired deadline)
+            balancesInstr,   // PC=11: Jump lands here
             swapInstr        // Execute swap
         );
 
@@ -284,8 +280,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         // Build individual instructions to check sizes
-        bytes memory jumpInstr = program.build(Opcode.JumpIfTokenIn,
-            ControlsArgsBuilder.buildJumpIfToken(address(tokenB), 0)); // We'll calculate offset later
+        bytes memory jumpInstr = JumpIfTokenIn.build(address(tokenB), 0); // We'll calculate offset later
         bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
@@ -299,8 +294,7 @@ contract ControlsTest is Test, OpcodesDebug {
         uint256 offset = uint16(jumpSize + feeSize);
 
         // Rebuild jump instruction with correct offset
-        jumpInstr = program.build(Opcode.JumpIfTokenOut,
-            ControlsArgsBuilder.buildJumpIfToken(address(tokenB), uint16(offset)));
+        jumpInstr = JumpIfTokenOut.build(address(tokenB), uint16(offset));
 
         bytes memory bytecode = bytes.concat(
             jumpInstr,       // If output is tokenB, jump over fee
@@ -329,8 +323,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         // Build individual instructions to check sizes
-        bytes memory jumpInstr = program.build(Opcode.JumpIfTokenOut,
-            ControlsArgsBuilder.buildJumpIfToken(address(tokenB), 0)); // We'll calculate offset later
+        bytes memory jumpInstr = JumpIfTokenOut.build(address(tokenB), 0); // We'll calculate offset later
         bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
@@ -344,8 +337,7 @@ contract ControlsTest is Test, OpcodesDebug {
         uint256 offset = uint16(jumpSize + feeSize);
 
         // Rebuild jump instruction with correct offset
-        jumpInstr = program.build(Opcode.JumpIfTokenOut,
-            ControlsArgsBuilder.buildJumpIfToken(address(tokenB), uint16(offset)));
+        jumpInstr = JumpIfTokenOut.build(address(tokenB), uint16(offset));
 
         bytes memory bytecode = bytes.concat(
             jumpInstr,       // If output is tokenB, jump over fee
@@ -378,8 +370,7 @@ contract ControlsTest is Test, OpcodesDebug {
                 [uint256(100e18), uint256(100e18)]
             ));
 
-        bytes memory jumpIfInstr = program.build(Opcode.JumpIfTokenIn,
-            ControlsArgsBuilder.buildJumpIfToken(address(0x9999), uint16(balancesInstr.length)));
+        bytes memory jumpIfInstr = JumpIfTokenIn.build(address(0x9999), uint16(balancesInstr.length));
         bytes memory swapInstr = program.build(Opcode.XYCSwap);
 
         bytes memory bytecode = bytes.concat(
@@ -397,17 +388,14 @@ contract ControlsTest is Test, OpcodesDebug {
     function test_BackwardJump() public {
         Program program;
 
-        bytes memory jumpInst1 = program.build(Opcode.Jump,
-            ControlsArgsBuilder.buildJump(uint16(0)));
+        bytes memory jumpInst1 = Jump.build(uint16(0));
         bytes memory balancesInstr = program.build(Opcode.DynamicBalances,
             BalancesArgsBuilder.build(
                 [uint256(100e18), uint256(100e18)]
             ));
         bytes memory swapInstr = program.build(Opcode.XYCSwap);
-        bytes memory jumpInst2 = program.build(Opcode.Jump,
-            ControlsArgsBuilder.buildJump(uint16(0)));
-        bytes memory jumpIfInstrIn = program.build(Opcode.JumpIfTokenIn,
-            ControlsArgsBuilder.buildJumpIfToken(address(tokenA), uint16(jumpInst1.length)));
+        bytes memory jumpInst2 = Jump.build(uint16(0));
+        bytes memory jumpIfInstrIn = JumpIfTokenIn.build(address(tokenA), uint16(jumpInst1.length));
 
         uint16 jumpIfInstrInOffset = uint16(
             jumpInst1.length +
@@ -416,11 +404,9 @@ contract ControlsTest is Test, OpcodesDebug {
             jumpInst2.length
         );
 
-        jumpInst1 = program.build(Opcode.Jump,
-            ControlsArgsBuilder.buildJump(jumpIfInstrInOffset));
+        jumpInst1 = Jump.build(jumpIfInstrInOffset);
 
-        jumpInst2 = program.build(Opcode.Jump,
-            ControlsArgsBuilder.buildJump(uint16(jumpIfInstrInOffset + jumpIfInstrIn.length)));
+        jumpInst2 = Jump.build(uint16(jumpIfInstrInOffset + jumpIfInstrIn.length));
 
         bytes memory bytecode = bytes.concat(
             jumpInst1,
@@ -443,8 +429,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Jump,
-                ControlsArgsBuilder.buildJump(65535)), // Jump out of bounds
+            Jump.build(65535), // Jump out of bounds
             program.build(Opcode.XYCSwap)
         );
 
@@ -475,8 +460,7 @@ contract ControlsTest is Test, OpcodesDebug {
                 [uint256(100e18), uint256(100e18)]
             )),
             program.build(Opcode.XYCSwap),
-            program.build(Opcode.Jump,
-                ControlsArgsBuilder.buildJump(65535)) // Jump out of bounds
+            Jump.build(65535) // Jump out of bounds
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -492,8 +476,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Jump,
-                ControlsArgsBuilder.buildJump(20)), // Jump inside next instruction
+            Jump.build(20), // Jump inside next instruction
             program.build(Opcode.DynamicBalances,
             BalancesArgsBuilder.build(
                 [uint256(100e18), uint256(100e18)]
@@ -530,8 +513,7 @@ contract ControlsTest is Test, OpcodesDebug {
                     [uint256(100e18), uint256(100e18)]
                 )),
             // Conditional jump to avoid infinite loop
-            program.build(Opcode.JumpIfTokenOut,
-                ControlsArgsBuilder.buildJumpIfToken(address(0x9999), 0)),
+            JumpIfTokenOut.build(address(0x9999), 0),
             program.build(Opcode.XYCSwap)
         );
 
@@ -551,17 +533,17 @@ contract ControlsTest is Test, OpcodesDebug {
             BalancesArgsBuilder.build(
                 [uint256(100e18), uint256(100e18)]
             ));
-        bytes memory jump1 = program.build(Opcode.Jump, ControlsArgsBuilder.buildJump(0));
-        bytes memory salt1 = program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(1)));
-        bytes memory jump2 = program.build(Opcode.Jump, ControlsArgsBuilder.buildJump(0));
-        bytes memory salt2 = program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(2)));
+        bytes memory jump1 = Jump.build(0);
+        bytes memory salt1 = Salt.build(uint64(1));
+        bytes memory jump2 = Jump.build(0);
+        bytes memory salt2 = Salt.build(uint64(2));
         bytes memory swap = program.build(Opcode.XYCSwap);
 
         uint256 offset1 = balances.length + jump1.length + salt1.length;
         uint256 offset2 = offset1 + jump2.length + salt2.length;
 
-        jump1 = program.build(Opcode.Jump, ControlsArgsBuilder.buildJump(uint16(offset1)));
-        jump2 = program.build(Opcode.Jump, ControlsArgsBuilder.buildJump(uint16(offset2)));
+        jump1 = Jump.build(uint16(offset1));
+        jump2 = Jump.build(uint16(offset2));
 
         bytes memory bytecode = bytes.concat(
             balances,
@@ -593,7 +575,7 @@ contract ControlsTest is Test, OpcodesDebug {
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
             program.build(Opcode.Stop),
             // Would revert the whole swap if Stop did not halt execution
-            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(bytes4(0xdeadbeef)))
+            Revert.build(bytes4(0xdeadbeef))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -636,7 +618,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         bytes4 exception = 0xdeadbeef;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(exception)),
+            Revert.build(exception),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]
@@ -649,7 +631,7 @@ contract ControlsTest is Test, OpcodesDebug {
         bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         tokenA.mint(taker, 1e18);
 
-        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, abi.encodePacked(exception)));
+        vm.expectRevert(abi.encodeWithSelector(Revert.InstructionRevert.selector, abi.encodePacked(exception)));
         swapVM.swap(order, 1e18, takerData);
     }
 
@@ -657,18 +639,14 @@ contract ControlsTest is Test, OpcodesDebug {
      * @notice Test revert instruction with an arbitrary-length reason
      */
     function test_Revert_LongReason() public {
-        Program program;
-
         bytes memory exception = bytes("order is one-directional");
-        bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(exception))
-        );
+        bytes memory bytecode = bytes.concat(Revert.build(exception));
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
         tokenA.mint(taker, 1e18);
 
-        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, exception));
+        vm.expectRevert(abi.encodeWithSelector(Revert.InstructionRevert.selector, exception));
         swapVM.swap(order, 1e18, takerData);
     }
 
@@ -679,8 +657,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         // Expected direction A->B (tokenA < tokenB); offset calculated after sizing
-        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), 0));
+        bytes memory jumpInstr = JumpIfDirection.build(address(tokenA), address(tokenB), 0);
         bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
@@ -689,8 +666,7 @@ contract ControlsTest is Test, OpcodesDebug {
         bytes memory swapInstr = program.build(Opcode.XYCSwap);
 
         uint16 offset = uint16(jumpInstr.length + feeInstr.length);
-        jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), offset));
+        jumpInstr = JumpIfDirection.build(address(tokenA), address(tokenB), offset);
 
         bytes memory bytecode = bytes.concat(
             jumpInstr,       // If direction is A->B, jump over fee
@@ -719,8 +695,7 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         // Expected direction B->A; offset calculated after sizing
-        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenB), address(tokenA), 0));
+        bytes memory jumpInstr = JumpIfDirection.build(address(tokenB), address(tokenA), 0);
         bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
@@ -729,8 +704,7 @@ contract ControlsTest is Test, OpcodesDebug {
         bytes memory swapInstr = program.build(Opcode.XYCSwap);
 
         uint16 offset = uint16(jumpInstr.length + feeInstr.length);
-        jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenB), address(tokenA), offset));
+        jumpInstr = JumpIfDirection.build(address(tokenB), address(tokenA), offset);
 
         bytes memory bytecode = bytes.concat(
             jumpInstr,       // If direction is B->A, jump over fee
@@ -759,9 +733,8 @@ contract ControlsTest is Test, OpcodesDebug {
         Program program;
 
         bytes4 wrongDirection = 0xbad0d14a;
-        bytes memory jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), 0));
-        bytes memory revertInstr = program.build(Opcode.Revert, ControlsArgsBuilder.buildRevert(wrongDirection));
+        bytes memory jumpInstr = JumpIfDirection.build(address(tokenA), address(tokenB), 0);
+        bytes memory revertInstr = Revert.build(wrongDirection);
         bytes memory balancesInstr = program.build(Opcode.StaticBalances,
             BalancesArgsBuilder.build(
                 [uint256(100e18), uint256(100e18)]
@@ -769,8 +742,7 @@ contract ControlsTest is Test, OpcodesDebug {
         bytes memory swapInstr = program.build(Opcode.XYCSwap);
 
         uint16 offset = uint16(jumpInstr.length + revertInstr.length);
-        jumpInstr = program.build(Opcode.JumpIfDirection,
-            ControlsArgsBuilder.buildJumpIfDirection(address(tokenA), address(tokenB), offset));
+        jumpInstr = JumpIfDirection.build(address(tokenA), address(tokenB), offset);
 
         bytes memory bytecode = bytes.concat(
             jumpInstr,       // A->B jumps over the revert
@@ -790,7 +762,7 @@ contract ControlsTest is Test, OpcodesDebug {
         // Disallowed direction reverts
         bytes memory takerData = _signAndPackTakerData(order, true, 0, false);
         tokenB.mint(taker, 1e18);
-        vm.expectRevert(abi.encodeWithSelector(InstructionRevert.selector, abi.encodePacked(wrongDirection)));
+        vm.expectRevert(abi.encodeWithSelector(Revert.InstructionRevert.selector, abi.encodePacked(wrongDirection)));
         swapVM.swap(order, 1e18, takerData);
     }
 
@@ -798,7 +770,7 @@ contract ControlsTest is Test, OpcodesDebug {
     function _buildSimpleSwapWithSalt(uint64 salt) private view returns (bytes memory) {
         Program program;
         return bytes.concat(
-            program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(salt)),
+            Salt.build(salt),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build(
                     [uint256(100e18), uint256(100e18)]

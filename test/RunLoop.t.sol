@@ -17,7 +17,7 @@ import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -92,8 +92,8 @@ contract RunLoopTest is Test, OpcodesDebug {
             program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
             // Multiple instructions to verify PC advances correctly
-            program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(1))),
-            program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(2))),
+            Salt.build(uint64(1)),
+            Salt.build(uint64(2)),
             // NestedRunLoop instruction
             program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
             program.build(Opcode.XYCSwap) // Terminal - computes amounts and stops
@@ -248,9 +248,8 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Add 20 salt instructions (harmless, just increase program length)
         for (uint64 i = 0; i < 20; i++) {
-            bytecode = bytes.concat(bytecode,
-                program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(i)));
-        }
+            bytecode = bytes.concat(bytecode, Salt.build(i));
+       }
 
         // Add nested runLoop chain
         bytecode = bytes.concat(
@@ -262,9 +261,8 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Add more salts
         for (uint64 i = 20; i < 40; i++) {
-            bytecode = bytes.concat(bytecode,
-                program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(i)));
-        }
+            bytecode = bytes.concat(bytecode, Salt.build(i));
+       }
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         (uint256 amountIn, uint256 amountOut, ) = _executeSwap(order, 1e18);

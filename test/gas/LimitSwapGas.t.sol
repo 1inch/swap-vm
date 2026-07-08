@@ -24,7 +24,7 @@ import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjust
 import { MinRateArgsBuilder } from "../../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
-import { ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
+import { Salt, Deadline } from "../../src/instructions/Controls.sol";
 import { InvalidatorsArgsBuilder } from "../../src/instructions/Invalidators.sol";
 
 /**
@@ -575,8 +575,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Deadline,
-                ControlsArgsBuilder.buildDeadline(deadline)),
+            Deadline.build(deadline),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             program.build(Opcode.LimitSwap,
@@ -594,8 +593,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(salt)),
+            Salt.build(salt),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             program.build(Opcode.LimitSwap,
@@ -650,10 +648,8 @@ contract LimitSwapGas is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.Deadline,
-                ControlsArgsBuilder.buildDeadline(deadline)),
-            program.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(salt)),
+            Deadline.build(deadline),
+            Salt.build(salt),
             program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             program.build(Opcode.FlatFeeAmountIn,

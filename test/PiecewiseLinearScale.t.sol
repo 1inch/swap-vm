@@ -15,7 +15,7 @@ import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { PiecewiseLinearScaleArgsBuilder } from "../src/instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../src/instructions/PiecewiseLinearScale.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -56,8 +56,8 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         return bytes.concat(
             p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(balanceIn), balanceOut])),
             scaleIn
-                ? p.build(Opcode.PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales))
-                : p.build(Opcode.PiecewiseLinearScaleBalanceOut, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales)),
+                ? PiecewiseLinearScaleBalanceIn.build(timestamp, durations, scales)
+                : PiecewiseLinearScaleBalanceOut.build(timestamp, durations, scales),
             p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
@@ -67,13 +67,13 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     function testFuzz_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public pure {
         value = bound(value, 0, type(uint232).max);
 
-        uint256 unscaled = PiecewiseLinearScaleArgsBuilder.unscaleValue(value, scale);
-        uint256 scaled = PiecewiseLinearScaleArgsBuilder.scaleValue(unscaled, scale);
+        uint256 unscaled = PiecewiseLinearScale.unscaleValue(value, scale);
+        uint256 scaled = PiecewiseLinearScale.scaleValue(unscaled, scale);
 
         assertEq(scaled, value);
 
         if (unscaled > 0) {
-            uint256 scaledLess = PiecewiseLinearScaleArgsBuilder.scaleValue(unscaled - 1, scale);
+            uint256 scaledLess = PiecewiseLinearScale.scaleValue(unscaled - 1, scale);
             assertLt(scaledLess, value);
         }
     }
@@ -105,7 +105,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         }
 
         // It is important that `balanceIn` is not `takingAmount` and should be calculated
-        uint256 balanceIn = PiecewiseLinearScaleArgsBuilder.unscaleValue(takingAmount, scales[last]);
+        uint256 balanceIn = PiecewiseLinearScale.unscaleValue(takingAmount, scales[last]);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, makingAmount, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -147,7 +147,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-            assertEq(amountInNext, PiecewiseLinearScaleArgsBuilder.scaleValue(balanceIn, scales[k]));
+            assertEq(amountInNext, PiecewiseLinearScale.scaleValue(balanceIn, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
@@ -195,7 +195,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint256 amountIn;
 
         // The least `balanceOut` with the worst scale
-        uint256 balanceOutInitial = PiecewiseLinearScaleArgsBuilder.scaleValue(makingAmount, scales[0]);
+        uint256 balanceOutInitial = PiecewiseLinearScale.scaleValue(makingAmount, scales[0]);
 
         // At the initial point the whole `takingAmount` sells for exactly `balanceOutInitial`, and one wei less in sells strictly less
         vm.warp(timestamp);
@@ -231,7 +231,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (, uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-            assertEq(amountOutNext, PiecewiseLinearScaleArgsBuilder.scaleValue(makingAmount, scales[k]));
+            assertEq(amountOutNext, PiecewiseLinearScale.scaleValue(makingAmount, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);

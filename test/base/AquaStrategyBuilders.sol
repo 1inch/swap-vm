@@ -20,7 +20,6 @@ import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { Controls } from "../../src/instructions/Controls.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 

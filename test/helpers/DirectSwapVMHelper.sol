@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
+import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Direct (signature-based) SwapVM with OpcodesDebug
 contract DirectSwapVMHelper is OpcodesDebug {
@@ -44,7 +44,7 @@ contract DirectSwapVMHelper is OpcodesDebug {
                 BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
             p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
+            Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
