@@ -64,8 +64,9 @@ contract LimitOpcodes is
         else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.ValidateSeriesEpoch)) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
-        else if (opcode == uint256(Opcode.PrivateOrder)) Whitelist._whitelistSingleTaker(ctx, args);
-        else if (opcode == uint256(Opcode.WhitelistMultipleTakers)) Whitelist._whitelistMultipleTakers(ctx, args);
+        else if (opcode == uint256(Opcode.PrivateOrder)) Whitelist._privateOrder(ctx, args);
+        else if (opcode == uint256(Opcode.WhitelistCoequal)) Whitelist._whitelistCoequal(ctx, args);
+        else if (opcode == uint256(Opcode.WhitelistSequential)) Whitelist._whitelistSequential(ctx, args);
         else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceIn)) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceOut)) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
         else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
