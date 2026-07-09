@@ -93,16 +93,17 @@ contract Opcodes is
         else if (opcode == 44) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 45) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == 46) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
-        else if (opcode == 47) Whitelist._whitelistSingleTaker(ctx, args);
-        else if (opcode == 48) Whitelist._whitelistMultipleTakers(ctx, args);
+        else if (opcode == 47) Whitelist._privateOrder(ctx, args);
+        else if (opcode == 48) Whitelist._whitelistCoequal(ctx, args);
         else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
         else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
         else if (opcode == 51) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
+        else if (opcode == 52) Whitelist._whitelistSequential(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 
     function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[53] memory instructions = [
+        function(Context memory, bytes calldata) internal[54] memory instructions = [
             _notInstruction,
             // Debug - reserved for debugging utilities (core infrastructure)
             _notInstruction,
@@ -164,11 +165,12 @@ contract Opcodes is
             Fee._dynamicProtocolFeeAmountInXD,
             Fee._aquaDynamicProtocolFeeAmountInXD,
             SeriesEpochManager._validateSeriesEpochXD,
-            Whitelist._whitelistSingleTaker,
-            Whitelist._whitelistMultipleTakers,
+            Whitelist._privateOrder,
+            Whitelist._whitelistCoequal,
             PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
             PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D,
-            Controls._onlyTxOriginTokenBalanceNonZero
+            Controls._onlyTxOriginTokenBalanceNonZero,
+            Whitelist._whitelistSequential
         ];
 
         // Efficiently turning static memory array into dynamic memory array
