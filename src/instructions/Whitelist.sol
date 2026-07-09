@@ -62,8 +62,9 @@ library WhitelistArgsBuilder {
     /// @notice Parse encoded program counter and whitelist start timestamp
     function parseWhitelistSequentialStartPC(bytes calldata args) internal pure returns (uint40 ts, uint256 pcs) {
         assembly ("memory-safe") {
-            ts := shr(200, calldataload(args.offset))
-            pcs := shr(240, calldataload(args.offset))
+            let word := calldataload(args.offset)
+            ts := and(shr(200, word), 0xffffffffff)
+            pcs := shr(240, word)
         }
     }
 
