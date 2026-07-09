@@ -73,7 +73,7 @@ library WhitelistArgsBuilder {
     function parseWhitelistSequentialIx(bytes calldata args, uint256 id) internal pure returns (uint80 allowedTaker, uint256 duration) {
         assembly ("memory-safe") {
             let word := calldataload(add(args.offset, mul(id, 12)))
-            allowedTaker := shr(160, word)
+            allowedTaker := and(shr(160, word), 0xffffffffffffffffffff)
             duration := shr(240, word)
         }
     }
