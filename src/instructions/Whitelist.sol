@@ -159,7 +159,7 @@ contract Whitelist {
                     return;
                 }
 
-                if (duration > timeLeft) revert WhitelistAllowedTimeViolation();
+                if (timeLeft < duration) revert WhitelistAllowedTimeViolation();
                 timeLeft -= duration;
             }
         }
