@@ -79,9 +79,6 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         _label("_vmProgramJustPrivateOrder");
         _fill(_vmProgramJustPrivateOrder());
 
-        _label("_vmProgramJustWhitelistMultipleTakers");
-        _fill(_vmProgramJustWhitelistMultipleTakers());
-
         _label("_vmProgramJustBaseFeeAdjuster");
         _fill(_vmProgramJustBaseFeeAdjuster());
 
@@ -200,15 +197,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker))
-        );
-    }
-
-    function _vmProgramJustWhitelistMultipleTakers() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
-        return bytes.concat(
-            p.build(_patchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(_whitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(dynamic([taker, address(0x33)])))
+            p.build(_privateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker))
         );
     }
 
@@ -361,7 +350,7 @@ contract GasSnapshotE2E is Script, OpcodesDebug {
         Program memory p = ProgramBuilder.init(_opcodes());
         return bytes.concat(
             p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker)),
+            p.build(_privateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker)),
             p.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
             p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );

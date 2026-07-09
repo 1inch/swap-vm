@@ -21,6 +21,7 @@ import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.s
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
 /// @title Whitelist tests
 contract WhitelistTest is Test, LimitOpcodesDebug {
@@ -40,10 +41,12 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
     uint256 constant SWAP_AMOUNT = 1e18;
 
     address[25] ALLOWED_TAKERS;
+    uint40 START;
+    uint16[20] DURATIONS;
 
     enum WhitelistType {
-        Single,
-        Multiple
+        Coequal,
+        Sequential
     }
 
     constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
@@ -90,52 +93,65 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         ALLOWED_TAKERS[22] = address(0x00000000000000ee001700000000000000FF0017);
         ALLOWED_TAKERS[23] = address(0x00000000000000EE001800000000000000ff0018);
         ALLOWED_TAKERS[24] = address(0x00000000000000ee001900000000000000Ff0019);
+
+        START = 1700000000;
+        DURATIONS[ 0] = 100;
+        DURATIONS[ 1] = 200;
+        DURATIONS[ 2] = 300;
+        DURATIONS[ 3] = 150;
+        DURATIONS[ 4] = 120;
+        DURATIONS[ 5] = 200;
+        DURATIONS[ 6] = 300;
+        DURATIONS[ 7] = 150;
+        DURATIONS[ 8] = 130;
+        DURATIONS[ 9] = 0;
+        DURATIONS[10] = 120;
+        DURATIONS[11] = 300;
+        DURATIONS[12] = 150;
+        DURATIONS[13] = 100;
+        DURATIONS[14] = 200;
+        DURATIONS[15] = 300;
+        DURATIONS[16] = 150;
+        DURATIONS[17] = 130;
+        DURATIONS[18] = 140;
+        DURATIONS[19] = 120;
     }
 
-    function test_Whitelist_Single() public {
-        ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Single, 1));
+    function test_Whitelist_Coequal() public {
         bytes memory takerData = _buildTakerData();
 
-        vm.prank(ALLOWED_TAKERS[0]);
-        swapVM.quote(order, SWAP_AMOUNT, takerData);
-
-        vm.prank(ALLOWED_TAKERS[1]);
-        vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-        swapVM.quote(order, SWAP_AMOUNT, takerData);
-    }
-
-    function test_Whitelist_Multiple() public {
-        bytes memory takerData = _buildTakerData();
-
-        for (uint256 length = 1; length < 26; ++length) {
-            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Multiple, length));
-
-            for (uint256 i; i < length; ++i) {
-                vm.prank(ALLOWED_TAKERS[i]);
-                swapVM.quote(order, SWAP_AMOUNT, takerData);
-            }
-
-            if (length < 25) {
-                vm.prank(ALLOWED_TAKERS[length]);
-                vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-                swapVM.quote(order, SWAP_AMOUNT, takerData);
-            }
+        for (uint256 length = 1; length <= 25; ++length) {
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Coequal, length));
 
             vm.prank(address(0xaffacfed));
-            vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
-            swapVM.quote(order, SWAP_AMOUNT, takerData);
+            (, uint256 outF,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+            vm.prank(ALLOWED_TAKERS[0]);
+            (, uint256 outT,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+            assertGt(outT, outF);
+
+            // Every listed taker is routed to branchT
+            for (uint256 i; i < length; ++i) {
+                vm.prank(ALLOWED_TAKERS[i]);
+                (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                assertEq(out, outT);
+            }
+
+            // The next, unlisted entry falls through to branchF
+            if (length < 25) {
+                vm.prank(ALLOWED_TAKERS[length]);
+                (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                assertEq(out, outF);
+            }
         }
     }
 
-    function test_Whitelist_Multiple_GasBenchmark() public {
+    function test_Whitelist_Coequal_GasBenchmark() public {
         // Warmup account
         address(swapVM).staticcall("");
 
-        for (uint256 length = 1; length < 26; ++length) {
-            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Multiple, length));
+        for (uint256 length = 1; length <= 25; ++length) {
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Coequal, length));
             bytes memory takerData = _buildTakerData();
-
-            uint256 amountIn = 10_000_000;
 
             uint256 usage;
             uint256 worst;
@@ -143,7 +159,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) {
                 vm.prank(ALLOWED_TAKERS[i]);
                 uint256 gas = gasleft();
-                swapVM.quote(order, amountIn, takerData);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
                 uint256 temp = gas - gasleft();
                 usage += temp;
                 if (worst < temp) worst = temp;
@@ -153,25 +169,139 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         }
     }
 
-    /// @dev staticBalances -> limitswap -> whitelist
+    function test_Whitelist_Sequential() public {
+        bytes memory takerData = _buildTakerData();
+
+        for (uint256 length = 1; length <= 20; ++length) {
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Sequential, length));
+
+            uint256 ts = START;
+
+            uint256 outF = SWAP_AMOUNT * BALANCE_A / BALANCE_B;
+            uint256 outT = 2 * SWAP_AMOUNT * BALANCE_A / BALANCE_B;
+            assertGt(outT, outF);
+
+            for (uint256 i; i < length; ++i) {
+                {
+                    // Taker not listed yet
+                    vm.warp(ts - 1);
+                    vm.prank(ALLOWED_TAKERS[i]);
+                    vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                    swapVM.quote(order, SWAP_AMOUNT, takerData);
+                }
+                {
+                    // Every listed taker is routed to branchT
+                    vm.warp(ts);
+                    vm.prank(ALLOWED_TAKERS[i]);
+                    (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                    assertEq(out, outT);
+                }
+
+                ts += DURATIONS[i];
+            }
+
+            if (length < 20 && DURATIONS[length - 1] != 0) {
+                // The next, unlisted entry still reverts
+                vm.prank(ALLOWED_TAKERS[length]);
+                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
+
+                // Aliens are not allowed
+                vm.prank(address(0xaffacfed));
+                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
+            } else if (length == 20) {
+                // During the last duration aliens are still not allowed
+                vm.prank(address(0xaffacfed));
+                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
+
+                // All durations passed, any unlisted pass through branchF
+                vm.warp(ts);
+                {
+                    vm.prank(address(0xaffacfed));
+                    (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                    assertEq(out, outF);
+                }
+                {
+                    vm.prank(ALLOWED_TAKERS[length - 1]);
+                    (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                    assertEq(out, outT);
+                }
+                {
+                    vm.prank(ALLOWED_TAKERS[0]);
+                    (, uint256 out,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+                    assertEq(out, outT);
+                }
+            }
+        }
+    }
+
+    function test_Whitelist_Sequential_GasBenchmark() public {
+        // Warmup account
+        address(swapVM).staticcall("");
+        vm.warp(type(uint40).max);
+
+        for (uint256 length = 1; length <= 20; ++length) {
+            ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Sequential, length));
+            bytes memory takerData = _buildTakerData();
+
+            uint256 usage;
+            uint256 worst;
+
+            for (uint256 i; i < length; ++i) {
+                vm.prank(ALLOWED_TAKERS[i]);
+                uint256 gas = gasleft();
+                swapVM.quote(order, SWAP_AMOUNT, takerData);
+                uint256 temp = gas - gasleft();
+                usage += temp;
+                if (worst < temp) worst = temp;
+            }
+
+            console.log(usage / length, worst, length);
+        }
+    }
+
+    /// @dev condition -> staticBalances A or B -> limitswap
     function _buildProgram(WhitelistType whitelistType, uint256 length) internal view returns (bytes memory) {
-        address[] memory allowedTakers = new address[](length);
-        for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
-
         Program memory p = ProgramBuilder.init(_opcodes());
-        bytes memory code = bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
-        );
 
-        // console.logBytes(WhitelistArgsBuilder.buildWhitelistMultipleTakers(allowedTakers));
-        if (whitelistType == WhitelistType.Single) {
-            code = bytes.concat(code, p.build(_whitelistSingleTaker, WhitelistArgsBuilder.buildWhitelistSingleTaker(allowedTakers[0])));
-        } else if (whitelistType == WhitelistType.Multiple) {
-            code = bytes.concat(code, p.build(_whitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(allowedTakers)));
+        uint16 conditionLength;
+        uint16 branchFLength = 2 + 64 + 2 + 2;
+        uint16 branchTLength = 2 + 64;
+        uint16 finLength = 2 + 1;
+
+        bytes memory condition;
+        if (whitelistType == WhitelistType.Coequal) {
+            address[] memory allowedTakers = new address[](length);
+            for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
+
+            conditionLength = uint16(2 + 2 + length * 10);
+            condition = p.build(_whitelistCoequal, WhitelistArgsBuilder.buildWhitelistCoequal(conditionLength + branchFLength, allowedTakers));
+            assertEq(conditionLength, condition.length);
+        } else if (whitelistType == WhitelistType.Sequential) {
+            address[] memory allowedTakers = new address[](length);
+            for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
+            uint16[] memory durations = new uint16[](length);
+            for (uint256 i; i < length; ++i) durations[i] = DURATIONS[i];
+
+            conditionLength = uint16(7 + 2 + length * 12);
+            condition = p.build(_whitelistSequential, WhitelistArgsBuilder.buildWhitelistSequential(conditionLength + branchFLength, START, allowedTakers, durations));
+            assertEq(conditionLength, condition.length);
         }
 
-        return code;
+        bytes memory branchF = bytes.concat(
+            p.build(_staticBalancesXD, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
+            p.build(_jump, ControlsArgsBuilder.buildJump(conditionLength + branchFLength + branchTLength))
+        );
+        assertEq(branchFLength, branchF.length);
+        bytes memory branchT = p.build(_staticBalancesXD, BalancesArgsBuilder.build([BALANCE_A * 2, BALANCE_B]));
+        assertEq(branchTLength, branchT.length);
+
+        bytes memory fin = p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenB), address(tokenA)));
+        assertEq(finLength, fin.length);
+
+        return bytes.concat(condition, branchF, branchT, fin);
     }
 
     function _buildOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
@@ -203,7 +333,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: true,
-            isAToB: true,
+            isAToB: false,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
