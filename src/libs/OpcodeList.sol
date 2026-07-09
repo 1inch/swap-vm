@@ -58,8 +58,8 @@ enum Opcode {
     /* 29 */ _29,
     /* 2a */ _2a,
     /* 2b */ PrivateOrder,
-    /* 2c */ WhitelistMultipleTakers,
-    /* 2d */ _2d,
+    /* 2c */ WhitelistCoequal,
+    /* 2d */ WhitelistSequential,
     /* 2e */ _2e,
     /* 2f */ _2f,
 

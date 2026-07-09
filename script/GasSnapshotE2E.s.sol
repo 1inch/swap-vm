@@ -79,9 +79,6 @@ contract GasSnapshotE2E is Script {
         _label("_vmProgramJustPrivateOrder");
         _fill(_vmProgramJustPrivateOrder());
 
-        _label("_vmProgramJustWhitelistMultipleTakers");
-        _fill(_vmProgramJustWhitelistMultipleTakers());
-
         _label("_vmProgramJustBaseFeeAdjuster");
         _fill(_vmProgramJustBaseFeeAdjuster());
 
@@ -200,15 +197,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker))
-        );
-    }
-
-    function _vmProgramJustWhitelistMultipleTakers() internal view returns (bytes memory) {
-        Program p;
-        return bytes.concat(
-            p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.WhitelistMultipleTakers, WhitelistArgsBuilder.buildWhitelistMultipleTakers(dynamic([taker, address(0x33)])))
+            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker))
         );
     }
 
@@ -361,7 +350,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildWhitelistSingleTaker(taker)),
+            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker)),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
             p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
