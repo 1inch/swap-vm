@@ -14,8 +14,8 @@ import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { SeriesEpochManager, SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -63,8 +63,8 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
         Program p;
         return bytes.concat(
             p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), uint256(2e18)])),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            StaticBalances.build(1e18, 2e18),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             p.build(Opcode.Salt, abi.encodePacked(salt))
         );
     }

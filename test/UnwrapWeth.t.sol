@@ -11,7 +11,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -65,9 +65,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory programBytes = bytes.concat(
-            program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
-                [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
-            )),
+            DynamicBalances.build(ORDER_BALANCE, ORDER_BALANCE),
             program.build(Opcode.XYCSwap)
         );
 

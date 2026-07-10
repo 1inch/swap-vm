@@ -16,8 +16,8 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -105,14 +105,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         _testInvariants(bytecode);
@@ -129,14 +127,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         _testInvariants(bytecode);
@@ -153,14 +149,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // TODO: Fix additivity and monotonicity for progressive fees with dutch auction
@@ -178,14 +172,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // TODO: Fix additivity for progressive fees with dutch auction
@@ -203,14 +195,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // TODO: Fix additivity for protocol fees with dutch auction
@@ -229,8 +219,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             // Multiple fees
@@ -238,8 +227,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // TODO: Fix additivity for progressive fees with dutch auction
@@ -257,14 +245,12 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         _testInvariants(bytecode);

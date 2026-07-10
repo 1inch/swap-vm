@@ -21,7 +21,7 @@ import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
 import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -44,7 +44,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     SwapVMRouterDebug public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
-    Balances public balancesContract;
+    DynamicBalancesExternal public balancesContract;
 
     // Addresses
     address public maker;
@@ -60,7 +60,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
-        balancesContract = Balances(address(swapVM));
+        balancesContract = DynamicBalancesExternal(address(swapVM));
 
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -181,8 +181,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function getBalances(bytes32 orderHash) internal view returns (uint256 balA, uint256 balB) {
-        balA = balancesContract.balances(orderHash, address(tokenA));
-        balB = balancesContract.balances(orderHash, address(tokenB));
+        balA = balancesContract.balance(orderHash, address(tokenA));
+        balB = balancesContract.balance(orderHash, address(tokenB));
     }
 
     function getProtocolFee() internal view returns (uint256) {
@@ -208,10 +208,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
     // ===== PROGRAM BUILDERS =====
     // Order: protocolFee -> dynamicBalances -> [decay?] -> [concentrate?] -> flatFee -> swap / peggedSwap -> salt
-
-    function _dynamicBalancesArgs() internal pure returns (bytes memory) {
-        return BalancesArgsBuilder.build([uint256(INITIAL_BALANCE_A), INITIAL_BALANCE_B]);
-    }
 
     function buildProgram(
         uint32 protocolFeeBps,
@@ -239,7 +235,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             flatFeeCode,
             swapCode,
             p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
@@ -261,7 +257,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             : bytes("");
 
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             protocolFeeCode, // WRONG: protocolFee after balances
             flatFeeCode,
             p.build(Opcode.XYCConcentrateSwap,
@@ -287,7 +283,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
             p.build(Opcode.XYCConcentrateSwap,
@@ -313,7 +309,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
             p.build(Opcode.XYCSwap),
@@ -339,7 +335,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.DynamicBalances, _dynamicBalancesArgs()),
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
             flatFeeCode,
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),

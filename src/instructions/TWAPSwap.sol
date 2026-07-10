@@ -82,7 +82,7 @@ library TWAPSwapArgsBuilder {
  *
  * The bump should ensure profitability after the mandatory waiting period.
  */
-contract TWAPSwap is LimitSwap {
+contract TWAPSwap {
     using Math for uint256;
     using Power for uint256;
     using ContextLib for Context;

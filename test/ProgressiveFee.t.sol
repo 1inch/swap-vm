@@ -17,7 +17,7 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
@@ -83,8 +83,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         Program program;
         bytes memory programBytes = bytes.concat(
             // 1. Set initial token balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
             // 2. Apply progressive fee based on rate change
             program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)),

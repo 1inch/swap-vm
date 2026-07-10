@@ -16,7 +16,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title XYCConcentrate Capital Efficiency vs XYCSwap
@@ -125,7 +125,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.XYCSwap)
             )
         }));
@@ -158,7 +158,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )

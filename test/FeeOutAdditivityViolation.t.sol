@@ -17,7 +17,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
@@ -352,8 +352,7 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     function _createOrderWithFlatFeeOut() private view returns (ISwapVM.Order memory) {
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
+            DynamicBalances.build(BALANCE, BALANCE),
             program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
             program.build(Opcode.XYCSwap)
         );
@@ -363,8 +362,7 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     function _createOrderWithFlatFeeIn() private view returns (ISwapVM.Order memory) {
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
+            DynamicBalances.build(BALANCE, BALANCE),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
             program.build(Opcode.XYCSwap)
         );

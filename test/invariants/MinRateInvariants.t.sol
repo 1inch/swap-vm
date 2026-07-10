@@ -17,8 +17,8 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { MinRateArgsBuilder } from "../../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
@@ -110,12 +110,10 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(3000e18)])),  // 1:3 base rate
+            StaticBalances.build(1000e18, 3000e18),  // 1:3 base rate
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -158,14 +156,12 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(2500e18)])),  // Start with 1:2.5 rate
+            StaticBalances.build(1000e18, 2500e18),  // Start with 1:2.5 rate
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -208,14 +204,12 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(3000e18)])),  // Start with 1:3 rate
+            StaticBalances.build(1000e18, 3000e18),  // Start with 1:3 rate
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -256,14 +250,12 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(5000e18)])),  // 1:5 base rate (very generous)
+            StaticBalances.build(1000e18, 5000e18),  // 1:5 base rate (very generous)
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -306,14 +298,12 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(6000e18)])),  // 1:6 base rate (very generous)
+            StaticBalances.build(1000e18, 6000e18),  // 1:6 base rate (very generous)
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -355,14 +345,12 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(8000e18)])),  // 1:8 base rate (extremely generous)
+            StaticBalances.build(1000e18, 8000e18),  // 1:8 base rate (extremely generous)
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -409,8 +397,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(7000e18)])),  // 1:7 base rate (very generous)
+            StaticBalances.build(1000e18, 7000e18),  // 1:7 base rate (very generous)
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             program.build(Opcode.FlatFeeAmountIn,
@@ -419,8 +406,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
             program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

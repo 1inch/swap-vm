@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -100,8 +100,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -190,8 +189,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -257,8 +255,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -307,8 +304,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
@@ -355,8 +351,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceIn, balanceOut])),
+            DynamicBalances.build(balanceIn, balanceOut),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,
@@ -409,8 +404,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceIn, balanceOut])),
+            DynamicBalances.build(balanceIn, balanceOut),
             program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,

@@ -8,12 +8,12 @@ import { Context } from "../libs/VM.sol";
 import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../instructions/Controls.sol";
-import { Balances } from "../instructions/Balances.sol";
+import { DynamicBalancesExternal, StaticBalances, DynamicBalances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
-import { LimitSwap } from "../instructions/LimitSwap.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
 import { DutchAuction } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
@@ -27,12 +27,11 @@ import { Whitelist } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
 
 contract Opcodes is
-    Balances,
+    DynamicBalancesExternal,
     Invalidators,
     XYCSwap,
     XYCConcentrate,
     Decay,
-    LimitSwap,
     MinRate,
     DutchAuction,
     BaseFeeAdjuster,
@@ -62,16 +61,16 @@ contract Opcodes is
         else if (opcode == OnlyTakerTokenBalanceNonZero.opcode.asU8()) OnlyTakerTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == OnlyTakerTokenBalanceGte.opcode.asU8()) OnlyTakerTokenBalanceGte.exec(ctx, args);
         else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
-        else if (opcode == uint256(Opcode.StaticBalances)) Balances._staticBalancesXD(ctx, args);
-        else if (opcode == uint256(Opcode.DynamicBalances)) Balances._dynamicBalancesXD(ctx, args);
+        else if (opcode == StaticBalances.opcode.asU8()) StaticBalances.exec(ctx, args);
+        else if (opcode == DynamicBalances.opcode.asU8()) DynamicBalances.exec(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
         else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
         else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
-        else if (opcode == uint256(Opcode.LimitSwap)) LimitSwap._limitSwap1D(ctx, args);
-        else if (opcode == uint256(Opcode.LimitSwapFullAmount)) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
+        else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == uint256(Opcode.RequireMinRate)) MinRate._requireMinRate1D(ctx, args);
         else if (opcode == uint256(Opcode.AdjustMinRate)) MinRate._adjustMinRate1D(ctx, args);
         else if (opcode == uint256(Opcode.DutchAuctionBalanceIn)) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);

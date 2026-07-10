@@ -6,67 +6,82 @@ pragma solidity 0.8.30;
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library BalancesArgsBuilder {
-    using SafeCast for uint256;
-    using Calldata for bytes;
+/// @notice StaticBalances opcode, set context token balances to specified values
+/// @dev Encoding: [uint256 balanceA, uint256 balanceB]
+library StaticBalances {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    function build(uint256[2] memory balances) internal pure returns (bytes memory) {
-        return abi.encodePacked(balances[0], balances[1]);
+    Opcode constant opcode = Opcode.StaticBalances;
+
+    function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(balanceA, balanceB);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
-        balanceA = uint256(bytes32(args));
-        balanceB = uint256(bytes32(args.slice(32)));
+        balanceA = args.at(0).asU256();
+        balanceB = args.at(32).asU256();
     }
-}
 
-contract Balances {
-    using Calldata for bytes;
-    using ContextLib for Context;
-
-    error SetBalancesExpectZeroBalances(uint256 balanceIn, uint256 balanceOut);
-
-    mapping(bytes32 orderHash =>
-        mapping(address token => uint256)) public balances;
-
-    /// @dev Sets ctx.swap.balanceIn/Out from provided initial balances
-    /// @param args.initialBalances[2] | 32 bytes * 2
-    function _staticBalancesXD(Context memory ctx, bytes calldata args) internal pure {
-        require(ctx.swap.balanceIn == 0 && ctx.swap.balanceOut == 0, SetBalancesExpectZeroBalances(ctx.swap.balanceIn, ctx.swap.balanceOut));
-
+    function exec(Context memory ctx, bytes calldata args) internal pure {
         uint256 balanceIn;
         uint256 balanceOut;
-        if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = BalancesArgsBuilder.parse(args);
-        else (balanceOut, balanceIn) = BalancesArgsBuilder.parse(args);
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
+        else (balanceOut, balanceIn) = parse(args);
 
         ctx.swap.balanceIn = balanceIn;
         ctx.swap.balanceOut = balanceOut;
     }
+}
 
-    /// @dev Load or init ctx.swap.balanceIn/Out from provided initial balances,
-    ///      then execute sub-instruction and apply swap amounts to stored balances
-    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction reads balances
-    ///   but does NOT update them after nested instructions complete. Quote may succeed while swap reverts
-    ///   if balances were modified between quote and swap calls. Makers MUST NOT use backward jumps to
-    ///   this instruction as it breaks numerical consistency between quote() and swap().
-    /// @param args.initialBalances[2] | 32 bytes * 2
-    function _dynamicBalancesXD(Context memory ctx, bytes calldata args) internal {
-        require(ctx.swap.balanceIn == 0 && ctx.swap.balanceOut == 0, SetBalancesExpectZeroBalances(ctx.swap.balanceIn, ctx.swap.balanceOut));
+/// @notice DynamicBalances opcode, set context token balances to storage values, initialized with specified values
+/// @dev Encoding: [uint256 balanceA, uint256 balanceB]
+/// @dev In quote mode reads storage but does not update it
+/// @dev The opcode is expected to be executed only once in strategy flow, multiple inclusions may lead to unexpected balances stored
+library DynamicBalances {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-        uint256 balanceIn = balances[ctx.query.orderHash][ctx.query.tokenIn];
-        uint256 balanceOut = balances[ctx.query.orderHash][ctx.query.tokenOut];
+    using ContextLib for Context;
+
+    error DynamicBalancesReachZero();
+
+    Opcode constant opcode = Opcode.DynamicBalances;
+
+    function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(balanceA, balanceB);
+        return InstructionBuilder.build(opcode, args);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
+        balanceA = args.at(0).asU256();
+        balanceB = args.at(32).asU256();
+    }
+
+    struct Storage {
+        mapping(bytes32 orderHash => mapping(address token => uint256)) balance;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.DynamicBalances")) - 1)) & ~bytes32(uint256(0xff));
+        assembly { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
+
+        uint256 balanceIn = $.balance[ctx.query.orderHash][ctx.query.tokenIn];
+        uint256 balanceOut = $.balance[ctx.query.orderHash][ctx.query.tokenOut];
 
         if (balanceIn | balanceOut == 0) {
-            if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = BalancesArgsBuilder.parse(args);
-            else (balanceOut, balanceIn) = BalancesArgsBuilder.parse(args);
-
-            if (!ctx.vm.isStaticContext) {
-                balances[ctx.query.orderHash][ctx.query.tokenIn] = balanceIn;
-                balances[ctx.query.orderHash][ctx.query.tokenOut] = balanceOut;
-            }
+            if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
+            else (balanceOut, balanceIn) = parse(args);
         }
 
         ctx.swap.balanceIn = balanceIn;
@@ -74,9 +89,20 @@ contract Balances {
 
         ctx.runLoop();
 
+        balanceIn += ctx.swap.amountIn;
+        balanceOut -= ctx.swap.amountOut;
+
         if (!ctx.vm.isStaticContext) {
-            balances[ctx.query.orderHash][ctx.query.tokenIn] += ctx.swap.amountIn;
-            balances[ctx.query.orderHash][ctx.query.tokenOut] -= ctx.swap.amountOut;
+            require(balanceIn | balanceOut != 0, DynamicBalancesReachZero());
+            $.balance[ctx.query.orderHash][ctx.query.tokenIn] = balanceIn;
+            $.balance[ctx.query.orderHash][ctx.query.tokenOut] = balanceOut;
         }
+    }
+}
+
+contract DynamicBalancesExternal {
+    function balance(bytes32 orderHash, address token) external view returns (uint256) {
+        DynamicBalances.Storage storage $ = DynamicBalances.store();
+        return $.balance[orderHash][token];
     }
 }

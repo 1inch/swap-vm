@@ -17,8 +17,8 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
 
@@ -74,10 +74,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -135,13 +133,11 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(3500000e18)])), // 3500:1 rate (Swap B to A; ascending tokenA, tokenB)
+            StaticBalances.build(1000e18, 3500000e18), // 3500:1 rate (Swap B to A; ascending tokenA, tokenB)
             // DutchAuction adjusts balances, then LimitSwap computes amounts
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            LimitSwap.build(address(tokenB), address(tokenA)),
             // BaseFeeAdjuster must be applied after the swap
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
@@ -198,10 +194,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // Swap B to A (ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -241,10 +235,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // Swap B to A (ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -292,10 +284,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
         );
@@ -330,10 +320,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
         );
@@ -369,10 +357,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(300000e18)])), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
+            LimitSwap.build(address(tokenB), address(tokenA)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
         );

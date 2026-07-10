@@ -17,7 +17,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -117,8 +117,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint16 decayPeriod = 300; // 5 minutes
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.XYCConcentrateSwap,
@@ -164,8 +163,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1500e18, sqrtPmin, sqrtPmax);
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.XYCConcentrateSwap,

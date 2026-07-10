@@ -10,7 +10,7 @@ import { TakerTraitsLib } from "../../../src/libs/TakerTraits.sol";
 import { PeggedFeesInvariants } from "../PeggedFeesInvariants.t.sol";
 import { TokenMockDecimals } from "../../mocks/TokenMockDecimals.sol";
 import { Program, ProgramBuilder, Opcode } from "../../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../../src/instructions/PeggedSwap.sol";
 
 /**
@@ -129,8 +129,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         // token address order (tokenA, tokenB).
         Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceTokenA, balanceTokenB])),
+            DynamicBalances.build(balanceTokenA, balanceTokenB),
             p.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Config,

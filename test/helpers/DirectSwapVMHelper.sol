@@ -14,8 +14,8 @@ import { ISwapVM } from "../../src/SwapVM.sol";
 import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { LimitSwap, LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Direct (signature-based) SwapVM with OpcodesDebug
@@ -38,12 +38,9 @@ contract DirectSwapVMHelper is OpcodesDebug {
         uint256 balanceA,
         uint256 balanceB
     ) external view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(balanceA, balanceB),
+            LimitSwap.build(address(tokenB), address(tokenA)),
             Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 

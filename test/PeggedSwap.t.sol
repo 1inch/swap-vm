@@ -12,7 +12,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
@@ -94,8 +94,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         Program prog;
 
         bytes memory programBytes = bytes.concat(
-            prog.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
             setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
             prog.build(Opcode.PeggedSwap,

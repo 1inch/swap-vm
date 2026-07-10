@@ -15,8 +15,8 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
@@ -89,8 +89,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Create a valid program that properly terminates
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
+            DynamicBalances.build(100e18, 100e18),
             // Multiple instructions to verify PC advances correctly
             Salt.build(uint64(1)),
             Salt.build(uint64(2)),
@@ -189,8 +188,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])), // Level 0: DynamicBalances → runLoop
+            DynamicBalances.build(100e18, 100e18), // Level 0: DynamicBalances → runLoop
             program.build(Opcode.Decay, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
             program.build(Opcode.RequireMinRate,
@@ -213,8 +211,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
+            DynamicBalances.build(100e18, 100e18),
             program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
             program.build(Opcode.XYCSwap)
         );
@@ -243,8 +240,7 @@ contract RunLoopTest is Test, OpcodesDebug {
     function test_VeryLongProgram() public {
         Program program;
 
-        bytes memory bytecode = program.build(Opcode.DynamicBalances,
-            BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)]));
+        bytes memory bytecode = DynamicBalances.build(100e18, 100e18);
 
         // Add 20 salt instructions (harmless, just increase program length)
         for (uint64 i = 0; i < 20; i++) {
@@ -304,8 +300,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Main program: Balances → BestRouteSelector
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
+            DynamicBalances.build(100e18, 100e18),
             program.build(Opcode.Extruction, selectorArgs)
         );
 

@@ -16,8 +16,8 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 
@@ -102,10 +102,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            StaticBalances.build(1e30, 2e30),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -129,10 +127,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            StaticBalances.build(1e30, 2e30),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -157,10 +153,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            StaticBalances.build(1e30, 2e30),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -190,10 +184,8 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         for (uint256 i = 0; i < ethPrices.length; i++) {
             Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.StaticBalances,
-                    BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-                program.build(Opcode.LimitSwap,
-                    LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+                StaticBalances.build(1e30, 2e30),
+                LimitSwap.build(address(tokenA), address(tokenB)),
                 program.build(Opcode.BaseFeeAdjuster,
                     BaseFeeAdjusterArgsBuilder.build(
                         baseGasPrice,
@@ -223,12 +215,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
@@ -259,12 +249,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
+            StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,

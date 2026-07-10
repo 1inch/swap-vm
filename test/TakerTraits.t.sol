@@ -14,8 +14,8 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
@@ -497,12 +497,9 @@ contract TakerTraitsTest is Test, OpcodesDebug {
     }
 
     function _createLimitOrder(uint64 salt) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(MAKER_BALANCE_A, MAKER_BALANCE_B),
+            LimitSwap.build(address(tokenB), address(tokenA)),
             Salt.build(salt)
         );
 
@@ -542,12 +539,9 @@ contract TakerTraitsTest is Test, OpcodesDebug {
         bytes memory preOutData,
         bytes memory postOutData
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
+            StaticBalances.build(MAKER_BALANCE_A, MAKER_BALANCE_B),
+            LimitSwap.build(address(tokenB), address(tokenA)),
             Salt.build(salt)
         );
 

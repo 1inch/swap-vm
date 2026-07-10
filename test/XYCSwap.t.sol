@@ -16,7 +16,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
@@ -80,13 +80,13 @@ contract XYCSwapTest is Test, OpcodesDebug {
         bytes memory bytecode;
         if (feeIn > 0) {
             bytecode = bytes.concat(
-                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
+                DynamicBalances.build(balanceA, balanceB),
                 program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
                 program.build(Opcode.XYCSwap)
             );
         } else {
             bytecode = bytes.concat(
-                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
+                DynamicBalances.build(balanceA, balanceB),
                 program.build(Opcode.XYCSwap)
             );
         }

@@ -16,7 +16,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
@@ -91,8 +91,7 @@ contract DecayTest is Test, OpcodesDebug {
     function createDecayOrder() internal returns (ISwapVM.Order memory order, bytes memory signature) {
         Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(INITIAL_LIQUIDITY), INITIAL_LIQUIDITY])),
+            DynamicBalances.build(INITIAL_LIQUIDITY, INITIAL_LIQUIDITY),
             p.build(Opcode.Decay,
                 DecayArgsBuilder.build(DECAY_PERIOD)),
             p.build(Opcode.XYCSwap, ""),

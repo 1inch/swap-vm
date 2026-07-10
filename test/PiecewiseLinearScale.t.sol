@@ -14,9 +14,9 @@ import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../src/instructions/PiecewiseLinearScale.sol";
-import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -52,13 +52,12 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint24[] memory scales,
         bool scaleIn
     ) internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(balanceIn), balanceOut])),
+            StaticBalances.build(balanceIn, balanceOut),
             scaleIn
                 ? PiecewiseLinearScaleBalanceIn.build(timestamp, durations, scales)
                 : PiecewiseLinearScaleBalanceOut.build(timestamp, durations, scales),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 

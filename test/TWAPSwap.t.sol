@@ -17,8 +17,8 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 /**
  * @title TWAPSwapTest
@@ -74,12 +74,10 @@ contract TWAPSwapTest is Test, OpcodesDebug {
     ) private view returns (bytes memory) {
         Program program;
         return bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(tokenABalance), tokenBBalance])),
+            StaticBalances.build(tokenABalance, tokenBBalance),
             program.build(Opcode.TWAPSwap,
                 TWAPSwapArgsBuilder.build(twapArgs)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 

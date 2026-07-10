@@ -22,7 +22,7 @@ import {IProtocolFeeProvider} from "../src/instructions/interfaces/IProtocolFeeP
  *     // Dynamic protocol fee BEFORE balances
  *     program.build(Opcode.DynamicProtocolFeeAmountIn, abi.encodePacked(address(feeProvider))),
  *     // Balances instruction
- *     program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(...)),
+ *     DynamicBalances.build(...),
  *     // Other fees AFTER balances (flat, progressive)
  *     program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)),
  *     // Swap instruction

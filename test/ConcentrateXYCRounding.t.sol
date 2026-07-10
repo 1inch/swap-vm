@@ -15,7 +15,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
@@ -95,9 +95,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
-                    [uint256(bLt), bGt]
-                )),
+                DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
@@ -217,8 +215,8 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
 
         // === Check 3: Maker protection (liquidity grows) ===
         (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
-            swapVM.balances(h, tokenLt),
-            swapVM.balances(h, tokenGt),
+            swapVM.balance(h, tokenLt),
+            swapVM.balance(h, tokenGt),
             sqrtPmin,
             sqrtPmax
         );

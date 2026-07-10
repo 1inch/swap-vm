@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 
@@ -195,8 +195,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
 
             // Balances
-            p.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balanceA, _balanceB])),
+            DynamicBalances.build(_balanceA, _balanceB),
 
             // Regular fees AFTER balances (0 = disabled)
             (fees.flatFeeInBps > 0) ? p.build(Opcode.FlatFeeAmountIn,

@@ -17,7 +17,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -179,8 +179,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildProtocolFee(_protocolFeeOutBps, feeRecipient)) : bytes(""),
 
             // Balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balanceA, _balanceB])),
+            DynamicBalances.build(_balanceA, _balanceB),
 
             // Flat fee BEFORE concentrate (concentrate is terminal)
             (_flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,

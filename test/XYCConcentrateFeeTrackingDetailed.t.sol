@@ -21,7 +21,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -101,7 +101,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceETH), balanceUSD])),
+                DynamicBalances.build(balanceETH, balanceUSD),
                 feeInstruction,
                 program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
@@ -179,8 +179,8 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 totalFeeETH = 0;
 
         for (uint256 i = 0; i < roundsToTest; i++) {
-            uint256 currentUSD = swapVM.balances(mainHash, tokenUSD);
-            uint256 currentETH = swapVM.balances(mainHash, tokenETH);
+            uint256 currentUSD = swapVM.balance(mainHash, tokenUSD);
+            uint256 currentETH = swapVM.balance(mainHash, tokenETH);
 
             // First swap: exactOut (ETH->USD)
             (ISwapVM.Order memory snapshot1, bytes memory snap1Sig) = _createOrderWithBalances(
@@ -193,10 +193,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             vm.prank(taker);
             swapVM.swap(snapshot1, swapAmountUSD, _takerData(false, snap1Sig, true));
 
-            uint256 mainUSD_after1 = swapVM.balances(mainHash, tokenUSD);
-            uint256 mainETH_after1 = swapVM.balances(mainHash, tokenETH);
-            uint256 snapUSD_after1 = swapVM.balances(snap1Hash, tokenUSD);
-            uint256 snapETH_after1 = swapVM.balances(snap1Hash, tokenETH);
+            uint256 mainUSD_after1 = swapVM.balance(mainHash, tokenUSD);
+            uint256 mainETH_after1 = swapVM.balance(mainHash, tokenETH);
+            uint256 snapUSD_after1 = swapVM.balance(snap1Hash, tokenUSD);
+            uint256 snapETH_after1 = swapVM.balance(snap1Hash, tokenETH);
 
             int256 feeUSD_swap1 = int256(mainUSD_after1) - int256(snapUSD_after1);
             int256 feeETH_swap1 = int256(mainETH_after1) - int256(snapETH_after1);
@@ -223,10 +223,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
 
             assertApproxEqAbs(ethReceived_main, ethReceived_snap, 1e10, "AmountOut mismatch");
 
-            uint256 mainUSD_after2 = swapVM.balances(mainHash, tokenUSD);
-            uint256 mainETH_after2 = swapVM.balances(mainHash, tokenETH);
-            uint256 snapUSD_after2 = swapVM.balances(snap2Hash, tokenUSD);
-            uint256 snapETH_after2 = swapVM.balances(snap2Hash, tokenETH);
+            uint256 mainUSD_after2 = swapVM.balance(mainHash, tokenUSD);
+            uint256 mainETH_after2 = swapVM.balance(mainHash, tokenETH);
+            uint256 snapUSD_after2 = swapVM.balance(snap2Hash, tokenUSD);
+            uint256 snapETH_after2 = swapVM.balance(snap2Hash, tokenETH);
 
             int256 feeUSD_swap2 = int256(mainUSD_after2) - int256(snapUSD_after2);
             int256 feeETH_swap2 = int256(mainETH_after2) - int256(snapETH_after2);
@@ -239,8 +239,8 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         }
 
         // Final analysis
-        uint256 finalUSD = swapVM.balances(mainHash, tokenUSD);
-        uint256 finalETH = swapVM.balances(mainHash, tokenETH);
+        uint256 finalUSD = swapVM.balance(mainHash, tokenUSD);
+        uint256 finalETH = swapVM.balance(mainHash, tokenETH);
 
         (, uint256 finalSqrtP) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
             finalETH, finalUSD, sqrtPriceMin, sqrtPriceMax
@@ -292,8 +292,8 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 totalFeeETH = 0;
 
         for (uint256 i = 0; i < roundsToTest; i++) {
-            uint256 currentUSD = swapVM.balances(mainHash, tokenUSD);
-            uint256 currentETH = swapVM.balances(mainHash, tokenETH);
+            uint256 currentUSD = swapVM.balance(mainHash, tokenUSD);
+            uint256 currentETH = swapVM.balance(mainHash, tokenETH);
 
             // First swap: exactOut (USD->ETH)
             (ISwapVM.Order memory snapshot1, bytes memory snap1Sig) = _createOrderWithBalances(
@@ -307,10 +307,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             vm.prank(taker);
             swapVM.swap(snapshot1, swapAmountETH, _takerData(false, snap1Sig, false));
 
-            uint256 mainUSD_after1 = swapVM.balances(mainHash, tokenUSD);
-            uint256 mainETH_after1 = swapVM.balances(mainHash, tokenETH);
-            uint256 snapUSD_after1 = swapVM.balances(snap1Hash, tokenUSD);
-            uint256 snapETH_after1 = swapVM.balances(snap1Hash, tokenETH);
+            uint256 mainUSD_after1 = swapVM.balance(mainHash, tokenUSD);
+            uint256 mainETH_after1 = swapVM.balance(mainHash, tokenETH);
+            uint256 snapUSD_after1 = swapVM.balance(snap1Hash, tokenUSD);
+            uint256 snapETH_after1 = swapVM.balance(snap1Hash, tokenETH);
 
             int256 feeUSD_swap1 = int256(mainUSD_after1) - int256(snapUSD_after1);
             int256 feeETH_swap1 = int256(mainETH_after1) - int256(snapETH_after1);
@@ -330,10 +330,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             vm.prank(taker);
             swapVM.swap(snapshot2, amountInAfterFee, _takerData(true, snap2Sig, true));
 
-            uint256 mainUSD_after2 = swapVM.balances(mainHash, tokenUSD);
-            uint256 mainETH_after2 = swapVM.balances(mainHash, tokenETH);
-            uint256 snapUSD_after2 = swapVM.balances(snap2Hash, tokenUSD);
-            uint256 snapETH_after2 = swapVM.balances(snap2Hash, tokenETH);
+            uint256 mainUSD_after2 = swapVM.balance(mainHash, tokenUSD);
+            uint256 mainETH_after2 = swapVM.balance(mainHash, tokenETH);
+            uint256 snapUSD_after2 = swapVM.balance(snap2Hash, tokenUSD);
+            uint256 snapETH_after2 = swapVM.balance(snap2Hash, tokenETH);
 
             int256 feeUSD_swap2 = int256(mainUSD_after2) - int256(snapUSD_after2);
             int256 feeETH_swap2 = int256(mainETH_after2) - int256(snapETH_after2);

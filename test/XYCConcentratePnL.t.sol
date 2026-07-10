@@ -15,7 +15,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -110,7 +110,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
                 p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
@@ -267,10 +267,11 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         // Exhaust all Gt (buying moves price toward sqrtPmin)
         // tokenLt -> tokenGt (buy Gt): isAToB = true.
+        uint256 dust = 1e18;
         vm.prank(taker);
-        swapVM.swap(order, bGt, _td(sig, false));
-        assertEq(swapVM.balances(swapVM.hash(order), tokenGt), 0,
-            string.concat(label, ": all Gt should be bought out"));
+        swapVM.swap(order, bGt - dust, _td(sig, false));
+        assertEq(swapVM.balance(swapVM.hash(order), tokenGt), dust,
+            string.concat(label, ": only dust Gt should remain"));
 
         uint256 postRate = _postExhaustRate(order, _td(sig, true));
         // preRate / postRate ≈ P_spot / P_min = sqrtPspot² / sqrtPmin² (both in 1e18 scale)
@@ -348,8 +349,8 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         bytes32 h = swapVM.hash(order);
         (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
-            swapVM.balances(h, tokenLt),
-            swapVM.balances(h, tokenGt),
+            swapVM.balance(h, tokenLt),
+            swapVM.balance(h, tokenGt),
             sqrtPmin,
             sqrtPmax
         );
@@ -384,7 +385,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         vm.stopPrank();
 
         bytes32 h    = swapVM.hash(order);
-        uint256 finalTVL = swapVM.balances(h, tokenLt) + swapVM.balances(h, tokenGt);
+        uint256 finalTVL = swapVM.balance(h, tokenLt) + swapVM.balance(h, tokenGt);
         int256  pnl  = int256(finalTVL) - int256(initialTVL);
         assertTrue(pnl < 0,
             string.concat(label, " [wrong]: raw TVL must fall when balances mismatch spot"));
@@ -446,7 +447,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
                 p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
@@ -503,7 +504,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         _runUniformRoundTrips(order, sig, swapSize, ROUNDS_C);
 
-        uint256 finalTVL = swapVM.balances(h, tokenLt) + swapVM.balances(h, tokenGt);
+        uint256 finalTVL = swapVM.balance(h, tokenLt) + swapVM.balance(h, tokenGt);
         assertTrue(int256(finalTVL) >= int256(initialTVL),
             "AsymmetricRange [correct]: TVL must grow after fee-earning round-trips");
     }
@@ -528,7 +529,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         _runUniformRoundTrips(order, sig, 1_000e18, ROUNDS_C);
 
-        uint256 finalTVL = swapVM.balances(h, tokenLt) + swapVM.balances(h, tokenGt);
+        uint256 finalTVL = swapVM.balance(h, tokenLt) + swapVM.balance(h, tokenGt);
         assertTrue(int256(finalTVL) < int256(initialTVL),
             "AsymmetricRange [wrong]: TVL must fall when balances mismatch range");
     }

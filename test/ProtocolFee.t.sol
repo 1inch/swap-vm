@@ -15,7 +15,7 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
@@ -98,8 +98,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
                         FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
             ) : bytes(""),
             // 1. Set initial token balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
             // 2. Apply flat feeIn (optional)
             setup.flatInFeeBps > 0 ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(setup.flatInFeeBps)) : bytes(""),

@@ -14,8 +14,8 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 import { WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
@@ -156,7 +156,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustStaticBalances() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            StaticBalances.build(1e18, 1e18),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -164,7 +164,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustDynamicBalances() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -298,25 +298,23 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramJustLimitSwap() internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(1e18, 1e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramJustLimitSwapFull() internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
-            p.build(Opcode.LimitSwapFullAmount, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(1e18, 1e18),
+            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramJustXYC() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.XYCSwap)
         );
     }
@@ -324,7 +322,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustXYCConcentrate() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(0.1e18, 5e18))
         );
     }
@@ -340,36 +338,36 @@ contract GasSnapshotE2E is Script {
     function _vmProgramLimitOrderSimple() internal view returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            StaticBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(14)),
-            p.build(Opcode.LimitSwapFullAmount, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramLimitOrderPrivate() internal view returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            StaticBalances.build(1e18, 1e18),
             p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker)),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramLimitEpochPartial() internal view returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            StaticBalances.build(1e18, 1e18),
             p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
             p.build(Opcode.InvalidateTokenIn, InvalidatorsArgsBuilder.buildInvalidateBit(12)),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramXYCSimple() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
             p.build(Opcode.XYCSwap)
         );
@@ -378,7 +376,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramXYCDecay() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(1e18), 1e18])),
+            DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
             p.build(Opcode.Decay, DecayArgsBuilder.build(155)),
             p.build(Opcode.XYCSwap)

@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -132,8 +132,7 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
+            DynamicBalances.build(1000e18, 1000e18),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(period)),
             program.build(Opcode.XYCSwap)
@@ -167,8 +166,7 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     function _testDecayXYCWithPeriod(uint16 period) private {
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
+            DynamicBalances.build(1000e18, 1000e18),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(period)),
             program.build(Opcode.XYCSwap)

@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -188,8 +188,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
 
             // Balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balanceA, _balanceB])),
+            DynamicBalances.build(_balanceA, _balanceB),
 
             // Regular fees AFTER balances
             (fees.flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,

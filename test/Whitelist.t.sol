@@ -19,8 +19,8 @@ import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Jump } from "../src/instructions/Controls.sol";
 
 /// @title Whitelist tests
@@ -291,14 +291,14 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         }
 
         bytes memory branchF = bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
+            StaticBalances.build(BALANCE_A, BALANCE_B),
             Jump.build(conditionLength + branchFLength + branchTLength)
         );
         assertEq(branchFLength, branchF.length);
-        bytes memory branchT = p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A * 2, BALANCE_B]));
+        bytes memory branchT = StaticBalances.build(BALANCE_A * 2, BALANCE_B);
         assertEq(branchTLength, branchT.length);
 
-        bytes memory fin = p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenB), address(tokenA)));
+        bytes memory fin = LimitSwap.build(address(tokenB), address(tokenA));
         assertEq(finLength, fin.length);
 
         return bytes.concat(condition, branchF, branchT, fin);

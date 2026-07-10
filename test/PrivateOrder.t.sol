@@ -19,8 +19,8 @@ import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
 
 /// @title Whitelist tests
@@ -82,8 +82,8 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
         Program p;
         bytes memory code = bytes.concat(
             p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(ALLOWED_TAKER)),
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(BALANCE_A, BALANCE_B),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         return code;

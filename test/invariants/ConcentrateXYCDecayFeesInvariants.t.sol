@@ -17,7 +17,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
@@ -125,8 +125,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1000e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(300)),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)),
             program.build(Opcode.XYCConcentrateSwap, _cArgs())
@@ -139,8 +138,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(600)),
             program.build(Opcode.ProgressiveFeeOut, FeeArgsBuilderExperimental.buildProgressiveFee(0.01e9)),
             program.build(Opcode.XYCConcentrateSwap, _cArgs())
@@ -157,8 +155,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1100e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(450)),
             program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.004e9)),
             program.build(Opcode.XYCConcentrateSwap, _cArgs())
@@ -171,8 +168,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1800e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(720)),
             program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.05e9)),
             program.build(Opcode.XYCConcentrateSwap, _cArgs())
@@ -191,8 +187,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1300e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(540)),
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(0.0025e9, feeRecipient)),
@@ -206,8 +201,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1700e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(780)),
             program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.002e9)),
             program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.03e9)),
@@ -223,8 +217,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
+            DynamicBalances.build(_balA, _balB),
             program.build(Opcode.Decay, DecayArgsBuilder.build(480)),
             program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.0055e9)),
             program.build(Opcode.XYCConcentrateSwap, _cArgs())

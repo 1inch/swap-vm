@@ -25,7 +25,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -104,7 +104,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceETH), balanceUSD])),
+                DynamicBalances.build(balanceETH, balanceUSD),
                 feeInstruction,
                 program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)

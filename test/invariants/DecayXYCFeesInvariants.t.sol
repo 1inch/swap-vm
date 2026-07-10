@@ -16,7 +16,7 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -106,8 +106,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.FlatFeeAmountIn,
@@ -149,8 +148,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.FlatFeeAmountOut,
@@ -193,8 +191,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.ProgressiveFeeIn,
@@ -230,8 +227,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.ProgressiveFeeOut,
@@ -283,8 +279,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             program.build(Opcode.ProtocolFeeAmountIn,
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.XYCSwap)
@@ -332,8 +327,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.XYCSwap)
@@ -376,8 +370,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceA, balanceB])),
+            DynamicBalances.build(balanceA, balanceB),
             program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
             program.build(Opcode.FlatFeeAmountIn,
