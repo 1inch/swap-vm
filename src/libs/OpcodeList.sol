@@ -4,8 +4,11 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-/// @notice Opcode space layout (16-slot rows, _Ix slots keep numbering stable for future instructions)
+/// @notice Opcode space layout, banked by instruction family
+/// @dev New instruction MUST take the next free `_Ix` slot of its family bank
+/// @dev The reserved bank (0xf0-0xff) is never allocated
 enum Opcode {
+    // 0x00-0x0f | Core control flow: halt, revert, jumps, extensions
     /* 00 */ Stop,
     /* 01 */ Revert,
     /* 02 */ Salt,
@@ -23,6 +26,7 @@ enum Opcode {
     /* 0e */ _0e,
     /* 0f */ _0f,
 
+    // 0x10-0x1f | Debug: wired only into *Debug opcode sets
     /* 10 */ PrintSwapRegisters,
     /* 11 */ PrintSwapQuery,
     /* 12 */ PrintContext,
@@ -40,6 +44,7 @@ enum Opcode {
     /* 1e */ _1e,
     /* 1f */ _1f,
 
+    // 0x20-0x3f | Conditions & access guards: taker/time validation, whitelists, conditional jumps
     /* 20 */ Deadline,
     /* 21 */ _21,
     /* 22 */ _22,
@@ -56,7 +61,6 @@ enum Opcode {
     /* 2d */ WhitelistSequential,
     /* 2e */ _2e,
     /* 2f */ _2f,
-
     /* 30 */ JumpIfDirection,
     /* 31 */ JumpIfTokenIn,
     /* 32 */ JumpIfTokenOut,
@@ -65,24 +69,25 @@ enum Opcode {
     /* 35 */ _35,
     /* 36 */ _36,
     /* 37 */ _37,
-    /* 38 */ InvalidateBit,
-    /* 39 */ InvalidateTokenIn,
-    /* 3a */ InvalidateTokenOut,
+    /* 38 */ _38,
+    /* 39 */ _39,
+    /* 3a */ _3a,
     /* 3b */ _3b,
     /* 3c */ _3c,
     /* 3d */ _3d,
-    /* 3e */ ValidateSeriesEpoch,
+    /* 3e */ _3e,
     /* 3f */ _3f,
 
-    /* 40 */ XYCSwap,
-    /* 41 */ XYCConcentrateSwap,
-    /* 42 */ _42,
-    /* 43 */ LimitSwap,
-    /* 44 */ LimitSwapFullAmount,
+    // 0x40-0x4f | Invalidators & epochs: order/series invalidation
+    /* 40 */ InvalidateBit,
+    /* 41 */ InvalidateTokenIn,
+    /* 42 */ InvalidateTokenOut,
+    /* 43 */ _43,
+    /* 44 */ _44,
     /* 45 */ _45,
     /* 46 */ _46,
     /* 47 */ _47,
-    /* 48 */ PeggedSwap,
+    /* 48 */ ValidateSeriesEpoch,
     /* 49 */ _49,
     /* 4a */ _4a,
     /* 4b */ _4b,
@@ -91,15 +96,16 @@ enum Opcode {
     /* 4e */ _4e,
     /* 4f */ _4f,
 
-    /* 50 */ FlatFeeAmountIn,
-    /* 51 */ ProtocolFeeAmountIn,
-    /* 52 */ AquaProtocolFeeAmountIn,
-    /* 53 */ ProgressiveFeeIn,
-    /* 54 */ DynamicProtocolFeeAmountIn,
-    /* 55 */ AquaDynamicProtocolFeeAmountIn,
+    // 0x50-0x6f | Swap curves: instructions computing swap amounts from balances
+    /* 50 */ XYCSwap,
+    /* 51 */ XYCConcentrateSwap,
+    /* 52 */ _52,
+    /* 53 */ LimitSwap,
+    /* 54 */ LimitSwapFullAmount,
+    /* 55 */ _55,
     /* 56 */ _56,
     /* 57 */ _57,
-    /* 58 */ _58,
+    /* 58 */ PeggedSwap,
     /* 59 */ _59,
     /* 5a */ _5a,
     /* 5b */ _5b,
@@ -107,11 +113,10 @@ enum Opcode {
     /* 5d */ _5d,
     /* 5e */ _5e,
     /* 5f */ _5f,
-
-    /* 60 */ FlatFeeAmountOut,
-    /* 61 */ ProtocolFeeAmountOut,
-    /* 62 */ AquaProtocolFeeAmountOut,
-    /* 63 */ ProgressiveFeeOut,
+    /* 60 */ _60,
+    /* 61 */ _61,
+    /* 62 */ _62,
+    /* 63 */ _63,
     /* 64 */ _64,
     /* 65 */ _65,
     /* 66 */ _66,
@@ -125,28 +130,28 @@ enum Opcode {
     /* 6e */ _6e,
     /* 6f */ _6f,
 
-    /* 70 */ StaticBalances,
-    /* 71 */ DynamicBalances,
-    /* 72 */ _72,
-    /* 73 */ _73,
-    /* 74 */ DutchAuctionBalanceIn,
-    /* 75 */ DutchAuctionBalanceOut,
+    // 0x70-0x8f | Fees
+    /* 70 */ FlatFeeAmountIn,
+    /* 71 */ ProtocolFeeAmountIn,
+    /* 72 */ AquaProtocolFeeAmountIn,
+    /* 73 */ ProgressiveFeeIn,
+    /* 74 */ DynamicProtocolFeeAmountIn,
+    /* 75 */ AquaDynamicProtocolFeeAmountIn,
     /* 76 */ _76,
-    /* 77 */ PiecewiseLinearScaleBalanceIn,
-    /* 78 */ PiecewiseLinearScaleBalanceOut,
+    /* 77 */ _77,
+    /* 78 */ _78,
     /* 79 */ _79,
     /* 7a */ _7a,
-    /* 7b */ Decay,
-    /* 7c */ TWAPSwap,
+    /* 7b */ _7b,
+    /* 7c */ _7c,
     /* 7d */ _7d,
     /* 7e */ _7e,
     /* 7f */ _7f,
-
-    /* 80 */ RequireMinRate,
-    /* 81 */ AdjustMinRate,
-    /* 82 */ _82,
-    /* 83 */ _83,
-    /* 84 */ BaseFeeAdjuster,
+    /* 80 */ FlatFeeAmountOut,
+    /* 81 */ ProtocolFeeAmountOut,
+    /* 82 */ AquaProtocolFeeAmountOut,
+    /* 83 */ ProgressiveFeeOut,
+    /* 84 */ _84,
     /* 85 */ _85,
     /* 86 */ _86,
     /* 87 */ _87,
@@ -159,23 +164,23 @@ enum Opcode {
     /* 8e */ _8e,
     /* 8f */ _8f,
 
-    /* 90 */ _90,
-    /* 91 */ _91,
+    // 0x90-0xaf | Balances tuning: setting and adjustment of virtual balances
+    /* 90 */ StaticBalances,
+    /* 91 */ DynamicBalances,
     /* 92 */ _92,
     /* 93 */ _93,
-    /* 94 */ _94,
-    /* 95 */ _95,
+    /* 94 */ DutchAuctionBalanceIn,
+    /* 95 */ DutchAuctionBalanceOut,
     /* 96 */ _96,
-    /* 97 */ _97,
-    /* 98 */ _98,
+    /* 97 */ PiecewiseLinearScaleBalanceIn,
+    /* 98 */ PiecewiseLinearScaleBalanceOut,
     /* 99 */ _99,
     /* 9a */ _9a,
-    /* 9b */ _9b,
-    /* 9c */ _9c,
+    /* 9b */ Decay,
+    /* 9c */ TWAPSwap,
     /* 9d */ _9d,
     /* 9e */ _9e,
     /* 9f */ _9f,
-
     /* a0 */ _a0,
     /* a1 */ _a1,
     /* a2 */ _a2,
@@ -193,11 +198,12 @@ enum Opcode {
     /* ae */ _ae,
     /* af */ _af,
 
-    /* b0 */ _b0,
-    /* b1 */ _b1,
+    // 0xb0-0xcf | Rates tuning: exchange-rate constraints and price adjustment
+    /* b0 */ RequireMinRate,
+    /* b1 */ AdjustMinRate,
     /* b2 */ _b2,
     /* b3 */ _b3,
-    /* b4 */ _b4,
+    /* b4 */ BaseFeeAdjuster,
     /* b5 */ _b5,
     /* b6 */ _b6,
     /* b7 */ _b7,
@@ -209,7 +215,6 @@ enum Opcode {
     /* bd */ _bd,
     /* be */ _be,
     /* bf */ _bf,
-
     /* c0 */ _c0,
     /* c1 */ _c1,
     /* c2 */ _c2,
@@ -227,6 +232,7 @@ enum Opcode {
     /* ce */ _ce,
     /* cf */ _cf,
 
+    // 0xd0-0xef | Unallocated
     /* d0 */ _d0,
     /* d1 */ _d1,
     /* d2 */ _d2,
@@ -243,7 +249,6 @@ enum Opcode {
     /* dd */ _dd,
     /* de */ _de,
     /* df */ _df,
-
     /* e0 */ _e0,
     /* e1 */ _e1,
     /* e2 */ _e2,
@@ -261,6 +266,7 @@ enum Opcode {
     /* ee */ _ee,
     /* ef */ _ef,
 
+    // 0xf0-0xff | Reserved: never allocate (potential 2-byte opcode escape-prefix)
     /* f0 */ _f0,
     /* f1 */ _f1,
     /* f2 */ _f2,
