@@ -16,8 +16,9 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
@@ -105,7 +106,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== CORE HELPERS =====
 
     function defaultConcentrateArgs() internal pure returns (bytes memory) {
-        return XYCConcentrateArgsBuilder.build2D(
+        return XYCConcentrateSwap.build(
             Math.sqrt(0.5e36),
             Math.sqrt(2.0e36)
         );
@@ -221,8 +222,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             : bytes("");
 
         bytes memory concentrateCode = includeConcentrate
-            ? p.build(Opcode.XYCConcentrateSwap,
-                     defaultConcentrateArgs())
+            ? defaultConcentrateArgs()
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
@@ -231,14 +231,14 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
         bytes memory swapCode = includeConcentrate
             ? concentrateCode
-            : p.build(Opcode.XYCSwap);
+            : XYCSwap.build();
 
         return bytes.concat(
             protocolFeeCode,
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             flatFeeCode,
             swapCode,
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         ); 
     }
 
@@ -260,9 +260,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             protocolFeeCode, // WRONG: protocolFee after balances
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -286,9 +285,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -312,8 +310,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCSwap),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -339,7 +337,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 

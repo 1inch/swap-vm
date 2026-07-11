@@ -20,7 +20,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -103,9 +103,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(balanceETH, balanceUSD),
                 feeInstruction,
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
-                )
+                XYCConcentrateSwap.build(sqrtPriceMin, sqrtPriceMax)
             )
         }));
 
@@ -152,7 +150,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 initialUSD = 3_000_000e18;
         uint256 initialETH = 1000e18;
         uint256 spotPrice = 3000e18;
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(spotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 actualBalanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;
@@ -242,7 +240,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 finalUSD = swapVM.balance(mainHash, tokenUSD);
         uint256 finalETH = swapVM.balance(mainHash, tokenETH);
 
-        (, uint256 finalSqrtP) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
+        (, uint256 finalSqrtP) = XYCConcentrateSwap.computeLiquidityAndPrice(
             finalETH, finalUSD, sqrtPriceMin, sqrtPriceMax
         );
         uint256 finalSpotPrice = (finalSqrtP * finalSqrtP) / 1e18;
@@ -271,7 +269,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 initialUSD = 3_000_000e18;
         uint256 initialETH = 1000e18;
         uint256 spotPrice = 3000e18;
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(spotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 actualBalanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;

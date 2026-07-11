@@ -16,7 +16,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
@@ -97,9 +97,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -157,7 +155,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     ) internal {
         uint256 avail = 100_000e18;
         (uint256 initialL, uint256 bLt, uint256 bGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
+            XYCConcentrateSwap.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
         bytes32 h = swapVM.hash(order);
@@ -214,7 +212,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         assertLt(valueAfter, valueBefore, string.concat(label, ": taker profited from round-trips"));
 
         // === Check 3: Maker protection (liquidity grows) ===
-        (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
+        (uint256 finalL,) = XYCConcentrateSwap.computeLiquidityAndPrice(
             swapVM.balance(h, tokenLt),
             swapVM.balance(h, tokenGt),
             sqrtPmin,

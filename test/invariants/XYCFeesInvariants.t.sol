@@ -18,6 +18,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
@@ -208,7 +209,7 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
             // Swap instruction
-            p.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
     }
 

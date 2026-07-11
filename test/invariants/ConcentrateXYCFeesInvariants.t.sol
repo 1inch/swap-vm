@@ -19,7 +19,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -118,12 +118,12 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     /**
      * @notice Compute initial pool balances based on concentration parameters
-     * @dev Uses XYCConcentrateArgsBuilder.computeLiquidityFromAmounts
+     * @dev Uses XYCConcentrateSwap.computeLiquidityFromAmounts
      */
     function _computeInitialBalances() internal {
         uint256 sqrtPspot = 1e18; // Market spot price = 1.0
         (, uint256 actualLt, uint256 actualGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            XYCConcentrateSwap.computeLiquidityFromAmounts(
                 availableLiquidity, availableLiquidity, sqrtPspot, sqrtPriceMin, sqrtPriceMax
             );
 
@@ -186,8 +186,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildFlatFee(_flatFeeInBps)) : bytes(""),
 
             // Concentrate instruction (terminal: computes virtual reserves + swap)
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(_sqrtPriceMin, _sqrtPriceMax))
+            XYCConcentrateSwap.build(_sqrtPriceMin, _sqrtPriceMax)
         );
     }
 

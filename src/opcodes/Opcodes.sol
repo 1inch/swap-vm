@@ -11,7 +11,7 @@ import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Dea
 import { DynamicBalancesExternal, StaticBalances, DynamicBalances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
-import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
@@ -29,8 +29,6 @@ import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from ".
 contract Opcodes is
     DynamicBalancesExternal,
     Invalidators,
-    XYCSwap,
-    XYCConcentrate,
     MinRate,
     DutchAuction,
     BaseFeeAdjuster,
@@ -65,8 +63,8 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
         else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
-        else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
-        else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == XYCSwap.opcode.asU8()) XYCSwap.exec(ctx, args);
+        else if (opcode == XYCConcentrateSwap.opcode.asU8()) XYCConcentrateSwap.exec(ctx, args);
         else if (opcode == Decay.opcode.asU8()) Decay.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);

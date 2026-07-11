@@ -6,152 +6,157 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @dev Fixed-point basis for sqrt price values (1e18)
-uint256 constant ONE = 1e18;
+/// @notice XYCConcentrateSwap opcode, constant-product swap curve concentrating liquidity in specified price range
+///   Automatically reinvests accumulated maker fees
+/// @dev Encoding: [uint256 sqrtPriceMin, uint256 sqrtPriceMax]
+library XYCConcentrateSwap {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-library XYCConcentrateArgsBuilder {
-    using Calldata for bytes;
+    using Math for uint256;
 
     error ConcentrateInvalidPriceBounds(uint256 sqrtPriceMin, uint256 sqrtPriceMax);
+    error ConcentrateSpotOutOfRange(uint256 sqrtPriceMin, uint256 sqrtPriceSpot, uint256 sqrtPriceMax);
 
-    /// @notice Build args for the 2D price-bounds concentrate instruction
-    /// @param sqrtPriceMin sqrt(P_min) in 1e18 fixed-point, where P = tokenGt/tokenLt
-    /// @param sqrtPriceMax sqrt(P_max) in 1e18 fixed-point, where P = tokenGt/tokenLt
-    function build2D(uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (bytes memory) {
+    Opcode constant opcode = Opcode.XYCConcentrateSwap;
+
+    uint256 constant ONE = 1e18;
+
+    function build(uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (bytes memory) {
         require(0 < sqrtPriceMin && sqrtPriceMin < sqrtPriceMax, ConcentrateInvalidPriceBounds(sqrtPriceMin, sqrtPriceMax));
-        return abi.encodePacked(sqrtPriceMin, sqrtPriceMax);
+
+        bytes memory args = abi.encodePacked(sqrtPriceMin, sqrtPriceMax);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function parse2D(bytes calldata args) internal pure returns (uint256 sqrtPriceMin, uint256 sqrtPriceMax) {
-        sqrtPriceMin = uint256(bytes32(args));
-        sqrtPriceMax = uint256(bytes32(args.slice(32)));
+    function parse(bytes calldata args) internal pure returns (uint256 sqrtPriceMin, uint256 sqrtPriceMax) {
+        sqrtPriceMin = args.at(0).asU256();
+        sqrtPriceMax = args.at(32).asU256();
     }
 
-    /// @notice Compute the implied spot price and liquidity from real balances and price bounds
-    /// @param balanceLt Real balance of the token with lower address
-    /// @param balanceGt Real balance of the token with higher address
-    /// @param sqrtPriceMin sqrt(P_min) in 1e18 fixed-point
-    /// @param sqrtPriceMax sqrt(P_max) in 1e18 fixed-point
-    /// @return liquidity The computed L value
-    /// @return sqrtPriceSpot The implied sqrt(P_spot) in 1e18 fixed-point
-    function computeLiquidityAndPrice(
-        uint256 balanceLt,
-        uint256 balanceGt,
-        uint256 sqrtPriceMin,
-        uint256 sqrtPriceMax
-    ) internal pure returns (uint256 liquidity, uint256 sqrtPriceSpot) {
-        liquidity = _computeL(balanceLt, balanceGt, sqrtPriceMin, sqrtPriceMax);
-        uint256 virtualLt = balanceLt + Math.mulDiv(liquidity, ONE, sqrtPriceMax);
-        uint256 virtualGt = balanceGt + Math.mulDiv(liquidity, sqrtPriceMin, ONE);
-        sqrtPriceSpot = Math.sqrt(Math.mulDiv(virtualGt, ONE*ONE, virtualLt));
-    }
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = parse(args);
 
-    /// @notice Compute the initial balances for given L, P_spot, P_min, P_max:
-    ///   bLt = L * (sqrtPmax - sqrtPspot) / (sqrtPmax * sqrtPspot)
-    ///   bGt = L * (sqrtPspot - sqrtPmin)
-    function computeBalances(
-        uint256 targetL,
-        uint256 sqrtPspot,
-        uint256 sqrtPmin,
-        uint256 sqrtPmax
-    ) internal pure returns (uint256 bLt, uint256 bGt) {
-        require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
+        bool direction = ctx.query.tokenIn < ctx.query.tokenOut;
+        uint256 liquidity = computeLiquidity(
+            direction ? ctx.swap.balanceIn : ctx.swap.balanceOut,
+            direction ? ctx.swap.balanceOut : ctx.swap.balanceIn,
+            sqrtPriceMin,
+            sqrtPriceMax
+        );
 
-        bLt = sqrtPmax > sqrtPspot
-            ? Math.mulDiv(targetL, (sqrtPmax - sqrtPspot) * ONE, sqrtPspot * sqrtPmax)
-            : 0;
-        bGt = sqrtPspot > sqrtPmin ? Math.mulDiv(targetL, sqrtPspot - sqrtPmin, ONE) : 0;
-    }
+        uint256 virtualIn = ctx.swap.balanceIn;
+        uint256 virtualOut = ctx.swap.balanceOut;
 
-    /// @notice Compute max achievable L from available token amounts at a given spot price.
-    ///   Takes the minimum of L implied by each token.
-    /// @return targetL  The max achievable L
-    /// @return actualLt Amount of tokenLt actually needed (<=availableLt)
-    /// @return actualGt Amount of tokenGt actually needed (<=availableGt)
-    function computeLiquidityFromAmounts(
-        uint256 availableLt,
-        uint256 availableGt,
-        uint256 sqrtPspot,
-        uint256 sqrtPmin,
-        uint256 sqrtPmax
-    ) internal pure returns (uint256 targetL, uint256 actualLt, uint256 actualGt) {
-        require(sqrtPmin < sqrtPmax, ConcentrateInvalidPriceBounds(sqrtPmin, sqrtPmax));
-
-        if (sqrtPspot <= sqrtPmin) {
-            targetL = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
-        } else if (sqrtPspot < sqrtPmax) {
-            uint256 lFromLt = Math.mulDiv(availableLt, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * ONE);
-            uint256 lFromGt = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
-            targetL = lFromLt < lFromGt ? lFromLt : lFromGt;
+        // Rounding virtual in up favors maker
+        if (direction) {
+            virtualIn += liquidity.mulDiv(ONE, sqrtPriceMax, Math.Rounding.Ceil);
+            virtualOut += liquidity.mulDiv(sqrtPriceMin, ONE);
         } else {
-            targetL = Math.mulDiv(availableGt, ONE, sqrtPspot - sqrtPmin);
+            virtualIn += liquidity.mulDiv(sqrtPriceMin, ONE, Math.Rounding.Ceil);
+            virtualOut += liquidity.mulDiv(ONE, sqrtPriceMax);
         }
 
-        (actualLt, actualGt) = computeBalances(targetL, sqrtPspot, sqrtPmin, sqrtPmax);
+        if (ctx.query.isExactIn) {
+            // Floor division for tokenOut favors maker
+            ctx.swap.amountOut = ctx.swap.amountIn * virtualOut / (virtualIn + ctx.swap.amountIn);
+        } else {
+            // Ceil division for tokenIn favors maker
+            ctx.swap.amountIn = (ctx.swap.amountOut * virtualIn).ceilDiv(virtualOut - ctx.swap.amountOut);
+        }
     }
 
-    /// @notice Compute L from real balances and price bounds (internal)
-    function _computeL(
-        uint256 bLt,
-        uint256 bGt,
+    /// @notice Compute liquidity from balances and price bounds
+    /// @dev Solves invariant as quadratic equation
+    ///   Invariant: `(balanceA + virtualA) * (balanceB + virtualB) = liquidity ** 2`
+    ///     where `virtualA = liquidity / sqrtPriceMax` and `virtualB = liquidity * sqrtPriceMin`
+    ///
+    ///   Equation: `(1 - sqrtPriceMin / sqrtPriceMax) * liquidity ** 2 - beta * liquidity - balanceA * balanceB = 0`
+    ///     where `beta = balanceA * sqrtPriceMin + balanceB / sqrtPriceMax`
+    ///
+    ///   Positive root: `liquidity = (beta + sqrt(beta ** 2 + 4 * (sqrtPriceMax - sqrtPriceMin) * balanceA * balanceB / sqrtPriceMax)) *
+    ///     sqrtPriceMax / (2 * (sqrtPriceMax - sqrtPriceMin))`
+    function computeLiquidity(
+        uint256 balanceA,
+        uint256 balanceB,
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax
     ) internal pure returns (uint256) {
         uint256 priceDelta = sqrtPriceMax - sqrtPriceMin;
-        uint256 beta = Math.mulDiv(bLt, sqrtPriceMin, ONE) + Math.mulDiv(bGt, ONE, sqrtPriceMax);
-        uint256 fourAC = Math.mulDiv(4 * priceDelta, bLt * bGt, sqrtPriceMax);
+        uint256 beta = balanceA.mulDiv(sqrtPriceMin, ONE) + balanceB.mulDiv(ONE, sqrtPriceMax);
+        uint256 fourAC = (4 * priceDelta).mulDiv(balanceA * balanceB, sqrtPriceMax);
         uint256 disc = beta * beta + fourAC;
-        return Math.mulDiv(beta + Math.sqrt(disc), sqrtPriceMax, 2 * priceDelta);
+
+        return (beta + disc.sqrt()).mulDiv(sqrtPriceMax, 2 * priceDelta);
     }
-}
 
-/// @title XYCConcentrate - Concentrated liquidity swap with price bounds (2-token only)
-/// @notice Terminal instruction: computes virtual reserves from real balances and price bounds,
-///         then performs a constant-product swap in a single step.
-///         L (liquidity) is recomputed from real balances each swap.
-///         Fee reinvestment happens automatically as growing real balances increase L.
-///         Virtual reserves are local — ctx.swap.balanceIn/Out are not mutated,
-///         so dynamicBalances sees only real balance changes (amountIn/amountOut).
-contract XYCConcentrate {
-    error ConcentrateRecomputeDetected(uint256 amountIn, uint256 amountOut);
+    /// @notice Price estimation helper
+    ///   Actual swap rate may slightly differ due to rounding amounts favor maker
+    function computeLiquidityAndPrice(
+        uint256 balanceA,
+        uint256 balanceB,
+        uint256 sqrtPriceMin,
+        uint256 sqrtPriceMax
+    ) internal pure returns (uint256 liquidity, uint256 sqrtPriceSpot) {
+        liquidity = computeLiquidity(balanceA, balanceB, sqrtPriceMin, sqrtPriceMax);
 
-    /// @param args.sqrtPriceMin | 32 bytes (uint256, 1e18 fp) — sqrt(P_min) where P = tokenGt/tokenLt
-    /// @param args.sqrtPriceMax | 32 bytes (uint256, 1e18 fp) — sqrt(P_max) where P = tokenGt/tokenLt
-    function _xycConcentrateGrowLiquidity2D(Context memory ctx, bytes calldata args) internal pure {
+        uint256 virtualA = balanceA + liquidity.mulDiv(ONE, sqrtPriceMax);
+        uint256 virtualB = balanceB + liquidity.mulDiv(sqrtPriceMin, ONE);
 
-        (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = XYCConcentrateArgsBuilder.parse2D(args);
+        sqrtPriceSpot = virtualB.mulDiv(ONE * ONE, virtualA).sqrt();
+    }
 
-        bool isTokenInLt = ctx.query.tokenIn < ctx.query.tokenOut;
-        uint256 bLt = isTokenInLt ? ctx.swap.balanceIn : ctx.swap.balanceOut;
-        uint256 bGt = isTokenInLt ? ctx.swap.balanceOut : ctx.swap.balanceIn;
+    /// @notice Approximate initial balances for given liquidity, boundaries and spot price
+    ///   Returns a raw estimation, a slightly better balance pair may exist with liquidity closer to the target
+    /// @dev Computations rationale
+    ///   `balanceA = virtualA(sqrtPriceSpot) - virtualA(sqrtPriceMax)`
+    ///   `balanceB = virtualB(sqrtPriceSpot) - virtualB(sqrtPriceMin)`
+    ///     where `virtualA(sqrtPrice) = liquidity / sqrtPrice` and `virtualB(sqrtPrice) = liquidity * sqrtPrice`
+    /// @dev Holds `computeLiquidity(balanceA, balanceB, sqrtPriceMin, sqrtPriceMax) <= liquidity`
+    function computeBalances(
+        uint256 liquidity,
+        uint256 sqrtPriceSpot,
+        uint256 sqrtPriceMin,
+        uint256 sqrtPriceMax
+    ) internal pure returns (uint256 balanceA, uint256 balanceB) {
+        require(sqrtPriceMin < sqrtPriceMax, ConcentrateInvalidPriceBounds(sqrtPriceMin, sqrtPriceMax));
+        require(sqrtPriceMin <= sqrtPriceSpot, ConcentrateSpotOutOfRange(sqrtPriceMin, sqrtPriceSpot, sqrtPriceMax));
+        require(sqrtPriceSpot <= sqrtPriceMax, ConcentrateSpotOutOfRange(sqrtPriceMin, sqrtPriceSpot, sqrtPriceMax));
 
-        uint256 L = XYCConcentrateArgsBuilder._computeL(bLt, bGt, sqrtPriceMin, sqrtPriceMax);
+        balanceA = liquidity.mulDiv((sqrtPriceMax - sqrtPriceSpot) * ONE, sqrtPriceSpot * sqrtPriceMax);
+        balanceB = liquidity.mulDiv(sqrtPriceSpot - sqrtPriceMin, ONE);
+    }
 
-        uint256 virtualBalanceIn;
-        uint256 virtualBalanceOut;
-        if (isTokenInLt) {
-            virtualBalanceIn  = ctx.swap.balanceIn  + Math.mulDiv(L, ONE, sqrtPriceMax, Math.Rounding.Ceil);
-            virtualBalanceOut = ctx.swap.balanceOut + Math.mulDiv(L, sqrtPriceMin, ONE);
+    /// @notice Approximate initial balances from available token amounts, boundaries and spot price
+    ///   Returns a raw estimation, a slightly better balance pair may exist resulting in bigger liquidity
+    /// @dev Holds `actualA <= availableA` and `actualB <= availableB`
+    function computeLiquidityFromAmounts(
+        uint256 availableA,
+        uint256 availableB,
+        uint256 sqrtPriceSpot,
+        uint256 sqrtPriceMin,
+        uint256 sqrtPriceMax
+    ) internal pure returns (uint256 liquidity, uint256 actualA, uint256 actualB) {
+        require(sqrtPriceMin < sqrtPriceMax, ConcentrateInvalidPriceBounds(sqrtPriceMin, sqrtPriceMax));
+        require(sqrtPriceMin <= sqrtPriceSpot, ConcentrateSpotOutOfRange(sqrtPriceMin, sqrtPriceSpot, sqrtPriceMax));
+        require(sqrtPriceSpot <= sqrtPriceMax, ConcentrateSpotOutOfRange(sqrtPriceMin, sqrtPriceSpot, sqrtPriceMax));
+
+        if (sqrtPriceSpot <= sqrtPriceMin) {
+            liquidity = availableA.mulDiv(sqrtPriceSpot * sqrtPriceMax, (sqrtPriceMax - sqrtPriceSpot) * ONE);
+        } else if (sqrtPriceSpot < sqrtPriceMax) {
+            uint256 liquidityFromA = availableA.mulDiv(sqrtPriceSpot * sqrtPriceMax, (sqrtPriceMax - sqrtPriceSpot) * ONE);
+            uint256 liquidityFromB = availableB.mulDiv(ONE, sqrtPriceSpot - sqrtPriceMin);
+            liquidity = liquidityFromA.min(liquidityFromB);
         } else {
-            virtualBalanceIn  = ctx.swap.balanceIn  + Math.mulDiv(L, sqrtPriceMin, ONE, Math.Rounding.Ceil);
-            virtualBalanceOut = ctx.swap.balanceOut + Math.mulDiv(L, ONE, sqrtPriceMax);
+            liquidity = availableB.mulDiv(ONE, sqrtPriceSpot - sqrtPriceMin);
         }
 
-        if (ctx.query.isExactIn) {
-            require(ctx.swap.amountOut == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
-            ctx.swap.amountOut = (
-                (ctx.swap.amountIn * virtualBalanceOut) /
-                (virtualBalanceIn + ctx.swap.amountIn)
-            );
-        } else {
-            require(ctx.swap.amountIn == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
-            ctx.swap.amountIn = Math.ceilDiv(
-                ctx.swap.amountOut * virtualBalanceIn,
-                (virtualBalanceOut - ctx.swap.amountOut)
-            );
-        }
+        (actualA, actualB) = computeBalances(liquidity, sqrtPriceSpot, sqrtPriceMin, sqrtPriceMax);
+        liquidity = computeLiquidity(actualA, actualB, sqrtPriceMin, sqrtPriceMax);
     }
 }

@@ -17,8 +17,9 @@ import { AquaOpcodesDebug } from "../src/opcodes/AquaOpcodesDebug.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
@@ -99,7 +100,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
     /// @notice Default symmetric price bounds for concentrate: sqrt(0.5)*sqrt(2.0) = 1.0
     function defaultConcentrateArgs() internal pure returns (bytes memory) {
-        return XYCConcentrateArgsBuilder.build2D(
+        return XYCConcentrateSwap.build(
             Math.sqrt(0.5e36),  // sqrtPmin = sqrt(0.5) ≈ 0.7071
             Math.sqrt(2.0e36)   // sqrtPmax = sqrt(2.0) ≈ 1.4142
         );
@@ -197,19 +198,18 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             : bytes("");
 
         bytes memory concentrateCode = includeConcentrate
-            ? p.build(Opcode.XYCConcentrateSwap,
-                     defaultConcentrateArgs())
+            ? defaultConcentrateArgs()
             : bytes("");
 
         bytes memory swapCode = includeConcentrate
             ? concentrateCode
-            : p.build(Opcode.XYCSwap);
+            : XYCSwap.build();
 
         return bytes.concat(
             protocolFeeCode,
             flatFeeCode,
             swapCode,
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -230,9 +230,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         return bytes.concat(
             protocolFeeCode,
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -255,9 +254,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             protocolFeeCode,
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -282,7 +280,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -305,8 +303,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             protocolFeeCode,
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCSwap),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 

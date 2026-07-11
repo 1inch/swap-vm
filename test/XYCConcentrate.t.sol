@@ -19,7 +19,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -110,7 +110,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         // Compute actual pool balances consistent with P_spot=1 using computeLiquidityFromAmounts.
         // tokenA=Gt (higher address), tokenB=Lt (lower address).
         // setup.balanceA is the DESIRED Gt amount; setup.balanceB is used as Lt upper bound.
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             setup.balanceB, setup.balanceA, 1e18, sqrtPmin, sqrtPmax
         );
         // Assign based on which token is Lt vs Gt
@@ -141,9 +141,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(actualBalanceB, actualBalanceA),
                 program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
 
@@ -510,7 +508,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 targetL
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         // Compute balances for the given spot price
-        (uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeBalances(
+        (uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeBalances(
             targetL, sqrtPspot, sqrtPmin, sqrtPmax
         );
 
@@ -542,9 +540,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(balanceB, balanceA),
                 program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
 
@@ -563,7 +559,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? balanceGt : balanceLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? balanceLt : balanceGt;
 
-        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -586,9 +581,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(balanceB, balanceA),
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
 
@@ -605,7 +598,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 sqrtPmin = 1e18 - 1;
         uint256 sqrtPmax = 1e18 + 1;
 
-        uint256 L = XYCConcentrateArgsBuilder._computeL(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
+        uint256 L = XYCConcentrateSwap.computeLiquidity(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
         uint256 deltaLtFloor = Math.mulDiv(L, 1e18, sqrtPmax);
         uint256 deltaLtCeil = Math.mulDiv(L, 1e18, sqrtPmax, Math.Rounding.Ceil);
         uint256 deltaGtFloor = Math.mulDiv(L, sqrtPmin, 1e18);
@@ -642,7 +635,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     function test_ZeroBalance_SpotAtUpperBound() public {
         uint256 sqrtPmin = Math.sqrt(0.01e18 * 1e18);  // 0.1e18
         uint256 sqrtPmax = Math.sqrt(25e18 * 1e18);    // 5e18
-        uint256 sqrtPspot = sqrtPmax + 100;                  // At upper bound
+        uint256 sqrtPspot = sqrtPmax;                  // At upper bound
         uint256 targetL = 100_000e18;
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrderAtBoundary(
@@ -666,7 +659,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     function test_ZeroBalance_SpotAtLowerBound() public {
         uint256 sqrtPmin = Math.sqrt(0.01e18 * 1e18);  // 0.1e18
         uint256 sqrtPmax = Math.sqrt(25e18 * 1e18);    // 5e18
-        uint256 sqrtPspot = sqrtPmin - 100;              // At lower bound
+        uint256 sqrtPspot = sqrtPmin;              // At lower bound
         uint256 targetL = 100_000e18;
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrderAtBoundary(
@@ -682,6 +675,41 @@ contract ConcentrateTest is Test, OpcodesDebug {
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, swapAmount, swapExactIn);
         assertGt(amountOut, 0);
         assertEq(amountIn, swapAmount);
+    }
+
+    function testFuzz_ComputeBalances(uint256 sqrtPmin, uint256 sqrtPmax, uint256 sqrtPspot, uint256 liquidity) public pure {
+        sqrtPmin = bound(sqrtPmin, 0.001e18, 10e18);
+        sqrtPmax = bound(sqrtPmax, sqrtPmin + 1, sqrtPmin * 3);
+        sqrtPspot = bound(sqrtPspot, sqrtPmin, sqrtPmax);
+        liquidity = bound(liquidity, sqrtPmin * sqrtPmax, type(uint128).max);
+
+        (uint256 balanceA, uint256 balanceB) = XYCConcentrateSwap.computeBalances(liquidity, sqrtPspot, sqrtPmin, sqrtPmax);
+        (uint256 actualLiquidity, uint256 actualSqrtPriceSpot) = XYCConcentrateSwap.computeLiquidityAndPrice(balanceA, balanceB, sqrtPmin, sqrtPmax);
+        assertApproxEqRel(actualSqrtPriceSpot, sqrtPspot, 1e6);
+        assertLe(actualLiquidity, liquidity);
+        assertApproxEqRel(actualLiquidity, liquidity, 1e6);
+    }
+
+    function testFuzz_ComputeLiquidityFromAmounts(uint256 sqrtPmin, uint256 sqrtPmax, uint256 sqrtPspot, uint256 availableA, uint256 availableB) public pure {
+        sqrtPmin = bound(sqrtPmin, 0.001e18, 10e18);
+        sqrtPmax = bound(sqrtPmax, sqrtPmin + 1, sqrtPmin * 3);
+        sqrtPspot = bound(sqrtPspot, sqrtPmin, sqrtPmax);
+        availableA = bound(availableA, 1e15, 10000e18);
+        availableB = bound(availableB, 1e15, 10000e18);
+
+        (uint256 liquidity, uint256 balanceA, uint256 balanceB) = XYCConcentrateSwap.computeLiquidityFromAmounts(availableA, availableB, sqrtPspot, sqrtPmin, sqrtPmax);
+        assertLe(balanceA, availableA);
+        assertLe(balanceB, availableB);
+
+        uint256 liquidityFromA = sqrtPmax > sqrtPspot ? Math.mulDiv(availableA, sqrtPspot * sqrtPmax, (sqrtPmax - sqrtPspot) * XYCConcentrateSwap.ONE) : type(uint).max;
+        uint256 liquidityFromB = sqrtPspot > sqrtPmin ? Math.mulDiv(availableB, XYCConcentrateSwap.ONE, sqrtPspot - sqrtPmin) : type(uint).max;
+
+        if (liquidityFromA < liquidityFromB) assertApproxEqRel(balanceA, availableA, 1e12);
+        else assertApproxEqRel(balanceB, availableB, 1e12);
+
+        (uint256 actualLiquidity, uint256 actualSqrtPriceSpot) = XYCConcentrateSwap.computeLiquidityAndPrice(balanceA, balanceB, sqrtPmin, sqrtPmax);
+        assertEq(actualLiquidity, liquidity);
+        assertApproxEqRel(actualSqrtPriceSpot, sqrtPspot, 1e12);
     }
 
     // TODO: Move this test to general SwapVM tests since it's not specific to XYCConcentrate

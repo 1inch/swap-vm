@@ -91,7 +91,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
             (setup.flatFeeBps) > 0 ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(setup.flatFeeBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // === Create Order ===

@@ -26,7 +26,7 @@ import {IProtocolFeeProvider} from "../src/instructions/interfaces/IProtocolFeeP
  *     // Other fees AFTER balances (flat, progressive)
  *     program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)),
  *     // Swap instruction
- *     program.build(Opcode.XYCSwap)
+ *     XYCSwap.build()
  * );
  * ```
  *

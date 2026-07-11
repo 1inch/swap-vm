@@ -29,7 +29,8 @@ import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
-import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCSwap } from "../src/instructions/XYCSwap.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { BestRouteSelector } from "../test/mocks/BestRouteSelector.sol";
 import { Program, ProgramBuilder, Opcode } from "../test/utils/ProgramBuilder.sol";
@@ -315,15 +316,14 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
-            p.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
     }
 
     function _vmProgramJustXYCConcentrate() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
-            p.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(0.1e18, 5e18))
+            XYCConcentrateSwap.build(0.1e18, 5e18)
         );
     }
 
@@ -369,7 +369,7 @@ contract GasSnapshotE2E is Script {
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
-            p.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
     }
 
@@ -379,7 +379,7 @@ contract GasSnapshotE2E is Script {
             DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
             Decay.build(155),
-            p.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
     }
 

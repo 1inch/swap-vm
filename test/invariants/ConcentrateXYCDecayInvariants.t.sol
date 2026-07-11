@@ -18,7 +18,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -71,7 +71,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 sqrtPmax
     ) internal view returns (uint256 balA, uint256 balB) {
         (, uint256 actualLt, uint256 actualGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            XYCConcentrateSwap.computeLiquidityFromAmounts(
                 available, available, 1e18, sqrtPmin, sqrtPmax
             );
         (balA, balB) = address(tokenA) < address(tokenB)
@@ -115,12 +115,10 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1000e18, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 300; // 5 minutes
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -160,12 +158,10 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 sqrtPmin = Math.sqrt(0.8e36);
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1500e18, sqrtPmin, sqrtPmax);
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

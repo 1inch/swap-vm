@@ -89,11 +89,10 @@ contract DecayTest is Test, OpcodesDebug {
     uint256 private orderNonce = 0;
 
     function createDecayOrder() internal returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(INITIAL_LIQUIDITY, INITIAL_LIQUIDITY),
             Decay.build(DECAY_PERIOD),
-            p.build(Opcode.XYCSwap, ""),
+            XYCSwap.build(),
             Salt.build(uint32(0x1000 + orderNonce++))
         );
 

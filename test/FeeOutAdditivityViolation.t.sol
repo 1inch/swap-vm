@@ -19,6 +19,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -354,7 +355,7 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE, BALANCE),
             program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
         return _createOrder(bytecode);
     }
@@ -364,7 +365,7 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE, BALANCE),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
         return _createOrder(bytecode);
     }

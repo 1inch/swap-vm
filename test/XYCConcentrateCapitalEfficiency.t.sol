@@ -15,7 +15,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -126,7 +126,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
-                p.build(Opcode.XYCSwap)
+                XYCSwap.build()
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -159,9 +159,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));

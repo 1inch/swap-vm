@@ -20,6 +20,7 @@ import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances
 import { Decay } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -110,7 +111,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -151,7 +152,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -193,7 +194,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             Decay.build(decayPeriod),
             program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -228,7 +229,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             Decay.build(decayPeriod),
             program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -277,7 +278,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -324,7 +325,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -370,7 +371,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

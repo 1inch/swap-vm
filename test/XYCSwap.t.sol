@@ -82,12 +82,12 @@ contract XYCSwapTest is Test, OpcodesDebug {
             bytecode = bytes.concat(
                 DynamicBalances.build(balanceA, balanceB),
                 program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
-                program.build(Opcode.XYCSwap)
+                XYCSwap.build()
             );
         } else {
             bytecode = bytes.concat(
                 DynamicBalances.build(balanceA, balanceB),
-                program.build(Opcode.XYCSwap)
+                XYCSwap.build()
             );
         }
 

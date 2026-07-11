@@ -63,10 +63,9 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         // MakerTraits requires tokenA < tokenB; balances are symmetric so ordering of values is irrelevant
         (address lowerToken, address higherToken) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
 
-        Program program;
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(ORDER_BALANCE, ORDER_BALANCE),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

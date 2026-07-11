@@ -24,7 +24,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -106,9 +106,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(balanceETH, balanceUSD),
                 feeInstruction,
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
-                )
+                XYCConcentrateSwap.build(sqrtPriceMin, sqrtPriceMax)
             )
         }));
 
@@ -159,7 +157,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 initialUSD = 2_010_000e18;
         uint256 initialETH = 1000e18;
 
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(targetSpotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 balanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;
@@ -207,7 +205,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 initialUSD = 4_000_000e18;
         uint256 initialETH = 1000e18;
 
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(targetSpotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 balanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;

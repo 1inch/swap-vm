@@ -18,6 +18,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -130,11 +131,10 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_DecayXYCHalfwayDecay() public {
         uint16 period = 120; // 2 minutes
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
             Decay.build(period),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -163,11 +163,10 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
      * Helper to test Decay + XYC with specific period
      */
     function _testDecayXYCWithPeriod(uint16 period) private {
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
             Decay.build(period),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

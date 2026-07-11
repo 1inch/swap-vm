@@ -30,9 +30,8 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
         TokenMock tokenA,
         TokenMock tokenB
     ) external view returns (ISwapVM.Order memory) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.XYCSwap),
+            XYCSwap.build(),
             Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 

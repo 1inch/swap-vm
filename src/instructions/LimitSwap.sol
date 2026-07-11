@@ -12,7 +12,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice LimitSwap opcode, linear swap in specified direction
-/// @dev Encoding: [bool swapDirection]
+/// @dev Encoding: [bool direction]
 library LimitSwap {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
@@ -38,17 +38,17 @@ library LimitSwap {
         require(direction == swapDirection, LimitSwapDirectionMismatch());
 
         if (ctx.query.isExactIn) {
-            // Floor division for tokenOut is desired behavior
+            // Floor division for tokenOut favors maker
             ctx.swap.amountOut = ctx.swap.amountIn * ctx.swap.balanceOut / ctx.swap.balanceIn;
         } else {
-            // Ceiling division for tokenIn is desired behavior
+            // Ceil division for tokenIn favors maker
             ctx.swap.amountIn = (ctx.swap.amountOut * ctx.swap.balanceIn).ceilDiv(ctx.swap.balanceOut);
         }
     }
 }
 
 /// @notice LimitSwapFullAmount opcode, swap balanceIn for balanceOut in specified direction
-/// @dev Encoding: [bool swapDirection]
+/// @dev Encoding: [bool direction]
 library LimitSwapFullAmount {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;

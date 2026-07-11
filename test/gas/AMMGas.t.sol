@@ -18,7 +18,8 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 
@@ -76,7 +77,7 @@ contract AMMGas is Test, OpcodesDebug {
         uint256 sqrtPmax
     ) internal view returns (uint256 balA, uint256 balB) {
         (, uint256 actualLt, uint256 actualGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            XYCConcentrateSwap.computeLiquidityFromAmounts(
                 available, available, 1e18, sqrtPmin, sqrtPmax
             );
         (balA, balB) = address(tokenA) < address(tokenB)
@@ -277,10 +278,9 @@ contract AMMGas is Test, OpcodesDebug {
     // ==================== Helper Functions ====================
 
     function _createXYCSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE_A, BALANCE_B),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -294,12 +294,9 @@ contract AMMGas is Test, OpcodesDebug {
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            )
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -313,12 +310,9 @@ contract AMMGas is Test, OpcodesDebug {
         uint256 sqrtPmax = Math.sqrt(1.4e36);
         (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            )
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -330,11 +324,10 @@ contract AMMGas is Test, OpcodesDebug {
     function _createDecayXYCSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint16 decayPeriod = 3600; // 1 hour decay period
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE_A, BALANCE_B),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -349,13 +342,10 @@ contract AMMGas is Test, OpcodesDebug {
         (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 3600;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
             Decay.build(decayPeriod),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            )
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -376,7 +366,7 @@ contract AMMGas is Test, OpcodesDebug {
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE_A, BALANCE_B),
             feeInstruction,
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -397,9 +387,7 @@ contract AMMGas is Test, OpcodesDebug {
             DynamicBalances.build(balA, balB),
             Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            )
+            XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

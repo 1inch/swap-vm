@@ -46,11 +46,10 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForDeadline(uint40 deadline) internal view returns (ISwapVM.Order memory) {
         // Build program with deadline check and XYC swap
-        Program program;
         bytes memory bytecode = bytes.concat(
             Deadline.build(deadline),
-            program.build(Opcode.XYCSwap),
-            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -140,11 +139,10 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForCheckNft() internal view returns (ISwapVM.Order memory) {
         // Build program with NFT gate check and XYC swap
-        Program program;
         bytes memory bytecode = bytes.concat(
             OnlyTakerTokenBalanceNonZero.build(address(nftGate)),
-            program.build(Opcode.XYCSwap),
-            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -234,11 +232,10 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForCheckNftTxOrigin() internal view returns (ISwapVM.Order memory) {
         // Build program with tx.origin NFT gate check and XYC swap
-        Program program;
         bytes memory bytecode = bytes.concat(
             OnlyTxOriginTokenBalanceNonZero.build(address(nftGate)),
-            program.build(Opcode.XYCSwap),
-            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua

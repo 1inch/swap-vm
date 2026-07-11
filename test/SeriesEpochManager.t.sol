@@ -15,6 +15,7 @@ import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { SeriesEpochManager, SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 
@@ -65,7 +66,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
             StaticBalances.build(1e18, 2e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            p.build(Opcode.Salt, abi.encodePacked(salt))
+            Salt.build(abi.encodePacked(salt))
         );
     }
 

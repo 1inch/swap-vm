@@ -14,7 +14,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -112,9 +112,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -194,7 +192,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
     /// @notice quote() and swap() must return identical amounts for an off-center pool.
     function _assertQuoteEqualsSwap(SpotSetup memory s) internal {
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             100_000e18, 100_000e18, s.sqrtPspot, s.sqrtPmin, s.sqrtPmax
         );
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, s.sqrtPmin, s.sqrtPmax);
@@ -258,7 +256,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 sqrtPmax,
         string memory label
     ) internal {
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             100_000e18, 100_000e18, sqrtPspot, sqrtPmin, sqrtPmax
         );
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
@@ -330,7 +328,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
     ) internal {
         uint256 avail = 100_000e18;
         (uint256 initialL, uint256 bLt, uint256 bGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
+            XYCConcentrateSwap.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
 
@@ -348,7 +346,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         _runBalancedRoundTrips(order, sig, swapSizeLt, swapSizeGt);
 
         bytes32 h = swapVM.hash(order);
-        (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
+        (uint256 finalL,) = XYCConcentrateSwap.computeLiquidityAndPrice(
             swapVM.balance(h, tokenLt),
             swapVM.balance(h, tokenGt),
             sqrtPmin,
@@ -449,9 +447,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -485,14 +481,14 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 availableLt = 100_000e18;
         uint256 availableGt = 100_000e18;
 
-        (, uint256 actualLt, uint256 actualGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 actualLt, uint256 actualGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             availableLt, availableGt, SQRT_P_SPOT_C, SQRT_P_MIN_C, SQRT_P_MAX_C
         );
         uint256 initialTVL = actualLt + actualGt;
 
         // Verify the implied spot equals 1.0 exactly
         (, uint256 impliedSqrtP) =
-            XYCConcentrateArgsBuilder.computeLiquidityAndPrice(actualLt, actualGt, SQRT_P_MIN_C, SQRT_P_MAX_C);
+            XYCConcentrateSwap.computeLiquidityAndPrice(actualLt, actualGt, SQRT_P_MIN_C, SQRT_P_MAX_C);
         assertApproxEqRel(impliedSqrtP, ONE, 1e15,
             "AsymmetricRange correct: implied sqrtPspot must be ~1e18");
 
@@ -519,9 +515,9 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         // Confirm the mismatch: implied P_spot != 1.0
         (, uint256 impliedSqrtP) =
-            XYCConcentrateArgsBuilder.computeLiquidityAndPrice(bLt, bGt, SQRT_P_MIN_C, SQRT_P_MAX_C);
+            XYCConcentrateSwap.computeLiquidityAndPrice(bLt, bGt, SQRT_P_MIN_C, SQRT_P_MAX_C);
         // impliedSqrtP ≈ 0.875e18  (P ≈ 0.766), well below 1.0
-        assertTrue(impliedSqrtP < ONE,
+        assertLt(impliedSqrtP, ONE,
             "AsymmetricRange wrong: implied sqrtPspot must be < 1 with equal balances");
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrderC(bLt, bGt, SQRT_P_MIN_C, SQRT_P_MAX_C);

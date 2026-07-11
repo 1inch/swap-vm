@@ -17,8 +17,9 @@ import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
+import { Salt } from "../../src/instructions/Controls.sol";
 import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
@@ -85,21 +86,18 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             // priceMin/priceMax are in 1e18 format; sqrtP = sqrt(price * 1e18)
             uint256 sqrtPmin = Math.sqrt(setup.priceMin * 1e18);
             uint256 sqrtPmax = Math.sqrt(setup.priceMax * 1e18);
-            concentrateProgram = p.build(
-                Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            );
+            concentrateProgram = XYCConcentrateSwap.build(sqrtPmin, sqrtPmax);
         }
 
         bytes memory swapProgram = concentrateProgram.length > 0
             ? concentrateProgram
-            : p.build(Opcode.XYCSwap);
+            : XYCSwap.build();
 
         return bytes.concat(
             setup.protocolFeeBps > 0 ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
             setup.feeInBps > 0 ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
             swapProgram,
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 

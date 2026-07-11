@@ -108,7 +108,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
             setup.flatOutFeeBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(setup.flatOutFeeBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // === Create Order ===

@@ -21,7 +21,8 @@ import { Salt } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
+import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
 import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
@@ -85,8 +86,6 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @dev Tests that runLoop properly advances PC and terminates
      */
     function test_RunLoopTermination() public {
-        Program program;
-
         // Create a valid program that properly terminates
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18),
@@ -95,7 +94,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             Salt.build(uint64(2)),
             // NestedRunLoop instruction
             Decay.build(3600),
-            program.build(Opcode.XYCSwap) // Terminal - computes amounts and stops
+            XYCSwap.build() // Terminal - computes amounts and stops
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -193,8 +192,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
             program.build(Opcode.RequireMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 3: MinRate → runLoop
-            program.build(Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(Math.sqrt(0.5e36), Math.sqrt(2.0e36))) // Level 4: XYCConcentrate (terminal)
+            XYCConcentrateSwap.build(Math.sqrt(0.5e36), Math.sqrt(2.0e36)) // Level 4: XYCConcentrate (terminal)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -208,12 +206,10 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test static context (quote mode) with nested runLoop
      */
     function test_NestedRunLoop_StaticContext() public {
-        Program program;
-
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18),
             Decay.build(3600),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -252,7 +248,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             bytecode,
             Decay.build(3600),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)),
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // Add more salts
@@ -276,7 +272,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         BestRouteSelector selector = new BestRouteSelector(address(aqua));
 
         // Strategy 1: XYC (constant product)
-        bytes memory strategy1 = program.build(Opcode.XYCSwap);
+        bytes memory strategy1 = XYCSwap.build();
 
         // Strategy 2: Pegged (optimized for stable pairs)
         bytes memory strategy2 = program.build(Opcode.PeggedSwap,

@@ -94,7 +94,7 @@ contract FeeTest is Test, OpcodesDebug {
             setup.feeOutBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // === Create Order ===
