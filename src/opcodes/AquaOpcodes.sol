@@ -18,7 +18,6 @@ import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 contract AquaOpcodes is
     XYCSwap,
     XYCConcentrate,
-    Decay,
     Fee,
     PeggedSwap,
     Extruction
@@ -40,7 +39,7 @@ contract AquaOpcodes is
         else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
         else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
-        else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
+        else if (opcode == Decay.opcode.asU8()) Decay.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.ProtocolFeeAmountIn)) Fee._protocolFeeAmountInXD(ctx, args);

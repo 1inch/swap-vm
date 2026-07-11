@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -133,8 +133,7 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(period)),
+            Decay.build(period),
             program.build(Opcode.XYCSwap)
         );
 
@@ -167,8 +166,7 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(period)),
+            Decay.build(period),
             program.build(Opcode.XYCSwap)
         );
 

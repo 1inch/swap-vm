@@ -19,7 +19,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
-import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../src/instructions/Balances.sol";
 
@@ -284,7 +284,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return bytes.concat(
             protocolFeeCode,
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.XYCConcentrateSwap,
                    defaultConcentrateArgs()),
@@ -310,7 +310,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return bytes.concat(
             protocolFeeCode,
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.XYCSwap),
             p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
@@ -336,7 +336,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return bytes.concat(
             protocolFeeCode,
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
             p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))

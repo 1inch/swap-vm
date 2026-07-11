@@ -20,7 +20,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
-import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 
@@ -49,7 +49,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     AquaSwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
-    Decay public decay;
     PeggedSwap public peggedSwap;
 
     // Addresses
@@ -67,7 +66,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
         swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
-        decay = Decay(address(swapVM));
         peggedSwap = PeggedSwap(address(swapVM));
 
         makerPrivateKey = 0x1234;
@@ -255,7 +253,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.XYCConcentrateSwap,
                    defaultConcentrateArgs()),
@@ -281,7 +279,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
             p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
@@ -305,7 +303,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
             p.build(Opcode.XYCSwap),
             p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))

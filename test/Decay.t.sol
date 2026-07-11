@@ -17,7 +17,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
-import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 
@@ -92,8 +92,7 @@ contract DecayTest is Test, OpcodesDebug {
         Program p;
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(INITIAL_LIQUIDITY, INITIAL_LIQUIDITY),
-            p.build(Opcode.Decay,
-                DecayArgsBuilder.build(DECAY_PERIOD)),
+            Decay.build(DECAY_PERIOD),
             p.build(Opcode.XYCSwap, ""),
             Salt.build(uint32(0x1000 + orderNonce++))
         );

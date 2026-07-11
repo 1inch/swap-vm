@@ -19,7 +19,7 @@ import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.so
 import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 import { WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
-import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, PiecewiseLinearScale } from "../src/instructions/PiecewiseLinearScale.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
@@ -378,7 +378,7 @@ contract GasSnapshotE2E is Script {
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
             p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
-            p.build(Opcode.Decay, DecayArgsBuilder.build(155)),
+            Decay.build(155),
             p.build(Opcode.XYCSwap)
         );
     }

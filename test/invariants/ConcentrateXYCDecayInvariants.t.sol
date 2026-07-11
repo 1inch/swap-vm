@@ -19,7 +19,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -118,8 +118,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
@@ -164,8 +163,7 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );

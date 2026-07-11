@@ -31,7 +31,6 @@ contract Opcodes is
     Invalidators,
     XYCSwap,
     XYCConcentrate,
-    Decay,
     MinRate,
     DutchAuction,
     BaseFeeAdjuster,
@@ -68,7 +67,7 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
         else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
-        else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
+        else if (opcode == Decay.opcode.asU8()) Decay.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == uint256(Opcode.RequireMinRate)) MinRate._requireMinRate1D(ctx, args);

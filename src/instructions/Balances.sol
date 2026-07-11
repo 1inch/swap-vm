@@ -42,8 +42,7 @@ library StaticBalances {
 
 /// @notice DynamicBalances opcode, set context token balances to storage values, initialized with specified values
 /// @dev Encoding: [uint256 balanceA, uint256 balanceB]
-/// @dev In quote mode reads storage but does not update it
-/// @dev The opcode is expected to be executed only once in strategy flow, multiple inclusions may lead to unexpected balances stored
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library DynamicBalances {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
@@ -87,13 +86,13 @@ library DynamicBalances {
         ctx.swap.balanceIn = balanceIn;
         ctx.swap.balanceOut = balanceOut;
 
-        ctx.runLoop();
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        balanceIn += ctx.swap.amountIn;
-        balanceOut -= ctx.swap.amountOut;
+        balanceIn += amountIn;
+        balanceOut -= amountOut;
+        require(balanceIn | balanceOut != 0, DynamicBalancesReachZero());
 
         if (!ctx.vm.isStaticContext) {
-            require(balanceIn | balanceOut != 0, DynamicBalancesReachZero());
             $.balance[ctx.query.orderHash][ctx.query.tokenIn] = balanceIn;
             $.balance[ctx.query.orderHash][ctx.query.tokenOut] = balanceOut;
         }

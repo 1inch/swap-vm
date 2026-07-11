@@ -19,7 +19,7 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
@@ -94,7 +94,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             Salt.build(uint64(1)),
             Salt.build(uint64(2)),
             // NestedRunLoop instruction
-            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            Decay.build(3600),
             program.build(Opcode.XYCSwap) // Terminal - computes amounts and stops
         );
 
@@ -189,7 +189,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18), // Level 0: DynamicBalances → runLoop
-            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
+            Decay.build(3600), // Level 1: Decay → runLoop
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
             program.build(Opcode.RequireMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 3: MinRate → runLoop
@@ -212,7 +212,7 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            Decay.build(3600),
             program.build(Opcode.XYCSwap)
         );
 
@@ -250,7 +250,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Add nested runLoop chain
         bytecode = bytes.concat(
             bytecode,
-            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            Decay.build(3600),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)),
             program.build(Opcode.XYCSwap)
         );

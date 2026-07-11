@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -107,8 +107,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(Opcode.XYCSwap)
@@ -149,8 +148,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(Opcode.XYCSwap)
@@ -192,8 +190,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(Opcode.XYCSwap)
@@ -228,8 +225,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
             program.build(Opcode.XYCSwap)
@@ -280,8 +276,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(Opcode.ProtocolFeeAmountIn,
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCSwap)
         );
 
@@ -328,8 +323,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCSwap)
         );
 
@@ -371,8 +365,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(Opcode.ProgressiveFeeOut,

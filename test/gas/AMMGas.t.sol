@@ -19,7 +19,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 
 /**
@@ -333,8 +333,7 @@ contract AMMGas is Test, OpcodesDebug {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE_A, BALANCE_B),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCSwap)
         );
 
@@ -353,8 +352,7 @@ contract AMMGas is Test, OpcodesDebug {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
             )
@@ -397,8 +395,7 @@ contract AMMGas is Test, OpcodesDebug {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)),
             program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)

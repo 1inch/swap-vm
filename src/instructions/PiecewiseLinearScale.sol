@@ -9,7 +9,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice Apply a piecewise-linear scale to the balance in (maker exact in)
+/// @notice PiecewiseLinearScaleBalanceIn opcode, apply a piecewise-linear scale to the balance in (maker exact in)
 ///   Applies initial scale before start and last scale after end
 /// @dev Scale formula `value * (scale + 1) / 2 ** 24`
 /// @dev To build a Dutch auction, start with 1.0 scale and decrease it over time
@@ -30,7 +30,7 @@ library PiecewiseLinearScaleBalanceIn {
     }
 }
 
-/// @notice Apply a piecewise-linear scale to the balance out (maker exact out)
+/// @notice PiecewiseLinearScaleBalanceOut opcode, apply a piecewise-linear scale to the balance out (maker exact out)
 ///   Applies initial scale before start and last scale after end
 /// @dev Scale formula `value * (scale + 1) / 2 ** 24`
 /// @dev To build a Dutch auction, start with a low scale and increase it over time to 1.0
