@@ -35,7 +35,7 @@ enum Opcode {
     // 0x10-0x1f | Debug: wired only into *Debug opcode sets
     /* 10 */ PrintSwapRegisters,
     /* 11 */ PrintSwapQuery,
-    /* 12 */ PrintContext,
+    /* 12 */ PrintVM,
     /* 13 */ PrintFreeMemoryPointer,
     /* 14 */ PrintGasLeft,
     /* 15 */ _15,

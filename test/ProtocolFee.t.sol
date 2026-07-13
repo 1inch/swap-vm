@@ -19,7 +19,6 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
-import { Debug } from "../src/instructions/Debug.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
