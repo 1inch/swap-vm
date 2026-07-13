@@ -18,7 +18,7 @@ import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
@@ -264,7 +264,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
     /// @dev condition -> staticBalances A or B -> limitswap
     function _buildProgram(WhitelistType whitelistType, uint256 length) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
 
         uint16 conditionLength;
         uint16 branchFLength = 2 + 64 + 2 + 2;
@@ -277,7 +277,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
 
             conditionLength = uint16(2 + 2 + length * 10);
-            condition = p.build(_whitelistCoequal, WhitelistArgsBuilder.buildWhitelistCoequal(conditionLength + branchFLength, allowedTakers));
+            condition = p.build(Opcode.WhitelistCoequal, WhitelistArgsBuilder.buildWhitelistCoequal(conditionLength + branchFLength, allowedTakers));
             assertEq(conditionLength, condition.length);
         } else if (whitelistType == WhitelistType.Sequential) {
             address[] memory allowedTakers = new address[](length);
@@ -286,19 +286,19 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) durations[i] = DURATIONS[i];
 
             conditionLength = uint16(7 + 2 + length * 12);
-            condition = p.build(_whitelistSequential, WhitelistArgsBuilder.buildWhitelistSequential(conditionLength + branchFLength, START, allowedTakers, durations));
+            condition = p.build(Opcode.WhitelistSequential, WhitelistArgsBuilder.buildWhitelistSequential(conditionLength + branchFLength, START, allowedTakers, durations));
             assertEq(conditionLength, condition.length);
         }
 
         bytes memory branchF = bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
-            p.build(_jump, ControlsArgsBuilder.buildJump(conditionLength + branchFLength + branchTLength))
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
+            p.build(Opcode.Jump, ControlsArgsBuilder.buildJump(conditionLength + branchFLength + branchTLength))
         );
         assertEq(branchFLength, branchF.length);
-        bytes memory branchT = p.build(_staticBalancesXD, BalancesArgsBuilder.build([BALANCE_A * 2, BALANCE_B]));
+        bytes memory branchT = p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A * 2, BALANCE_B]));
         assertEq(branchTLength, branchT.length);
 
-        bytes memory fin = p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenB), address(tokenA)));
+        bytes memory fin = p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenB), address(tokenA)));
         assertEq(finLength, fin.length);
 
         return bytes.concat(condition, branchF, branchT, fin);

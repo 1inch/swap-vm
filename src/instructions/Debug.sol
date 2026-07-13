@@ -14,16 +14,6 @@ import { Context, SwapRegisters } from "../libs/VM.sol";
 contract Debug {
     using CalldataPtrLib for CalldataPtr;
 
-    function _injectDebugOpcodes(function(Context memory, bytes calldata) internal[] memory opcodes) internal pure returns (function(Context memory, bytes calldata) internal[] memory) {
-        opcodes[0] = Debug._printSwapRegisters;
-        opcodes[1] = Debug._printSwapQuery;
-        opcodes[2] = Debug._printContext;
-        opcodes[3] = Debug._printFreeMemoryPointer;
-        opcodes[4] = Debug._printGasLeft;
-        opcodes[5] = Debug._patchSwapRegisters;
-        return opcodes;
-    }
-
     function _printSwapRegisters(Context memory ctx, bytes calldata /* args */) internal pure {
         console.log("ctx.swap => SwapRegisters {");
         console.log("    balanceIn:  ", ctx.swap.balanceIn, ",");

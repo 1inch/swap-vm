@@ -16,7 +16,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { dynamic } from "./utils/Dynamic.sol";
@@ -350,23 +350,23 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     }
 
     function _createOrderWithFlatFeeOut() private view returns (ISwapVM.Order memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
-            program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
+            program.build(Opcode.XYCSwap)
         );
         return _createOrder(bytecode);
     }
 
     function _createOrderWithFlatFeeIn() private view returns (ISwapVM.Order memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
-            program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
+            program.build(Opcode.XYCSwap)
         );
         return _createOrder(bytecode);
     }

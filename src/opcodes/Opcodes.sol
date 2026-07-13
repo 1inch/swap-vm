@@ -5,9 +5,8 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
 
-// Sorted by utility: core infrastructure first, then trading instructions
-// New instructions should be added at the end to maintain backward compatibility
 import { Controls } from "../instructions/Controls.sol";
 import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
@@ -51,134 +50,54 @@ contract Opcodes is
 
     constructor(address aqua) FeeExperimental(aqua) {}
 
-    function _notInstruction(Context memory /* ctx */, bytes calldata /* args */) internal view {}
-
     /// @notice Opcode direct dispatcher
-    /// @dev Indices MUST mirror {_opcodes} exactly
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
-        if (opcode == 10) Controls._jump(ctx, args);
-        else if (opcode == 11) Controls._jumpIfTokenIn(ctx, args);
-        else if (opcode == 12) Controls._jumpIfTokenOut(ctx, args);
-        else if (opcode == 13) Controls._deadline(ctx, args);
-        else if (opcode == 14) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
-        else if (opcode == 15) Controls._onlyTakerTokenBalanceGte(ctx, args);
-        else if (opcode == 16) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
-        else if (opcode == 17) Balances._staticBalancesXD(ctx, args);
-        else if (opcode == 18) Balances._dynamicBalancesXD(ctx, args);
-        else if (opcode == 19) Invalidators._invalidateBit1D(ctx, args);
-        else if (opcode == 20) Invalidators._invalidateTokenIn1D(ctx, args);
-        else if (opcode == 21) Invalidators._invalidateTokenOut1D(ctx, args);
-        else if (opcode == 22) XYCSwap._xycSwapXD(ctx, args);
-        else if (opcode == 23) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
-        else if (opcode == 24) Decay._decayXD(ctx, args);
-        else if (opcode == 25) LimitSwap._limitSwap1D(ctx, args);
-        else if (opcode == 26) LimitSwap._limitSwapOnlyFull1D(ctx, args);
-        else if (opcode == 27) MinRate._requireMinRate1D(ctx, args);
-        else if (opcode == 28) MinRate._adjustMinRate1D(ctx, args);
-        else if (opcode == 29) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
-        else if (opcode == 30) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
-        else if (opcode == 31) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
-        else if (opcode == 32) TWAPSwap._twap(ctx, args);
-        else if (opcode == 33) Extruction._extruction(ctx, args);
-        else if (opcode == 34) Controls._salt(ctx, args);
-        else if (opcode == 35) Fee._flatFeeAmountInXD(ctx, args);
-        else if (opcode == 36) FeeExperimental._flatFeeAmountOutXD(ctx, args);
-        else if (opcode == 37) FeeExperimental._progressiveFeeInXD(ctx, args);
-        else if (opcode == 38) FeeExperimental._progressiveFeeOutXD(ctx, args);
-        else if (opcode == 39) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
-        else if (opcode == 40) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
-        else if (opcode == 41) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
-        else if (opcode == 42) Fee._protocolFeeAmountInXD(ctx, args);
-        else if (opcode == 43) Fee._aquaProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == 44) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == 45) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == 46) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
-        else if (opcode == 47) Whitelist._privateOrder(ctx, args);
-        else if (opcode == 48) Whitelist._whitelistCoequal(ctx, args);
-        else if (opcode == 49) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
-        else if (opcode == 50) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        else if (opcode == 51) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
-        else if (opcode == 52) Whitelist._whitelistSequential(ctx, args);
+             if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
+        else if (opcode == uint256(Opcode.Stop)) Controls._stop(ctx, args);
+        else if (opcode == uint256(Opcode.Revert)) Controls._revert(ctx, args);
+        else if (opcode == uint256(Opcode.JumpIfDirection)) Controls._jumpIfDirection(ctx, args);
+        else if (opcode == uint256(Opcode.JumpIfTokenIn)) Controls._jumpIfTokenIn(ctx, args);
+        else if (opcode == uint256(Opcode.JumpIfTokenOut)) Controls._jumpIfTokenOut(ctx, args);
+        else if (opcode == uint256(Opcode.Deadline)) Controls._deadline(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceNonZero)) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceGte)) Controls._onlyTakerTokenBalanceGte(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTakerTokenSupplyShareGte)) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
+        else if (opcode == uint256(Opcode.StaticBalances)) Balances._staticBalancesXD(ctx, args);
+        else if (opcode == uint256(Opcode.DynamicBalances)) Balances._dynamicBalancesXD(ctx, args);
+        else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
+        else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
+        else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
+        else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
+        else if (opcode == uint256(Opcode.LimitSwap)) LimitSwap._limitSwap1D(ctx, args);
+        else if (opcode == uint256(Opcode.LimitSwapFullAmount)) LimitSwap._limitSwapOnlyFull1D(ctx, args);
+        else if (opcode == uint256(Opcode.RequireMinRate)) MinRate._requireMinRate1D(ctx, args);
+        else if (opcode == uint256(Opcode.AdjustMinRate)) MinRate._adjustMinRate1D(ctx, args);
+        else if (opcode == uint256(Opcode.DutchAuctionBalanceIn)) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
+        else if (opcode == uint256(Opcode.DutchAuctionBalanceOut)) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
+        else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
+        else if (opcode == uint256(Opcode.TWAPSwap)) TWAPSwap._twap(ctx, args);
+        else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
+        else if (opcode == uint256(Opcode.Salt)) Controls._salt(ctx, args);
+        else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
+        else if (opcode == uint256(Opcode.FlatFeeAmountOut)) FeeExperimental._flatFeeAmountOutXD(ctx, args);
+        else if (opcode == uint256(Opcode.ProgressiveFeeIn)) FeeExperimental._progressiveFeeInXD(ctx, args);
+        else if (opcode == uint256(Opcode.ProgressiveFeeOut)) FeeExperimental._progressiveFeeOutXD(ctx, args);
+        else if (opcode == uint256(Opcode.ProtocolFeeAmountOut)) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
+        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountOut)) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
+        else if (opcode == uint256(Opcode.PeggedSwap)) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
+        else if (opcode == uint256(Opcode.ProtocolFeeAmountIn)) Fee._protocolFeeAmountInXD(ctx, args);
+        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountIn)) Fee._aquaProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == uint256(Opcode.ValidateSeriesEpoch)) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
+        else if (opcode == uint256(Opcode.PrivateOrder)) Whitelist._privateOrder(ctx, args);
+        else if (opcode == uint256(Opcode.WhitelistCoequal)) Whitelist._whitelistCoequal(ctx, args);
+        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceIn)) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
+        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceOut)) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
+        else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
+        else if (opcode == uint256(Opcode.WhitelistSequential)) Whitelist._whitelistSequential(ctx, args);
         else revert UnknownOpcode(opcode);
-    }
-
-    function _opcodes() internal pure virtual returns (function(Context memory, bytes calldata) internal[] memory result) {
-        function(Context memory, bytes calldata) internal[54] memory instructions = [
-            _notInstruction,
-            // Debug - reserved for debugging utilities (core infrastructure)
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            _notInstruction,
-            // Controls - control flow (core infrastructure)
-            Controls._jump,
-            Controls._jumpIfTokenIn,
-            Controls._jumpIfTokenOut,
-            Controls._deadline,
-            Controls._onlyTakerTokenBalanceNonZero,
-            Controls._onlyTakerTokenBalanceGte,
-            Controls._onlyTakerTokenSupplyShareGte,
-            // Balances - balance operations (for AMMs or any other strategies)
-            Balances._staticBalancesXD,
-            Balances._dynamicBalancesXD,
-            // Invalidators - order invalidation (order management)
-            Invalidators._invalidateBit1D,
-            Invalidators._invalidateTokenIn1D,
-            Invalidators._invalidateTokenOut1D,
-            // XYCSwap - basic swap (most common swap type)
-            XYCSwap._xycSwapXD,
-            // XYCConcentrate - liquidity concentration (common AMM feature)
-            XYCConcentrate._xycConcentrateGrowLiquidity2D,
-            // Decay - Decay AMM (specific AMM)
-            Decay._decayXD,
-            // LimitSwap - limit orders (specific trading type)
-            LimitSwap._limitSwap1D,
-            LimitSwap._limitSwapOnlyFull1D,
-            // MinRate - minimum exchange rate enforcement (common trading requirement)
-            MinRate._requireMinRate1D,
-            MinRate._adjustMinRate1D,
-            // DutchAuction - auction mechanism with limit order and time decay (specific trading type)
-            DutchAuction._dutchAuctionBalanceIn1D,
-            DutchAuction._dutchAuctionBalanceOut1D,
-            // BaseFeeAdjuster - gas-based price adjustment (dynamic pricing)
-            BaseFeeAdjuster._baseFeeAdjuster1D,
-            // TWAPSwap - TWAP trading (complex trading strategy)
-            TWAPSwap._twap,
-            // NOTE: Add new instructions here to maintain backward compatibility
-            Extruction._extruction,
-            Controls._salt,
-            Fee._flatFeeAmountInXD,
-            FeeExperimental._flatFeeAmountOutXD,
-            FeeExperimental._progressiveFeeInXD,
-            FeeExperimental._progressiveFeeOutXD,
-            FeeExperimental._protocolFeeAmountOutXD,
-            FeeExperimental._aquaProtocolFeeAmountOutXD,
-            PeggedSwap._peggedSwapGrowPriceRange2D,
-            Fee._protocolFeeAmountInXD,
-            Fee._aquaProtocolFeeAmountInXD,
-            Fee._dynamicProtocolFeeAmountInXD,
-            Fee._aquaDynamicProtocolFeeAmountInXD,
-            SeriesEpochManager._validateSeriesEpochXD,
-            Whitelist._privateOrder,
-            Whitelist._whitelistCoequal,
-            PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D,
-            PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D,
-            Controls._onlyTxOriginTokenBalanceNonZero,
-            Whitelist._whitelistSequential
-        ];
-
-        // Efficiently turning static memory array into dynamic memory array
-        // by rewriting _notInstruction with array length, so it's excluded from the result
-        uint256 instructionsArrayLength = instructions.length - 1;
-        assembly ("memory-safe") {
-            result := instructions
-            mstore(result, instructionsArrayLength)
-        }
     }
 }

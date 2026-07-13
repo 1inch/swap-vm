@@ -17,7 +17,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentratePnLTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
@@ -88,7 +88,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -110,9 +110,9 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
+                p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )
@@ -424,7 +424,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -446,9 +446,9 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
-                p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
+                p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )

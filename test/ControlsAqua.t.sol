@@ -16,7 +16,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { MockNFT } from "./mocks/MockNft.sol";
@@ -46,11 +46,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForDeadline(uint40 deadline) internal view returns (ISwapVM.Order memory) {
         // Build program with deadline check and XYC swap
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._deadline, ControlsArgsBuilder.buildDeadline(deadline)),
-            program.build(XYCSwap._xycSwapXD),
-            program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            program.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(deadline)),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -142,11 +142,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForCheckNft() internal view returns (ISwapVM.Order memory) {
         // Build program with NFT gate check and XYC swap
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
-            program.build(XYCSwap._xycSwapXD),
-            program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            program.build(Opcode.OnlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -236,11 +236,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForCheckNftTxOrigin() internal view returns (ISwapVM.Order memory) {
         // Build program with tx.origin NFT gate check and XYC swap
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._onlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
-            program.build(XYCSwap._xycSwapXD),
-            program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            program.build(Opcode.OnlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua

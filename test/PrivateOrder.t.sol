@@ -21,6 +21,7 @@ import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.s
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { Opcode } from "../src/libs/OpcodeList.sol";
 
 /// @title Whitelist tests
 contract PrivateOrderTest is Test, LimitOpcodesDebug {
@@ -78,11 +79,11 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
 
     /// @dev whitelist -> staticBalances -> limitswap
     function _buildProgram() internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory code = bytes.concat(
-            p.build(_privateOrder, WhitelistArgsBuilder.buildPrivateOrder(ALLOWED_TAKER)),
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(ALLOWED_TAKER)),
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
         return code;
