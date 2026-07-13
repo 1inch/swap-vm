@@ -16,7 +16,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   To correctly build order based on "maker receives at least" value, initial order balance in should be calculated as
 ///   `PiecewiseLinearScale.unscaleValue(minBalanceIn, lowestScale)`
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with `InvalidateTokenIn` because it relies on `ctx.swap.balanceIn` which is modified here
+/// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library PiecewiseLinearScaleBalanceIn {
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceIn;
 
@@ -37,7 +37,7 @@ library PiecewiseLinearScaleBalanceIn {
 ///   To correctly build order based on "maker pays at max" value, set initial order balance to the value,
 ///   it would be reached at 1.0 scale
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with `InvalidateTokenOut` because it relies on `ctx.swap.balanceOut` which is modified here
+/// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library PiecewiseLinearScaleBalanceOut {
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceOut;
 
@@ -77,12 +77,12 @@ library PiecewiseLinearScale {
     }
 
     function parsePointScale(bytes calldata args, uint256 n) internal pure returns (uint24 scale) {
-        // Skip [start, n * [scale[k], duration[k]]
+        // Skip [start, n * [scale[k], duration[k]]]
         unchecked { scale = args.at(5 + 5 * n).asU24(); }
     }
 
     function parseIntervalDuration(bytes calldata args, uint256 n) internal pure returns (uint16 duration) {
-        // Skip [start, scale[0], n * [duration[k], scale[k + 1]]
+        // Skip [start, scale[0], n * [duration[k], scale[k + 1]]]
         unchecked { duration = args.at((5 + 3) + 5 * n).asU16(); }
     }
 

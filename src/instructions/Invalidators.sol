@@ -41,7 +41,7 @@ library InvalidateBit {
 
     function exec(Context memory ctx, bytes calldata args) internal {
         Storage storage $ = store();
-        uint256 bitIndex = parse(args);
+        uint32 bitIndex = parse(args);
         uint256 slot = bitIndex >> 8;
 
         uint256 bitmap = $.bitmap[ctx.query.maker][slot];
@@ -73,7 +73,7 @@ contract InvalidateBitExternal {
         emit InvalidateBitUpdated(msg.sender, slot, newSlotValue);
     }
 
-    function invalidateBits(uint248 slot, uint256 mask) external {
+    function invalidateBits(uint256 slot, uint256 mask) external {
         InvalidateBit.Storage storage $ = InvalidateBit.store();
 
         uint256 newSlotValue = $.bitmap[msg.sender][slot] | mask;

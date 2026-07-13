@@ -35,8 +35,8 @@ library RequireMinRate {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 rateIn;
-        uint256 rateOut;
+        uint64 rateIn;
+        uint64 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
         else (rateOut, rateIn) = parse(args);
 
@@ -71,8 +71,8 @@ library AdjustMinRate {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 rateIn;
-        uint256 rateOut;
+        uint64 rateIn;
+        uint64 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
         else (rateOut, rateIn) = parse(args);
 

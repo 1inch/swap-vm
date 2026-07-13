@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { SeriesEpochManager, SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
+import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../src/instructions/SeriesEpochManager.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -61,9 +61,8 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
     /// @dev Program: validate (seriesId, epoch) -> staticBalances -> limitSwap
     function _epochProgram(uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
-            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
+            ValidateSeriesEpoch.build(seriesId, epoch),
             StaticBalances.build(1e18, 2e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
             Salt.build(abi.encodePacked(salt))
@@ -284,7 +283,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
     function test_SeriesEpochManager_AdvanceZeroReverts() public {
         vm.prank(maker);
-        vm.expectRevert(SeriesEpochManager.SeriesEpochManagerAdvanceEpochFailed.selector);
+        vm.expectRevert(ValidateSeriesEpochExternal.SeriesEpochAdvanceFailed.selector);
         swapVM.seriesEpochAdvance(0, 0);
 
         assertEq(swapVM.seriesEpoch(maker, 0), 0);
@@ -368,10 +367,10 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             assertEq(amountOutQuote, amountOutSwap);
             assertGt(amountOutSwap, 0);
         } else {
-            vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
+            vm.expectPartialRevert(ValidateSeriesEpoch.ValidateSeriesEpochWrongEpoch.selector);
             swapVM.quote(order, AMOUNT_IN, takerData);
 
-            vm.expectPartialRevert(SeriesEpochManager.SeriesEpochManagerWrongEpoch.selector);
+            vm.expectPartialRevert(ValidateSeriesEpoch.ValidateSeriesEpochWrongEpoch.selector);
             vm.prank(address(this));
             swapVM.swap(order, AMOUNT_IN, takerData);
         }

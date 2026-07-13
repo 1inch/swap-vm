@@ -257,7 +257,7 @@ library OnlyTxOriginTokenBalanceNonZero {
         token = args.at(0).asAddress();
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
+    function exec(Context memory, bytes calldata args) internal view {
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(tx.origin);
         require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));

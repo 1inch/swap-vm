@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
-import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
+import { PrivateOrder } from "../src/instructions/Whitelist.sol";
 import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
@@ -73,15 +73,14 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
         swapVM.quote(order, SWAP_AMOUNT, takerData);
 
         vm.prank(BAD_TAKER);
-        vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
+        vm.expectRevert(PrivateOrder.PrivateOrderInvalidTaker.selector);
         swapVM.quote(order, SWAP_AMOUNT, takerData);
     }
 
     /// @dev whitelist -> staticBalances -> limitswap
     function _buildProgram() internal view returns (bytes memory) {
-        Program p;
         bytes memory code = bytes.concat(
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(ALLOWED_TAKER)),
+            PrivateOrder.build(ALLOWED_TAKER),
             StaticBalances.build(BALANCE_A, BALANCE_B),
             LimitSwap.build(address(tokenA), address(tokenB))
         );

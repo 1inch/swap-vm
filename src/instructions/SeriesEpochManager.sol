@@ -4,71 +4,80 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library SeriesEpochManagerArgsBuilder {
-    using Calldata for bytes;
+/// @notice ValidateSeriesEpoch opcode, requires the maker's current epoch for the series to match the epoch specified in the order
+///   Each maker keeps an independent, monotonically increasing epoch per seriesId, advancing a series epoch cancels the whole batch
+///   of orders pinned to it, orders can be planned for future epochs
+/// @dev Encoding: [uint32 seriesId, uint32 epoch]
+library ValidateSeriesEpoch {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    function buildEpochValidation(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
-        return abi.encodePacked(seriesId, epoch);
+    error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
+
+    Opcode constant opcode = Opcode.ValidateSeriesEpoch;
+
+    function build(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(seriesId, epoch);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 seriesId, uint256 epoch) {
-        seriesId = uint32(bytes4(args));
-        epoch = uint32(bytes4(args.slice(4)));
+    function parse(bytes calldata args) internal pure returns (uint32 seriesId, uint32 epoch) {
+        seriesId = args.at(0).asU32();
+        epoch = args.at(4).asU32();
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(uint256 seriesId => uint256)) epoch;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.ValidateSeriesEpoch")) - 1)) & ~bytes32(uint256(0xff));
+        assembly { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal view {
+        ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
+        (uint32 seriesId, uint32 expectedEpoch) = parse(args);
+
+        uint256 currentEpoch = $.epoch[ctx.query.maker][seriesId];
+        require(currentEpoch == expectedEpoch, ValidateSeriesEpochWrongEpoch(ctx.query.maker, seriesId, expectedEpoch, currentEpoch));
     }
 }
 
-/**
- * @notice Managing epoch for series of orders, an order is executable only at specified epoch
- * @dev Each maker keeps an independent, monotonically increasing epoch per `seriesId`
- * An order pins itself to a `(seriesId, epoch)` via the `_validateSeriesEpochXD` instruction
- * - The maker can cancel a whole batch at once by advancing that series' epoch
- * - The maker can plan orders for future epochs
- * - The maker can move over epochs sequentially or skip up to 254 epochs
- */
-contract SeriesEpochManager {
-    using ContextLib for Context;
+contract ValidateSeriesEpochExternal {
+    error SeriesEpochAdvanceFailed();
 
-    error SeriesEpochManagerWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
-    error SeriesEpochManagerAdvanceEpochFailed();
+    event SeriesEpochIncreased(address indexed maker, uint256 indexed seriesId, uint256 newEpoch);
 
-    event SeriesEpochManagerEpochIncreased(address indexed maker, uint256 series, uint256 newEpoch);
+    function seriesEpoch(address maker, uint256 seriesId) external view returns (uint256) {
+        ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
+        return $.epoch[maker][seriesId];
+    }
 
-    /// @notice Current epoch per maker per series. Orders pinned to a lower epoch are invalidated
-    mapping(address maker => mapping(uint256 seriesId => uint256 epoch)) public seriesEpoch;
-
-    /// @notice Advances the caller's epoch for `seriesId` by one (invalidates the current epoch)
+    /// @notice Advances the caller's epoch for seriesId by one (invalidates the current epoch)
     function seriesEpochIncrease(uint256 seriesId) external {
-        unchecked {
-            uint256 newEpoch = ++seriesEpoch[msg.sender][seriesId];
+        ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
 
-            emit SeriesEpochManagerEpochIncreased(msg.sender, seriesId, newEpoch);
+        unchecked {
+            uint256 newEpoch = ++$.epoch[msg.sender][seriesId];
+            emit SeriesEpochIncreased(msg.sender, seriesId, newEpoch);
         }
     }
 
-    /// @notice Advances the caller's epoch for `seriesId` by `amount` (invalidates multiple epochs at once)
-    /// @dev `amount` is bounded to [1, 255]
+    /// @notice Advances the caller's epoch for seriesId by amount in [1, 255] (invalidates multiple epochs at once)
     function seriesEpochAdvance(uint256 seriesId, uint8 amount) external {
-        if (amount == 0) revert SeriesEpochManagerAdvanceEpochFailed();
+        require(amount > 0, SeriesEpochAdvanceFailed());
+        ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
+
         unchecked {
-            uint256 newEpoch = seriesEpoch[msg.sender][seriesId] + amount;
-            seriesEpoch[msg.sender][seriesId] = newEpoch;
-
-            emit SeriesEpochManagerEpochIncreased(msg.sender, seriesId, newEpoch);
+            uint256 newEpoch = $.epoch[msg.sender][seriesId] + amount;
+            $.epoch[msg.sender][seriesId] = newEpoch;
+            emit SeriesEpochIncreased(msg.sender, seriesId, newEpoch);
         }
-    }
-
-    /// @notice Requires the maker's current epoch for the order's series to match the epoch specified in the order
-    /// @dev The instruction does not affect swap registers or state, it could be used in whatever place of the program
-    /// @dev The instruction is compatible with any order type
-    /// @param args.seriesId | 4 bytes (uint32)
-    /// @param args.epoch    | 4 bytes (uint32)
-    function _validateSeriesEpochXD(Context memory ctx, bytes calldata args) internal view {
-        (uint256 seriesId, uint256 expectedEpoch) = SeriesEpochManagerArgsBuilder.parse(args);
-
-        uint256 currentEpoch = seriesEpoch[ctx.query.maker][seriesId];
-        require(currentEpoch == expectedEpoch, SeriesEpochManagerWrongEpoch(ctx.query.maker, seriesId, expectedEpoch, currentEpoch));
     }
 }

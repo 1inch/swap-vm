@@ -63,7 +63,7 @@ contract Debug {
             bytes memory buffer = new bytes(2 + data.length * 2);
             buffer[0] = "0";
             buffer[1] = "x";
-            for (uint256 i = 0; i < data.length; i++) {
+            for (uint256 i; i < data.length; i++) {
                 buffer[2 + i * 2] = digits[uint8(data[i] >> 4)];
                 buffer[2 + i * 2 + 1] = digits[uint8(data[i] & 0x0f)];
             }

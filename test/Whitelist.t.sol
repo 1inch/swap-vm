@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
-import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
+import { WhitelistCoequal, WhitelistSequential } from "../src/instructions/Whitelist.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
@@ -186,7 +186,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
                     // Taker not listed yet
                     vm.warp(ts - 1);
                     vm.prank(ALLOWED_TAKERS[i]);
-                    vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                    vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                     swapVM.quote(order, SWAP_AMOUNT, takerData);
                 }
                 {
@@ -203,17 +203,17 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             if (length < 20 && DURATIONS[length - 1] != 0) {
                 // The next, unlisted entry still reverts
                 vm.prank(ALLOWED_TAKERS[length]);
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
 
                 // Aliens are not allowed
                 vm.prank(address(0xaffacfed));
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
             } else if (length == 20) {
                 // During the last duration aliens are still not allowed
                 vm.prank(address(0xaffacfed));
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
 
                 // All durations passed, any unlisted pass through branchF
@@ -277,7 +277,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
 
             conditionLength = uint16(2 + 2 + length * 10);
-            condition = p.build(Opcode.WhitelistCoequal, WhitelistArgsBuilder.buildWhitelistCoequal(conditionLength + branchFLength, allowedTakers));
+            condition = WhitelistCoequal.build(conditionLength + branchFLength, allowedTakers);
             assertEq(conditionLength, condition.length);
         } else if (whitelistType == WhitelistType.Sequential) {
             address[] memory allowedTakers = new address[](length);
@@ -286,7 +286,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) durations[i] = DURATIONS[i];
 
             conditionLength = uint16(7 + 2 + length * 12);
-            condition = p.build(Opcode.WhitelistSequential, WhitelistArgsBuilder.buildWhitelistSequential(conditionLength + branchFLength, START, allowedTakers, durations));
+            condition = WhitelistSequential.build(conditionLength + branchFLength, START, allowedTakers, durations);
             assertEq(conditionLength, condition.length);
         }
 

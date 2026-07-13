@@ -17,8 +17,8 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
-import { WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
-import { SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
+import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../src/instructions/Whitelist.sol";
+import { ValidateSeriesEpoch } from "../src/instructions/SeriesEpochManager.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, PiecewiseLinearScale } from "../src/instructions/PiecewiseLinearScale.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
@@ -190,7 +190,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(10, 0))
+            ValidateSeriesEpoch.build(10, 0)
         );
     }
 
@@ -198,7 +198,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker))
+            PrivateOrder.build(taker)
         );
     }
 
@@ -343,20 +343,18 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramLimitOrderPrivate() internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker)),
+            PrivateOrder.build(taker),
             InvalidateBit.build(13),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramLimitEpochPartial() internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
-            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
+            ValidateSeriesEpoch.build(55, 0),
             InvalidateTokenIn.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
