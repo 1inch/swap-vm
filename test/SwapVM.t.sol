@@ -17,7 +17,7 @@ import { TakerTraitsLib, TakerTraits } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { Invalidators, InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -86,11 +86,10 @@ contract SwapVMTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
             StaticBalances.build(setup.balanceA, setup.balanceB),
             LimitSwap.build(setup.tokenIn, setup.tokenOut),
-            setup.useInvalidator ? p.build(Opcode.InvalidateTokenOut) : bytes(""),
+            setup.useInvalidator ? InvalidateTokenOut.build() : bytes(""),
             setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 

@@ -21,11 +21,11 @@ import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { TWAPSwap, TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
-import { MinRateArgsBuilder } from "../../src/instructions/MinRate.sol";
+import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
 import { Salt, Deadline } from "../../src/instructions/Controls.sol";
-import { InvalidatorsArgsBuilder } from "../../src/instructions/Invalidators.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
 
 /**
  * @title LimitSwapGas
@@ -457,11 +457,9 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint64 rateA = 1e8; // 1 tokenA
         uint64 rateB = 1.5e8; // 1.5 tokenB per tokenA
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(BALANCE_A, BALANCE_B),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -594,10 +592,8 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createInvalidateBitLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint32 bitIndex = 42;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
+            InvalidateBit.build(bitIndex),
             StaticBalances.build(BALANCE_A, BALANCE_B),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -609,11 +605,10 @@ contract LimitSwapGas is Test, OpcodesDebug {
     }
 
     function _createLimitSwapInvalidateTokenInOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(BALANCE_A, BALANCE_B),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenIn)
+            InvalidateTokenIn.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -635,7 +630,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenIn)
+            InvalidateTokenIn.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

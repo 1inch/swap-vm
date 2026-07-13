@@ -4,133 +4,194 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library InvalidatorsArgsBuilder {
-    using Calldata for bytes;
+/// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
+/// @dev Encoding: [uint32 bitIndex]
+library InvalidateBit {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    function buildInvalidateBit(uint32 bitIndex) internal pure returns (bytes memory) {
-        return abi.encodePacked(bitIndex);
+    using ContextLib for Context;
+
+    error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
+
+    Opcode constant opcode = Opcode.InvalidateBit;
+
+    function build(uint32 bitIndex) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(bitIndex);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function parseBitIndex(bytes calldata args) internal pure returns (uint256 bitIndex) {
-        bitIndex = uint32(bytes4(args));
+    function parse(bytes calldata args) internal pure returns (uint32 bitIndex) {
+        bitIndex = args.at(0).asU32();
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(uint256 slotIndex => uint256)) bitmap;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateBit")) - 1)) & ~bytes32(uint256(0xff));
+        assembly { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
+        uint256 bitIndex = parse(args);
+        uint256 slot = bitIndex >> 8;
+
+        uint256 bitmap = $.bitmap[ctx.query.maker][slot];
+        uint256 bit = 1 << (bitIndex & 0xff);
+        require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
+
+        ctx.runLoop();
+
+        if (!ctx.vm.isStaticContext) {
+            $.bitmap[ctx.query.maker][slot] |= bit;
+        }
     }
 }
 
-/// @title Invalidators - Order invalidation mechanisms for SwapVM
-/// @notice Provides mechanisms to track and prevent order replay or overfilling
-/// @dev Supports three invalidation strategies: bit-based, token-in based, and token-out based
-contract Invalidators {
-    using ContextLib for Context;
+contract InvalidateBitExternal {
+    event InvalidateBitUpdated(address indexed maker, uint256 slotIndex, uint256 slotValue);
 
-    error InvalidatorsBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
-
-    error InvalidatorsTokenInExceeded(uint256 prefilled, uint256 amountIn, uint256 balanceIn);
-    error InvalidateTokenInExpectsAmountInToBeComputed();
-
-    error InvalidatorsTokenOutExceeded(uint256 prefilled, uint256 amountOut, uint256 balanceOut);
-    error InvalidateTokenOutExpectsAmountOutToBeComputed();
-
-    event InvalidatorsBitUpdated(address indexed maker, uint256 slotIndex, uint256 slotValue);
-    event InvalidatorsTokenInFilled(address indexed maker, bytes32 orderHash);
-    event InvalidatorsTokenOutFilled(address indexed maker, bytes32 orderHash);
-
-    mapping(address maker =>
-        mapping(uint256 slotIndex => uint256 bitmap)) public bitInvalidators;
-
-    mapping(address maker =>
-        mapping(bytes32 orderHash =>
-            mapping(address token => uint256 filled))) public tokenInInvalidators;
-
-    mapping(address maker =>
-        mapping(bytes32 orderHash =>
-            mapping(address token => uint256 filled))) public tokenOutInvalidators;
+    function bitInvalidators(address maker, uint256 slotIndex) external view returns (uint256) {
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
+        return $.bitmap[maker][slotIndex];
+    }
 
     function invalidateBit(uint256 bitIndex) external {
-        uint256 slot = bitIndex >> 8;
-        uint256 newSlotValue = bitInvalidators[msg.sender][slot] | (1 << (bitIndex & 0xFF));
-        bitInvalidators[msg.sender][slot] = newSlotValue;
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
 
-        emit InvalidatorsBitUpdated(msg.sender, slot, newSlotValue);
+        uint256 slot = bitIndex >> 8;
+        uint256 newSlotValue = $.bitmap[msg.sender][slot] | (1 << (bitIndex & 0xff));
+        $.bitmap[msg.sender][slot] = newSlotValue;
+        emit InvalidateBitUpdated(msg.sender, slot, newSlotValue);
     }
 
     function invalidateBits(uint248 slot, uint256 mask) external {
-        uint256 newSlotValue = bitInvalidators[msg.sender][slot] | mask;
-        bitInvalidators[msg.sender][slot] = newSlotValue;
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
 
-        emit InvalidatorsBitUpdated(msg.sender, slot, newSlotValue);
+        uint256 newSlotValue = $.bitmap[msg.sender][slot] | mask;
+        $.bitmap[msg.sender][slot] = newSlotValue;
+        emit InvalidateBitUpdated(msg.sender, slot, newSlotValue);
+    }
+}
+
+/// @notice InvalidateTokenIn opcode, bounds cumulative amount in across all fills by the strategy balance in
+///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
+/// @dev Encoding: []
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library InvalidateTokenIn {
+    using ContextLib for Context;
+
+    error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
+
+    Opcode constant opcode = Opcode.InvalidateTokenIn;
+
+    function build() internal pure returns (bytes memory) {
+        return InstructionBuilder.build(opcode);
     }
 
-    function invalidateTokenIn(bytes32 orderHash, address tokenIn) external {
-        tokenInInvalidators[msg.sender][orderHash][tokenIn] = type(uint256).max;
-
-        emit InvalidatorsTokenInFilled(msg.sender, orderHash);
+    struct Storage {
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
     }
 
-    function invalidateTokenOut(bytes32 orderHash, address tokenOut) external {
-        tokenOutInvalidators[msg.sender][orderHash][tokenOut] = type(uint256).max;
-
-        emit InvalidatorsTokenOutFilled(msg.sender, orderHash);
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenIn")) - 1)) & ~bytes32(uint256(0xff));
+        assembly { $.slot := slot }
     }
 
-    /// @notice Invalidates order using a unique bit index (one-time execution)
-    /// @dev Uses a bitmap to efficiently track which orders have been executed
-    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks the bit
-    ///   but does NOT set it. Quote may succeed while swap reverts if order was already executed between
-    ///   quote and swap calls. Makers MUST NOT use backward jumps to this instruction as it breaks
-    ///   numerical consistency between quote() and swap().
-    /// @param args.bitIndex | 4 bytes (uint32)
-    function _invalidateBit1D(Context memory ctx, bytes calldata args) internal {
-        uint256 bitIndex = InvalidatorsArgsBuilder.parseBitIndex(args);
-        uint256 bitmap = bitInvalidators[ctx.query.maker][bitIndex >> 8];
-        uint256 bit = (1 << (bitIndex & 0xFF));
-        require(bitmap & bit == 0, InvalidatorsBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
+    function exec(Context memory ctx, bytes calldata) internal {
+        Storage storage $ = store();
+
+        uint256 balanceIn = ctx.swap.balanceIn;
+        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
+
+        (uint256 amountIn,) = ctx.runLoop();
+
+        filled += amountIn;
+        require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
+
         if (!ctx.vm.isStaticContext) {
-            bitInvalidators[ctx.query.maker][bitIndex >> 8] |= bit;
+            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
         }
     }
+}
 
-    /// @notice Tracks input token consumption for partial fill orders
-    /// @dev Prevents overfilling by tracking cumulative amountIn per order
-    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks limits
-    ///   but does NOT update the filled counter. Quote may succeed while swap reverts if order was
-    ///   partially filled between quote and swap calls. Makers MUST NOT use backward jumps to this
-    ///   instruction as it breaks numerical consistency between quote() and swap().
-    function _invalidateTokenIn1D(Context memory ctx, bytes calldata /* args */) internal {
-        // Wait till amountIn computed in case of !isExactIn
-        if (ctx.swap.amountIn == 0) {
-            ctx.runLoop();
-        }
+contract InvalidateTokenInExternal {
+    event InvalidateTokenInFilled(address indexed maker, bytes32 indexed orderHash);
 
-        require(ctx.swap.amountIn > 0, InvalidateTokenInExpectsAmountInToBeComputed());
-        uint256 prefilled = tokenInInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
-        uint256 newFilled = prefilled + ctx.swap.amountIn;
-        require(newFilled <= ctx.swap.balanceIn, InvalidatorsTokenInExceeded(prefilled, ctx.swap.amountIn, ctx.swap.balanceIn));
-        if (!ctx.vm.isStaticContext) {
-            tokenInInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = newFilled;
-        }
+    function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+        return $.filled[maker][orderHash][token];
     }
 
-    /// @notice Tracks output token distribution for partial fill orders
-    /// @dev Prevents overfilling by tracking cumulative amountOut per order
-    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction checks limits
-    ///   but does NOT update the filled counter. Quote may succeed while swap reverts if order was
-    ///   partially filled between quote and swap calls. Makers MUST NOT use backward jumps to this
-    ///   instruction as it breaks numerical consistency between quote() and swap().
-    function _invalidateTokenOut1D(Context memory ctx, bytes calldata /* args */) internal {
-        // Wait till amountOut computed in case of isExactIn
-        if (ctx.swap.amountOut == 0) {
-            ctx.runLoop();
-        }
+    function invalidateTokenIn(bytes32 orderHash, address token) external {
+        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
 
-        require(ctx.swap.amountOut > 0, InvalidateTokenOutExpectsAmountOutToBeComputed());
-        uint256 prefilled = tokenOutInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
-        uint256 newFilled = prefilled + ctx.swap.amountOut;
-        require(newFilled <= ctx.swap.balanceOut, InvalidatorsTokenOutExceeded(prefilled, ctx.swap.amountOut, ctx.swap.balanceOut));
+        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        emit InvalidateTokenInFilled(msg.sender, orderHash);
+    }
+}
+
+/// @notice InvalidateTokenOut opcode, bounds cumulative amount out across all fills by the strategy balance out
+///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
+/// @dev Encoding: []
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library InvalidateTokenOut {
+    using ContextLib for Context;
+
+    error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
+
+    Opcode constant opcode = Opcode.InvalidateTokenOut;
+
+    function build() internal pure returns (bytes memory) {
+        return InstructionBuilder.build(opcode);
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenOut")) - 1)) & ~bytes32(uint256(0xff));
+        assembly { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata) internal {
+        Storage storage $ = store();
+
+        uint256 balanceOut = ctx.swap.balanceOut;
+        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
+
+        (, uint256 amountOut) = ctx.runLoop();
+
+        filled += amountOut;
+        require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
+
         if (!ctx.vm.isStaticContext) {
-            tokenOutInvalidators[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = newFilled;
+            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;
         }
+    }
+}
+
+contract InvalidateTokenOutExternal {
+    event InvalidateTokenOutFilled(address indexed maker, bytes32 indexed orderHash);
+
+    function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+        return $.filled[maker][orderHash][token];
+    }
+
+    function invalidateTokenOut(bytes32 orderHash, address token) external {
+        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+
+        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        emit InvalidateTokenOutFilled(msg.sender, orderHash);
     }
 }

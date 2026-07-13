@@ -24,8 +24,9 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
-import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
-import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
+import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
+import { Extruction } from "../src/instructions/Extruction.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
 import { Context, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
 import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
@@ -190,8 +191,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             DynamicBalances.build(100e18, 100e18), // Level 0: DynamicBalances → runLoop
             Decay.build(3600), // Level 1: Decay → runLoop
             program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
-            program.build(Opcode.RequireMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 3: MinRate → runLoop
+            RequireMinRate.build(uint64(0.8e9), uint64(1.2e9)), // Level 3: MinRate → runLoop
             XYCConcentrateSwap.build(Math.sqrt(0.5e36), Math.sqrt(2.0e36)) // Level 4: XYCConcentrate (terminal)
         );
 
@@ -286,7 +286,6 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Pack strategies with lengths
         bytes memory selectorArgs = abi.encodePacked(
-            address(selector),              // Extruction target
             uint8(2),                       // 2 strategies
             uint16(strategy1.length),       // Strategy 1 length
             strategy1,                      // Strategy 1 bytecode
@@ -297,7 +296,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         // Main program: Balances → BestRouteSelector
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18),
-            program.build(Opcode.Extruction, selectorArgs)
+            Extruction.build(address(selector), selectorArgs)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

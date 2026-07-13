@@ -16,14 +16,14 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
-import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
 import { SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, PiecewiseLinearScale } from "../src/instructions/PiecewiseLinearScale.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
-import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
+import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
@@ -174,7 +174,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(15))
+            InvalidateBit.build(15)
         );
     }
 
@@ -182,7 +182,7 @@ contract GasSnapshotE2E is Script {
         Program p;
         return bytes.concat(
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))),
-            p.build(Opcode.InvalidateTokenIn)
+            InvalidateTokenIn.build()
         );
     }
 
@@ -266,10 +266,10 @@ contract GasSnapshotE2E is Script {
         );
     }
 
-    function _vmProgramJustRequireMinRate() internal view returns (bytes memory) {
+    function _vmProgramJustRequireMinRate() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.RequireMinRate, MinRateArgsBuilder.build(address(tokenA), address(tokenB), 1e18, 2.2e18)),
+            RequireMinRate.build(1e18, 2.2e18),
             p.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})))
         );
     }
@@ -313,7 +313,6 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramJustXYC() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
             XYCSwap.build()
@@ -336,10 +335,9 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramLimitOrderSimple() internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
-            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(14)),
+            InvalidateBit.build(14),
             LimitSwapFullAmount.build(address(tokenA), address(tokenB))
         );
     }
@@ -349,7 +347,7 @@ contract GasSnapshotE2E is Script {
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
             p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(taker)),
-            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(13)),
+            InvalidateBit.build(13),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
@@ -359,25 +357,23 @@ contract GasSnapshotE2E is Script {
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
             p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(55, 0)),
-            p.build(Opcode.InvalidateTokenIn, InvalidatorsArgsBuilder.buildInvalidateBit(12)),
+            InvalidateTokenIn.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
     function _vmProgramXYCSimple() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
-            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(44)),
+            InvalidateBit.build(44),
             XYCSwap.build()
         );
     }
 
     function _vmProgramXYCDecay() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
-            p.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(33)),
+            InvalidateBit.build(33),
             Decay.build(155),
             XYCSwap.build()
         );

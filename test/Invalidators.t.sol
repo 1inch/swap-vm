@@ -12,14 +12,13 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { SwapVM } from "../src/SwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
-import { Invalidators } from "../src/instructions/Invalidators.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 
 
 /**
@@ -95,10 +94,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     function test_InvalidateBitSingleUse() public {
         uint32 bitIndex = 42;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
+            InvalidateBit.build(bitIndex),
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -134,18 +131,14 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         uint32 bitIndex1 = 10;
         uint32 bitIndex2 = 20;
 
-        Program program1;
         bytes memory bytecode1 = bytes.concat(
-            program1.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex1)),
+            InvalidateBit.build(bitIndex1),
             StaticBalances.build(50e18, 100e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        Program program2;
         bytes memory bytecode2 = bytes.concat(
-            program2.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex2)),
+            InvalidateBit.build(bitIndex2),
             StaticBalances.build(50e18, 100e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -168,11 +161,10 @@ contract InvalidatorsTest is Test, OpcodesDebug {
      */
     function test_InvalidateTokenInPartialFills() public {
         // Order with 10 tokenA available, but can be filled multiple times
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(10e18, 20e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenIn)
+            InvalidateTokenIn.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -201,12 +193,11 @@ contract InvalidatorsTest is Test, OpcodesDebug {
      * Test token output invalidation
      */
     function test_InvalidateTokenOutPartialFills() public {
-        // Order with 20 tokenB available for output
-        Program program;
+        // Order with 20 tokenB available for outp
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 20e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenOut)
+            InvalidateTokenOut.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -256,14 +247,12 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     function test_CombinedInvalidators() public {
         uint32 bitIndex = 100;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
+            InvalidateBit.build(bitIndex),
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenIn),
-            program.build(Opcode.InvalidateTokenOut)
+            InvalidateTokenIn.build(),
+            InvalidateTokenOut.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -294,10 +283,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         bitIndices[3] = 512;   // First bit of third slot
 
         for (uint256 i = 0; i < bitIndices.length; i++) {
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit,
-                    InvalidatorsArgsBuilder.buildInvalidateBit(bitIndices[i])),
+                InvalidateBit.build(bitIndices[i]),
                 StaticBalances.build(10e18, 20e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -319,19 +306,14 @@ contract InvalidatorsTest is Test, OpcodesDebug {
      * Test external invalidation functions
      */
     function test_ExternalInvalidation() public {
-        // Get invalidators contract address from SwapVM
-        Invalidators invalidators = Invalidators(address(swapVM));
-
         // Pre-invalidate a bit as maker
         uint256 bitToInvalidate = 999;
         vm.prank(maker);
-        invalidators.invalidateBit(bitToInvalidate);
+        swapVM.invalidateBit(bitToInvalidate);
 
         // Create order using that bit
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.InvalidateBit,
-                InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate))),
+            InvalidateBit.build(uint32(bitToInvalidate)),
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -349,11 +331,10 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         );
 
         // Order with token input tracking should fail immediately
-        Program program2;
         bytes memory bytecode2 = bytes.concat(
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program2.build(Opcode.InvalidateTokenIn)
+            InvalidateTokenIn.build()
         );
 
         ISwapVM.Order memory order2 = _createOrder(bytecode2);
@@ -362,7 +343,7 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         // Also test external token invalidation
         bytes32 orderHash = swapVM.hash(order2);
         vm.prank(maker);
-        invalidators.invalidateTokenIn(orderHash, address(tokenA));
+        swapVM.invalidateTokenIn(orderHash, address(tokenA));
 
         TokenMock(address(tokenA)).mint(taker, 1e18);
         vm.expectRevert();
@@ -374,9 +355,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     }
 
     function test_ExternalInvalidationMultiBits() public {
-        // Get invalidators contract address from SwapVM
-        Invalidators invalidators = Invalidators(address(swapVM));
-
         // Pre-invalidate a bit as maker
         uint248 slot = 5;
         uint256 bitToInvalidate1 = (slot << 8) + 1;
@@ -386,16 +364,15 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         uint256 bitToInvalidate3 = (slot << 8) + 5;
 
         vm.prank(maker);
-        invalidators.invalidateBit(bitToInvalidate1);
+        swapVM.invalidateBit(bitToInvalidate1);
         vm.prank(maker);
-        invalidators.invalidateBits(slot, 32 + 8);
+        swapVM.invalidateBits(slot, 32 + 8);
 
         // Check that 3rd and 5th bits are invalidated in addition to 1st
         {
             // Create order using bitToInvalidate1
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate1))),
+                InvalidateBit.build(uint32(bitToInvalidate1)),
                 StaticBalances.build(100e18, 200e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -410,9 +387,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         }
         {
             // Create order using bitToInvalidate2
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate2))),
+                InvalidateBit.build(uint32(bitToInvalidate2)),
                 StaticBalances.build(100e18, 200e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -427,9 +403,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         }
         {
             // Create order using bitToInvalidate3
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToInvalidate3))),
+                InvalidateBit.build(uint32(bitToInvalidate3)),
                 StaticBalances.build(100e18, 200e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -445,9 +420,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
         {
             // Create order using bitToKeep1
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToKeep1))),
+                InvalidateBit.build(uint32(bitToKeep1)),
                 StaticBalances.build(100e18, 200e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -461,9 +435,8 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         }
         {
             // Create order using bitToKeep2
-            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(uint32(bitToKeep2))),
+                InvalidateBit.build(uint32(bitToKeep2)),
                 StaticBalances.build(100e18, 200e18),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
@@ -481,11 +454,10 @@ contract InvalidatorsTest is Test, OpcodesDebug {
      * Test zero amount handling
      */
     function test_InvalidatorZeroAmount() public {
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 0), // Zero output balance
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.InvalidateTokenOut)
+            InvalidateTokenOut.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

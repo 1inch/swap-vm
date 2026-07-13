@@ -20,7 +20,7 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
-import { MinRateArgsBuilder } from "../../src/instructions/MinRate.sol";
+import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -111,8 +111,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3000e18),  // 1:3 base rate
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -159,8 +158,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             StaticBalances.build(1000e18, 2500e18),  // Start with 1:2.5 rate
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -207,8 +205,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             StaticBalances.build(1000e18, 3000e18),  // Start with 1:3 rate
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -253,8 +250,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             StaticBalances.build(1000e18, 5000e18),  // 1:5 base rate (very generous)
             program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -301,8 +297,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             StaticBalances.build(1000e18, 6000e18),  // 1:6 base rate (very generous)
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -348,8 +343,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             StaticBalances.build(1000e18, 8000e18),  // 1:8 base rate (extremely generous)
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -404,8 +398,7 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
             program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

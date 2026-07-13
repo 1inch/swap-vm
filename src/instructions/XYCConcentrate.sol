@@ -74,13 +74,13 @@ library XYCConcentrateSwap {
     /// @notice Compute liquidity from balances and price bounds
     /// @dev Solves invariant as quadratic equation
     ///   Invariant: `(balanceA + virtualA) * (balanceB + virtualB) = liquidity ** 2`
-    ///     where `virtualA = liquidity / sqrtPriceMax` and `virtualB = liquidity * sqrtPriceMin`
+    ///   where `virtualA = liquidity / sqrtPriceMax` and `virtualB = liquidity * sqrtPriceMin`
     ///
     ///   Equation: `(1 - sqrtPriceMin / sqrtPriceMax) * liquidity ** 2 - beta * liquidity - balanceA * balanceB = 0`
-    ///     where `beta = balanceA * sqrtPriceMin + balanceB / sqrtPriceMax`
+    ///   where `beta = balanceA * sqrtPriceMin + balanceB / sqrtPriceMax`
     ///
     ///   Positive root: `liquidity = (beta + sqrt(beta ** 2 + 4 * (sqrtPriceMax - sqrtPriceMin) * balanceA * balanceB / sqrtPriceMax)) *
-    ///     sqrtPriceMax / (2 * (sqrtPriceMax - sqrtPriceMin))`
+    ///   sqrtPriceMax / (2 * (sqrtPriceMax - sqrtPriceMin))`
     function computeLiquidity(
         uint256 balanceA,
         uint256 balanceB,
@@ -113,10 +113,10 @@ library XYCConcentrateSwap {
 
     /// @notice Approximate initial balances for given liquidity, boundaries and spot price
     ///   Returns a raw estimation, a slightly better balance pair may exist with liquidity closer to the target
-    /// @dev Computations rationale
+    /// @dev Computations rationale:
     ///   `balanceA = virtualA(sqrtPriceSpot) - virtualA(sqrtPriceMax)`
     ///   `balanceB = virtualB(sqrtPriceSpot) - virtualB(sqrtPriceMin)`
-    ///     where `virtualA(sqrtPrice) = liquidity / sqrtPrice` and `virtualB(sqrtPrice) = liquidity * sqrtPrice`
+    ///   where `virtualA(sqrtPrice) = liquidity / sqrtPrice` and `virtualB(sqrtPrice) = liquidity * sqrtPrice`
     /// @dev Holds `computeLiquidity(balanceA, balanceB, sqrtPriceMin, sqrtPriceMax) <= liquidity`
     function computeBalances(
         uint256 liquidity,

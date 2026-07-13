@@ -18,7 +18,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { MinRateArgsBuilder } from "../src/instructions/MinRate.sol";
+import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
 /**
@@ -71,11 +71,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e18;
         uint64 rateB = 2.2e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            program.build(Opcode.RequireMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            RequireMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -104,11 +102,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e18;
         uint64 rateB = 1.5e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            program.build(Opcode.RequireMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            RequireMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -136,11 +132,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300e18),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -169,11 +163,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300e18),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -207,8 +199,7 @@ contract MinRateTest is Test, OpcodesDebug {
             StaticBalances.build(100e18, 200e18),
             program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -239,11 +230,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 150e18),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -275,11 +264,9 @@ contract MinRateTest is Test, OpcodesDebug {
         // First test A -> B
         // Base rate: 1 tokenA = 0.5 tokenB (200:100)
         // This equals the min rate, so no adjustment
-        Program programAtoB;
         bytes memory bytecodeAtoB = bytes.concat(
             StaticBalances.build(200e18, 100e18),
-            programAtoB.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -300,11 +287,9 @@ contract MinRateTest is Test, OpcodesDebug {
         // Now test B -> A with same balances
         // Base rate: 1 tokenB = 2 tokenA
         // This equals the inverse of min rate, so no adjustment
-        Program programBtoA;
         bytes memory bytecodeBtoA = bytes.concat(
             StaticBalances.build(200e18, 100e18),
-            programBtoA.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenB), address(tokenA))
         );
 
@@ -332,11 +317,9 @@ contract MinRateTest is Test, OpcodesDebug {
         uint64 rateA = 1e9;
         uint64 rateB = 1000e9;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 1000000e18),
-            program.build(Opcode.AdjustMinRate,
-                MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
+            AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

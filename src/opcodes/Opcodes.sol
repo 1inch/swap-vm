@@ -9,12 +9,12 @@ import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../instructions/Controls.sol";
 import { DynamicBalancesExternal, StaticBalances, DynamicBalances } from "../instructions/Balances.sol";
-import { Invalidators } from "../instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
-import { MinRate } from "../instructions/MinRate.sol";
+import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuction } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap } from "../instructions/TWAPSwap.sol";
@@ -28,14 +28,14 @@ import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from ".
 
 contract Opcodes is
     DynamicBalancesExternal,
-    Invalidators,
-    MinRate,
+    InvalidateBitExternal,
+    InvalidateTokenInExternal,
+    InvalidateTokenOutExternal,
     DutchAuction,
     BaseFeeAdjuster,
     TWAPSwap,
     Fee,
     FeeExperimental,
-    Extruction,
     PeggedSwap,
     SeriesEpochManager,
     Whitelist
@@ -60,21 +60,21 @@ contract Opcodes is
         else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
         else if (opcode == StaticBalances.opcode.asU8()) StaticBalances.exec(ctx, args);
         else if (opcode == DynamicBalances.opcode.asU8()) DynamicBalances.exec(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == InvalidateBit.opcode.asU8()) InvalidateBit.exec(ctx, args);
+        else if (opcode == InvalidateTokenIn.opcode.asU8()) InvalidateTokenIn.exec(ctx, args);
+        else if (opcode == InvalidateTokenOut.opcode.asU8()) InvalidateTokenOut.exec(ctx, args);
         else if (opcode == XYCSwap.opcode.asU8()) XYCSwap.exec(ctx, args);
         else if (opcode == XYCConcentrateSwap.opcode.asU8()) XYCConcentrateSwap.exec(ctx, args);
         else if (opcode == Decay.opcode.asU8()) Decay.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
-        else if (opcode == uint256(Opcode.RequireMinRate)) MinRate._requireMinRate1D(ctx, args);
-        else if (opcode == uint256(Opcode.AdjustMinRate)) MinRate._adjustMinRate1D(ctx, args);
+        else if (opcode == RequireMinRate.opcode.asU8()) RequireMinRate.exec(ctx, args);
+        else if (opcode == AdjustMinRate.opcode.asU8()) AdjustMinRate.exec(ctx, args);
         else if (opcode == uint256(Opcode.DutchAuctionBalanceIn)) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
         else if (opcode == uint256(Opcode.DutchAuctionBalanceOut)) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
         else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
         else if (opcode == uint256(Opcode.TWAPSwap)) TWAPSwap._twap(ctx, args);
-        else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
+        else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountOut)) FeeExperimental._flatFeeAmountOutXD(ctx, args);

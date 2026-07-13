@@ -17,8 +17,7 @@ import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
 contract AquaOpcodes is
     Fee,
-    PeggedSwap,
-    Extruction
+    PeggedSwap
 {
     using OpcodeOps for Opcode;
 
@@ -45,7 +44,7 @@ contract AquaOpcodes is
         else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
         else if (opcode == uint256(Opcode.PeggedSwap)) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
-        else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
+        else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }

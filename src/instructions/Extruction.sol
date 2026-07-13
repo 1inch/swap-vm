@@ -5,15 +5,76 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
-import { Context, ContextLib, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 
-/// @title IExtruction - State-modifying external logic interface
-/// @notice Interface for external contracts that implement custom swap logic during swap() execution
-/// @dev CRITICAL SECURITY REQUIREMENTS:
-///      - Implementations MUST produce deterministic and consistent results with IStaticExtruction
-///      - The same inputs MUST yield the same swap amounts in both interfaces
-///      - Non-deterministic behavior will cause quote/swap inconsistencies and unexpected execution
-///      - Target contracts SHOULD be immutable (non-upgradeable) to prevent logic changes between quote/swap
+import { Context, ContextLib, SwapQuery, SwapRegisters } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
+
+/// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
+///   The target may modify the swap registers, set the program counter and consume taker args
+/// @dev Encoding: [address target, bytes extructionArgs]
+/// @dev The extruction target is expected to be deterministic, consistent across quote / swap modes, calculations are
+///   expected to be overflow-safe, revert conditions should be transparent, centralization and upgradability avoided
+/// @dev General safety measures:
+///   Maker min exchange rate expectations should be guarded by using RequireMinRate or AdjustMinRate before Extruction
+///   Maker max spend expectations should be guarded by using AQUA or DynamicBalances for AMM-strategies
+///   or using StaticBalances with InvalidateTokenIn or InvalidateTokenOut before Extruction for amount-limited strategies
+///
+///   Taker should employ threshold to guard the min exchange rate
+///   SwapVM guards taker-specified amount to be unchanged by the strategy execution
+/// @dev Execution of the opcode multiple times in strategy flow may lead to quote / swap divergence:
+///   In swap mode extruction target may update storage affecting future executions while in quote mode storage could be only read
+library Extruction {
+    using Calldata for bytes;
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
+
+    using ContextLib for Context;
+
+    error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);
+
+    Opcode constant opcode = Opcode.Extruction;
+
+    function build(address target, bytes memory extructionArgs) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(target, extructionArgs);
+        return InstructionBuilder.build(opcode, args);
+    }
+
+    function parse(bytes calldata args) internal pure returns (address target, bytes calldata extructionArgs) {
+        target = args.at(0).asAddress();
+        extructionArgs = args.slice(20);
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        (address target, bytes calldata extructionArgs) = parse(args);
+        uint256 choppedLength;
+
+        if (ctx.vm.isStaticContext) {
+            (ctx.vm.nextPC, choppedLength, ctx.swap) = IStaticExtruction(target).extruction(
+                ctx.vm.isStaticContext,
+                ctx.vm.nextPC,
+                ctx.query,
+                ctx.swap,
+                extructionArgs,
+                ctx.takerArgs()
+            );
+        } else {
+            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
+                ctx.vm.isStaticContext,
+                ctx.vm.nextPC,
+                ctx.query,
+                ctx.swap,
+                extructionArgs,
+                ctx.takerArgs()
+            );
+        }
+
+        bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength);
+        require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped, choppedLength));
+    }
+}
+
 interface IExtruction {
     function extruction(
         bool isStaticContext,
@@ -29,13 +90,6 @@ interface IExtruction {
     );
 }
 
-/// @title IStaticExtruction - View-only external logic interface
-/// @notice Interface for external contracts that implement custom swap logic during quote() execution
-/// @dev CRITICAL SECURITY REQUIREMENTS:
-///      - Implementations MUST be deterministic and consistent with IExtruction
-///      - The same inputs MUST yield the same swap amounts in both interfaces
-///      - This is the read-only version called during quoting operations
-///      - Inconsistent implementations will break quote/swap consistency guarantees
 interface IStaticExtruction {
     function extruction(
         bool isStaticContext,
@@ -49,68 +103,4 @@ interface IStaticExtruction {
         uint256 choppedLength,
         SwapRegisters memory updatedSwap
     );
-}
-
-/// @title Extruction - External Custom Logic Delegation
-/// @notice Allows makers to delegate pricing and state logic to external contracts for advanced strategies
-/// @dev IMPORTANT SECURITY CONSIDERATIONS FOR TAKERS/RESOLVERS:
-///
-///      Quote/Swap Consistency Risk:
-///      - This instruction delegates logic to maker-controlled external contracts
-///      - Takers MUST validate strategy consistency before execution
-///      - IStaticExtruction.extruction() (quote) and IExtruction.extruction() (swap) MUST return
-///        consistent results for the same inputs
-///
-///      Validation Requirements:
-///      - Verify target contract is non-upgradeable or has trusted governance
-///      - Ensure target implementation is deterministic and cannot change between quote/swap
-///      - Review target contract code for correctness and security
-///      - Test quote/swap consistency before routing significant volume
-///
-///      Risk Mitigation:
-///      - Takers already have slippage protection via threshold amounts
-///      - Consider using additional monitoring for Extruction-based strategies
-///      - Only interact with strategies that have been thoroughly validated
-///
-///      This is a "use at your own risk" feature designed for advanced use cases.
-///      Failure to validate may result in quote/swap inconsistencies, reverts, or unexpected execution.
-contract Extruction {
-    using Calldata for bytes;
-    using ContextLib for Context;
-
-    error ExtructionChoppedExceededLength(bytes chopped, uint256 requested);
-
-    /// @dev Calls an external contract to perform custom logic, potentially modifying the swap state
-    /// @dev QUOTE/SWAP DIVERGENCE: This instruction delegates to external contracts (IStaticExtruction for
-    ///   quote, IExtruction for swap). Target implementations MUST be deterministic and return consistent
-    ///   results in both modes. Non-deterministic behavior breaks numerical consistency. Makers MUST NOT
-    ///   use backward jumps to this instruction as it breaks consistency between quote() and swap().
-    /// @param args.target         | 20 bytes
-    /// @param args.extructionArgs | N bytes
-    function _extruction(Context memory ctx, bytes calldata args) internal {
-        address target = address(bytes20(args));
-        uint256 choppedLength;
-
-        if (ctx.vm.isStaticContext) {
-            (ctx.vm.nextPC, choppedLength, ctx.swap) = IStaticExtruction(target).extruction(
-                ctx.vm.isStaticContext,
-                ctx.vm.nextPC,
-                ctx.query,
-                ctx.swap,
-                args.slice(20),
-                ctx.takerArgs()
-            );
-        } else {
-            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
-                ctx.vm.isStaticContext,
-                ctx.vm.nextPC,
-                ctx.query,
-                ctx.swap,
-                args.slice(20),
-                ctx.takerArgs()
-            );
-        }
-        bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength);
-        require(chopped.length == choppedLength, ExtructionChoppedExceededLength(chopped, choppedLength)); // Revert if not enough data
-    }
 }

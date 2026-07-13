@@ -9,12 +9,9 @@ import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
 import { Jump, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../instructions/Controls.sol";
 import { StaticBalances } from "../instructions/Balances.sol";
-import { Invalidators } from "../instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
-import { MinRate } from "../instructions/MinRate.sol";
-import { DutchAuction } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
-import { TWAPSwap } from "../instructions/TWAPSwap.sol";
 import { Fee } from "../instructions/Fee.sol";
 import { FeeExperimental } from "../instructions/FeeExperimental.sol";
 import { Extruction } from "../instructions/Extruction.sol";
@@ -23,11 +20,12 @@ import { Whitelist } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
 
 contract LimitOpcodes is
-    Invalidators,
+    InvalidateBitExternal,
+    InvalidateTokenInExternal,
+    InvalidateTokenOutExternal,
     BaseFeeAdjuster,
     Fee,
     FeeExperimental,
-    Extruction,
     SeriesEpochManager,
     Whitelist
 {
@@ -47,13 +45,13 @@ contract LimitOpcodes is
         else if (opcode == OnlyTakerTokenBalanceGte.opcode.asU8()) OnlyTakerTokenBalanceGte.exec(ctx, args);
         else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
         else if (opcode == StaticBalances.opcode.asU8()) StaticBalances.exec(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
+        else if (opcode == InvalidateBit.opcode.asU8()) InvalidateBit.exec(ctx, args);
+        else if (opcode == InvalidateTokenIn.opcode.asU8()) InvalidateTokenIn.exec(ctx, args);
+        else if (opcode == InvalidateTokenOut.opcode.asU8()) InvalidateTokenOut.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
-        else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
+        else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == uint256(Opcode.ProtocolFeeAmountOut)) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
         else if (opcode == uint256(Opcode.AquaProtocolFeeAmountOut)) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
