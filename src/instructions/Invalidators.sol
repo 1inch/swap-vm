@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -35,7 +36,7 @@ library InvalidateBit {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateBit")) - 1)) & ~bytes32(uint256(0xff));
+        bytes32 slot = StorageSlots.InvalidateBit;
         assembly { $.slot := slot }
     }
 
@@ -102,7 +103,7 @@ library InvalidateTokenIn {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenIn")) - 1)) & ~bytes32(uint256(0xff));
+        bytes32 slot = StorageSlots.InvalidateTokenIn;
         assembly { $.slot := slot }
     }
 
@@ -159,7 +160,7 @@ library InvalidateTokenOut {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenOut")) - 1)) & ~bytes32(uint256(0xff));
+        bytes32 slot = StorageSlots.InvalidateTokenOut;
         assembly { $.slot := slot }
     }
 

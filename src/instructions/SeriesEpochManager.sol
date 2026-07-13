@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -36,7 +37,7 @@ library ValidateSeriesEpoch {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.ValidateSeriesEpoch")) - 1)) & ~bytes32(uint256(0xff));
+        bytes32 slot = StorageSlots.ValidateSeriesEpoch;
         assembly { $.slot := slot }
     }
 

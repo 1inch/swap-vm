@@ -8,6 +8,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -40,7 +41,7 @@ library Decay {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = keccak256(abi.encode(uint256(keccak256("1inch.storage.Decay")) - 1)) & ~bytes32(uint256(0xff));
+        bytes32 slot = StorageSlots.Decay;
         assembly { $.slot := slot }
     }
 
