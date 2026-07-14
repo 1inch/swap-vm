@@ -145,8 +145,7 @@ bytes memory bytecode = bytes.concat(
     program.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(
         sqrtPriceMin,
         sqrtPriceMax
-    )), // Apply concentrated-liquidity bounds
-    program.build(Opcode.XYCSwap) // Execute swap using concentrated state
+    )) // Apply concentrated-liquidity bounds and compute swap amounts
 );
 ```
 
