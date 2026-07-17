@@ -108,7 +108,6 @@ bytes memory bytecode = bytes.concat(
     - `XYCSwap._xycSwapXD`
     - `PeggedSwap._peggedSwapGrowPriceRange2D`
     - `XYCConcentrate._xycConcentrateGrowLiquidity2D`
-    - `XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D`
 - **Common Add-ons:**
   - Fee instructions (flat/progressive/protocol/dynamic-protocol variants)
   - `Decay._decayXD`
