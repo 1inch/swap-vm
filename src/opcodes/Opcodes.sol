@@ -32,7 +32,6 @@ contract Opcodes is
     InvalidateBitExternal,
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
-    BaseFeeAdjuster,
     TWAPSwapExternal,
     ValidateSeriesEpochExternal
 {
@@ -66,7 +65,7 @@ contract Opcodes is
         else if (opcode == AdjustMinRate.opcode.asU8()) AdjustMinRate.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
-        else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
+        else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
         else if (opcode == TWAPSwap.opcode.asU8()) TWAPSwap.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);

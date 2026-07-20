@@ -19,7 +19,7 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
-import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjuster } from "../../src/instructions/BaseFeeAdjuster.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -98,17 +98,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         _testInvariants(bytecode, 20 gwei, false, false); // Base gas price
@@ -123,17 +116,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: research invariant behavior at moderate gas prices
@@ -149,17 +135,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 200_000;
         uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: research invariant behavior at high gas prices
@@ -180,17 +159,10 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         ethPrices[2] = 5000e18;  // High ETH price
 
         for (uint256 i = 0; i < ethPrices.length; i++) {
-            Program program;
             bytes memory bytecode = bytes.concat(
                 StaticBalances.build(1e30, 2e30),
                 LimitSwap.build(address(tokenA), address(tokenB)),
-                program.build(Opcode.BaseFeeAdjuster,
-                    BaseFeeAdjusterArgsBuilder.build(
-                        baseGasPrice,
-                        ethPrices[i],
-                        gasAmount,
-                        maxPriceDecay
-                    ))
+                BaseFeeAdjuster.build(baseGasPrice, ethPrices[i], gasAmount, 1e18 - maxPriceDecay)
             );
 
             // TODO: Analyze invariant behavior across different ETH prices
@@ -211,18 +183,11 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with high gas
@@ -244,18 +209,11 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with high gas

@@ -19,7 +19,7 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
-import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjuster } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
@@ -103,18 +103,11 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint24 feeBps = 100; // 1% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: BaseFeeAdjuster breaks symmetry and additivity due to asymmetric gas adjustments
@@ -131,18 +124,11 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 98e16;
         uint24 feeBps = 200; // 2% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: BaseFeeAdjuster breaks symmetry and additivity due to asymmetric gas adjustments
@@ -160,18 +146,11 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 98e16;
         uint24 feeBps = 150; // 1.5% protocol fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: BaseFeeAdjuster breaks symmetry and additivity due to asymmetric gas adjustments
@@ -189,20 +168,13 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 flatFeeBps = 50; // 0.5% flat fee
         uint24 protocolFeeBps = 100; // 1% protocol fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             // Multiple fees
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: BaseFeeAdjuster breaks symmetry and additivity due to asymmetric gas adjustments
@@ -219,18 +191,11 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 95e16; // More aggressive adjustment
         uint24 feeBps = 1000; // 10% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // TODO: BaseFeeAdjuster breaks symmetry and additivity due to asymmetric gas adjustments
@@ -251,19 +216,12 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint24 feeBps = 100; // 1% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with high gas
@@ -286,19 +244,12 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint24 feeBps = 150; // 1.5% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with high gas
@@ -321,19 +272,12 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;  // Less aggressive max price adjustment
         uint24 feeBps = 200; // 2% protocol fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with moderate gas
@@ -357,20 +301,13 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 flatFeeBps = 75; // 0.75% flat fee
         uint24 protocolFeeBps = 100; // 1% protocol fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         // Test at mid-auction with high gas

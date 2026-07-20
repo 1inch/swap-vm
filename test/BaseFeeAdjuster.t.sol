@@ -20,7 +20,7 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../src/instructions/DutchAuction.sol";
-import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjuster } from "../src/instructions/BaseFeeAdjuster.sol";
 
 /**
  * @title BaseFeeAdjusterTest
@@ -70,17 +70,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -129,20 +122,13 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3500000e18), // 3500:1 rate (Swap B to A; ascending tokenA, tokenB)
             // DutchAuction adjusts balances, then LimitSwap computes amounts
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenB), address(tokenA)),
             // BaseFeeAdjuster must be applied after the swap
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -189,17 +175,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment - generous limit
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -230,17 +209,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(
-                    baseGasPrice,
-                    ethToTokenPrice,
-                    gasAmount,
-                    maxPriceDecay
-                ))
+            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -279,12 +251,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 90e16; // 10% max (high to not interfere with test)
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -315,12 +285,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 90e16; // 10% max
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -352,12 +320,10 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 90e16; // 10% max
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
             LimitSwap.build(address(tokenB), address(tokenA)),
-            program.build(Opcode.BaseFeeAdjuster,
-                BaseFeeAdjusterArgsBuilder.build(baseGasPrice, ethToToken1Price, gasAmount, maxPriceDecay))
+            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
