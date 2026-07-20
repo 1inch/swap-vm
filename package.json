@@ -10,13 +10,14 @@
   },
   "dependencies": {
     "@1inch/aqua": "github:1inch/aqua#0.1.0",
-    "@1inch/solidity-utils": "6.9.9",
+    "@1inch/solidity-utils": "6.9.10",
     "@openzeppelin/contracts": "5.4.0",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.1.6",
     "@nomicfoundation/hardhat-keystore": "^3.0.11",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
     "@nomicfoundation/hardhat-verify": "^3.0.0",
     "hardhat": "^3.8.0",
     "hardhat-ignore-warnings": "0.3.0",
@@ -26,10 +27,12 @@
   "resolutions": {
     "elliptic": "6.6.1",
     "@openzeppelin/contracts": "5.4.0",
-    "@1inch/solidity-utils": "6.9.9"
+    "@1inch/solidity-utils": "6.9.10"
   },
   "scripts": {
-    "test": "npx hardhat test solidity",
+    "test": "npx hardhat test",
+    "test:solidity": "npx hardhat test solidity",
+    "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
     "lint": "prettier --check \"{src,test,script,mocks}/**/*.sol\"",
     "format": "prettier --write \"{src,test,script,mocks}/**/*.sol\"",

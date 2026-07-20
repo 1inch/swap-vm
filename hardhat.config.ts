@@ -2,6 +2,7 @@ import { defineConfig, configVariable } from "hardhat/config";
 import hardhatIgnition from "@nomicfoundation/hardhat-ignition";
 import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
 import hardhatVerify from "@nomicfoundation/hardhat-verify";
+import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
 import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 
 const swapVmCompiler = {
@@ -29,6 +30,7 @@ export default defineConfig({
     hardhatIgnition,
     hardhatKeystore,
     hardhatVerify,
+    hardhatNodeTestRunner,
   ],
   solidity: {
     splitTestsCompilation: true,
@@ -52,20 +54,6 @@ export default defineConfig({
       type: "http",
       url: "http://127.0.0.1:8545",
       chainId: 31337,
-    },
-    sepolia: {
-      type: "http",
-      chainType: "l1",
-      url: configVariable("SEPOLIA_RPC_URL"),
-      accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
-      chainId: 11155111,
-    },
-    mainnet: {
-      type: "http",
-      chainType: "l1",
-      url: configVariable("MAINNET_RPC_URL"),
-      accounts: [configVariable("MAINNET_PRIVATE_KEY")],
-      chainId: 1,
     },
   },
   verify: {
