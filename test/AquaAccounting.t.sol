@@ -21,10 +21,9 @@ import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
-uint256 constant BPS = 1e7;
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../src/instructions/Decay.sol";
-import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -38,6 +37,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     using ProgramBuilder for Program;
 
     // Constants
+    uint256 constant BPS = 1e7;
     uint256 constant ONE = 1e18;
     uint256 constant INITIAL_BALANCE_A = 1000e18;
     uint256 constant INITIAL_BALANCE_B = 2000e18; // Asymmetric pool: ratio matters for CorrectVsWrong ordering tests
@@ -52,7 +52,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     AquaSwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
-    PeggedSwap public peggedSwap;
 
     // Addresses
     address public maker;
@@ -66,8 +65,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
-
-        peggedSwap = PeggedSwap(address(swapVM));
 
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -104,17 +101,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             Math.sqrt(0.5e36),  // sqrtPmin = sqrt(0.5) ≈ 0.7071
             Math.sqrt(2.0e36)   // sqrtPmax = sqrt(2.0) ≈ 1.4142
         );
-    }
-
-    /// @notice Default PeggedSwap args for tokenA/tokenB (both 18 decimals)
-    function defaultPeggedArgs() internal pure returns (PeggedSwapArgsBuilder.Args memory) {
-        return PeggedSwapArgsBuilder.Args({
-            x0: INITIAL_BALANCE_A,
-            y0: INITIAL_BALANCE_B,
-            linearWidth: 1e27,
-            rateLt: 1,
-            rateGt: 1
-        });
     }
 
     /// @notice Deploy order (create + ship) and perform a single swap
@@ -256,8 +242,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     function buildProgramWithDecayPegged(
         uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint24 flatFeeInBps,
-        PeggedSwapArgsBuilder.Args memory peggedArgs
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
         Program p;
 
@@ -273,7 +258,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             protocolFeeCode,
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
+            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
             Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
@@ -524,7 +509,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 4: Decay + PeggedSwap Tests =====
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -536,7 +521,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 

@@ -11,7 +11,7 @@ import { PeggedFeesInvariants } from "../PeggedFeesInvariants.t.sol";
 import { TokenMockDecimals } from "../../mocks/TokenMockDecimals.sol";
 import { Program, ProgramBuilder, Opcode } from "../../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../../src/instructions/Balances.sol";
-import { PeggedSwapArgsBuilder } from "../../../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../../../src/instructions/PeggedSwap.sol";
 
 /**
  * @title VeryImbalancedDifferentDecimals
@@ -130,14 +130,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         Program p;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceTokenA, balanceTokenB),
-            p.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Config,
-                    y0: y0Config,
-                    linearWidth: linearWidth,
-                    rateLt: rateLtTest,
-                    rateGt: rateGtTest
-                })))
+            PeggedSwap.build(x0Config, y0Config, linearWidth, rateLtTest, rateGtTest)
         );
 
         // Create order (using maker and swapVM from parent setup)

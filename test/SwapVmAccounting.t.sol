@@ -22,7 +22,7 @@ import { Salt } from "../src/instructions/Controls.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../src/instructions/Decay.sol";
-import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../src/instructions/Balances.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
@@ -109,16 +109,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             Math.sqrt(0.5e36),
             Math.sqrt(2.0e36)
         );
-    }
-
-    function defaultPeggedArgs() internal pure returns (PeggedSwapArgsBuilder.Args memory) {
-        return PeggedSwapArgsBuilder.Args({
-            x0: INITIAL_BALANCE_A,
-            y0: INITIAL_BALANCE_B,
-            linearWidth: 1e27,
-            rateLt: 1,
-            rateGt: 1
-        });
     }
 
     function signOrder(ISwapVM.Order memory order) internal view returns (bytes memory) {
@@ -317,8 +307,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     function buildProgramWithDecayPegged(
         uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint24 flatFeeInBps,
-        PeggedSwapArgsBuilder.Args memory peggedArgs
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
         Program p;
 
@@ -335,7 +324,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
+            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
             Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
@@ -509,7 +498,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 4: Decay + PeggedSwap Tests =====
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -521,7 +510,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 

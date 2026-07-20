@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
@@ -193,16 +193,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             (fees.progressiveFeeOutBps > 0) ? FeeProgressiveOut.build(fees.progressiveFeeOutBps) : bytes(""),
 
             // PeggedSwap instruction
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(
-                    PeggedSwapArgsBuilder.Args({
-                        x0: x0,
-                        y0: y0,
-                        linearWidth: linearWidth,
-                        rateLt: rateLt,
-                        rateGt: rateGt
-                    })
-                ))
+            PeggedSwap.build(x0, y0, linearWidth, rateLt, rateGt)
         );
     }
 

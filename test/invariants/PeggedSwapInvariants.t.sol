@@ -17,7 +17,7 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -96,17 +96,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -185,17 +177,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -251,17 +235,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -303,14 +279,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Initial,
-                    y0: y0Initial,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -347,17 +316,9 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceIn, balanceOut),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: balanceIn,
-                    y0: balanceOut,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(balanceIn, balanceOut, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -403,14 +364,7 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceIn, balanceOut),
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: balanceIn,
-                    y0: balanceOut,
-                    linearWidth: linearWidth,
-                        rateLt: 1,
-                        rateGt: 1
-                })))
+            PeggedSwap.build(balanceIn, balanceOut, linearWidth, 1, 1)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

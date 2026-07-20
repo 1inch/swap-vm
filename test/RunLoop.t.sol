@@ -23,7 +23,7 @@ import { Decay } from "../src/instructions/Decay.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { Extruction } from "../src/instructions/Extruction.sol";
@@ -269,14 +269,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         bytes memory strategy1 = XYCSwap.build();
 
         // Strategy 2: Pegged (optimized for stable pairs)
-        bytes memory strategy2 = program.build(Opcode.PeggedSwap,
-            PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                x0: 50e18,          // balanceIn
-                y0: 50e18,          // balanceOut
-                linearWidth: 0.02e9, // 2% width for stable pairs
-                rateLt: 1,
-                rateGt: 1
-            })));
+        bytes memory strategy2 = PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1);
 
         // Pack strategies with lengths
         bytes memory selectorArgs = abi.encodePacked(

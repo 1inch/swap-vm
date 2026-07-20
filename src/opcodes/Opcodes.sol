@@ -35,7 +35,6 @@ contract Opcodes is
     DutchAuction,
     BaseFeeAdjuster,
     TWAPSwap,
-    PeggedSwap,
     ValidateSeriesEpochExternal
 {
     using OpcodeOps for Opcode;
@@ -77,7 +76,7 @@ contract Opcodes is
         else if (opcode == FeeProgressiveIn.opcode.asU8()) FeeProgressiveIn.exec(ctx, args);
         else if (opcode == FeeProgressiveOut.opcode.asU8()) FeeProgressiveOut.exec(ctx, args);
         else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
-        else if (opcode == uint256(Opcode.PeggedSwap)) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
+        else if (opcode == PeggedSwap.opcode.asU8()) PeggedSwap.exec(ctx, args);
         else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);
         else if (opcode == PrivateOrder.opcode.asU8()) PrivateOrder.exec(ctx, args);
         else if (opcode == WhitelistCoequal.opcode.asU8()) WhitelistCoequal.exec(ctx, args);

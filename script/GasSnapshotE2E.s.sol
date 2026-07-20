@@ -29,7 +29,7 @@ import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
 import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
-import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { Program, ProgramBuilder, Opcode } from "../test/utils/ProgramBuilder.sol";
@@ -310,10 +310,9 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramJustPeggedSwap() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: 0})),
-            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({x0: 50e18, y0: 50e18, linearWidth: 0.02e9, rateLt: 1, rateGt: 1})))
+            PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1)
         );
     }
 
