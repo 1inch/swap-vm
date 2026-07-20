@@ -24,7 +24,6 @@ import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, Piecewis
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
-import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 import { PatchSwapRegisters } from "../src/instructions/Debug.sol";

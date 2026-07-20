@@ -18,7 +18,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
-import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
@@ -254,8 +254,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceIn,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
@@ -290,8 +289,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
@@ -326,8 +324,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceIn,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
@@ -363,8 +360,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB)),

@@ -20,7 +20,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../src/instructions/DutchAuction.sol";
 
 /**
  * @title DutchAuctionTest
@@ -97,11 +97,9 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -113,7 +111,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
         // Should revert on actual swap execution
         TokenMock(address(tokenA)).mint(taker, 10e18);
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
         swapVM.swap(
             order,
             10e18,
@@ -129,11 +127,9 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            program.build(Opcode.DutchAuctionBalanceIn,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -145,7 +141,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
         // Should revert on actual swap execution
         TokenMock(address(tokenA)).mint(taker, 10e18);
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
         swapVM.swap(
             order,
             10e18,
@@ -160,13 +156,11 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            useIn ? program.build(Opcode.DutchAuctionBalanceIn,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)) :
-                program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            useIn ?
+                DutchAuctionBalanceIn.build(startTime, duration, decayFactor) :
+                DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

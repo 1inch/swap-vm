@@ -19,7 +19,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.sol";
 
 /**
@@ -133,8 +133,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3500000e18), // 3500:1 rate (Swap B to A; ascending tokenA, tokenB)
             // DutchAuction adjusts balances, then LimitSwap computes amounts
-            program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenB), address(tokenA)),
             // BaseFeeAdjuster must be applied after the swap
             program.build(Opcode.BaseFeeAdjuster,

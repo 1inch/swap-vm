@@ -15,7 +15,7 @@ import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
-import { DutchAuction } from "../instructions/DutchAuction.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
@@ -32,7 +32,6 @@ contract Opcodes is
     InvalidateBitExternal,
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
-    DutchAuction,
     BaseFeeAdjuster,
     TWAPSwapExternal,
     ValidateSeriesEpochExternal
@@ -65,8 +64,8 @@ contract Opcodes is
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == RequireMinRate.opcode.asU8()) RequireMinRate.exec(ctx, args);
         else if (opcode == AdjustMinRate.opcode.asU8()) AdjustMinRate.exec(ctx, args);
-        else if (opcode == uint256(Opcode.DutchAuctionBalanceIn)) DutchAuction._dutchAuctionBalanceIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.DutchAuctionBalanceOut)) DutchAuction._dutchAuctionBalanceOut1D(ctx, args);
+        else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
+        else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
         else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
         else if (opcode == TWAPSwap.opcode.asU8()) TWAPSwap.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);

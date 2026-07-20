@@ -18,7 +18,7 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
-import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -214,8 +214,7 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceIn,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
@@ -248,8 +247,7 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            program.build(Opcode.DutchAuctionBalanceOut,
-                DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             LimitSwap.build(address(tokenA), address(tokenB)),
             program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
