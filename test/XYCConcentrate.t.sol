@@ -18,7 +18,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -31,8 +31,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
     using SafeCast for uint256;
     using FormatLib for Vm;
     using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
     address public tokenA;
@@ -96,7 +94,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     struct MakerSetup {
         uint256 balanceA;
         uint256 balanceB;
-        uint256 flatFee;     // 0.003e9 - 0.3% flat fee
+        uint256 flatFee;     // 0.003e7 - 0.3% flat fee
         uint256 priceBoundA; // 0.01e18 - sqrtPmin = sqrt(priceBoundA)
         uint256 priceBoundB; // 25e18   - sqrtPmax = sqrt(priceBoundB)
     }
@@ -117,7 +115,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 actualBalanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -140,7 +137,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(actualBalanceB, actualBalanceA),
-                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
+                FeeFlatIn.build(setup.flatFee.toUint24()),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
@@ -209,7 +206,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,
             balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
             priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
@@ -233,7 +230,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,
             balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
             priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
@@ -260,7 +257,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,
             balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
             priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
@@ -335,7 +332,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,
             balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
             priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
@@ -383,7 +380,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 9000e18,
             balanceB: 8000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18, // price range min (P_min = 0.01, sqrtPmin = 0.1)
             priceBoundB: 25e18    // price range max (P_max = 25, sqrtPmax = 5)
         });
@@ -446,7 +443,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 1000e18,
             balanceB: 1000e18,
-            flatFee: 0.003e9,     // 0.3% flat fee
+            flatFee: 0.003e7,     // 0.3% flat fee
             priceBoundA: 0.01e18,
             priceBoundB: 25e18
         });
@@ -516,7 +513,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -539,7 +535,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(balanceB, balanceA),
-                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
+                FeeFlatIn.build(0.003e7), // 0.3% fee
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
@@ -717,7 +713,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     //     MakerSetup memory setup = MakerSetup({
     //         balanceA: 20000e18,
     //         balanceB: 3000e18,
-    //         flatFee: 0.003e9,     // 0.3% flat fee
+    //         flatFee: 0.003e7,     // 0.3% flat fee
     //         priceBoundA: 0.01e18, // XYCConcentrate tokenA to 100x
     //         priceBoundB: 25e18    // XYCConcentrate tokenB to 25x
     //     });

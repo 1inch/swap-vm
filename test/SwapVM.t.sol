@@ -24,8 +24,6 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 contract SwapVMTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;

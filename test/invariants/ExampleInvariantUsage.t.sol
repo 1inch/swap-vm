@@ -17,8 +17,8 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -42,8 +42,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -129,8 +127,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
+            FeeFlatIn.build(0.003e7), // 0.3% fee
             XYCSwap.build()
         );
 
@@ -164,8 +161,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
-            program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(0.1e9)), // 10% progressive
+            FeeProgressiveIn.build(0.1e7), // 10% progressive
             XYCSwap.build()
         );
 

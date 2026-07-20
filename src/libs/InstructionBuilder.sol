@@ -23,6 +23,6 @@ library InstructionBuilder {
 
     function encodeBool(bool value, uint8 bit) internal pure returns (uint8 res) {
         require(bit < 8, InstructionBuilderBitExceedsByte(bit));
-        if (value) res = uint8(128 >> bit); 
+        if (value) res = uint8(128 >> bit);
     }
 }

@@ -11,19 +11,17 @@ import { Jump, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNon
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
-import { Fee } from "../instructions/Fee.sol";
+import { FeeFlatIn } from "../instructions/FeeFlat.sol";
+import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
 contract AquaOpcodes is
-    Fee,
     PeggedSwap
 {
     using OpcodeOps for Opcode;
 
     error UnknownOpcode(uint256 opcode);
-
-    constructor(address aqua) Fee(aqua) {}
 
     /// @notice Opcode direct dispatcher
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
@@ -38,11 +36,8 @@ contract AquaOpcodes is
         else if (opcode == XYCConcentrateSwap.opcode.asU8()) XYCConcentrateSwap.exec(ctx, args);
         else if (opcode == Decay.opcode.asU8()) Decay.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
-        else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.ProtocolFeeAmountIn)) Fee._protocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountIn)) Fee._aquaProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);
+        else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
         else if (opcode == uint256(Opcode.PeggedSwap)) PeggedSwap._peggedSwapGrowPriceRange2D(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);

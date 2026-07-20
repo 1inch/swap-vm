@@ -43,8 +43,6 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
     address COLLISION_TAKER = 0x00000000000000bAdbad00000000000000fF0002;
     address BAD_TAKER = 0x00000000000000eE000200000000000000BadBad;
 
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
-
     function setUp() public {
         maker = vm.addr(makerPK);
         swapVM = new LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");

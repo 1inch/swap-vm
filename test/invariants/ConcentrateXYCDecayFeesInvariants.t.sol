@@ -20,8 +20,9 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -43,8 +44,6 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     uint256 public makerPK = 0x1234;
     address public taker;
     address public feeRecipient;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -122,12 +121,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 1: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order1_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1000e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(300),
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)),
+            FeeFlatIn.build(0.003e7),
             _xycConcentrate()
         );
 
@@ -135,12 +133,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order1_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(600),
-            program.build(Opcode.ProgressiveFeeOut, FeeArgsBuilderExperimental.buildProgressiveFee(0.01e9)),
+            FeeProgressiveOut.build(0.01e7),
             _xycConcentrate()
         );
 
@@ -152,12 +149,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 2: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order2_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1100e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(450),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.004e9)),
+            FeeFlatOut.build(0.004e7),
             _xycConcentrate()
         );
 
@@ -165,12 +161,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order2_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1800e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(720),
-            program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.05e9)),
+            FeeProgressiveIn.build(0.05e7),
             _xycConcentrate()
         );
 
@@ -184,13 +179,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 4: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order4_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1300e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(540),
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(0.0025e9, feeRecipient)),
+            FeeBuilders.protocolFeeOut(0.0025e7, feeRecipient),
             _xycConcentrate()
         );
 
@@ -198,13 +191,12 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order4_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1700e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(780),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.002e9)),
-            program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.03e9)),
+            FeeFlatOut.build(0.002e7),
+            FeeProgressiveIn.build(0.03e7),
             _xycConcentrate()
         );
 
@@ -214,12 +206,11 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order5_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(_balA, _balB),
             Decay.build(480),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.0055e9)),
+            FeeFlatOut.build(0.0055e7),
             _xycConcentrate()
         );
 

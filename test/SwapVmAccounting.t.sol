@@ -19,7 +19,8 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
-import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../src/instructions/Balances.sol";
@@ -52,8 +53,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker;
     address public protocolFeeRecipient;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     function setUp() public {
         tokenA = new TokenMock("Token I", "TKI");
@@ -211,14 +210,14 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // Order: protocolFee -> dynamicBalances -> [decay?] -> [concentrate?] -> flatFee -> swap / peggedSwap -> salt
 
     function buildProgram(
-        uint32 protocolFeeBps,
-        uint32 flatFeeInBps,
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps,
         bool includeConcentrate
     ) internal view returns (bytes memory) {
         Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory concentrateCode = includeConcentrate
@@ -226,7 +225,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         bytes memory swapCode = includeConcentrate
@@ -243,17 +242,17 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function buildWrongProgram(
-        uint32 protocolFeeBps,
-        uint32 flatFeeInBps
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
         Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
@@ -266,18 +265,18 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function buildProgramWithDecayConcentrate(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
         Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
@@ -291,18 +290,18 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function buildProgramWithDecayXYCSwap(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
         Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
@@ -316,19 +315,19 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function buildProgramWithDecayPegged(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps,
+        uint24 flatFeeInBps,
         PeggedSwapArgsBuilder.Args memory peggedArgs
     ) internal view returns (bytes memory) {
         Program p;
 
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.ProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
@@ -369,26 +368,26 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 1: XYCSwap Tests =====
 
     function test_XYCSwap_ProtocolFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, false), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), true);
 
         assertEq(r.amountIn, SWAP_AMOUNT, "AmountIn should match swap amount");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, false), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_With_FlatFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, false), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), true);
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_With_FlatFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, false), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
@@ -397,7 +396,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 2: XYCConcentrate Tests =====
 
     function test_XYCConcentrate_ProtocolFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, true), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), true);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -408,7 +407,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, true), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "Exact out amount");
         assertTokenAConservation(r.orderHash, r.amountIn);
@@ -420,7 +419,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -431,7 +430,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -445,8 +444,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactIn() public {
 
-        SwapResult memory correct = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), true);
-        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e9, 0.10e9), true);
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), true);
 
         {
             (uint256 correctBal,) = getBalances(correct.orderHash);
@@ -462,8 +461,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactOut() public {
 
-        SwapResult memory correct = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), false);
-        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e9, 0.10e9), false);
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), false);
 
         {
             (uint256 correctBal,) = getBalances(correct.orderHash);
@@ -476,7 +475,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 3: Decay + XYCConcentrate Tests =====
 
     function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayConcentrate(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -491,7 +490,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayConcentrate(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 
@@ -510,7 +509,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 4: Decay + PeggedSwap Tests =====
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e9, DECAY_PERIOD, 0.10e9, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -522,7 +521,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e9, DECAY_PERIOD, 0.10e9, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7, defaultPeggedArgs());
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 
@@ -536,7 +535,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== TEST GROUP 4b: Decay + Regular Tokens (XYCSwap instead of PeggedSwap) =====
 
     function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayXYCSwap(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -548,7 +547,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayXYCSwap(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 

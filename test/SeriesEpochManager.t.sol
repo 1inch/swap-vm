@@ -38,8 +38,6 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
     uint256 internal constant AMOUNT_IN = 1e15;
 
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
-
     function setUp() public {
         maker = vm.addr(makerPK);
         maker2 = vm.addr(maker2PK);

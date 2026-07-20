@@ -16,14 +16,14 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentratePnLTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
     uint256 constant ONE     = 1e18;
-    uint32  constant FEE_BPS = 3_000_000; // 0.3%
+    uint24  constant FEE_BPS = 0.003e7; // 0.3%
     uint256 constant ROUNDS  = 200;
 
     // ── Range A: P in [0.04, 4], sqrtP in [0.2, 2] ──────────────────────────
@@ -47,10 +47,8 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
     uint256 constant SQRT_P_SPOT_C = 1_000_000_000_000_000_000;  // sqrt(1.00·1e36) = 1e18
 
     // Round-trip counts and fee rate for Range-C scenario (original PnL test parameters)
-    uint32  constant FEE_BPS_C     = 500_000;  // 0.05%
+    uint24  constant FEE_BPS_C     = 5_000;  // 0.05% in 1e7 scale
     uint256 constant ROUNDS_C      = 500;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
     address public tokenLt; // lower address
@@ -88,7 +86,6 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -111,7 +108,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
-                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
+                FeeFlatIn.build(FEE_BPS),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
@@ -446,7 +443,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
-                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS_C)),
+                FeeFlatIn.build(FEE_BPS_C),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));

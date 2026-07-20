@@ -21,7 +21,7 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
 
     AquaSwapVMRouter public router;
 
-    constructor(address aqua) AquaOpcodesDebug(aqua) {
+    constructor(address aqua) {
         router = new AquaSwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
     }
 

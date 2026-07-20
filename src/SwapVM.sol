@@ -17,9 +17,10 @@ import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol"
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
 import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
-import { Context, ContextLib, VM, SwapRegisters, SwapQuery  } from "./libs/VM.sol";
+import { Context, ContextLib, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { MakerTraits, MakerTraitsLib } from "./libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
+import { FeeMetaLib, FeeReceiverLib } from "./libs/ProtocolFee.sol";
 
 /// @title SwapVM
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
@@ -37,7 +38,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @dev Signature verification failed for the order
     error BadSignature(address maker, bytes32 orderHash, bytes signature);
     /// @dev Aqua balance insufficient after taker pushed tokens
-    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount, uint256 amountNetPulled);
+    error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
     /// @dev Cannot use shouldUnwrapWeth with Aqua orders
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
     /// @dev Cannot use custom receiver with Aqua orders
@@ -143,8 +144,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount,
-                amountNetPulled: 0
+                amountOut: isExactIn ? 0 : amount
+            }),
+            fee: ProtocolFee({
+                meta: FeeMetaLib.init(),
+                receivers: FeeReceiverLib.init()
             })
         });
 
@@ -193,8 +197,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount,
-                amountNetPulled: 0
+                amountOut: isExactIn ? 0 : amount
+            }),
+            fee: ProtocolFee({
+                meta: FeeMetaLib.init(),
+                receivers: FeeReceiverLib.init()
             })
         });
 
@@ -234,6 +241,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             ITakerCallbacks(ctx.query.taker).preTransferInCallback(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, callbackData);
         }
 
+        uint256 fee;
         if (ctx.swap.amountIn > 0) {
             if (order.traits.useAquaInsteadOfSignature()) {
                 require(!order.traits.shouldUnwrapWeth(), MakerTraitsUnwrapIsIncompatibleWithAqua());
@@ -241,21 +249,26 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
                 if (takerTraits.useTransferFromAndAquaPush()) {
                     IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.taker, address(this), ctx.swap.amountIn);
-                    IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn);
-                    AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn);
+                    fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn);
+
+                    IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn - fee);
+                    AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn - fee);
                 } else {
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
-                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn - ctx.swap.amountNetPulled, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn, ctx.swap.amountNetPulled));
+                    require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
+
+                    fee = FeeMetaLib.resolveInAquaPullMaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn, AQUA, order.maker, ctx.query.orderHash);
                 }
             } else {
-                _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
+                fee = FeeMetaLib.resolveInSafeTransferFromTaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker);
+                _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn - fee, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
             }
         }
 
         if (order.traits.hasPostTransferInHook()) {
             (IMakerHooks target, bytes calldata makerHookData) = order.traits.postTransferInHook(order.maker, order.data);
             bytes calldata takerHookData = takerTraits.postTransferInHookData(takerData);
-            target.postTransferIn(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, makerHookData, takerHookData);
+            target.postTransferIn(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, fee, ctx.query.orderHash, makerHookData, takerHookData);
         }
     }
 
@@ -271,12 +284,16 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             ITakerCallbacks(ctx.query.taker).preTransferOutCallback(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, callbackData);
         }
 
+        uint256 fee;
+        if (order.traits.useAquaInsteadOfSignature()) fee = FeeMetaLib.resolveOutAquaPullMaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenOut, ctx.swap.amountOut, AQUA, order.maker, ctx.query.orderHash);
+        else fee = FeeMetaLib.resolveOutSafeTransferFromMaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenOut, ctx.swap.amountOut, order.maker);
+
         _transferFrom(order.maker, takerTraits.to(takerData, msg.sender), ctx.query.tokenOut, ctx.swap.amountOut, ctx.query.orderHash, order.traits.useAquaInsteadOfSignature(), takerTraits.shouldUnwrapWeth());
 
         if (order.traits.hasPostTransferOutHook()) {
             (IMakerHooks target, bytes calldata makerHookData) = order.traits.postTransferOutHook(order.maker, order.data);
             bytes calldata takerHookData = takerTraits.postTransferOutHookData(takerData);
-            target.postTransferOut(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, ctx.query.orderHash, makerHookData, takerHookData);
+            target.postTransferOut(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, fee, ctx.query.orderHash, makerHookData, takerHookData);
         }
     }
 

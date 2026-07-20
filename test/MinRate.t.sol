@@ -19,7 +19,7 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
-import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
 /**
  * @title MinRateTest
@@ -37,8 +37,6 @@ contract MinRateTest is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -192,13 +190,11 @@ contract MinRateTest is Test, OpcodesDebug {
         // MinRate: cap at 1:1.9 (protect maker from giving too much after fees)
         uint64 rateA = 1e18;
         uint64 rateB = 1.9e18;
-        uint32 feeBps = 0.01e9; // 1% fee
+        uint24 feeBps = 0.01e7; // 1% fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );

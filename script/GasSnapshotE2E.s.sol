@@ -25,8 +25,8 @@ import { BaseFeeAdjusterArgsBuilder } from "../src/instructions/BaseFeeAdjuster.
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
-import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
 import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
 import { PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
@@ -148,48 +148,48 @@ contract GasSnapshotE2E is Script {
 
     function _vmProgramJust() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustStaticBalances() internal pure returns (bytes memory) {
         return bytes.concat(
             StaticBalances.build(1e18, 1e18),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustDynamicBalances() internal pure returns (bytes memory) {
         return bytes.concat(
             DynamicBalances.build(1e18, 1e18),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustInvalidateBit() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             InvalidateBit.build(15)
         );
     }
 
     function _vmProgramJustInvalidateToken() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             InvalidateTokenIn.build()
         );
     }
 
     function _vmProgramJustEpoch() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             ValidateSeriesEpoch.build(10, 0)
         );
     }
 
     function _vmProgramJustPrivateOrder() internal view returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             PrivateOrder.build(taker)
         );
     }
@@ -197,7 +197,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustBaseFeeAdjuster() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             p.build(Opcode.BaseFeeAdjuster, BaseFeeAdjusterArgsBuilder.build(25 gwei, 3500e18, 150_000, 99e16))
         );
     }
@@ -205,48 +205,48 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustJump() internal pure returns (bytes memory) {
         return bytes.concat(
             Jump.build(uint16(4)),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustJumpIfTokenIn() internal view returns (bytes memory) {
         return bytes.concat(
             JumpIfTokenIn.build(address(tokenA), 24),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustDeadline() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             Deadline.build(type(uint32).max)
         );
     }
 
     function _vmProgramJustOnlyTakerTokenBalanceNonZero() internal view returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             OnlyTakerTokenBalanceNonZero.build(address(tokenA))
         );
     }
 
     function _vmProgramJustOnlyTakerTokenBalanceGte() internal view returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             OnlyTakerTokenBalanceGte.build(address(tokenA), 1)
         );
     }
 
     function _vmProgramJustOnlyTakerTokenSupplyShareGte() internal view returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             OnlyTakerTokenSupplyShareGte.build(address(tokenA), 0)
         );
     }
 
     function _vmProgramJustSalt() internal pure returns (bytes memory) {
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             Salt.build(uint64(42))
         );
     }
@@ -254,30 +254,30 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustRequireMinRate() internal pure returns (bytes memory) {
         return bytes.concat(
             RequireMinRate.build(1e18, 2.2e18),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
     function _vmProgramJustFlatFeeAmountIn() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.10e9)),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
+            FeeFlatIn.build(0.10e7)
         );
     }
 
     function _vmProgramJustProgressiveFeeIn() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            p.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.10e9)),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
+            FeeProgressiveIn.build(0.10e7)
         );
     }
 
     function _vmProgramJustPiecewiseLinearScaleBalanceIn() internal pure returns (bytes memory) {
         return bytes.concat(
             PiecewiseLinearScaleBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])),
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT, amountNetPulled: 0}))
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT}))
         );
     }
 
@@ -312,7 +312,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustPeggedSwap() internal pure returns (bytes memory) {
         Program p;
         return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: 0, amountNetPulled: 0})),
+            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: 0})),
             p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({x0: 50e18, y0: 50e18, linearWidth: 0.02e9, rateLt: 1, rateGt: 1})))
         );
     }

@@ -88,8 +88,8 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         testAmountsExactOut[1] = unitOut / 2;   // 0.5 tokens
         testAmountsExactOut[2] = unitOut;       // 1 token
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // Very imbalanced pools with different decimals have higher rounding errors
         // For small amounts (1 wei in 6-dec), sqrt error > swap size

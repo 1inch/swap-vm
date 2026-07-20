@@ -28,8 +28,8 @@ contract LargeAmounts is PeggedFeesInvariants {
         testAmountsExactOut[1] = 100e18;
         testAmountsExactOut[2] = 200e18;
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         symmetryTolerance = 1010;
         additivityTolerance = 2000;

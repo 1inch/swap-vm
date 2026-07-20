@@ -18,8 +18,9 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -43,8 +44,6 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 public makerPK = 0x1234;
     address public taker;
     address public feeRecipient;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -103,14 +102,13 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 1000e18;
         uint256 balanceB = 1000e18;
         uint16 decayPeriod = 300; // 5 minutes
-        uint32 feeBps = 0.003e9; // 0.3% fee
+        uint24 feeBps = 0.003e7; // 0.3% fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             XYCSwap.build()
         );
 
@@ -144,14 +142,13 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 1500e18;
         uint256 balanceB = 1500e18;
         uint16 decayPeriod = 600; // 10 minutes
-        uint32 feeBps = 0.005e9; // 0.5% fee
+        uint24 feeBps = 0.005e7; // 0.5% fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             XYCSwap.build()
         );
 
@@ -186,14 +183,13 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 2000e18;
         uint256 balanceB = 2000e18;
         uint16 decayPeriod = 900; // 15 minutes
-        uint32 feeBps = 0.1e9; // 10% progressive fee
+        uint24 feeBps = 0.1e7; // 10% progressive fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
+            FeeProgressiveIn.build(feeBps),
             XYCSwap.build()
         );
 
@@ -221,14 +217,13 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 1800e18;
         uint256 balanceB = 1800e18;
         uint16 decayPeriod = 1200; // 20 minutes
-        uint32 feeBps = 0.05e9; // 5% progressive fee
+        uint24 feeBps = 0.05e7; // 5% progressive fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.ProgressiveFeeOut,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
+            FeeProgressiveOut.build(feeBps),
             XYCSwap.build()
         );
 
@@ -270,12 +265,11 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 1000e18;
         uint256 balanceB = 1000e18;
         uint16 decayPeriod = 300;
-        uint32 feeBps = 0.002e9; // 0.2% protocol fee
+        uint24 feeBps = 0.002e7; // 0.2% protocol fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.ProtocolFeeAmountIn,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
+            FeeBuilders.protocolFeeIn(feeBps, feeRecipient),
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
             XYCSwap.build()
@@ -313,7 +307,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 1000e18;
         uint256 balanceB = 1000e18;
         uint16 decayPeriod = 300;
-        uint32 feeBps = 0.002e9; // 0.2% protocol fee
+        uint24 feeBps = 0.002e7; // 0.2% protocol fee
 
         // Pre-approve for protocol fee transfers
         vm.prank(maker);
@@ -321,8 +315,7 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(feeBps, feeRecipient)),
+            FeeBuilders.protocolFeeOut(feeBps, feeRecipient),
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
             XYCSwap.build()
@@ -360,17 +353,15 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceA = 3000e18;
         uint256 balanceB = 3000e18;
         uint16 decayPeriod = 600;
-        uint32 flatFeeBps = 0.001e9;      // 0.1% flat fee
-        uint32 progressiveFeeBps = 0.02e9; // 2% progressive fee
+        uint24 flatFeeBps = 0.001e7;      // 0.1% flat fee
+        uint24 progressiveFeeBps = 0.02e7; // 2% progressive fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(Opcode.ProgressiveFeeOut,
-                FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
+            FeeFlatIn.build(flatFeeBps),
+            FeeProgressiveOut.build(progressiveFeeBps),
             XYCSwap.build()
         );
 

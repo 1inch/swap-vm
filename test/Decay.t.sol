@@ -26,8 +26,6 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 contract DecayTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;

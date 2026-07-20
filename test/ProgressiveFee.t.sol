@@ -19,8 +19,8 @@ import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -28,8 +28,6 @@ uint256 constant ONE = 1e18;
 
 contract ProgressiveFeeTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouterDebug public swapVM;
     address public tokenA;
@@ -74,8 +72,8 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
     struct MakerSetup {
         uint256 balanceA;
         uint256 balanceB;
-        uint32 progressiveFeeBps;
-        uint32 flatFeeBps;
+        uint24 progressiveFeeBps;
+        uint24 flatFeeBps;
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
@@ -84,11 +82,9 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
             // 1. Set initial token balances
             DynamicBalances.build(setup.balanceA, setup.balanceB),
             // 2. Apply progressive fee based on rate change
-            program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)),
+            FeeProgressiveIn.build(setup.progressiveFeeBps),
             // 3. Apply flat fee on top of progressive fee
-            (setup.flatFeeBps) > 0 ? program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(setup.flatFeeBps)) : bytes(""),
+            (setup.flatFeeBps) > 0 ? FeeFlatIn.build(setup.flatFeeBps) : bytes(""),
             // 4. Perform the swap
             XYCSwap.build()
         );
@@ -161,7 +157,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -185,7 +181,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -209,7 +205,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
@@ -234,7 +230,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
@@ -259,11 +255,11 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory orderWithProgressiveFee,) = _createOrder(setup);
-        setup.flatFeeBps = 0.10e9; // 10% flat fee
+        setup.flatFeeBps = 0.10e7; // 10% flat fee
         setup.progressiveFeeBps = 0;
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
 
@@ -288,11 +284,11 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory orderWithProgressiveFee,) = _createOrder(setup);
-        setup.flatFeeBps = 0.10e9; // 10% flat fee
+        setup.flatFeeBps = 0.10e7; // 10% flat fee
         setup.progressiveFeeBps = 0;
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
 
@@ -317,7 +313,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -400,8 +396,8 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
-            flatFeeBps: 0.05e9 // 5% flat fee
+            progressiveFeeBps: 0.10e7, // 10% fee
+            flatFeeBps: 0.05e7 // 5% flat fee
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
@@ -415,7 +411,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         (, uint256 amountOutWithProgressiveFee,) = swapVM.asView().quote(orderWithFlatFees, amountIn, exactInTakerData);
 
         setup.progressiveFeeBps = 0; // Remove progressive fee
-        setup.flatFeeBps = 0.05e9; // Restore flat fee
+        setup.flatFeeBps = 0.05e7; // Restore flat fee
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
         (, uint256 amountOutWithFlatFee,) = swapVM.asView().quote(orderWithFlatFee, amountIn, exactInTakerData);
 
@@ -434,8 +430,8 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
-            flatFeeBps: 0.05e9 // 5% flat fee
+            progressiveFeeBps: 0.10e7, // 10% fee
+            flatFeeBps: 0.05e7 // 5% flat fee
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
@@ -449,7 +445,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         (uint256 amountInWithProgressiveFee,,) = swapVM.asView().quote(orderWithProgressiveFee, amountOut, exactOutTakerData);
 
         setup.progressiveFeeBps = 0; // Remove progressive fee
-        setup.flatFeeBps = 0.05e9; // Restore flat fee
+        setup.flatFeeBps = 0.05e7; // Restore flat fee
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
         (uint256 amountInWithFlatFee,,) = swapVM.asView().quote(orderWithFlatFee, amountOut, exactOutTakerData);
 
@@ -468,7 +464,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% fee
+            progressiveFeeBps: 0.10e7, // 10% fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -497,7 +493,7 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            progressiveFeeBps: 0.10e9, // 10% progressive fee
+            progressiveFeeBps: 0.10e7, // 10% progressive fee
             flatFeeBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);

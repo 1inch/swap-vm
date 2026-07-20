@@ -19,8 +19,9 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -41,8 +42,6 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
     uint256 public makerPK = 0x1234;
     address public taker;
     address public protocolFeeCollector;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -101,15 +100,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.99e18;
-        uint32 feeBps = 100; // 1% fee
+        uint24 feeBps = 0.01e7; // 1% fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -123,15 +121,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.98e18;
-        uint32 feeBps = 200; // 2% fee
+        uint24 feeBps = 0.02e7; // 2% fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -145,15 +142,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.95e18;
-        uint32 feeBps = 50; // 0.5% base fee
+        uint24 feeBps = 0.005e7; // 0.5% base fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
+            FeeProgressiveIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -168,15 +164,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.99e18; // Use milder decay to avoid overflow
-        uint32 feeBps = 25; // 0.25% base fee (reduced to avoid overflow)
+        uint24 feeBps = 0.0025e7; // 0.25% base fee (reduced to avoid overflow)
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.ProgressiveFeeOut,
-                FeeArgsBuilderExperimental.buildProgressiveFee(feeBps)),
+            FeeProgressiveOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -191,15 +186,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.97e18;
-        uint32 feeBps = 150; // 1.5% protocol fee
+        uint24 feeBps = 0.015e7; // 1.5% protocol fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
+            FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -214,8 +208,8 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.96e18;
-        uint32 flatFeeBps = 50; // 0.5% flat fee
-        uint32 progressiveFeeBps = 25; // 0.25% progressive fee
+        uint24 flatFeeBps = 0.005e7; // 0.5% flat fee
+        uint24 progressiveFeeBps = 0.0025e7; // 0.25% progressive fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
@@ -223,10 +217,8 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
             program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
             // Multiple fees
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(Opcode.ProgressiveFeeOut,
-                FeeArgsBuilderExperimental.buildProgressiveFee(progressiveFeeBps)),
+            FeeFlatIn.build(flatFeeBps),
+            FeeProgressiveOut.build(progressiveFeeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -241,15 +233,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
         uint64 decayFactor = 0.99e18;
-        uint32 feeBps = 1000; // 10% fee
+        uint24 feeBps = 0.1e7; // 10% fee
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -292,6 +283,11 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
 
             config.skipAdditivity = skipAdditivity;
             config.skipMonotonicity = skipMonotonicity;
+            // Fees round up per instruction: allow 1-wei price jitter between trade sizes
+            config.monotonicityToleranceBps = 1;
+            // Floor-rounded protocol fees vanish on dust amounts, so dust rates can beat
+            // the net-of-fee spot price by up to the fee size (<= 2% in this file)
+            config.roundingToleranceBps = 200;
 
             assertAllInvariantsWithConfig(
                 swapVM,

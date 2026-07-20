@@ -15,7 +15,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
@@ -40,8 +40,6 @@ contract PeggedSwapMathWrapper {
 
 contract PeggedSwapTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
     address public tokenA;
@@ -95,8 +93,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(setup.balanceA, setup.balanceB),
-            setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
+            setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),
             prog.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: setup.x0,
@@ -592,7 +589,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0.003e9 // 0.3%
+            feeInBps: 0.003e7 // 0.3%
         });
 
         ISwapVM.Order memory orderNoFee = _createOrder(setupNoFee);

@@ -19,7 +19,7 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
@@ -29,8 +29,6 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
     using SafeCast for uint256;
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenUSD;
     address public tokenETH;
@@ -39,8 +37,8 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
-    uint32 public constant FLAT_FEE_BPS = 0.003e9; // 0.3%
-    uint256 public constant BPS = 1e9;
+    uint24 public constant FLAT_FEE_BPS = 0.003e7; // 0.3%
+    uint256 public constant BPS = 1e7;
 
     function setUp() public {
         makerPrivateKey = 0x1234;
@@ -72,12 +70,10 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
         uint256 balanceETH,
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 flatFeeBps
+        uint24 flatFeeBps
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
-
         bytes memory feeInstruction = flatFeeBps > 0
-            ? program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeBps))
+            ? FeeFlatIn.build(flatFeeBps)
             : bytes("");
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

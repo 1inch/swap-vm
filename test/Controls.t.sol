@@ -19,7 +19,7 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
-import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
@@ -40,8 +40,6 @@ contract ControlsTest is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -252,11 +250,9 @@ contract ControlsTest is Test, OpcodesDebug {
      * Test jumpIfTokenOut instruction
      */
     function test_JumpIfTokenIn() public {
-        Program program;
-
         // Build individual instructions to check sizes
         bytes memory jumpInstr = JumpIfTokenIn.build(address(tokenB), 0); // We'll calculate offset later
-        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory feeInstr = FeeFlatOut.build(0.1e7); // 10%
         bytes memory balancesInstr = StaticBalances.build(100e18, 100e18);
         bytes memory swapInstr = XYCSwap.build();
 
@@ -285,18 +281,16 @@ contract ControlsTest is Test, OpcodesDebug {
 
         // Test B->A swap (output is tokenA, should apply fee)
         amountOut = _executeSwap(order, address(tokenB), address(tokenA), 1e18);
-        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+        assertEq(amountOut, 891089108910891089, "Should get ~0.9e18 with fee");
     }
 
     /**
      * Test jumpIfTokenOut instruction
      */
     function test_JumpIfTokenOut() public {
-        Program program;
-
         // Build individual instructions to check sizes
         bytes memory jumpInstr = JumpIfTokenOut.build(address(tokenB), 0); // We'll calculate offset later
-        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory feeInstr = FeeFlatOut.build(0.1e7); // 10%
         bytes memory balancesInstr = StaticBalances.build(100e18, 100e18);
         bytes memory swapInstr = XYCSwap.build();
 
@@ -325,7 +319,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         // Test B->A swap (output is tokenA, should apply fee)
         amountOut = _executeSwap(order, address(tokenB), address(tokenA), 1e18);
-        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+        assertEq(amountOut, 891089108910891089, "Should get ~0.9e18 with fee");
     }
 
     /**
@@ -573,11 +567,9 @@ contract ControlsTest is Test, OpcodesDebug {
      * @notice Test jumpIfDirection instruction skips fee only for the matching direction
      */
     function test_JumpIfDirection() public {
-        Program program;
-
         // Expected direction A->B (tokenA < tokenB); offset calculated after sizing
         bytes memory jumpInstr = JumpIfDirection.build(address(tokenA), address(tokenB), 0);
-        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory feeInstr = FeeFlatOut.build(0.1e7); // 10%
         bytes memory balancesInstr = StaticBalances.build(100e18, 100e18);
         bytes memory swapInstr = XYCSwap.build();
 
@@ -601,18 +593,16 @@ contract ControlsTest is Test, OpcodesDebug {
 
         // B->A does not match: fee applied
         amountOut = _executeSwap(order, address(tokenB), address(tokenA), 1e18);
-        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+        assertEq(amountOut, 891089108910891089, "Should get ~0.9e18 with fee");
     }
 
     /**
      * @notice Test jumpIfDirection with the reversed expected direction
      */
     function test_JumpIfDirection_Reversed() public {
-        Program program;
-
         // Expected direction B->A; offset calculated after sizing
         bytes memory jumpInstr = JumpIfDirection.build(address(tokenB), address(tokenA), 0);
-        bytes memory feeInstr = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.1e9)); // 10%
+        bytes memory feeInstr = FeeFlatOut.build(0.1e7); // 10%
         bytes memory balancesInstr = StaticBalances.build(100e18, 100e18);
         bytes memory swapInstr = XYCSwap.build();
 
@@ -636,7 +626,7 @@ contract ControlsTest is Test, OpcodesDebug {
 
         // A->B does not match: fee applied
         amountOut = _executeSwap(order, address(tokenA), address(tokenB), 1e18);
-        assertEq(amountOut, 891089108910891090, "Should get ~0.9e18 with fee");
+        assertEq(amountOut, 891089108910891089, "Should get ~0.9e18 with fee"); // fee rounds up (maker-favorable)
     }
 
     /**

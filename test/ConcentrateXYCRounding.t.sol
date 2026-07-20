@@ -17,7 +17,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -32,7 +32,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
     uint256 constant ONE = 1e18;
-    uint32 constant FEE_BPS = 3_000_000; // 0.3%
+    uint24 constant FEE_BPS = 0.003e7; // 0.3%
 
     SwapVMRouter public swapVM;
     address public tokenLt; // lower address
@@ -40,8 +40,6 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK;
     address public taker = makeAddr("taker");
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     function setUp() public {
         makerPK = 0x1234;
@@ -73,7 +71,6 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -96,7 +93,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
-                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
+                FeeFlatIn.build(FEE_BPS),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));

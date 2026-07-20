@@ -27,8 +27,8 @@ contract SmallAmounts is ConcentrateXYCFeesInvariants {
         _computeInitialBalances();
 
         // Standard fees
-        flatFeeInBps = 0.003e9;        // 0.3%
-        protocolFeeOutBps = 0.002e9;   // 0.2%
+        flatFeeInBps = 0.003e7;        // 0.3%
+        protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Small test amounts (0.01% - 0.1% of pool)
         testAmounts = new uint256[](5);

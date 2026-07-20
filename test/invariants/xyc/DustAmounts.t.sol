@@ -40,16 +40,16 @@ contract DustAmounts is XYCFeesInvariants {
         balanceB = 1000e18;
 
         // Standard fees
-        flatFeeInBps = 0.003e9;        // 0.3%
-        flatFeeOutBps = 0.003e9;       // 0.3%
-        progressiveFeeInBps = 0.05e9;  // 5%
-        progressiveFeeOutBps = 0.05e9; // 5%
-        protocolFeeOutBps = 0.002e9;   // 0.2%
+        flatFeeInBps = 0.003e7;        // 0.3%
+        flatFeeOutBps = 0.003e7;       // 0.3%
+        progressiveFeeInBps = 0.05e7;  // 5%
+        progressiveFeeOutBps = 0.05e7; // 5%
+        protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Test absolute minimum for exactIn (1-2 wei gives output=0 for progressive fees)
         testAmounts = new uint256[](9);
-        testAmounts[0] = 3;       // 3 wei - minimum for progressive fees
-        testAmounts[1] = 5;       // 5 wei
+        testAmounts[0] = 5;       // 5 wei - minimum for stacked ceil-rounded fees
+        testAmounts[1] = 7;       // 7 wei
         testAmounts[2] = 10;      // 10 wei
         testAmounts[3] = 20;      // 20 wei
         testAmounts[4] = 50;      // 50 wei

@@ -21,7 +21,8 @@ import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -46,8 +47,6 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 public makerPK = 0x1234;
     address public taker;
     address public protocolFeeCollector;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -243,13 +242,11 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_MinRate_LimitSwap_FlatFeeIn() public {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18; // Cap at 1:2 rate
-        uint32 feeBps = 100; // 1% fee on input
+        uint24 feeBps = 0.01e7; // 1% fee on input
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 5000e18),  // 1:5 base rate (very generous)
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -267,8 +264,8 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             1e18,
             exactInData
         );
-        // Actual output is slightly less due to rounding: 1999999800000000000
-        assertEq(amountOut, 1999999800000000000, "MinRate should cap output at ~2e18");
+        // 1% input fee, then MinRate caps at 1:2 on the net input: 0.99e18 * 2
+        assertEq(amountOut, 1.98e18, "MinRate should cap output at ~2e18");
 
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = exactInData;
@@ -290,13 +287,11 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_MinRate_LimitSwap_FlatFeeOut() public {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18; // Cap at 1:2 rate
-        uint32 feeBps = 200; // 2% fee on output
+        uint24 feeBps = 0.02e7; // 2% fee on output
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 6000e18),  // 1:6 base rate (very generous)
-            program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -314,8 +309,8 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             1e18,
             exactInData
         );
-        // Actual output is slightly less due to rounding: 1999999600000000000
-        assertEq(amountOut, 1999999600000000000, "Should get min rate minus output fee");
+        // MinRate caps at 2e18, minus 2% output fee
+        assertEq(amountOut, 1.96e18, "Should get min rate minus output fee");
 
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = exactInData;
@@ -336,13 +331,11 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_MinRate_LimitSwap_ProtocolFee() public {
         uint64 rateA = 1e18;
         uint64 rateB = 1.85e18; // Cap at 1:1.85 rate
-        uint32 feeBps = 150; // 1.5% protocol fee
+        uint24 feeBps = 0.015e7; // 1.5% protocol fee
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 8000e18),  // 1:8 base rate (extremely generous)
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
+            FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -360,8 +353,8 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             1e18,
             exactInData
         );
-        // Actual output is slightly less due to rounding: 1849999722500000000
-        assertEq(amountOut, 1849999722500000000, "Should get min rate minus protocol fee");
+        // MinRate caps at 1.85e18, minus 1.5% protocol fee on output
+        assertEq(amountOut, 1.82225e18, "Should get min rate minus protocol fee");
 
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = exactInData;
@@ -386,18 +379,16 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 decayFactor = 0.995e18;
         uint64 rateA = 1e18;
         uint64 rateB = 1.7e18; // Cap at 1:1.7 rate
-        uint32 flatFeeBps = 50; // 0.5% flat fee on input
-        uint32 protocolFeeBps = 100; // 1% protocol fee on output
+        uint24 flatFeeBps = 0.005e7; // 0.5% flat fee on input
+        uint24 protocolFeeBps = 0.01e7; // 1% protocol fee on output
 
         Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 7000e18),  // 1:7 base rate (very generous)
             program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
+            FeeFlatIn.build(flatFeeBps),
+            FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -418,8 +409,8 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
             1e18,
             exactInData
         );
-        // MinRate caps at 1:1.7, then 1% protocol fee. Actual: 1699999745000008500
-        assertEq(amountOut, 1699999745000008500, "Should get min rate minus protocol fee");
+        // 0.5% input fee, MinRate caps net input at 1:1.7, then 1% protocol fee on output
+        assertEq(amountOut, 1.674585e18, "Should get min rate minus protocol fee");
 
         InvariantConfig memory config = _getDefaultConfig();
         config.exactInTakerData = exactInData;

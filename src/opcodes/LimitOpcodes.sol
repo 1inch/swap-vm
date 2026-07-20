@@ -12,8 +12,7 @@ import { StaticBalances } from "../instructions/Balances.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
-import { Fee } from "../instructions/Fee.sol";
-import { FeeExperimental } from "../instructions/FeeExperimental.sol";
+import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
@@ -24,15 +23,11 @@ contract LimitOpcodes is
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
     BaseFeeAdjuster,
-    Fee,
-    FeeExperimental,
     ValidateSeriesEpochExternal
 {
     using OpcodeOps for Opcode;
 
     error UnknownOpcode(uint256 opcode);
-
-    constructor(address aqua) FeeExperimental(aqua) {}
 
     /// @notice Opcode direct dispatcher
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
@@ -52,12 +47,7 @@ contract LimitOpcodes is
         else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
-        else if (opcode == uint256(Opcode.ProtocolFeeAmountOut)) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountOut)) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
-        else if (opcode == uint256(Opcode.ProtocolFeeAmountIn)) Fee._protocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountIn)) Fee._aquaProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
+        else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
         else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);
         else if (opcode == PrivateOrder.opcode.asU8()) PrivateOrder.exec(ctx, args);
         else if (opcode == WhitelistCoequal.opcode.asU8()) WhitelistCoequal.exec(ctx, args);

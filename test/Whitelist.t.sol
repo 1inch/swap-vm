@@ -49,8 +49,6 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         Sequential
     }
 
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
-
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);

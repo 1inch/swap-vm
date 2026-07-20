@@ -38,8 +38,6 @@ contract InvalidatorsTest is Test, OpcodesDebug {
     uint256 public makerPK = 0x1234;
     address public taker;
 
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
-
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);

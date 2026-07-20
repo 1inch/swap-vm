@@ -18,7 +18,7 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
-import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
@@ -50,8 +50,6 @@ contract RunLoopTest is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -185,13 +183,11 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test deep nesting (5 levels): DynamicBalances → Decay → Fee → MinRate → XYCConcentrate(terminal)
      */
     function test_NestedRunLoop_Deep_SixLevels() public {
-        Program program;
-
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(100e18, 100e18), // Level 0: DynamicBalances → runLoop
             Decay.build(3600), // Level 1: Decay → runLoop
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
-            RequireMinRate.build(uint64(0.8e9), uint64(1.2e9)), // Level 3: MinRate → runLoop
+            FeeFlatIn.build(0.01e7), // Level 2: Fee (1%) → runLoop
+            RequireMinRate.build(uint64(0.8e7), uint64(1.2e7)), // Level 3: MinRate → runLoop
             XYCConcentrateSwap.build(Math.sqrt(0.5e36), Math.sqrt(2.0e36)) // Level 4: XYCConcentrate (terminal)
         );
 
@@ -234,20 +230,18 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test very long program (50+ instructions)
      */
     function test_VeryLongProgram() public {
-        Program program;
-
         bytes memory bytecode = DynamicBalances.build(100e18, 100e18);
 
         // Add 20 salt instructions (harmless, just increase program length)
         for (uint64 i = 0; i < 20; i++) {
             bytecode = bytes.concat(bytecode, Salt.build(i));
-       }
+        }
 
         // Add nested runLoop chain
         bytecode = bytes.concat(
             bytecode,
             Decay.build(3600),
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)),
+            FeeFlatIn.build(0.01e7),
             XYCSwap.build()
         );
 

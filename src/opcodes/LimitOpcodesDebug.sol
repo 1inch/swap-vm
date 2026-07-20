@@ -8,12 +8,10 @@ import { Context } from "../libs/VM.sol";
 import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
 import { LimitOpcodes } from "./LimitOpcodes.sol";
-import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PatchSwapRegisters } from "../instructions/Debug.sol";
+import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PrintFee, PatchSwapRegisters } from "../instructions/Debug.sol";
 
 contract LimitOpcodesDebug is LimitOpcodes {
     using OpcodeOps for Opcode;
-
-    constructor(address aqua) LimitOpcodes(aqua) {}
 
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
              if (opcode == PrintSwapRegisters.opcode.asU8()) PrintSwapRegisters.exec(ctx, args);
@@ -21,6 +19,7 @@ contract LimitOpcodesDebug is LimitOpcodes {
         else if (opcode == PrintVM.opcode.asU8()) PrintVM.exec(ctx, args);
         else if (opcode == PrintFreeMemoryPointer.opcode.asU8()) PrintFreeMemoryPointer.exec(ctx, args);
         else if (opcode == PrintGasLeft.opcode.asU8()) PrintGasLeft.exec(ctx, args);
+        else if (opcode == PrintFee.opcode.asU8()) PrintFee.exec(ctx, args);
         else if (opcode == PatchSwapRegisters.opcode.asU8()) PatchSwapRegisters.exec(ctx, args);
         else super._runOpcode(ctx, opcode, args);
     }

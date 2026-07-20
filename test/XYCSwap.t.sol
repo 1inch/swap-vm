@@ -18,7 +18,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
@@ -34,7 +34,7 @@ contract MockToken is ERC20 {
 contract XYCSwapTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
+    constructor() {}
 
     SwapVMRouter public swapVM;
     MockToken public tokenA;
@@ -81,7 +81,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
         if (feeIn > 0) {
             bytecode = bytes.concat(
                 DynamicBalances.build(balanceA, balanceB),
-                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
+                FeeFlatIn.build(uint24(feeIn)),
                 XYCSwap.build()
             );
         } else {
@@ -173,13 +173,13 @@ contract XYCSwapTest is Test, OpcodesDebug {
     function test_XYCSwap_BasicSwap_WithFee() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
-        uint256 feeIn = 0.003e9; // 0.3%
+        uint256 feeIn = 0.003e7; // 0.3%
 
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, feeIn);
         bytes memory takerData = _signAndPack(order, true, 0);
 
         uint256 amountIn = 10e18;
-        uint256 amountInAfterFee = amountIn * (1e9 - feeIn) / 1e9;
+        uint256 amountInAfterFee = amountIn * (1e7 - feeIn) / 1e7;
         uint256 expectedOut = (amountInAfterFee * poolB) / (poolA + amountInAfterFee);
 
         vm.prank(taker);
@@ -231,7 +231,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
     function test_XYCSwap_RoundingInvariants_WithFee() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
-        uint256 feeIn = 0.003e9; // 0.3%
+        uint256 feeIn = 0.003e7; // 0.3%
 
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, feeIn);
         bytes memory takerData = _signAndPack(order, true, 0);
@@ -250,7 +250,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
     function test_XYCSwap_RoundingInvariants_HighFee() public {
         uint256 poolA = 1000e18;
         uint256 poolB = 1000e18;
-        uint256 feeIn = 0.01e9; // 1%
+        uint256 feeIn = 0.01e7; // 1%
 
         ISwapVM.Order memory order = _makeOrder(poolA, poolB, feeIn);
         bytes memory takerData = _signAndPack(order, true, 0);

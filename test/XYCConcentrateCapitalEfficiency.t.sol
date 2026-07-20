@@ -69,8 +69,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     uint256 constant SQRT_P_MAX_NARROW = 3_333_333_333_333_333_333;        // ~3.33e18 (≈10/3)
     // For sqrtPmin=0.9: R = 1/(1-0.9) = 10
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenLt;
     address public tokenGt;

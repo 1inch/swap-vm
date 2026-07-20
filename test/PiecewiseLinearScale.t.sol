@@ -34,8 +34,6 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     // 18 decimals 100 * 10 ** 12, feels reasonable
     uint256 internal constant MAX_AMOUNT = 1e18 * 1e12 * 100;
 
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
-
     function setUp() public {
         swapVM = new LimitSwapVMRouterDebug(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
         tokenA = new TokenMock("Token I", "TKI");

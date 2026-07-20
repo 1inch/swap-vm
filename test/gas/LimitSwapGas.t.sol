@@ -22,8 +22,8 @@ import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol
 import { TWAPSwap, TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { Salt, Deadline } from "../../src/instructions/Controls.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
 
@@ -47,8 +47,6 @@ contract LimitSwapGas is Test, OpcodesDebug {
     uint256 constant BALANCE_A = 1000e18;
     uint256 constant BALANCE_B = 2000e18;
     uint256 constant SWAP_AMOUNT = 1e18;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -470,17 +468,15 @@ contract LimitSwapGas is Test, OpcodesDebug {
     }
 
     function _createLimitSwapWithFeeOrder(bool isFeeIn, bool isExactIn, bool isProgressive) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint32 feeBps = 100; // 1%
-
-        Program program;
+        uint24 feeBps = 100; // 1%
 
         bytes memory feeInstruction;
         if (isProgressive) {
-            feeInstruction = program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(feeBps));
+            feeInstruction = FeeProgressiveIn.build(feeBps);
         } else if (isFeeIn) {
-            feeInstruction = program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps));
+            feeInstruction = FeeFlatIn.build(feeBps);
         } else {
-            feeInstruction = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(feeBps));
+            feeInstruction = FeeFlatOut.build(feeBps);
         }
 
         bytes memory bytecode = bytes.concat(
@@ -620,15 +616,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createFullLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint40 deadline = uint40(block.timestamp + 3600);
         uint64 salt = 99999;
-        uint32 feeBps = 30; // 0.3%
+        uint24 feeBps = 30; // 0.3%
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             Deadline.build(deadline),
             Salt.build(salt),
             StaticBalances.build(BALANCE_A, BALANCE_B),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB)),
             InvalidateTokenIn.build()
         );

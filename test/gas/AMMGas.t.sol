@@ -21,7 +21,7 @@ import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 
 /**
  * @title AMMGas
@@ -43,8 +43,6 @@ contract AMMGas is Test, OpcodesDebug {
     uint256 constant BALANCE_A = 1000e18;
     uint256 constant BALANCE_B = 1000e18;
     uint256 constant SWAP_AMOUNT = 1e18;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -355,13 +353,11 @@ contract AMMGas is Test, OpcodesDebug {
     }
 
     function _createXYCSwapWithFeeOrder(bool isFeeIn, bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        uint32 feeBps = 100; // 1%
-
-        Program program;
+        uint24 feeBps = 100; // 1%
 
         bytes memory feeInstruction = isFeeIn ?
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)) :
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(feeBps));
+            FeeFlatIn.build(feeBps) :
+            FeeFlatOut.build(feeBps);
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(BALANCE_A, BALANCE_B),
@@ -380,13 +376,12 @@ contract AMMGas is Test, OpcodesDebug {
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balA, uint256 balB) = _concentrateBalances(BALANCE_A, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 3600;
-        uint32 feeBps = 30; // 0.3%
+        uint24 feeBps = 30; // 0.3%
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balA, balB),
             Decay.build(decayPeriod),
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
         );
 

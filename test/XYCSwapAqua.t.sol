@@ -10,8 +10,6 @@ import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 
-
-import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 

@@ -19,7 +19,8 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -45,8 +46,6 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 public makerPK = 0x1234;
     address public taker;
     address public protocolFeeCollector;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -153,7 +152,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 86400; // 24 hours
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 2000e18;
-        uint32 feeBps = 100; // 1% fee on input
+        uint24 feeBps = 100; // 1% fee on input
 
         Program p;
         bytes memory bytecode = bytes.concat(
@@ -167,8 +166,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: 1.15e18,
                     minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
                 }))),
-            p.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -207,7 +205,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 86400; // 24 hours
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 1500e18;
-        uint32 feeBps = 200; // 2% fee on output
+        uint24 feeBps = 200; // 2% fee on output
 
         Program p;
         bytes memory bytecode = bytes.concat(
@@ -221,8 +219,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: 1.2e18,
                     minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
                 }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -260,12 +257,11 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 43200; // 12 hours
         uint256 balanceOut = 500e18;
         uint256 balanceIn = 1000e18;
-        uint32 feeBps = 150; // 1.5% protocol fee
+        uint24 feeBps = 150; // 1.5% protocol fee
 
         Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
+            FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             StaticBalances.build(1000e18, 500e18),  // 2:1 rate
             p.build(Opcode.TWAPSwap,
                 TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
@@ -300,7 +296,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // Verify protocol fee was collected
         uint256 feeCollected = tokenB.balanceOf(protocolFeeCollector) - feeBalanceBefore;
-        uint256 expectedFee = amountOut * feeBps / 1e9;
+        uint256 expectedFee = amountOut * feeBps / 1e7;
         assertApproxEqRel(feeCollected, expectedFee, 0.01e18, "Protocol fee should be collected");
 
         // Test invariants
@@ -333,13 +329,12 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 7200; // 2 hours
         uint256 balanceOut = 200e18;
         uint256 balanceIn = 400e18;
-        uint32 flatFeeBps = 50; // 0.5% flat fee on input
-        uint32 protocolFeeBps = 100; // 1% protocol fee on output
+        uint24 flatFeeBps = 50; // 0.5% flat fee on input
+        uint24 protocolFeeBps = 100; // 1% protocol fee on output
 
         Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
+            FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             StaticBalances.build(400e18, 200e18),  // 2:1 rate
             p.build(Opcode.TWAPSwap,
                 TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
@@ -350,8 +345,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: 1.25e18,
                     minTradeAmountOut: 0.2e18 // 0.1% of balanceOut
                 }))),
-            p.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(flatFeeBps)),
+            FeeFlatIn.build(flatFeeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -389,7 +383,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 3600; // 1 hour
         uint256 balanceOut = 100e18;
         uint256 balanceIn = 200e18;
-        uint32 feeBps = 150; // 1.5% fee
+        uint24 feeBps = 150; // 1.5% fee
 
         Program p;
         bytes memory bytecode = bytes.concat(
@@ -403,8 +397,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: 1.4e18,
                     minTradeAmountOut: 0.05e18 // Very small minimum
                 }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -522,7 +515,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 2000e18;
         uint256 priceBump = 2.0e18; // 100% bump
-        uint32 feeBps = 300; // 3% fee
+        uint24 feeBps = 300; // 3% fee
 
         Program p;
         bytes memory bytecode = bytes.concat(
@@ -536,8 +529,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
                     priceBumpAfterIlliquidity: priceBump,
                     minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
                 }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
+            FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

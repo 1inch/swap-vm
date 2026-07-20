@@ -14,7 +14,9 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { SwapRegisters } from "../src/libs/VM.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PatchSwapRegisters } from "../src/instructions/Debug.sol";
+import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PrintFee, PatchSwapRegisters } from "../src/instructions/Debug.sol";
+import { FeeProtocol } from "../src/instructions/FeeProtocol.sol";
+import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 contract DebugTest is Test {
     SwapVMRouterDebug public swapVM;
@@ -50,14 +52,15 @@ contract DebugTest is Test {
                 balanceIn: 123e18,
                 balanceOut: 98e18,
                 amountIn: AMOUNT,
-                amountOut: AMOUNT,
-                amountNetPulled: 77
+                amountOut: AMOUNT
             })),
             PrintSwapRegisters.build(),
             PrintSwapQuery.build(),
             PrintVM.build(),
             PrintFreeMemoryPointer.build(),
-            PrintGasLeft.build()
+            PrintGasLeft.build(),
+            PrintFee.build(),
+            FeeBuilders.protocolSurplusIn(0.4e7, address(this), 123e18)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

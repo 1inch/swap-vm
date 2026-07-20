@@ -20,7 +20,8 @@ import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Salt } from "../../src/instructions/Controls.sol";
-import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeFlatIn } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 
@@ -48,8 +49,8 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         uint256 balanceB;
         uint256 priceMin;
         uint256 priceMax;
-        uint32 protocolFeeBps;
-        uint32 feeInBps;
+        uint24 protocolFeeBps;
+        uint24 feeInBps;
         address protocolFeeRecipient;
         SwapType swapType;
     }
@@ -61,8 +62,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
 
     address public maker;
     uint256 public makerPrivateKey;
-
-    constructor(address _aqua) AquaOpcodesDebug(_aqua) {}
 
     function setUp() public virtual {
         // Setup maker with known private key for signing
@@ -94,8 +93,8 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             : XYCSwap.build();
 
         return bytes.concat(
-            setup.protocolFeeBps > 0 ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
-            setup.feeInBps > 0 ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
+            setup.protocolFeeBps > 0 ? FeeBuilders.protocolFeeIn(setup.protocolFeeBps, setup.protocolFeeRecipient) : bytes(""),
+            setup.feeInBps > 0 ? FeeFlatIn.build(setup.feeInBps) : bytes(""),
             swapProgram,
             Salt.build(abi.encodePacked(vm.randomUint()))
         );

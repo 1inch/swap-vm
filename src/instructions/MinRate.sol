@@ -52,11 +52,11 @@ library RequireMinRate {
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
 /// @dev Later opcodes in the execution sequence should consider the amounts are not final and might change
 library AdjustMinRate {
-    using Math for uint256;
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
     using ContextLib for Context;
+    using Math for uint256;
 
     Opcode constant opcode = Opcode.AdjustMinRate;
 

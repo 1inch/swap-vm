@@ -35,8 +35,6 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
 
     address public protocolFeeRecipient;
 
-    constructor() AquaStrategyBuilders(address(aqua)) {}
-
     function setUp() public override virtual {
         super.setUp();
 

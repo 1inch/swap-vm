@@ -18,7 +18,8 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -55,10 +56,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 internal balanceB;
 
     // Flat fee
-    uint32 internal flatFeeInBps = 0.003e9;    // 0.3%
+    uint24 internal flatFeeInBps = 0.003e7;    // 0.3%
 
     // Protocol fee
-    uint32 internal protocolFeeOutBps = 0.002e9;   // 0.2%
+    uint24 internal protocolFeeOutBps = 0.002e7;   // 0.2%
     address internal feeRecipient = address(0xFEE);
 
     // Test amounts for invariants
@@ -82,8 +83,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // Monotonicity tolerance in bps (default 0, strict)
     uint256 internal monotonicityToleranceBps = 0;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public virtual {
         maker = vm.addr(makerPK);
@@ -168,22 +167,20 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 _balanceB,
         uint256 _sqrtPriceMin,
         uint256 _sqrtPriceMax,
-        uint32 _flatFeeInBps,
-        uint32 _protocolFeeOutBps
+        uint24 _flatFeeInBps,
+        uint24 _protocolFeeOutBps
     ) internal view returns (bytes memory) {
         Program program;
 
         return bytes.concat(
             // Protocol fees BEFORE balances
-            (_protocolFeeOutBps > 0) ? program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(_protocolFeeOutBps, feeRecipient)) : bytes(""),
+            (_protocolFeeOutBps > 0) ? FeeBuilders.protocolFeeOut(_protocolFeeOutBps, feeRecipient) : bytes(""),
 
             // Balances
             DynamicBalances.build(_balanceA, _balanceB),
 
             // Flat fee BEFORE concentrate (concentrate is terminal)
-            (_flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(_flatFeeInBps)) : bytes(""),
+            (_flatFeeInBps > 0) ? FeeFlatIn.build(_flatFeeInBps) : bytes(""),
 
             // Concentrate instruction (terminal: computes virtual reserves + swap)
             XYCConcentrateSwap.build(_sqrtPriceMin, _sqrtPriceMax)

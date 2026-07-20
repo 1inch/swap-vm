@@ -24,8 +24,8 @@ contract HugeLiquidity is PeggedFeesInvariants {
         testAmounts[1] = 1e25;   // 10 million tokens
         testAmounts[2] = 1e26;   // 100 million tokens
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // Huge liquidity has proportionally larger absolute errors
         symmetryTolerance = 1e9;  // 1 gwei tolerance for billion-scale pool

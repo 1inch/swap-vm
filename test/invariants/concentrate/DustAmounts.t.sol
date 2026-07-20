@@ -59,8 +59,8 @@ contract DustAmounts is ConcentrateXYCFeesInvariants {
         _computeInitialBalances();
 
         // Standard fees
-        flatFeeInBps = 0.003e9;        // 0.3%
-        protocolFeeOutBps = 0.002e9;   // 0.2%
+        flatFeeInBps = 0.003e7;        // 0.3%
+        protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Test ONLY dust amounts (10-1000 wei)
         // Note: 1 wei excluded - causes amountOut=0 due to quantization

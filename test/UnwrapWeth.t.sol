@@ -20,8 +20,6 @@ import { WETHMock } from "./mocks/WETHMock.sol";
 contract UnwrapWethTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     WETHMock public weth;
     TokenMock public token;

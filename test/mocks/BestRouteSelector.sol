@@ -4,7 +4,8 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context, SwapQuery, SwapRegisters, VM, ContextLib } from "../../src/libs/VM.sol";
+import { Context, SwapQuery, SwapRegisters, VM, ContextLib, ProtocolFee } from "../../src/libs/VM.sol";
+import { FeeMetaLib, FeeReceiverLib } from "../../src/libs/ProtocolFee.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 
@@ -39,7 +40,7 @@ contract BestRouteSelector is OpcodesDebug {
     error BestRouteSelectorInvalidArgs();
     error BestRouteSelectorNoBranches();
 
-    constructor(address aqua) OpcodesDebug(aqua) {}
+    constructor(address) {}
 
     function extruction(
         bool isStaticContext,
@@ -90,7 +91,11 @@ contract BestRouteSelector is OpcodesDebug {
                     dispatch: _runOpcode
                 }),
                 query: query,
-                swap: swap  // Reset to initial balances for each strategy!
+                swap: swap,  // Reset to initial balances for each strategy!
+                fee: ProtocolFee({
+                    meta: FeeMetaLib.init(),
+                    receivers: FeeReceiverLib.init()
+                })
             });
 
             // Execute this strategy
@@ -103,8 +108,7 @@ contract BestRouteSelector is OpcodesDebug {
                     balanceIn: swap.balanceIn,
                     balanceOut: swap.balanceOut,
                     amountIn: swap.amountIn,
-                    amountOut: amountOut,
-                    amountNetPulled: swap.amountNetPulled
+                    amountOut: amountOut
                 });
             }
         }

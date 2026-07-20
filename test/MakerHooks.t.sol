@@ -28,8 +28,6 @@ import { RevertingMakerHooks } from "./mocks/RevertingMakerHooks.sol";
 contract MakerHooksTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
 
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;

@@ -53,6 +53,8 @@ library MakerTraitsLib {
     /// @notice Arguments for building maker order
     /// @param maker Liquidity provider address
     /// @param receiver Recipient address (address(0) defaults to maker)
+    /// @param tokenA Token with lower address
+    /// @param tokenB Token with greater address
     /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
     /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
     /// @param allowZeroAmountIn Allow zero input amount swaps
@@ -119,17 +121,17 @@ library MakerTraitsLib {
             require(args.hasPostTransferOutHook, MakerTraitsMissingHasPostTransferOutFlag());
         }
 
-        uint256 index0 = (40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length).toUint16();
-        uint256 index1 = (index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length).toUint16();
-        uint256 index2 = (index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length).toUint16();
-        uint256 index3 = (index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length).toUint16();
+        uint256 index0 = 40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length;
+        uint256 index1 = index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length;
+        uint256 index2 = index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length;
+        uint256 index3 = index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length;
 
-        uint64 orderDataIndexes = (
-            (uint64(index0) << 0) |
-            (uint64(index1) << 16) |
-            (uint64(index2) << 32) |
-            (uint64(index3) << 48)
-        );
+        uint64 orderDataIndexes = uint64(bytes8(abi.encodePacked(
+            index3.toUint16(),
+            index2.toUint16(),
+            index1.toUint16(),
+            index0.toUint16()
+        )));
 
         return ISwapVM.Order({
             maker: args.maker,
