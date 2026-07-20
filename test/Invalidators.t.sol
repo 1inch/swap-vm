@@ -16,7 +16,6 @@ import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/ins
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 
@@ -27,8 +26,6 @@ import { LimitSwap } from "../src/instructions/LimitSwap.sol";
  * @dev Tests order invalidation mechanisms to prevent replay attacks
  */
 contract InvalidatorsTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

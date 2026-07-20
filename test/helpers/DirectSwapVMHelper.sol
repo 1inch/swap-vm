@@ -8,7 +8,6 @@ import { Vm } from "forge-std/Vm.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { dynamic } from "../utils/Dynamic.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 
 import { ISwapVM } from "../../src/SwapVM.sol";
 import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
@@ -20,8 +19,6 @@ import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Direct (signature-based) SwapVM with OpcodesDebug
 contract DirectSwapVMHelper is OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public router;
     Vm internal vmInstance;
 

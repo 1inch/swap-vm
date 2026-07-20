@@ -16,15 +16,12 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { MockNFT } from "./mocks/MockNft.sol";
 
 
 contract ControlsAquaTest is AquaSwapVMTest {
-    using ProgramBuilder for Program;
-
     MockNFT public nftGate;
 
     function setUp() public override {

@@ -21,14 +21,11 @@ import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e7;
 
 contract ProtocolFeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;

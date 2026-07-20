@@ -25,8 +25,6 @@ import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
-
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -34,8 +32,6 @@ import { dynamic } from "./utils/Dynamic.sol";
  * @notice Minimalistic POC to prove Aqua accounting correctness with fees
  */
 contract AquaAccounting is Test, AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     // Constants
     uint256 constant BPS = 1e7;
     uint256 constant ONE = 1e18;
@@ -244,8 +240,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         uint16 decayPeriod,
         uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -444,7 +438,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== COMPARATIVE TESTS: Wrong vs Correct Instruction Order =====
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactIn() public {
-
         SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
         SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), true);
 
@@ -457,7 +450,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactOut() public {
-
         SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
         SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), false);
 

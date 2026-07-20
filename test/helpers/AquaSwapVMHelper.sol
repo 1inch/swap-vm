@@ -6,8 +6,6 @@ pragma solidity 0.8.30;
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-
 import { ISwapVM } from "../../src/SwapVM.sol";
 import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
@@ -17,8 +15,6 @@ import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Aqua SwapVM with AquaOpcodesDebug
 contract AquaSwapVMHelper is AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     AquaSwapVMRouter public router;
 
     constructor(address aqua) {

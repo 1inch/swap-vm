@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
@@ -27,8 +26,6 @@ import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
  * @dev Tests minimum rate enforcement and adjustment mechanics
  */
 contract MinRateTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

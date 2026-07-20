@@ -16,7 +16,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
@@ -33,8 +32,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests all possible orderings ensuring concentrate always comes before XYC
  */
 contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

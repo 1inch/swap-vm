@@ -17,7 +17,6 @@ import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
@@ -35,8 +34,6 @@ contract PeggedSwapMathWrapper {
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;
@@ -85,8 +82,6 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
-        Program prog;
-
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(setup.balanceA, setup.balanceB),
             setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),

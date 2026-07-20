@@ -25,15 +25,12 @@ import { Decay } from "../src/instructions/Decay.sol";
 import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../src/instructions/Balances.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /**
  * @title SwapVmAccounting
  * @notice SwapVM (non-Aqua) accounting correctness with fees — mirrors AquaAccounting tests
  */
 contract SwapVmAccounting is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     // Constants
     uint256 constant ONE = 1e18;
     uint256 constant INITIAL_BALANCE_A = 1000e18;
@@ -204,8 +201,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint24 flatFeeInBps,
         bool includeConcentrate
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -235,8 +230,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint24 protocolFeeBps,
         uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -259,8 +252,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint16 decayPeriod,
         uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -284,8 +275,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint16 decayPeriod,
         uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -309,8 +298,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         uint16 decayPeriod,
         uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
             ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
@@ -432,7 +419,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     // ===== COMPARATIVE TESTS: Wrong vs Correct Instruction Order =====
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactIn() public {
-
         SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
         SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), true);
 
@@ -449,7 +435,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactOut() public {
-
         SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
         SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), false);
 

@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
@@ -31,8 +30,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests gas-based price adjustments with different fee mechanisms
  */
 contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

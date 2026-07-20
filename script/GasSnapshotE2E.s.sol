@@ -30,12 +30,9 @@ import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
 import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
-import { Program, ProgramBuilder, Opcode } from "../test/utils/ProgramBuilder.sol";
 import { dynamic } from "../test/utils/Dynamic.sol";
 
 contract GasSnapshotE2E is Script {
-    using ProgramBuilder for Program;
-
     uint256 internal constant AMOUNT = 1e18;
 
     uint256 internal constant MAKER_PK = 0xA11CE;
@@ -256,7 +253,6 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramJustFlatFeeAmountIn() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             FeeFlatIn.build(0.10e7)
@@ -264,7 +260,6 @@ contract GasSnapshotE2E is Script {
     }
 
     function _vmProgramJustProgressiveFeeIn() internal pure returns (bytes memory) {
-        Program p;
         return bytes.concat(
             PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             FeeProgressiveIn.build(0.10e7)

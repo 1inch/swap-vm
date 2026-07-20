@@ -25,14 +25,11 @@ import { FeeProtocol } from "../src/instructions/FeeProtocol.sol";
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { InvalidProtocolFeeProviderMock } from "./mocks/InvalidProtocolFeeProviderMock.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e7;
 
 contract DynamicProtocolFeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;

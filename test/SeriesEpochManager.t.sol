@@ -19,12 +19,9 @@ import { Salt } from "../src/instructions/Controls.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../src/instructions/SeriesEpochManager.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title SeriesEpochManager tests
 contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouter public swapVM;
     TokenMock public tokenA;

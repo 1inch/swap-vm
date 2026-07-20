@@ -21,11 +21,8 @@ import { Decay } from "../src/instructions/Decay.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract DecayTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;

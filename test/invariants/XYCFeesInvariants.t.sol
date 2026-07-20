@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
@@ -49,8 +48,6 @@ struct FeeConfig {
  * @dev Tests pool liquidity behavior with different fee structures applied to XYC pairs
  */
 contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -179,8 +176,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 _balanceB,
         FeeConfig memory fees
     ) internal view returns (bytes memory) {
-        Program p;
-
         return bytes.concat(
             // Protocol fees BEFORE balances
             (fees.protocolFeeOutBps > 0) ? FeeBuilders.protocolFeeOut(fees.protocolFeeOutBps, fees.feeRecipient) : bytes(""),

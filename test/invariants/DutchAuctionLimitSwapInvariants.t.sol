@@ -17,7 +17,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
@@ -30,8 +29,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests time-based price decay applied to limit orders
  */
 contract DutchAuctionLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -94,7 +91,6 @@ contract DutchAuctionLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             useIn ?

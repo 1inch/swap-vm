@@ -16,7 +16,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
@@ -31,8 +30,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests concentrated liquidity AMM behavior with different fee structures
  */
 contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -170,8 +167,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 _flatFeeInBps,
         uint24 _protocolFeeOutBps
     ) internal view returns (bytes memory) {
-        Program program;
-
         return bytes.concat(
             // Protocol fees BEFORE balances
             (_protocolFeeOutBps > 0) ? FeeBuilders.protocolFeeOut(_protocolFeeOutBps, feeRecipient) : bytes(""),

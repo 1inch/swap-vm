@@ -18,15 +18,12 @@ import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { PrivateOrder } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
 
 /// @title Whitelist tests
 contract PrivateOrderTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouter public swapVM;
     TokenMock public tokenA;

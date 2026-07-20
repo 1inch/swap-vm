@@ -16,7 +16,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
@@ -31,8 +30,6 @@ import { dynamic } from "./utils/Dynamic.sol";
  *   3. When splitting swaps is profitable considering gas costs
  */
 contract FeeOutAdditivityViolation is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

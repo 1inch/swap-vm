@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
 
@@ -27,8 +26,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests PeggedSwap's square-root-based curve for stablecoin swaps
  */
 contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -276,7 +273,6 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8 (standard for stablecoins)
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
@@ -361,7 +357,6 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         uint256 linearWidth = 0;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceIn, balanceOut),
             PeggedSwap.build(balanceIn, balanceOut, linearWidth, 1, 1)

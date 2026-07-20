@@ -15,7 +15,6 @@ import { ContextLib } from "../src/libs/VM.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
@@ -29,8 +28,6 @@ import { dynamic } from "./utils/Dynamic.sol";
  * @dev Tests control flow, conditional execution, and validation in swap programs
  */
 contract ControlsTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

@@ -16,7 +16,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
@@ -29,8 +28,6 @@ import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
  * @dev Measures gas for quote and swap operations with XYC, Concentrate, and Decay
  */
 contract AMMGas is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

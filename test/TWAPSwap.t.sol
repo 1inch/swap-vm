@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { TWAPSwap } from "../src/instructions/TWAPSwap.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
@@ -31,8 +30,6 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
  * @dev All tests use the instruction sequence: staticBalancesXD -> TWAP -> LimitSwap1D
  */
 contract TWAPSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -75,7 +72,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         uint256 priceBumpAfterIlliquidity,
         uint256 minTradeAmountOut
     ) private view returns (bytes memory) {
-        Program program;
         return bytes.concat(
             StaticBalances.build(tokenABalance, tokenBBalance),
             TWAPSwap.build(balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut),

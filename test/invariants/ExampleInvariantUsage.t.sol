@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
@@ -32,8 +31,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Shows various patterns for testing different instruction types
  */
 contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -124,7 +121,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 2: Test an AMM with fees maintains invariants
      */
     function test_AMMWithFeesInvariants() public {
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
             FeeFlatIn.build(0.003e7), // 0.3% fee
@@ -158,7 +154,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 3: Test progressive fees with custom configuration
      */
     function test_ProgressiveFeeInvariants() public {
-        Program program;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(1000e18, 1000e18),
             FeeProgressiveIn.build(0.1e7), // 10% progressive

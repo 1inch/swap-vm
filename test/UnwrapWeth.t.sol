@@ -14,12 +14,9 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 
 contract UnwrapWethTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     WETHMock public weth;
     TokenMock public token;

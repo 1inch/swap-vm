@@ -9,7 +9,6 @@ import { MakerTraitsLib } from "../../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../src/libs/TakerTraits.sol";
 import { PeggedFeesInvariants } from "../PeggedFeesInvariants.t.sol";
 import { TokenMockDecimals } from "../../mocks/TokenMockDecimals.sol";
-import { Program, ProgramBuilder, Opcode } from "../../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../../src/instructions/Balances.sol";
 import { PeggedSwap } from "../../../src/instructions/PeggedSwap.sol";
 
@@ -19,8 +18,6 @@ import { PeggedSwap } from "../../../src/instructions/PeggedSwap.sol";
  * @dev Token A has 18 decimals, Token B has 6 decimals (like USDC)
  */
 contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
-    using ProgramBuilder for Program;
-
     function setUp() public override {
         // Skip super.setUp() - do custom initialization
         maker = vm.addr(makerPK);
@@ -127,7 +124,6 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Build order with asymmetric pool. Balances are positional in ascending
         // token address order (tokenA, tokenB).
-        Program p;
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceTokenA, balanceTokenB),
             PeggedSwap.build(x0Config, y0Config, linearWidth, rateLtTest, rateGtTest)

@@ -17,7 +17,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../src/instructions/DutchAuction.sol";
@@ -28,8 +27,6 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../src/instructio
  * @dev Tests time-based price decay behavior
  */
 contract DutchAuctionTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

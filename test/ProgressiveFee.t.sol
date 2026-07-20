@@ -22,13 +22,10 @@ import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 
 contract ProgressiveFeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;
@@ -77,7 +74,6 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
         bytes memory programBytes = bytes.concat(
             // 1. Set initial token balances
             DynamicBalances.build(setup.balanceA, setup.balanceB),

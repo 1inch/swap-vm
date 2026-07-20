@@ -23,12 +23,9 @@ import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentrateFeeTrackingDetailedTest is Test, OpcodesDebug {
     using SafeCast for uint256;
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     address public tokenUSD;
     address public tokenETH;

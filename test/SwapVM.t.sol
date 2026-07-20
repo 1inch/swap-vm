@@ -19,11 +19,8 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { Salt } from "../src/instructions/Controls.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract SwapVMTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;

@@ -17,7 +17,6 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title XYCConcentrate Capital Efficiency vs XYCSwap
 /// @notice Proves that XYCConcentrate achieves higher capital efficiency than plain XYCSwap.
@@ -54,8 +53,6 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 ///         TEST 4 — Slippage comparison:
 ///           concentrate achieves the same output amount for a SMALLER input
 contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     uint256 constant ONE = 1e18;
 
     // Center-symmetric range [0.25, 4] — sqrtPmin=0.5, sqrtPmax=2
@@ -105,7 +102,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 bLt,
         uint256 bGt
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -138,7 +134,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,

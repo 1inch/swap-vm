@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
@@ -32,8 +31,6 @@ import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../src/
  * @dev Measures gas for quote and swap operations with various instruction combinations
  */
 contract LimitSwapGas is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -406,7 +403,6 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint16 duration = 300;
         uint64 decayFactor = 0.5e18; // 50% decay
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(BALANCE_A, BALANCE_B),
             isAuctionIn ?
@@ -544,7 +540,6 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createDeadlineLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint40 deadline = uint40(block.timestamp + 3600); // 1 hour from now
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             Deadline.build(deadline),
             StaticBalances.build(BALANCE_A, BALANCE_B),
@@ -560,7 +555,6 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createSaltLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint64 salt = 12345678;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             Salt.build(salt),
             StaticBalances.build(BALANCE_A, BALANCE_B),

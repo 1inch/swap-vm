@@ -22,13 +22,10 @@ import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 
 contract FeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;

@@ -18,12 +18,9 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../src/instructions/PiecewiseLinearScale.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title PiecewiseLinearScale tests
 contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouterDebug public swapVM;
     TokenMock public tokenA;

@@ -15,7 +15,6 @@ import { MockTakerBrokenCallback } from "./mocks/MockTakerBrokenCallback.sol";
 /// @title Negative tests for taker transfers in callback through Aqua
 /// @notice Tests various failure scenarios when taker callback doesn't properly push tokens to Aqua
 contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
-
     MockTakerBrokenCallback public brokenTaker;
 
     uint256 constant SWAP_AMOUNT = 50e18;

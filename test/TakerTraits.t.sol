@@ -17,7 +17,6 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 
 /**
@@ -26,8 +25,6 @@ import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
  * @dev Tests deadline, threshold, to, isExactIn, strictThreshold features
  */
 contract TakerTraitsTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;

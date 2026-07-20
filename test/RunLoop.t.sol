@@ -14,7 +14,6 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
@@ -39,8 +38,6 @@ import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
  *      - Stress tests and extruction + runLoop scenarios
  */
 contract RunLoopTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -261,7 +258,6 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @dev Key insight: Same balances, DIFFERENT strategies
      */
     function test_BestRouteSelector_XYC_vs_Pegged() public {
-        Program program;
         BestRouteSelector selector = new BestRouteSelector(address(aqua));
 
         // Strategy 1: XYC (constant product)

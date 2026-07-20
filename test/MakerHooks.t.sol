@@ -21,13 +21,10 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Salt } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 import { RevertingMakerHooks } from "./mocks/RevertingMakerHooks.sol";
 
 contract MakerHooksTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;

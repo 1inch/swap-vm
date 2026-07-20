@@ -14,7 +14,6 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
@@ -29,8 +28,6 @@ import { dynamic } from "./utils/Dynamic.sol";
  *      3. Maker protection (liquidity must grow, not shrink)
  */
 contract ConcentrateXYCRounding is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     uint256 constant ONE = 1e18;
     uint24 constant FEE_BPS = 0.003e7; // 0.3%
 

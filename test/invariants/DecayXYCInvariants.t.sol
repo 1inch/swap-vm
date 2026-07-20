@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
@@ -29,8 +28,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests decaying offsets affecting XYC (constant product) swap behavior
  */
 contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

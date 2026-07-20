@@ -23,15 +23,12 @@ import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
 
 contract ConcentrateTest is Test, OpcodesDebug {
     using SafeCast for uint256;
     using FormatLib for Vm;
-    using ProgramBuilder for Program;
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;

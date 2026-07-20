@@ -15,7 +15,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
@@ -35,8 +34,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * - Minimum trade size enforcement
  */
 contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;

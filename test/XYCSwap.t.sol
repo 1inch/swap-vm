@@ -20,7 +20,6 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
 contract MockToken is ERC20 {
@@ -32,8 +31,6 @@ contract MockToken is ERC20 {
 }
 
 contract XYCSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     constructor() {}
 
     SwapVMRouter public swapVM;
@@ -75,8 +72,6 @@ contract XYCSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _makeOrder(uint256 balanceA, uint256 balanceB, uint256 feeIn) internal view returns (ISwapVM.Order memory) {
-        Program program;
-
         bytes memory bytecode;
         if (feeIn > 0) {
             bytecode = bytes.concat(

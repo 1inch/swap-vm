@@ -18,15 +18,12 @@ import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { WhitelistCoequal, WhitelistSequential } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { Jump } from "../src/instructions/Controls.sol";
 
 /// @title Whitelist tests
 contract WhitelistTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -262,8 +259,6 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
     /// @dev condition -> staticBalances A or B -> limitswap
     function _buildProgram(WhitelistType whitelistType, uint256 length) internal view returns (bytes memory) {
-        Program p;
-
         uint16 conditionLength;
         uint16 branchFLength = 2 + 64 + 2 + 2;
         uint16 branchTLength = 2 + 64;

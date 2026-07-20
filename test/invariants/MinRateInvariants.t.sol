@@ -16,7 +16,6 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
@@ -36,8 +35,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * so a rate of 1:2 means at most 2 output tokens per 1 input token.
  */
 contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -107,7 +104,6 @@ contract MinRateInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 rateA = 1e18;
         uint64 rateB = 2e18; // Cap at 1:2 rate
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3000e18),  // 1:3 base rate
             AdjustMinRate.build(rateA, rateB),

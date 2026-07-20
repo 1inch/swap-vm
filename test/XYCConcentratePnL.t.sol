@@ -17,11 +17,8 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentratePnLTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     uint256 constant ONE     = 1e18;
     uint24  constant FEE_BPS = 0.003e7; // 0.3%
     uint256 constant ROUNDS  = 200;
@@ -420,7 +417,6 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,

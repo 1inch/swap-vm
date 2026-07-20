@@ -25,7 +25,6 @@ import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { TestConstants } from "./TestConstants.sol";
@@ -36,8 +35,6 @@ import { TestConstants } from "./TestConstants.sol";
  * @dev Inherits from Test and AquaOpcodesDebug to have access to vm and the instruction set
  */
 abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     enum SwapType {
         XYC,
         CONCENTRATE_GROW_PRICE_RANGE,
@@ -75,8 +72,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     }
 
     function buildProgram(MakerSetup memory setup) internal view virtual returns (bytes memory) {
-        Program p;
-
         bytes memory concentrateProgram = "";
 
         if(setup.swapType == SwapType.CONCENTRATE_GROW_LIQUIDITY ||
