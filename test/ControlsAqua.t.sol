@@ -13,7 +13,8 @@ import { SwapVM, ISwapVM } from "../src/SwapVM.sol";
 
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-import { Stop, Revert, Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut, Deadline, OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero, Salt } from "../src/instructions/Controls.sol";
+import { Deadline, Salt } from "../src/instructions/Controls.sol";
+import { OnlyTakerTokenBalanceNonZero, OnlyTxOriginTokenBalanceNonZero } from "../src/instructions/TokenValidators.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";

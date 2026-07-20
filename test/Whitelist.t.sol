@@ -20,7 +20,7 @@ import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
 import { WhitelistCoequal, WhitelistSequential } from "../src/instructions/Whitelist.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
-import { Jump } from "../src/instructions/Controls.sol";
+import { Jump } from "../src/instructions/Jumps.sol";
 
 /// @title Whitelist tests
 contract WhitelistTest is Test, LimitOpcodesDebug {
