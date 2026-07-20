@@ -70,7 +70,7 @@ library DynamicBalances {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.DynamicBalances;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {

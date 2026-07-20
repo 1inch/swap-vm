@@ -38,7 +38,7 @@ library ValidateSeriesEpoch {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.ValidateSeriesEpoch;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {

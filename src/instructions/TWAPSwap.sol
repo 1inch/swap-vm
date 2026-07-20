@@ -45,7 +45,7 @@ library TWAPSwap {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.TWAPSwap;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     /// @param balanceIn Expected amount of token1 (for initial price)

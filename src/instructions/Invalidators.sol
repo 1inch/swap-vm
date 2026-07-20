@@ -37,7 +37,7 @@ library InvalidateBit {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.InvalidateBit;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
@@ -104,7 +104,7 @@ library InvalidateTokenIn {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.InvalidateTokenIn;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     function exec(Context memory ctx, bytes calldata) internal {
@@ -161,7 +161,7 @@ library InvalidateTokenOut {
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.InvalidateTokenOut;
-        assembly { $.slot := slot }
+        assembly ("memory-safe") { $.slot := slot }
     }
 
     function exec(Context memory ctx, bytes calldata) internal {
