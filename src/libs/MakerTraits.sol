@@ -7,15 +7,20 @@ pragma solidity 0.8.30;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { InstructionArgs } from "./InstructionArgs.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
 type MakerTraits is uint256;
 
 library MakerTraitsLib {
-    using SafeCast for uint256;
-    using Calldata for bytes;
     using MakerTraitsLib for MakerTraits;
+    using SafeCast for uint256;
+
+    using Calldata for bytes;
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
+
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
@@ -204,13 +209,11 @@ library MakerTraitsLib {
 
     // Slices getters
 
-    function tokens(MakerTraits traits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
+    function tokens(MakerTraits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
         // In case there are not enough bytes in `data`, this block would fill missing bytes with zeros
         // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
-        assembly ("memory-safe") {
-            tokenA := shr(96, calldataload(data.offset))
-            tokenB := shr(96, calldataload(add(data.offset, 20)))
-        }
+        tokenA = data.at(0).asAddress();
+        tokenB = data.at(20).asAddress();
     }
 
     function program(MakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
