@@ -250,8 +250,8 @@ library MakerTraitsLib {
     function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
         unchecked {
             return data.slice(
-                (slice == OrderDataSlices.PreTransferInHook) ? 40 : _getOffset(traits, uint256(slice) - 1),
-                (slice == OrderDataSlices.Program) ? data.length : _getOffset(traits, uint256(slice)),
+                (slice == type(OrderDataSlices).min) ? 40 : _getOffset(traits, uint256(slice) - 1),
+                (slice == type(OrderDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
                 MakerTraitsMissingHookData.selector
             );
         }
