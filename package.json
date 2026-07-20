@@ -20,9 +20,7 @@
     "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
     "@nomicfoundation/hardhat-verify": "^3.0.0",
     "hardhat": "^3.8.0",
-    "hardhat-ignore-warnings": "0.3.0",
-    "prettier": "3.8.3",
-    "prettier-plugin-solidity": "2.3.1"
+    "hardhat-ignore-warnings": "0.3.0"
   },
   "resolutions": {
     "elliptic": "6.6.1",
@@ -34,8 +32,6 @@
     "test:solidity": "npx hardhat test solidity",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
-    "lint": "prettier --check \"{src,test,script,mocks}/**/*.sol\"",
-    "format": "prettier --write \"{src,test,script,mocks}/**/*.sol\"",
     "snapshot": "npx hardhat test solidity --snapshot --grep test_",
     "snapshot:check": "npx hardhat test solidity --snapshot-check",
     "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
