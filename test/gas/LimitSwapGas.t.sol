@@ -19,7 +19,7 @@ import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
-import { TWAPSwap, TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.sol";
+import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
 import { BaseFeeAdjusterArgsBuilder } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
@@ -430,18 +430,9 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint256 balanceOut = BALANCE_B;
         uint256 balanceIn = BALANCE_A;
 
-        Program program;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(BALANCE_A, BALANCE_B),
-            program.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.2e18,
-                    minTradeAmountOut: 0.1e18
-                }))),
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.2e18, 0.1e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

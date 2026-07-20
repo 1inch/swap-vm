@@ -7,6 +7,7 @@ import { DynamicBalances } from "../src/instructions/Balances.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../src/instructions/Invalidators.sol";
 import { ValidateSeriesEpoch } from "../src/instructions/SeriesEpochManager.sol";
+import { TWAPSwap } from "../src/instructions/TWAPSwap.sol";
 
 contract StorageSlotsTest is Test {
     function test_StorageSlots() public pure {
@@ -15,6 +16,7 @@ contract StorageSlotsTest is Test {
         assertEq(StorageSlots.InvalidateBit,           _erc7201("1inch.storage.InvalidateBit"));
         assertEq(StorageSlots.InvalidateTokenIn,       _erc7201("1inch.storage.InvalidateTokenIn"));
         assertEq(StorageSlots.InvalidateTokenOut,      _erc7201("1inch.storage.InvalidateTokenOut"));
+        assertEq(StorageSlots.TWAPSwap,                _erc7201("1inch.storage.TWAPSwap"));
         assertEq(StorageSlots.ValidateSeriesEpoch,     _erc7201("1inch.storage.ValidateSeriesEpoch"));
     }
 
@@ -53,6 +55,13 @@ contract StorageSlotsTest is Test {
             slotInvalidateTokenOut := InvalidateTokenOutStorage.slot
         }
         assertEq(StorageSlots.InvalidateTokenOut, slotInvalidateTokenOut);
+
+        bytes32 slotTWAPSwap;
+        TWAPSwap.Storage storage TWAPSwapStorage = TWAPSwap.store();
+        assembly ("memory-safe") {
+            slotTWAPSwap := TWAPSwapStorage.slot
+        }
+        assertEq(StorageSlots.TWAPSwap, slotTWAPSwap);
 
         bytes32 slotValidateSeriesEpoch;
         ValidateSeriesEpoch.Storage storage ValidateSeriesEpochStorage = ValidateSeriesEpoch.store();

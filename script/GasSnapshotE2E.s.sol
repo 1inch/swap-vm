@@ -27,7 +27,6 @@ import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { DutchAuctionArgsBuilder } from "../src/instructions/DutchAuction.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
-import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
 import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
 import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";

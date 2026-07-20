@@ -21,6 +21,9 @@ library StorageSlots {
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenOut")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant InvalidateTokenOut = 0x3c2634352eb2315e2005a08709d3df3f3b85b4a68fc7225cebee8d3fcbf55900;
 
+    // keccak256(abi.encode(uint256(keccak256("1inch.storage.TWAPSwap")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant TWAPSwap = 0x640df91835ad458786febd6043e5e7538298ac788112a2cbb5cd7bd71cf46f00;
+
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.ValidateSeriesEpoch")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant ValidateSeriesEpoch = 0xf6109436226f9396495ee71ea3d10edae6e620df596c3feca8428935dd6b1400;
 }
