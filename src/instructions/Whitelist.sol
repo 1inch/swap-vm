@@ -108,7 +108,7 @@ library WhitelistSequential {
 
     Opcode constant opcode = Opcode.WhitelistSequential;
 
-    function build(uint16 nextPC, uint40 start, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (bytes memory) {
+    function build(uint40 start, uint16 nextPC, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (bytes memory) {
         require(allowedTakers.length > 0, WhitelistSequentialEmptyList());
         require(allowedTakers.length == durations.length, WhitelistSequentialLengthMismatch());
 

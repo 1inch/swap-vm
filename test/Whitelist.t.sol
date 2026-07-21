@@ -279,7 +279,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) durations[i] = DURATIONS[i];
 
             conditionLength = uint16(7 + 2 + length * 12);
-            condition = WhitelistSequential.build(conditionLength + branchFLength, START, allowedTakers, durations);
+            condition = WhitelistSequential.build(START, conditionLength + branchFLength, allowedTakers, durations);
             assertEq(conditionLength, condition.length);
         }
 
