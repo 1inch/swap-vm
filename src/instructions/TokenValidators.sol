@@ -96,35 +96,41 @@ library OnlyTakerTokenBalanceGte {
 }
 
 /// @notice OnlyTakerTokenSupplyShareGte opcode, fail if taker token share is below expected share
-/// @dev Encoding: [address token, uint64 shareE18]
+/// @dev Encoding: [address token, uint64 share]
 library OnlyTakerTokenSupplyShareGte {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    error TakerTokenBalanceSupplyShareWrongShare(uint64 share);
     error TakerTokenBalanceSupplyShareIsLessThanRequired(
-        address taker, address token, uint256 balance, uint256 totalSupply, uint64 shareE18
+        address taker, address token, uint256 balance, uint256 totalSupply, uint64 share
     );
 
     Opcode constant opcode = Opcode.OnlyTakerTokenSupplyShareGte;
 
-    function build(address token, uint64 shareE18) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token, shareE18);
+    uint256 constant ONE = 1e18;
+
+    function build(address token, uint64 share) internal pure returns (bytes memory) {
+        require(share <= ONE, TakerTokenBalanceSupplyShareWrongShare(share));
+
+        bytes memory args = abi.encodePacked(token, share);
         return InstructionBuilder.build(opcode, args);
     }
 
-    function parse(bytes calldata args) internal pure returns (address token, uint64 shareE18) {
+    function parse(bytes calldata args) internal pure returns (address token, uint64 share) {
         token = args.at(0).asAddress();
-        shareE18 = args.at(20).asU64();
+        share = args.at(20).asU64();
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
-        (address token, uint64 shareE18) = parse(args);
+        (address token, uint64 share) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();
-        // balance * 1e18 / totalSupply >= minShareE18
+
+        // balance / totalSupply >= share
         require(
-            totalSupply > 0 && balance * 1e18 >= shareE18 * totalSupply,
-            TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, shareE18)
+            totalSupply > 0 && balance * ONE >= share * totalSupply,
+            TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, share)
         );
     }
 }

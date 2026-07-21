@@ -32,6 +32,9 @@ library TWAPSwap {
 
     Opcode constant opcode = Opcode.TWAPSwap;
 
+    uint256 constant ONE = 1e18;
+    uint256 constant DECAY_FACTOR = 0.9999e18;
+
     struct LastSwap {
         uint256 amountIn;
         uint256 amountOut;
@@ -64,7 +67,7 @@ library TWAPSwap {
     ) internal pure returns (bytes memory) {
         require(balanceIn > 0 && balanceOut > 0, TWAPSwapInvalidBalances(balanceIn, balanceOut));
         require(duration > 0, TWAPSwapInvalidDuration(duration));
-        require(priceBumpAfterIlliquidity >= 1e18, TWAPSwapInvalidPriceBump(priceBumpAfterIlliquidity));
+        require(priceBumpAfterIlliquidity >= ONE, TWAPSwapInvalidPriceBump(priceBumpAfterIlliquidity));
 
         bytes memory args = abi.encodePacked(balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut);
         return InstructionBuilder.build(opcode, args);
@@ -175,9 +178,9 @@ library TWAPSwap {
                     uint256 maxIlliquidityDuration = minTradeAmountOut * duration / balanceOut;
 
                     // Apply proportional price bump
-                    uint256 bumpRatio = Math.min(1e18, illiquidityDuration * 1e18 / maxIlliquidityDuration);
-                    uint256 scaledBump = 1e18 + (priceBumpAfterIlliquidity - 1e18) * bumpRatio / 1e18;
-                    baseAmountIn = baseAmountIn * scaledBump / 1e18;
+                    uint256 bumpRatio = Math.min(ONE, illiquidityDuration * ONE / maxIlliquidityDuration);
+                    uint256 scaledBump = ONE + (priceBumpAfterIlliquidity - ONE) * bumpRatio / ONE;
+                    baseAmountIn = baseAmountIn * scaledBump / ONE;
 
                     // Adjust auction start time
                     auctionStartTime += illiquidityDuration;
@@ -185,9 +188,9 @@ library TWAPSwap {
             }
         }
 
-        uint256 decay = uint256(0.9999e18).pow(block.timestamp - auctionStartTime, 1e18);
+        uint256 decay = DECAY_FACTOR.pow(block.timestamp - auctionStartTime, ONE);
         ctx.swap.balanceIn = baseAmountIn;
-        ctx.swap.balanceOut = baseAmountOut * decay / 1e18;
+        ctx.swap.balanceOut = baseAmountOut * decay / ONE;
 
         ctx.runLoop(); // Reuse LimitSwap logic for final amount calculation
 

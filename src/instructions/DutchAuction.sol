@@ -25,8 +25,10 @@ library DutchAuctionBalanceIn {
 
     Opcode constant opcode = Opcode.DutchAuctionBalanceIn;
 
+    uint256 constant ONE = 1e18;
+
     function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
-        require(decay < 1e18, DutchAuctionWrongDecayFactor(decay));
+        require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
 
         bytes memory args = abi.encodePacked(start, duration, decay);
         return InstructionBuilder.build(opcode, args);
@@ -44,7 +46,7 @@ library DutchAuctionBalanceIn {
         require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
         uint256 elapsed = block.timestamp - start;
 
-        ctx.swap.balanceIn = ctx.swap.balanceIn * uint256(decay).pow(elapsed, 1e18) / 1e18;
+        ctx.swap.balanceIn = ctx.swap.balanceIn * uint256(decay).pow(elapsed, ONE) / ONE;
     }
 }
 
@@ -64,8 +66,10 @@ library DutchAuctionBalanceOut {
 
     Opcode constant opcode = Opcode.DutchAuctionBalanceOut;
 
+    uint256 constant ONE = 1e18;
+
     function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
-        require(decay < 1e18, DutchAuctionWrongDecayFactor(decay));
+        require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
 
         bytes memory args = abi.encodePacked(start, duration, decay);
         return InstructionBuilder.build(opcode, args);
@@ -83,6 +87,6 @@ library DutchAuctionBalanceOut {
         require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
         uint256 elapsed = block.timestamp - start;
 
-        ctx.swap.balanceOut = ctx.swap.balanceOut * 1e18 / uint256(decay).pow(elapsed, 1e18);
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ONE / uint256(decay).pow(elapsed, ONE);
     }
 }

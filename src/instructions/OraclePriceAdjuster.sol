@@ -30,6 +30,7 @@ library OraclePriceAdjuster {
     Opcode constant opcode = Opcode.OraclePriceAdjuster;
 
     uint256 constant ONE = 1e18;
+    uint8 constant DECIMALS = 18;
 
     function build(uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) internal pure returns (bytes memory) {
         require(maxPriceDecay < ONE, OraclePriceAdjusterWrongMaxPriceDecay(maxPriceDecay));
@@ -63,10 +64,10 @@ library OraclePriceAdjuster {
 
         // Convert oracle price to 1e18 scale using provided decimals
         uint256 oraclePrice = answer.toUint256();
-        if (oracleDecimals < 18) {
-            oraclePrice = oraclePrice * 10 ** (18 - oracleDecimals);
-        } else if (oracleDecimals > 18) {
-            oraclePrice = oraclePrice / 10 ** (oracleDecimals - 18);
+        if (oracleDecimals < DECIMALS) {
+            oraclePrice = oraclePrice * 10 ** (DECIMALS - oracleDecimals);
+        } else if (oracleDecimals > DECIMALS) {
+            oraclePrice = oraclePrice / 10 ** (oracleDecimals - DECIMALS);
         }
 
         // Calculate current swap price (tokenOut per tokenIn)
