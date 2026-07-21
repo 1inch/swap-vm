@@ -365,4 +365,241 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         assertEq(TokenMock(tokenA).balanceOf(receiver1), flatFee, "Flat-only receiver gets only the flat part");
         assertEq(TokenMock(tokenA).balanceOf(receiver2), surplusFee, "Surplus-only receiver gets only the surplus part");
     }
+
+    // ========== Provider skip cases ==========
+
+    function _provider1(address provider, bool takeFlatFee, bool takeSurplusFee) internal pure returns (FeeProtocol.ProviderConfig[] memory providers) {
+        providers = new FeeProtocol.ProviderConfig[](1);
+        providers[0] = FeeProtocol.ProviderConfig({ provider: provider, takeFlatFee: takeFlatFee, takeSurplusFee: takeSurplusFee });
+    }
+
+    /// @dev External wrapper so vm.expectRevert can catch reverts of the internal builder
+    function buildExternal(
+        bool isTokenIn,
+        FeeProtocol.ReceiverConfig[] memory receivers,
+        FeeProtocol.ProviderConfig[] memory providers,
+        uint216 surplusEstimate
+    ) external pure returns (bytes memory) {
+        return FeeProtocol.build(isTokenIn, receivers, providers, surplusEstimate);
+    }
+
+    /// @notice Provider returning a zero recipient with nonzero fees is skipped: swap executes fee-free
+    function test_ProviderSkip_ZeroRecipient() public {
+        feeProvider.setRecipientAndFees(address(0), 0.01e7, 0.1e7);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), true, true), 50e18)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        assertEq(amountOut, _xycOut(amountIn), "Curve priced with no fee deduction");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn, "Maker receives the full amountIn");
+        assertEq(TokenMock(tokenA).balanceOf(address(0)), 0, "Nothing sent to the zero address");
+    }
+
+    /// @notice Provider returning zero fees with a valid recipient is skipped: swap executes fee-free
+    function test_ProviderSkip_ZeroFees() public {
+        feeProvider.setRecipientAndFees(providerReceiver, 0, 0);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), true, true), 50e18)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        // Skipped entry must not issue even a zero-value transfer
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, providerReceiver, 0), 0);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        assertEq(amountOut, _xycOut(amountIn), "Curve priced with no fee deduction");
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), 0, "Provider receiver gets nothing");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn, "Maker receives the full amountIn");
+    }
+
+    /// @notice Maker enables only the flat flag, provider returns only a surplus fee:
+    ///         the surplus part is masked away and the whole entry is skipped
+    function test_ProviderSkip_FlatFlagOnly_ProviderReturnsSurplusOnly() public {
+        feeProvider.setRecipientAndFees(providerReceiver, 0, 0.1e7);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), true, false), 0)
+        );
+
+        uint256 amountIn = 10e18;
+
+        // Skipped entry must not issue even a zero-value transfer
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, providerReceiver, 0), 0);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        assertEq(amountOut, _xycOut(amountIn), "Curve priced with no fee deduction");
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), 0, "Masked surplus is not charged");
+    }
+
+    /// @notice Maker enables only the surplus flag, provider returns only a flat fee:
+    ///         the flat part is masked away and the whole entry is skipped
+    function test_ProviderSkip_SurplusFlagOnly_ProviderReturnsFlatOnly() public {
+        feeProvider.setRecipientAndFees(providerReceiver, 0.01e7, 0);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), false, true), 50e18)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        // Skipped entry must not issue even a zero-value transfer
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, providerReceiver, 0), 0);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        assertEq(amountOut, _xycOut(amountIn), "Curve priced with no fee deduction");
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), 0, "Masked flat fee is not charged");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn, "Maker receives the full amountIn");
+    }
+
+    /// @notice Surplus-only flag keeps the provider's surplus part and drops its flat part
+    function test_ProviderMask_SurplusFlagOnly_KeepsSurplusDropsFlat() public {
+        uint24 surplusBps = 0.1e7;
+        uint216 estimatedIn = 50e18;
+        feeProvider.setRecipientAndFees(providerReceiver, 0.01e7, surplusBps); // flat must be masked
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), false, true), estimatedIn)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        // No flat deduction: curve is priced on the full input
+        assertEq(amountOut, _xycOut(amountIn), "Curve priced with no flat deduction");
+
+        // Mirror the contract's surplus math: realIn is the full amountIn since totalFeeBps == 0
+        uint256 scaledEstimate = (uint256(estimatedIn) * amountOut).ceilDiv(BALANCE_B);
+        uint256 surplusFee = (amountIn - scaledEstimate) * surplusBps / BPS;
+
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), surplusFee, "Only the surplus part is charged");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn - surplusFee, "Maker pays only the surplus fee");
+    }
+
+    /// @notice Flat-only flag keeps the provider's flat part and drops its surplus part
+    function test_ProviderMask_FlatFlagOnly_KeepsFlatDropsSurplus() public {
+        uint24 flatBps = 0.01e7;
+        feeProvider.setRecipientAndFees(providerReceiver, flatBps, 0.1e7); // surplus must be masked
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), _provider1(address(feeProvider), true, false), 0)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        uint256 flatFee = amountIn * flatBps / BPS;
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), flatFee, "Only the flat part is charged");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn - flatFee, "Maker nets the flat fee only");
+        assertEq(amountOut, _xycOut(amountIn - flatFee), "Curve priced on net of the flat fee only");
+    }
+
+    /// @notice A skipped provider does not affect the other targets: the static receiver is still paid exactly
+    function test_ProviderSkip_OtherReceiverStillPaid() public {
+        uint24 staticBps = 0.005e7;
+        feeProvider.setRecipientAndFees(address(0), 0.01e7, 0); // provider entry will be skipped
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _receivers1(staticBps, 0), _provider1(address(feeProvider), true, false), 0)
+        );
+
+        uint256 amountIn = 10e18;
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        uint256 staticFee = amountIn * staticBps / BPS;
+        assertEq(TokenMock(tokenA).balanceOf(receiver1), staticFee, "Static receiver is paid its exact fee");
+        assertEq(TokenMock(tokenA).balanceOf(providerReceiver), 0, "Skipped provider receiver gets nothing");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn - staticFee, "Maker nets only the static fee");
+        assertEq(amountOut, _xycOut(amountIn - staticFee), "Curve priced on the static fee only");
+    }
+
+    /// @notice Of two providers one is skipped and one is paid
+    function test_FiveProviders_TwoSkipped() public {
+        uint256 amountIn = 10e18;
+        uint24[5] memory bps = [uint24(0.01e7), 0.008e7, 0.005e7, 0.004e7, 0.002e7];
+        address[5] memory paidReceivers;
+        FeeProtocol.ProviderConfig[] memory providers = new FeeProtocol.ProviderConfig[](5);
+
+        for (uint256 i; i < 5; i++) {
+            paidReceivers[i] = makeAddr(string.concat("providerReceiver", vm.toString(i + 1)));
+            ProtocolFeeProviderMock provider = new ProtocolFeeProviderMock(bps[i], 0, paidReceivers[i], address(this));
+            providers[i] = FeeProtocol.ProviderConfig({ provider: address(provider), takeFlatFee: true, takeSurplusFee: false });
+
+            if (i == 1) provider.setRecipientAndFees(address(0), bps[i], 0); // skipped: zero receiver
+            if (i == 3) provider.setRecipientAndFees(paidReceivers[i], 0, 0); // skipped: zero fees
+        }
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _noReceivers(), providers, 0)
+        );
+
+        // Exactly one transfer per surviving receiver with its exact fee
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, paidReceivers[0], amountIn * bps[0] / BPS), 1);
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, paidReceivers[2], amountIn * bps[2] / BPS), 1);
+        vm.expectCall(tokenA, abi.encodeWithSignature("transferFrom(address,address,uint256)", taker, paidReceivers[4], amountIn * bps[4] / BPS), 1);
+        // No transfer of any amount towards the two skipped entries (prefix match on from/to)
+        vm.expectCall(tokenA, abi.encodePacked(bytes4(keccak256("transferFrom(address,address,uint256)")), abi.encode(taker, address(0))), 0);
+        vm.expectCall(tokenA, abi.encodePacked(bytes4(keccak256("transferFrom(address,address,uint256)")), abi.encode(taker, paidReceivers[3])), 0);
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        uint256 totalFee = amountIn * (bps[0] + bps[2] + bps[4]) / BPS;
+        assertEq(TokenMock(tokenA).balanceOf(paidReceivers[0]), amountIn * bps[0] / BPS, "First provider receiver paid exactly");
+        assertEq(TokenMock(tokenA).balanceOf(paidReceivers[2]), amountIn * bps[2] / BPS, "Third provider receiver paid exactly");
+        assertEq(TokenMock(tokenA).balanceOf(paidReceivers[4]), amountIn * bps[4] / BPS, "Fifth provider receiver paid exactly");
+        assertEq(TokenMock(tokenA).balanceOf(paidReceivers[3]), 0, "Zero-fee provider receiver gets nothing");
+        assertEq(TokenMock(tokenA).balanceOf(paidReceivers[1]), 0, "Zero-receiver provider receiver gets nothing");
+        assertEq(amountOut, _xycOut(amountIn - totalFee), "Curve priced only on the surviving providers");
+    }
+
+    // ========== Builder validation ==========
+
+    function test_Build_ZeroReceiver_Reverts() public {
+        FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
+        receivers[0] = FeeProtocol.ReceiverConfig({ receiver: address(0), feeBps: 0.01e7, surplusBps: 0 });
+
+        vm.expectRevert(FeeProtocol.FeeProtocolBadTarget.selector);
+        this.buildExternal(true, receivers, _noProviders(), 0);
+    }
+
+    function test_Build_ZeroProvider_Reverts() public {
+        vm.expectRevert(FeeProtocol.FeeProtocolBadTarget.selector);
+        this.buildExternal(true, _noReceivers(), _provider1(address(0), true, false), 0);
+    }
+
+    function test_Build_ReceiverWithoutFees_Reverts() public {
+        FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
+        receivers[0] = FeeProtocol.ReceiverConfig({ receiver: receiver1, feeBps: 0, surplusBps: 0 });
+
+        vm.expectRevert(FeeProtocol.FeeProtocolNoFeeFlagsSet.selector);
+        this.buildExternal(true, receivers, _noProviders(), 0);
+    }
+
+    function test_Build_ProviderWithoutFlags_Reverts() public {
+        vm.expectRevert(FeeProtocol.FeeProtocolNoFeeFlagsSet.selector);
+        this.buildExternal(true, _noReceivers(), _provider1(address(feeProvider), false, false), 0);
+    }
 }

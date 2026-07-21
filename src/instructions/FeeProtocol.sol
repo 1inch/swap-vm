@@ -36,9 +36,10 @@ library FeeProtocol {
     using Math for uint256;
     using SafeCast for uint256;
 
-    error FeeBpsOutOfRange(uint256 feeBps, uint256 surplusBps);
-    error FeeProtocolProviderFailedCall();
+    error FeeProtocolNoFeeFlagsSet();
+    error FeeProtocolBadTarget();
     error FeeProtocolExceedMaxCount();
+    error FeeBpsOutOfRange(uint256 feeBps, uint256 surplusBps);
 
     Opcode constant opcode = Opcode.FeeProtocol;
 
@@ -66,32 +67,44 @@ library FeeProtocol {
         require(count < 16, FeeProtocolExceedMaxCount());
 
         bytes memory args = abi.encodePacked(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
-
         bool encodeSurplusEstimate;
+
         for (uint256 i; i < receivers.length; i++) {
             bool takeFlatFee = receivers[i].feeBps > 0;
             bool takeSurplusFee = receivers[i].surplusBps > 0;
 
+            require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
+            require(receivers[i].receiver != address(0), FeeProtocolBadTarget());
+
             args = abi.encodePacked(
                 args,
-                InstructionBuilder.encodeBool(false, 0) | InstructionBuilder.encodeBool(takeFlatFee, 1)
-                    | InstructionBuilder.encodeBool(takeSurplusFee, 2),
+                InstructionBuilder.encodeBool(false, 0) |
+                InstructionBuilder.encodeBool(takeFlatFee, 1) |
+                InstructionBuilder.encodeBool(takeSurplusFee, 2),
                 receivers[i].receiver
             );
+
             if (takeFlatFee) args = abi.encodePacked(args, receivers[i].feeBps);
             if (takeSurplusFee) args = abi.encodePacked(args, receivers[i].surplusBps);
+
             encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
         }
 
         for (uint256 i; i < providers.length; i++) {
             bool takeFlatFee = providers[i].takeFlatFee;
             bool takeSurplusFee = providers[i].takeSurplusFee;
+
+            require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
+            require(providers[i].provider != address(0), FeeProtocolBadTarget());
+
             args = abi.encodePacked(
                 args,
-                InstructionBuilder.encodeBool(true, 0) | InstructionBuilder.encodeBool(takeFlatFee, 1)
-                    | InstructionBuilder.encodeBool(takeSurplusFee, 2),
+                InstructionBuilder.encodeBool(true, 0) |
+                InstructionBuilder.encodeBool(takeFlatFee, 1) |
+                InstructionBuilder.encodeBool(takeSurplusFee, 2),
                 providers[i].provider
             );
+
             encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
         }
 
@@ -133,9 +146,10 @@ library FeeProtocol {
         uint256 totalFeeBps;
         uint256 totalSurplusBps;
 
-        for (uint256 i = 0; i < count; i++) {
+        uint256 i;
+        while (i < count) {
             (bool isProvider, bool takeFlatFee, bool takeSurplusFee, address target) = parseItem(args, shift);
-            shift += 21;
+            unchecked { shift += 21; }
 
             address receiver;
             uint24 feeBps;
@@ -157,17 +171,24 @@ library FeeProtocol {
 
                 if (takeFlatFee) {
                     feeBps = parseFeeBps(args, shift);
-                    shift += 3;
+                    unchecked { shift += 3; }
                 }
                 if (takeSurplusFee) {
                     surplusBps = parseFeeBps(args, shift);
-                    shift += 3;
+                    unchecked { shift += 3; }
                 }
             }
 
-            totalFeeBps += feeBps;
-            totalSurplusBps += surplusBps;
-            receivers[i] = FeeReceiverLib.encode(receiver, feeBps, surplusBps);
+            if (receiver == address(0) || (feeBps == 0 && surplusBps == 0)) {
+                unchecked { count--; }
+            } else {
+                receivers[i] = FeeReceiverLib.encode(receiver, feeBps, surplusBps);
+                unchecked { 
+                    totalFeeBps += feeBps;
+                    totalSurplusBps += surplusBps;
+                    i++;
+                }
+            }
         }
 
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));

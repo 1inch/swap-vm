@@ -281,29 +281,6 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
         assertEq(actualProtocolFee, 0, "No fee should be transferred when feeBps is 0");
     }
 
-    function test_DynamicProtocolFee_ZeroAddress_Reverts() public {
-        // Setup fee provider with fee but zero recipient
-        feeProvider.setRecipientAndFees(address(0), 0.10e7, 0);
-
-        MakerSetup memory setup = MakerSetup({
-            balanceA: 100e18,
-            balanceB: 200e18,
-            dynamicFeeProvider: address(feeProvider),
-            flatInFeeBps: 0,
-            flatOutFeeBps: 0
-        });
-        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
-
-        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
-        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
-
-        uint256 amountIn = 10e18;
-        vm.prank(taker);
-        // No dedicated zero-recipient check anymore: the fee transfer to address(0) reverts inside ERC20
-        vm.expectRevert();
-        swapVM.swap(order, amountIn, exactInTakerDataSwap);
-    }
-
     function test_DynamicProtocolFee_ProviderReturnsHighFee_Reverts() public {
         // Setup fee provider with excessive fee
         feeProvider.setRecipientAndFees(protocolFeeRecipient, 1.5e7, 0); // 150%
