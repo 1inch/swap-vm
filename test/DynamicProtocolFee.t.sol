@@ -342,7 +342,7 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
 
         uint256 amountIn = 10e18;
         vm.prank(taker);
-        vm.expectRevert(FeeProtocol.FeeProtocolProviderFailedCall.selector);
+        vm.expectRevert(InvalidProtocolFeeProviderMock.FeeDynamicProtocolInvalidRecipient.selector);
         swapVM.swap(order, amountIn, exactInTakerDataSwap);
     }
 

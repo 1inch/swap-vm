@@ -141,15 +141,14 @@ library FeeProtocol {
             uint24 feeBps;
             uint24 surplusBps;
             if (isProvider) {
-                (bool success, bytes memory result) = target.staticcall(
-                    abi.encodeCall(
-                        IProtocolFeeProvider.getRecipientAndFees,
-                        (ctx.query.orderHash, ctx.query.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.query.isExactIn)
-                    )
+                (receiver, feeBps, surplusBps) = IProtocolFeeProvider(target).getRecipientAndFees(
+                    ctx.query.orderHash,
+                    ctx.query.maker,
+                    ctx.query.taker,
+                    ctx.query.tokenIn,
+                    ctx.query.tokenOut,
+                    ctx.query.isExactIn
                 );
-
-                require(success && result.length == 96, FeeProtocolProviderFailedCall());
-                (receiver, feeBps, surplusBps) = abi.decode(result, (address, uint24, uint24));
 
                 if (!takeFlatFee) feeBps = 0;
                 if (!takeSurplusFee) surplusBps = 0;
