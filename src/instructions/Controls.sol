@@ -9,7 +9,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice Salt opcode, produce different hashes for duplicated stategies
+/// @notice Salt opcode, produce different hashes for duplicated strategies
 /// @dev Encoding: [uint64 salt] or [bytes salt]
 library Salt {
     Opcode constant opcode = Opcode.Salt;
