@@ -9,7 +9,8 @@ import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
-import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
+import { TransientLock } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
+import { TransientLockUnsafeLib } from "@1inch/solidity-utils/contracts/libraries/TransientLockUnsafe.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol";
@@ -30,7 +31,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-    using TransientLockLib for TransientLock;
+    using TransientLockUnsafeLib for TransientLock;
     using ContextLib for Context;
     using MakerTraitsLib for MakerTraits;
     using TakerTraitsLib for TakerTraits;
@@ -43,6 +44,14 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
     /// @dev Cannot use custom receiver with Aqua orders
     error MakerTraitsCustomReceiverIsIncompatibleWithAqua();
+    /// @dev Cannot pay with native coin for other token than WETH
+    error MsgValueInvalidToken();
+    /// @dev Attached native coin does not cover amountIn fully
+    error NotEnoughMsgValueAttached();
+    /// @dev Payment in native coin is unexpected
+    error UnexpectedMsgValue();
+    /// @dev Native coin transfer failed
+    error EthTransferFailed();
 
     /// @notice Emitted when a swap is successfully executed
     /// @param orderHash Unique identifier for the order
@@ -73,6 +82,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
     /// @notice Aqua protocol instance for balance management
     IAqua public immutable AQUA;
+    IWETH public immutable WETH;
 
     mapping(bytes32 orderHash => TransientLock) private _reentrancyGuards;
 
@@ -84,6 +94,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @param version EIP-712 domain version
     constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) {
         AQUA = IAqua(aqua);
+        WETH = IWETH(weth);
     }
 
     /// @notice Cast contract to ISwapVM interface for view-only operations
@@ -165,7 +176,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         ISwapVM.Order calldata order,
         uint256 amount,
         bytes calldata takerTraitsAndData
-    ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
+    ) external payable returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
         _reentrancyGuards[orderHash].lock();
 
@@ -242,27 +253,44 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         }
 
         uint256 fee;
+        require(msg.value == 0 || ctx.query.tokenIn == address(WETH), MsgValueInvalidToken());
         if (ctx.swap.amountIn > 0) {
             if (order.traits.useAquaInsteadOfSignature()) {
                 require(!order.traits.shouldUnwrapWeth(), MakerTraitsUnwrapIsIncompatibleWithAqua());
                 require(order.maker == order.traits.receiver(order.maker), MakerTraitsCustomReceiverIsIncompatibleWithAqua());
 
                 if (takerTraits.useTransferFromAndAquaPush()) {
-                    IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.taker, address(this), ctx.swap.amountIn);
+                    if (_acceptNativePayment(ctx.swap.amountIn)) {
+                        WETH.safeDeposit(ctx.swap.amountIn);
+                    } else {
+                        IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.taker, address(this), ctx.swap.amountIn);
+                    }
                     fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn);
 
                     IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn - fee);
                     AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn - fee);
                 } else {
+                    require(msg.value == 0, UnexpectedMsgValue());
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
                     require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
 
                     fee = FeeMetaLib.resolveInAquaPullMaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn, AQUA, order.maker, ctx.query.orderHash);
                 }
+            } else if (_acceptNativePayment(ctx.swap.amountIn)) {
+                WETH.safeDeposit(ctx.swap.amountIn);
+                fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn);
+
+                if (order.traits.shouldUnwrapWeth()) {
+                    WETH.safeWithdrawTo(ctx.swap.amountIn - fee, order.traits.receiver(order.maker));
+                } else {
+                    IERC20(ctx.query.tokenIn).safeTransfer(order.traits.receiver(order.maker), ctx.swap.amountIn - fee);
+                }
             } else {
                 fee = FeeMetaLib.resolveInSafeTransferFromTaker(ctx.fee.meta, ctx.fee.receivers, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker);
                 _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn - fee, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
             }
+        } else {
+            if (msg.value > 0) _sendEth(msg.sender, msg.value);
         }
 
         if (order.traits.hasPostTransferInHook()) {
@@ -270,6 +298,26 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             bytes calldata takerHookData = takerTraits.postTransferInHookData(takerData);
             target.postTransferIn(order.maker, ctx.query.taker, ctx.query.tokenIn, ctx.query.tokenOut, ctx.swap.amountIn, ctx.swap.amountOut, fee, ctx.query.orderHash, makerHookData, takerHookData);
         }
+    }
+
+    function _acceptNativePayment(uint256 amount) internal returns (bool) {
+        if (msg.value == 0) return false;
+
+        require(msg.value >= amount, NotEnoughMsgValueAttached());
+
+        uint256 remaining;
+        unchecked {
+            remaining = msg.value - amount;
+        }
+
+        if (remaining > 0) _sendEth(msg.sender, remaining);
+
+        return true;
+    }
+
+    function _sendEth(address to, uint256 amount) private {
+        (bool success, ) = to.call{ value: amount }("");
+        require(success, EthTransferFailed());
     }
 
     function _transferOut(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData) private {
@@ -298,7 +346,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     }
 
     function _transferFrom(address from, address to, address token, uint256 amount, bytes32 orderHash, bool useAqua, bool unwrapWeth) private {
-        if (unwrapWeth) {
+        if (unwrapWeth && token == address(WETH)) {
             _transferOrPull(from, address(this), token, amount, orderHash, useAqua);
             IWETH(token).safeWithdrawTo(amount, to);
         } else {

@@ -26,7 +26,7 @@ contract ProtocolFeeProviderMockTest is Test {
         );
     }
 
-    function testGetProtocolFeeParams() public {
+    function test_GetProtocolFeeParams() public {
         vm.record();
         (address to, uint24 feeBps, uint24 surplusBps) = feeProvider.getRecipientAndFees(
             DUMMY_ORDER_HASH,
@@ -45,7 +45,7 @@ contract ProtocolFeeProviderMockTest is Test {
         assertEq(to, address(feeRecipient));
     }
 
-    function testSetProtocolFeeParams() public {
+    function test_SetProtocolFeeParams() public {
         uint24 feeBpsNew = 0.003e7; // 0.3% in 1e7 scale
         uint24 surplusBpsNew = 0.2e7; // 20% in 1e7 scale
         address feeRecipientNew = address(0x5678);
@@ -69,7 +69,7 @@ contract ProtocolFeeProviderMockTest is Test {
         assertEq(to, feeRecipientNew);
     }
 
-    function testSetProtocolFeeParams_NotOwner() public {
+    function test_SetProtocolFeeParams_NotOwner() public {
         vm.prank(address(0x5678));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(0x5678)));
         feeProvider.setRecipientAndFees(address(0x1234), 0.003e7, 0);
