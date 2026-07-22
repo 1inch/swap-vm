@@ -21,7 +21,7 @@ import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol"
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 import { RevertingMakerHooks } from "./mocks/RevertingMakerHooks.sol";
 
@@ -95,13 +95,13 @@ contract MakerHooksTest is Test, OpcodesDebug {
     // ==================== Helper Functions ====================
 
     function _buildProgram(uint64 salt) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(Balances._staticBalancesXD,
+            p.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),
-            p.build(LimitSwap._limitSwap1D,
+            p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Controls._salt,
+            p.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(salt))
         );
     }

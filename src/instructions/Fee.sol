@@ -4,8 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
+import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
@@ -134,7 +133,7 @@ contract Fee {
     ///   break numerical consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
-    ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
+    ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
     ///   - Fee calculation and state changes happen AFTER external call
     ///   - feeProvider MUST NOT rely on intermediate swap state
     ///   CAUTION: Takers should verify feeProvider trustworthiness before executing.
@@ -183,7 +182,7 @@ contract Fee {
     ///   consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
-    ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
+    ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
     ///   - Fee calculation and state changes happen AFTER external call
     ///   - feeProvider MUST NOT rely on intermediate swap state
     ///   CAUTION: Takers should verify feeProvider trustworthiness before executing.

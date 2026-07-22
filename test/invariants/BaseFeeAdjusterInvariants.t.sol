@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
@@ -100,13 +100,13 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -127,13 +127,13 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -155,13 +155,13 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 200_000;
         uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -188,13 +188,13 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         ethPrices[2] = 5000e18;  // High ETH price
 
         for (uint256 i = 0; i < ethPrices.length; i++) {
-            Program memory program = ProgramBuilder.init(_opcodes());
+            Program program;
             bytes memory bytecode = bytes.concat(
-                program.build(_staticBalancesXD,
+                program.build(Opcode.StaticBalances,
                     BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-                program.build(_limitSwap1D,
+                program.build(Opcode.LimitSwap,
                     LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-                program.build(_baseFeeAdjuster1D,
+                program.build(Opcode.BaseFeeAdjuster,
                     BaseFeeAdjusterArgsBuilder.build(
                         baseGasPrice,
                         ethPrices[i],
@@ -221,15 +221,15 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceIn1D,
+            program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -257,15 +257,15 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint24 gasAmount = 150_000;
         uint64 maxPriceDecay = 99e16;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceOut1D,
+            program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,

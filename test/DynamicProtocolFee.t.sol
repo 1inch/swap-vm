@@ -24,7 +24,7 @@ import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { InvalidProtocolFeeProviderMock } from "./mocks/InvalidProtocolFeeProviderMock.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e9;
@@ -93,23 +93,23 @@ contract DynamicProtocolFeeTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory programBytes = bytes.concat(
             // 0. Apply dynamic protocol fee
-            program.build(Fee._dynamicProtocolFeeAmountInXD,
+            program.build(Opcode.DynamicProtocolFeeAmountIn,
                 FeeArgsBuilder.buildDynamicProtocolFee(setup.dynamicFeeProvider)),
             // 1. Set initial token balances
-            program.build(Balances._dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
             // 2. Apply flat feeIn (optional)
-            setup.flatInFeeBps > 0 ? program.build(Fee._flatFeeAmountInXD,
+            setup.flatInFeeBps > 0 ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(setup.flatInFeeBps)) : bytes(""),
             // 3. Apply flat feeOut (optional)
-            setup.flatOutFeeBps > 0 ? program.build(FeeExperimental._flatFeeAmountOutXD,
+            setup.flatOutFeeBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(setup.flatOutFeeBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(XYCSwap._xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         // === Create Order ===

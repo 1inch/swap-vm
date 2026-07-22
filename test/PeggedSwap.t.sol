@@ -17,7 +17,7 @@ import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwa
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
@@ -31,6 +31,10 @@ contract PeggedSwapMathWrapper {
 
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
+    }
+
+    function buildArgs(PeggedSwapArgsBuilder.Args memory args) external pure returns (bytes memory) {
+        return PeggedSwapArgsBuilder.build(args);
     }
 }
 
@@ -87,14 +91,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
-        Program memory prog = ProgramBuilder.init(_opcodes());
+        Program prog;
 
         bytes memory programBytes = bytes.concat(
-            prog.build(Balances._dynamicBalancesXD,
+            prog.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            setup.feeInBps > 0 ? prog.build(Fee._flatFeeAmountInXD,
+            setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
-            prog.build(PeggedSwap._peggedSwapGrowPriceRange2D,
+            prog.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: setup.x0,
                     y0: setup.y0,
@@ -238,13 +242,16 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 poolSize = 100000e18;
         uint256 swapSize = 5000e18; // 5% of pool
 
-        // Test different A values
-        uint256[5] memory linearWidths = [
+        // Test different A values spanning the full allowed range (A <= 5000)
+        uint256[8] memory linearWidths = [
             uint256(0),        // Pure sqrt, max slippage
             0.1e27,            // Low A, unpegged
-            0.8e27,            // Medium A, stablecoins
-            1.2e27,            // High A, pegged
-            2e27               // Max A, minimal slippage
+            0.8e27,            // Medium A, classic stablecoins setting
+            2e27,              // Medium-high A
+            10e27,             // LST/LRT range
+            50e27,             // LST/LRT range upper
+            500e27,            // Tight stablecoin / Curve A≈250 equivalent
+            5000e27            // At cap
         ];
 
         uint256 previousOut = 0;
@@ -309,12 +316,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     }
 
     function test_PeggedSwap_EdgeCase_A_Max() public {
+        // Maximum allowed A: linearWidth <= 5000*ONE
         PoolSetup memory setup = PoolSetup({
             balanceA: 100000e18,
             balanceB: 100000e18,
             x0: 100000e18,
             y0: 100000e18,
-            linearWidth: 2e27, // Maximum allowed
+            linearWidth: 5000e27,
             feeInBps: 0
         });
 
@@ -322,6 +330,119 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 10000e18;
 
         _assertSwapQuoteConsistency(order, amountIn, true);
+    }
+
+    /// @notice A=5000 (at cap): output must be extremely close to amountIn (near-zero slippage)
+    ///         and the rounding-protection direction must still hold.
+    function test_PeggedSwap_HighA_TightPeg_ExactIn() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100_000e18,
+            balanceB: 100_000e18,
+            x0: 100_000e18,
+            y0: 100_000e18,
+            linearWidth: 5000e27, // at cap
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        uint256 amountIn = 1000e18; // 1% of pool
+
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, true, signature);
+
+        vm.prank(taker);
+        (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
+
+        assertEq(swappedIn, amountIn);
+        // For 1% trade at A=5000, slippage is essentially 0 (linear approx: ε≈Δ/(1+2A) ≈ 1e-5 ≈ 0.1 bp)
+        // amountOut must round DOWN ≤ amountIn (maker protection)
+        assertLe(swappedOut, amountIn, "Output must not exceed input");
+        assertGe(swappedOut, amountIn * 9999 / 10000, "Slippage > 1 bp at A=5000 for 1% trade is unexpected");
+    }
+
+    /// @notice Sweep across the now-allowed A range and verify quote==swap consistency for ExactIn and ExactOut
+    function test_PeggedSwap_QuoteSwapConsistency_AcrossA() public {
+        uint256[7] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27, 5000e27];
+
+        for (uint256 i = 0; i < as_.length; i++) {
+            PoolSetup memory setup = PoolSetup({
+                balanceA: 50_000e18,
+                balanceB: 50_000e18,
+                x0: 50_000e18,
+                y0: 50_000e18,
+                linearWidth: as_[i],
+                feeInBps: 0
+            });
+            ISwapVM.Order memory order = _createOrder(setup);
+            _assertSwapQuoteConsistency(order, 1_000e18, true);
+            _assertSwapQuoteConsistency(order, 1_000e18, false);
+        }
+    }
+
+    /// @notice Tolerance / invariant check across the full allowed A range
+    function test_PeggedSwap_InvariantPreserved_AcrossA() public {
+        uint256 poolSize = 100_000e18;
+        uint256 amountIn = 1_000e18;
+
+        uint256[7] memory as_ = [uint256(0), 0.8e27, 10e27, 50e27, 200e27, 500e27, 5000e27];
+
+        for (uint256 i = 0; i < as_.length; i++) {
+            PoolSetup memory setup = PoolSetup({
+                balanceA: poolSize,
+                balanceB: poolSize,
+                x0: poolSize,
+                y0: poolSize,
+                linearWidth: as_[i],
+                feeInBps: 0
+            });
+
+            ISwapVM.Order memory order = _createOrder(setup);
+            bytes memory signature = _signOrder(order);
+            bytes memory takerData = _makeTakerData(true, true, signature);
+
+            vm.prank(taker);
+            (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
+
+            uint256 inv0 = PeggedSwapMath.invariantFromReserves(
+                poolSize, poolSize, setup.x0, setup.y0, setup.linearWidth
+            );
+            uint256 inv1 = PeggedSwapMath.invariantFromReserves(
+                poolSize + amountIn, poolSize - amountOut, setup.x0, setup.y0, setup.linearWidth
+            );
+
+            // Maker must not lose invariant; allow ~5e24 rounding slack for high-A (linear dominates, more precision loss)
+            assertGe(inv1, inv0 - 5e24, "Invariant must not decrease post-swap (maker safety)");
+        }
+    }
+
+    // ========================================
+    // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
+    // ========================================
+
+    /// @notice linearWidth > 5000*ONE must revert at swap EXECUTION, not just off-chain.
+    ///         build() only encodes; a program can embed any args directly, so the on-chain
+    ///         decode in parse() is what protects maker funds. One wei above the cap is enough —
+    ///         the <= 5000*ONE branch is covered by every other test using linearWidth = 5000e27.
+    function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 100_000e18,
+            balanceB: 100_000e18,
+            x0: 100_000e18,
+            y0: 100_000e18,
+            linearWidth: 5000e27 + 1, // one wei above the cap
+            feeInBps: 0
+        });
+
+        ISwapVM.Order memory order = _createOrder(setup);
+        bytes memory signature = _signOrder(order);
+        bytes memory takerData = _makeTakerData(true, true, signature);
+
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(
+            PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
+            5000e27 + 1
+        ));
+        swapVM.swap(order, 1000e18, takerData);
     }
 
     // ========================================
@@ -709,7 +830,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         // Highly asymmetric pairs
         uint256[5] memory us = [uint256(1), 1e15, 1e24, ONE, 2 * ONE];
         uint256[5] memory vs = [2 * ONE, ONE, 1e15, 1e24, uint256(1)];
-        uint256[3] memory as_ = [uint256(0), 0.01e27, 2e27];
+        // Span the full allowed A range: 0, low, medium, high (LST/LRT), tight (stable), tight-Curve, cap
+        uint256[7] memory as_ = [uint256(0), 0.01e27, 2e27, 50e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < us.length; i++) {
             for (uint256 j = 0; j < as_.length; j++) {
@@ -740,7 +862,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             [uint256(1), uint256(1)]     // both 1 wei
         ];
 
-        uint256[4] memory as_ = [uint256(0), 0.01e27, 0.8e27, 2e27];
+        // Span A from 0 to the cap to ensure round-trip protection holds across all allowed widths
+        uint256[7] memory as_ = [uint256(0), 0.01e27, 0.8e27, 10e27, 200e27, 500e27, 5000e27];
 
         for (uint256 i = 0; i < pairs.length; i++) {
             uint256 u = pairs[i][0];
@@ -768,7 +891,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
         uint256 ONE = PeggedSwapMath.ONE;
 
-        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+        uint256[6] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27, 5000e27];
 
         for (uint256 j = 0; j < as_.length; j++) {
             uint256 a = as_[j];
@@ -877,7 +1000,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
         uint256 ONE = PeggedSwapMath.ONE;
 
-        uint256[3] memory as_ = [uint256(0), 0.8e27, 2e27];
+        uint256[6] memory as_ = [uint256(0), 0.8e27, 2e27, 50e27, 500e27, 5000e27];
 
         for (uint256 j = 0; j < as_.length; j++) {
             uint256 a = as_[j];
@@ -944,8 +1067,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     function test_PeggedSwap_RoundRobin_DepletionAndRoundingExploit() public {
         uint256 poolSize = 1000e18;
 
-        // Test with multiple A values
-        uint256[3] memory linearWidths = [uint256(0), 0.8e27, 2e27];
+        // Test with A values spanning 0 (pure sqrt) → cap
+        uint256[5] memory linearWidths = [uint256(0), 0.8e27, 50e27, 500e27, 5000e27];
 
         for (uint256 w = 0; w < linearWidths.length; w++) {
             PoolSetup memory setup = PoolSetup({

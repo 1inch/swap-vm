@@ -18,7 +18,7 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { PiecewiseLinearScaleArgsBuilder } from "../src/instructions/PiecewiseLinearScale.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title PiecewiseLinearScale tests
 contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
@@ -52,13 +52,13 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint24[] memory scales,
         bool scaleIn
     ) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(balanceIn), balanceOut])),
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(balanceIn), balanceOut])),
             scaleIn
-                ? p.build(_piecewiseLinearScaleBalanceIn1D, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales))
-                : p.build(_piecewiseLinearScaleBalanceOut1D, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales)),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+                ? p.build(Opcode.PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales))
+                : p.build(Opcode.PiecewiseLinearScaleBalanceOut, PiecewiseLinearScaleArgsBuilder.build(timestamp, durations, scales)),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
     }
 

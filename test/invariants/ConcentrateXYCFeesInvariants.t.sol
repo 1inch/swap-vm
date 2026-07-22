@@ -16,7 +16,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
@@ -171,23 +171,23 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint32 _flatFeeInBps,
         uint32 _protocolFeeOutBps
     ) internal view returns (bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         return bytes.concat(
             // Protocol fees BEFORE balances
-            (_protocolFeeOutBps > 0) ? program.build(_protocolFeeAmountOutXD,
+            (_protocolFeeOutBps > 0) ? program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(_protocolFeeOutBps, feeRecipient)) : bytes(""),
 
             // Balances
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([_balanceA, _balanceB])),
 
             // Flat fee BEFORE concentrate (concentrate is terminal)
-            (_flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
+            (_flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(_flatFeeInBps)) : bytes(""),
 
             // Concentrate instruction (terminal: computes virtual reserves + swap)
-            program.build(_xycConcentrateGrowLiquidity2D,
+            program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(_sqrtPriceMin, _sqrtPriceMax))
         );
     }

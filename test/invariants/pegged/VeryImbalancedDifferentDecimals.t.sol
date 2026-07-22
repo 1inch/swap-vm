@@ -9,7 +9,7 @@ import { MakerTraitsLib } from "../../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../src/libs/TakerTraits.sol";
 import { PeggedFeesInvariants } from "../PeggedFeesInvariants.t.sol";
 import { TokenMockDecimals } from "../../mocks/TokenMockDecimals.sol";
-import { Program, ProgramBuilder } from "../../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../../src/instructions/PeggedSwap.sol";
 
@@ -127,11 +127,11 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Build order with asymmetric pool. Balances are positional in ascending
         // token address order (tokenA, tokenB).
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            p.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceTokenA, balanceTokenB])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            p.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Config,
                     y0: y0Config,

@@ -8,10 +8,6 @@ fs_permissions = [
     { access = "read-write", path = "./config" }
 ]
 
-[profile.default.optimizer_details]
-yul = true
-yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }
-
 [fmt]
 single_line_statement_blocks = "multi"
 multiline_func_header        = "all"
@@ -25,7 +21,3 @@ solc_version   = "0.8.30"
 optimizer      = true
 optimizer_runs = 700
 via_ir         = true
-
-[profile.ci.optimizer_details]
-yul = true
-yulDetails = { stackAllocation = true, optimizerSteps = "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu" }

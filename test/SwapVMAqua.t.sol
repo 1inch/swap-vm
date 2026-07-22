@@ -9,7 +9,7 @@ import { ISwapVM } from "../src/SwapVM.sol";
 
 
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MockTakerFirstTransfer } from "./mocks/MockTakerFirstTransfer.sol";
 

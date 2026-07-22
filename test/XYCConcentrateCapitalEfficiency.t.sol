@@ -17,7 +17,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title XYCConcentrate Capital Efficiency vs XYCSwap
 /// @notice Proves that XYCConcentrate achieves higher capital efficiency than plain XYCSwap.
@@ -107,7 +107,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 bLt,
         uint256 bGt
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -125,8 +125,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(XYCSwap._xycSwapXD)
+                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                p.build(Opcode.XYCSwap)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -140,7 +140,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -158,8 +158,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
+                p.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )

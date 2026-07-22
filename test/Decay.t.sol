@@ -21,7 +21,7 @@ import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract DecayTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
@@ -89,14 +89,14 @@ contract DecayTest is Test, OpcodesDebug {
     uint256 private orderNonce = 0;
 
     function createDecayOrder() internal returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Balances._dynamicBalancesXD,
+            p.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(INITIAL_LIQUIDITY), INITIAL_LIQUIDITY])),
-            p.build(Decay._decayXD,
+            p.build(Opcode.Decay,
                 DecayArgsBuilder.build(DECAY_PERIOD)),
-            p.build(XYCSwap._xycSwapXD, ""),
-            p.build(Controls._salt,
+            p.build(Opcode.XYCSwap, ""),
+            p.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(uint32(0x1000 + orderNonce++)))
         );
 
