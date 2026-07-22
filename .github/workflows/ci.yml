@@ -5,9 +5,6 @@ on:
       - master
   pull_request:
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
   run-ci:
     runs-on: ubuntu-latest
@@ -17,13 +14,10 @@ jobs:
           persist-credentials: false
           submodules: true
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          version: stable
-
-      - name: Install deps
-        run: forge install
+          node-version: 24
 
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v2
@@ -39,10 +33,10 @@ jobs:
           git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "ssh://git@github.com/"
 
       - name: Install node modules
-        run: npm install
+        run: yarn install --frozen-lockfile
 
       - name: Check gas snapshots
-        run: forge snapshot --check --tolerance 5 --no-match-test "testFuzz_*"
+        run: yarn snapshot:check
 
       - name: Run tests
-        run: forge test
+        run: yarn test
