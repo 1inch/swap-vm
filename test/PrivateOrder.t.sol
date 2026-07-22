@@ -17,16 +17,13 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
-import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
+import { PrivateOrder } from "../src/instructions/Whitelist.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../src/instructions/LimitSwap.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
 
 /// @title Whitelist tests
 contract PrivateOrderTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -42,8 +39,6 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
     address ALLOWED_TAKER = 0x00000000000000eE000200000000000000fF0002;
     address COLLISION_TAKER = 0x00000000000000bAdbad00000000000000fF0002;
     address BAD_TAKER = 0x00000000000000eE000200000000000000BadBad;
-
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -73,17 +68,16 @@ contract PrivateOrderTest is Test, LimitOpcodesDebug {
         swapVM.quote(order, SWAP_AMOUNT, takerData);
 
         vm.prank(BAD_TAKER);
-        vm.expectRevert(Whitelist.WhitelistInvalidTaker.selector);
+        vm.expectRevert(PrivateOrder.PrivateOrderInvalidTaker.selector);
         swapVM.quote(order, SWAP_AMOUNT, takerData);
     }
 
     /// @dev whitelist -> staticBalances -> limitswap
     function _buildProgram() internal view returns (bytes memory) {
-        Program p;
         bytes memory code = bytes.concat(
-            p.build(Opcode.PrivateOrder, WhitelistArgsBuilder.buildPrivateOrder(ALLOWED_TAKER)),
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
-            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            PrivateOrder.build(ALLOWED_TAKER),
+            StaticBalances.build(BALANCE_A, BALANCE_B),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         return code;

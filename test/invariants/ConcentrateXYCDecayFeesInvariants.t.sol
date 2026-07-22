@@ -16,12 +16,12 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -32,8 +32,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests all possible orderings ensuring concentrate always comes before XYC
  */
 contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -43,8 +41,6 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     uint256 public makerPK = 0x1234;
     address public taker;
     address public feeRecipient;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -75,7 +71,7 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
         uint256 sqrtPmax
     ) internal view returns (uint256 balA, uint256 balB) {
         (, uint256 actualLt, uint256 actualGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+            XYCConcentrateSwap.computeLiquidityFromAmounts(
                 available, available, 1e18, sqrtPmin, sqrtPmax
             );
         (balA, balB) = address(tokenA) < address(tokenB)
@@ -115,35 +111,31 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
 
     function _sqrtPmin() internal pure returns (uint256) { return Math.sqrt(0.8e36); }
     function _sqrtPmax() internal pure returns (uint256) { return Math.sqrt(1.25e36); }
-    function _cArgs() internal pure returns (bytes memory) {
-        return XYCConcentrateArgsBuilder.build2D(_sqrtPmin(), _sqrtPmax());
+    function _xycConcentrate() internal pure returns (bytes memory) {
+        return XYCConcentrateSwap.build(_sqrtPmin(), _sqrtPmax());
     }
 
     // ====== Order 1: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order1_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1000e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(300)),
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(300),
+            FeeFlatIn.build(0.003e7),
+            _xycConcentrate()
         );
 
         _testInvariants(_createOrder(bytecode), false);
     }
 
     function test_Order1_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(600)),
-            program.build(Opcode.ProgressiveFeeOut, FeeArgsBuilderExperimental.buildProgressiveFee(0.01e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(600),
+            FeeProgressiveOut.build(0.01e7),
+            _xycConcentrate()
         );
 
         // Skip symmetry for GrowPriceRange with progressive fees
@@ -154,28 +146,24 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 2: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order2_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1100e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(450)),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.004e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(450),
+            FeeFlatOut.build(0.004e7),
+            _xycConcentrate()
         );
 
         _testInvariants(_createOrder(bytecode), false);
     }
 
     function test_Order2_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1800e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(720)),
-            program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.05e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(720),
+            FeeProgressiveIn.build(0.05e7),
+            _xycConcentrate()
         );
 
         // Skip symmetry for GrowPriceRange with progressive fees
@@ -188,30 +176,25 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     // ====== Order 4: Balances -> Decay -> Concentrate -> Fees -> XYC ======
 
     function test_Order4_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1300e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(540)),
-            program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(0.0025e9, feeRecipient)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(540),
+            FeeBuilders.protocolFeeOut(0.0025e7, feeRecipient),
+            _xycConcentrate()
         );
 
         _testInvariants(_createOrder(bytecode), false);
     }
 
     function test_Order4_GrowPriceRange2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1700e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(780)),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.002e9)),
-            program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(0.03e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(780),
+            FeeFlatOut.build(0.002e7),
+            FeeProgressiveIn.build(0.03e7),
+            _xycConcentrate()
         );
 
         // Skip symmetry for GrowPriceRange with multiple fees
@@ -220,14 +203,12 @@ contract ConcentrateXYCDecayFeesInvariants is Test, OpcodesDebug, CoreInvariants
     }
 
     function test_Order5_GrowLiquidity2D() public {
-        Program program;
         (uint256 _balA, uint256 _balB) = _concentrateBalances(1500e18, _sqrtPmin(), _sqrtPmax());
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balA, _balB])),
-            program.build(Opcode.Decay, DecayArgsBuilder.build(480)),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(0.0055e9)),
-            program.build(Opcode.XYCConcentrateSwap, _cArgs())
+            DynamicBalances.build(_balA, _balB),
+            Decay.build(480),
+            FeeFlatOut.build(0.0055e7),
+            _xycConcentrate()
         );
 
         _testInvariants(_createOrder(bytecode), false);

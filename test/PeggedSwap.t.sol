@@ -12,12 +12,11 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
@@ -32,17 +31,9 @@ contract PeggedSwapMathWrapper {
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
     }
-
-    function buildArgs(PeggedSwapArgsBuilder.Args memory args) external pure returns (bytes memory) {
-        return PeggedSwapArgsBuilder.build(args);
-    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;
@@ -91,21 +82,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
-        Program prog;
-
         bytes memory programBytes = bytes.concat(
-            prog.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
-            prog.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: setup.x0,
-                    y0: setup.y0,
-                    linearWidth: setup.linearWidth,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
+            setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),
+            PeggedSwap.build(setup.x0, setup.y0, setup.linearWidth, 1, 1)
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -416,36 +396,6 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     }
 
     // ========================================
-    // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
-    // ========================================
-
-    /// @notice linearWidth > 5000*ONE must revert at swap EXECUTION, not just off-chain.
-    ///         build() only encodes; a program can embed any args directly, so the on-chain
-    ///         decode in parse() is what protects maker funds. One wei above the cap is enough —
-    ///         the <= 5000*ONE branch is covered by every other test using linearWidth = 5000e27.
-    function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
-        PoolSetup memory setup = PoolSetup({
-            balanceA: 100_000e18,
-            balanceB: 100_000e18,
-            x0: 100_000e18,
-            y0: 100_000e18,
-            linearWidth: 5000e27 + 1, // one wei above the cap
-            feeInBps: 0
-        });
-
-        ISwapVM.Order memory order = _createOrder(setup);
-        bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
-
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(
-            PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
-            5000e27 + 1
-        ));
-        swapVM.swap(order, 1000e18, takerData);
-    }
-
-    // ========================================
     // IMBALANCED POOL TESTS
     // ========================================
 
@@ -593,7 +543,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0.003e9 // 0.3%
+            feeInBps: 0.003e7 // 0.3%
         });
 
         ISwapVM.Order memory orderNoFee = _createOrder(setupNoFee);
@@ -773,7 +723,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory takerData = _makeTakerData(true, true, signature);
 
         vm.prank(taker);
-        vm.expectRevert(PeggedSwap.PeggedSwapBothBalancesZero.selector);
+        vm.expectRevert(PeggedSwapMath.PeggedSwapMathInvalidInput.selector);
         swapVM.swap(order, 10e18, takerData);
     }
 

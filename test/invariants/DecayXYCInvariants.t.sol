@@ -15,9 +15,9 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -28,8 +28,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Tests decaying offsets affecting XYC (constant product) swap behavior
  */
 contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -38,8 +36,6 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -130,13 +126,10 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_DecayXYCHalfwayDecay() public {
         uint16 period = 120; // 2 minutes
 
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(period)),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(1000e18, 1000e18),
+            Decay.build(period),
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -165,13 +158,10 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
      * Helper to test Decay + XYC with specific period
      */
     function _testDecayXYCWithPeriod(uint16 period) private {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(Opcode.Decay,
-                DecayArgsBuilder.build(period)),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(1000e18, 1000e18),
+            Decay.build(period),
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

@@ -16,18 +16,13 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { Decay } from "../src/instructions/Decay.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract DecayTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;
@@ -89,15 +84,11 @@ contract DecayTest is Test, OpcodesDebug {
     uint256 private orderNonce = 0;
 
     function createDecayOrder() internal returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(INITIAL_LIQUIDITY), INITIAL_LIQUIDITY])),
-            p.build(Opcode.Decay,
-                DecayArgsBuilder.build(DECAY_PERIOD)),
-            p.build(Opcode.XYCSwap, ""),
-            p.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(uint32(0x1000 + orderNonce++)))
+            DynamicBalances.build(INITIAL_LIQUIDITY, INITIAL_LIQUIDITY),
+            Decay.build(DECAY_PERIOD),
+            XYCSwap.build(),
+            Salt.build(uint32(0x1000 + orderNonce++))
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

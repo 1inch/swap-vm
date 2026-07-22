@@ -17,16 +17,13 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Context } from "../src/libs/VM.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../src/opcodes/LimitOpcodesDebug.sol";
-import { Whitelist, WhitelistArgsBuilder } from "../src/instructions/Whitelist.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { WhitelistCoequal, WhitelistSequential } from "../src/instructions/Whitelist.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
+import { Jump } from "../src/instructions/Jumps.sol";
 
 /// @title Whitelist tests
 contract WhitelistTest is Test, LimitOpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     LimitSwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -48,8 +45,6 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         Coequal,
         Sequential
     }
-
-    constructor() LimitOpcodesDebug(address(aqua = new Aqua())) { }
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -186,7 +181,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
                     // Taker not listed yet
                     vm.warp(ts - 1);
                     vm.prank(ALLOWED_TAKERS[i]);
-                    vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                    vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                     swapVM.quote(order, SWAP_AMOUNT, takerData);
                 }
                 {
@@ -203,17 +198,17 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             if (length < 20 && DURATIONS[length - 1] != 0) {
                 // The next, unlisted entry still reverts
                 vm.prank(ALLOWED_TAKERS[length]);
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
 
                 // Aliens are not allowed
                 vm.prank(address(0xaffacfed));
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
             } else if (length == 20) {
                 // During the last duration aliens are still not allowed
                 vm.prank(address(0xaffacfed));
-                vm.expectRevert(Whitelist.WhitelistAllowedTimeViolation.selector);
+                vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
                 swapVM.quote(order, SWAP_AMOUNT, takerData);
 
                 // All durations passed, any unlisted pass through branchF
@@ -264,8 +259,6 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
     /// @dev condition -> staticBalances A or B -> limitswap
     function _buildProgram(WhitelistType whitelistType, uint256 length) internal view returns (bytes memory) {
-        Program p;
-
         uint16 conditionLength;
         uint16 branchFLength = 2 + 64 + 2 + 2;
         uint16 branchTLength = 2 + 64;
@@ -277,7 +270,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) allowedTakers[i] = ALLOWED_TAKERS[i];
 
             conditionLength = uint16(2 + 2 + length * 10);
-            condition = p.build(Opcode.WhitelistCoequal, WhitelistArgsBuilder.buildWhitelistCoequal(conditionLength + branchFLength, allowedTakers));
+            condition = WhitelistCoequal.build(conditionLength + branchFLength, allowedTakers);
             assertEq(conditionLength, condition.length);
         } else if (whitelistType == WhitelistType.Sequential) {
             address[] memory allowedTakers = new address[](length);
@@ -286,19 +279,19 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
             for (uint256 i; i < length; ++i) durations[i] = DURATIONS[i];
 
             conditionLength = uint16(7 + 2 + length * 12);
-            condition = p.build(Opcode.WhitelistSequential, WhitelistArgsBuilder.buildWhitelistSequential(conditionLength + branchFLength, START, allowedTakers, durations));
+            condition = WhitelistSequential.build(START, conditionLength + branchFLength, allowedTakers, durations);
             assertEq(conditionLength, condition.length);
         }
 
         bytes memory branchF = bytes.concat(
-            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A, BALANCE_B])),
-            p.build(Opcode.Jump, ControlsArgsBuilder.buildJump(conditionLength + branchFLength + branchTLength))
+            StaticBalances.build(BALANCE_A, BALANCE_B),
+            Jump.build(conditionLength + branchFLength + branchTLength)
         );
         assertEq(branchFLength, branchF.length);
-        bytes memory branchT = p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([BALANCE_A * 2, BALANCE_B]));
+        bytes memory branchT = StaticBalances.build(BALANCE_A * 2, BALANCE_B);
         assertEq(branchTLength, branchT.length);
 
-        bytes memory fin = p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenB), address(tokenA)));
+        bytes memory fin = LimitSwap.build(address(tokenB), address(tokenA));
         assertEq(finLength, fin.length);
 
         return bytes.concat(condition, branchF, branchT, fin);

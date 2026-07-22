@@ -23,18 +23,13 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
     using SafeCast for uint256;
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenUSD;
     address public tokenETH;
@@ -43,8 +38,8 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
     uint256 public makerPrivateKey;
     address public taker = makeAddr("taker");
 
-    uint32 public constant FEE_3PCT = 0.03e9; // 3%
-    uint256 public constant BPS = 1e9;
+    uint24 public constant FEE_3PCT = 0.03e7; // 3%
+    uint256 public constant BPS = 1e7;
 
     function setUp() public {
         makerPrivateKey = 0x1234;
@@ -75,12 +70,10 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 balanceETH,
         uint256 sqrtPriceMin,
         uint256 sqrtPriceMax,
-        uint32 feeBps
+        uint24 feeBps
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
-
         bytes memory feeInstruction = feeBps > 0
-            ? program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps))
+            ? FeeFlatIn.build(feeBps)
             : bytes("");
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -104,11 +97,9 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceETH), balanceUSD])),
+                DynamicBalances.build(balanceETH, balanceUSD),
                 feeInstruction,
-                program.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPriceMin, sqrtPriceMax)
-                )
+                XYCConcentrateSwap.build(sqrtPriceMin, sqrtPriceMax)
             )
         }));
 
@@ -159,7 +150,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 initialUSD = 2_010_000e18;
         uint256 initialETH = 1000e18;
 
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(targetSpotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 balanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;
@@ -207,7 +198,7 @@ contract XYCConcentrateFeeEffectivePriceBoundsTest is Test, OpcodesDebug {
         uint256 initialUSD = 4_000_000e18;
         uint256 initialETH = 1000e18;
 
-        (, uint256 bLt, uint256 bGt) = XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(
+        (, uint256 bLt, uint256 bGt) = XYCConcentrateSwap.computeLiquidityFromAmounts(
             initialETH, initialUSD, Math.sqrt(targetSpotPrice * 1e18), sqrtPriceMin, sqrtPriceMax
         );
         uint256 balanceUSD = address(tokenUSD) > address(tokenETH) ? bGt : bLt;

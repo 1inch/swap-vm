@@ -15,22 +15,17 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
-import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
-import { Debug } from "../src/instructions/Debug.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "./utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
-uint256 constant BPS = 1e9;
+uint256 constant BPS = 1e7;
 
 contract ProtocolFeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;
@@ -76,9 +71,9 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     struct MakerSetup {
         uint256 balanceA;
         uint256 balanceB;
-        uint32 protocolFeeBps;
-        uint32 flatInFeeBps;
-        uint32 flatOutFeeBps;
+        uint24 protocolFeeBps;
+        uint24 flatInFeeBps;
+        uint24 flatOutFeeBps;
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
@@ -86,28 +81,21 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     }
 
     function _createOrderWithFeeType(MakerSetup memory setup, bool protocolFeeOnAmountIn) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
-
         bytes memory programBytes = bytes.concat(
             // 0. Apply protocol fee (optional)
             setup.protocolFeeBps > 0 ? (
                 protocolFeeOnAmountIn
-                    ? program.build(Opcode.ProtocolFeeAmountIn,
-                        FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
-                    : program.build(Opcode.ProtocolFeeAmountOut,
-                        FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
+                    ? FeeBuilders.protocolFeeIn(setup.protocolFeeBps, protocolFeeRecipient)
+                    : FeeBuilders.protocolFeeOut(setup.protocolFeeBps, protocolFeeRecipient)
             ) : bytes(""),
             // 1. Set initial token balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
             // 2. Apply flat feeIn (optional)
-            setup.flatInFeeBps > 0 ? program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(setup.flatInFeeBps)) : bytes(""),
+            setup.flatInFeeBps > 0 ? FeeFlatIn.build(setup.flatInFeeBps) : bytes(""),
             // 3. Apply flat feeOut (optional)
-            setup.flatOutFeeBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(setup.flatOutFeeBps)) : bytes(""),
+            setup.flatOutFeeBps > 0 ? FeeFlatOut.build(setup.flatOutFeeBps) : bytes(""),
             // 4. Perform the swap
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // === Create Order ===
@@ -172,7 +160,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         // Just need to rebuild the takerData with signature for swapping
         // Since the original takerData was built for quoting (with empty signature),
         // we need to extract the isExactIn flag first (first two bytes contain flags)
-        bool isExactIn = (uint16(bytes2(takerData)) & 0x0001) != 0;
+        bool isExactIn = (uint8(takerData[21]) & 0x01) != 0; // flags are bytes 20-21 of the traits header
 
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
@@ -203,7 +191,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            protocolFeeBps: 0.10e7, // 10% fee
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
@@ -228,7 +216,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            protocolFeeBps: 0.10e7, // 10% fee
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
@@ -256,9 +244,9 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            protocolFeeBps: 0.10e7, // 10% fee
             flatInFeeBps: 0,
-            flatOutFeeBps: 0.05e9 // 5% flat fee
+            flatOutFeeBps: 0.05e7 // 5% flat fee
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -296,8 +284,8 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
-            flatInFeeBps: 0.05e9, // 5% flat fee
+            protocolFeeBps: 0.10e7, // 10% fee
+            flatInFeeBps: 0.05e7, // 5% flat fee
             flatOutFeeBps: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
@@ -335,7 +323,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            protocolFeeBps: 0.10e7, // 10% fee
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
@@ -355,8 +343,8 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         // Verify fee was collected (non-zero)
         assertGt(actualProtocolFee, 0, "Protocol fee should be collected from tokenIn");
 
-        // actualAmountIn returned is the effective amount used in swap after fee
-        assertLt(actualAmountIn, amountIn, "actualAmountIn should be less than requested (after fee)");
+        // ExactIn: taker always pays exactly the specified amountIn (fee carved out of maker receipt)
+        assertEq(actualAmountIn, amountIn, "actualAmountIn should equal requested amountIn");
 
         // Verify amountOut is less than without fee (due to fee deduction from effective amountIn)
         uint256 noFeeAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
@@ -368,7 +356,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% fee
+            protocolFeeBps: 0.10e7, // 10% fee
             flatInFeeBps: 0,
             flatOutFeeBps: 0
         });
@@ -401,8 +389,8 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            protocolFeeBps: 0.10e9, // 10% protocol fee
-            flatInFeeBps: 0.05e9,  // 5% flat fee
+            protocolFeeBps: 0.10e7, // 10% protocol fee
+            flatInFeeBps: 0.05e7,  // 5% flat fee
             flatOutFeeBps: 0
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFeeType(setup, true);

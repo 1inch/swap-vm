@@ -6,29 +6,28 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
-contract XYCSwap {
-    using ContextLib for Context;
+/// @notice XYCSwap opcode, constant-product swap curve
+/// @dev Encoding: []
+library XYCSwap {
+    using Math for uint256;
 
-    error XYCSwapRecomputeDetected();
-    error XYCSwapRequiresBothBalancesNonZero(uint256 balanceIn, uint256 balanceOut);
+    Opcode constant opcode = Opcode.XYCSwap;
 
-    function _xycSwapXD(Context memory ctx, bytes calldata /* args */) internal pure {
-        require(ctx.swap.balanceIn > 0 && ctx.swap.balanceOut > 0, XYCSwapRequiresBothBalancesNonZero(ctx.swap.balanceIn, ctx.swap.balanceOut));
+    function build() internal pure returns (bytes memory) {
+        return InstructionBuilder.build(opcode);
+    }
 
+    function exec(Context memory ctx, bytes calldata) internal pure {
         if (ctx.query.isExactIn) {
-            require(ctx.swap.amountOut == 0, XYCSwapRecomputeDetected());
-            ctx.swap.amountOut = (
-                (ctx.swap.amountIn * ctx.swap.balanceOut) /
-                (ctx.swap.balanceIn + ctx.swap.amountIn)
-            );
+            // Floor division for tokenOut favors maker
+            ctx.swap.amountOut = ctx.swap.amountIn * ctx.swap.balanceOut / (ctx.swap.balanceIn + ctx.swap.amountIn);
         } else {
-            require(ctx.swap.amountIn == 0, XYCSwapRecomputeDetected());
-            ctx.swap.amountIn = Math.ceilDiv(
-                ctx.swap.amountOut * ctx.swap.balanceIn,
-                (ctx.swap.balanceOut - ctx.swap.amountOut)
-            );
+            // Ceil division for tokenIn favors maker
+            ctx.swap.amountIn = (ctx.swap.amountOut * ctx.swap.balanceIn).ceilDiv(ctx.swap.balanceOut - ctx.swap.amountOut);
         }
     }
 }

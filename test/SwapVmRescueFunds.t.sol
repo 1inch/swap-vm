@@ -15,8 +15,6 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 
 /// @dev Smoke test: Rescuable edge cases are covered in solidity-utils
 contract SwapVmRescueFundsTest is Test, OpcodesDebug {
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
 

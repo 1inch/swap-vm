@@ -8,11 +8,9 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { BPS } from "../src/instructions/Fee.sol";
+import { FeeFlatIn } from "../src/instructions/FeeFlat.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
-
-
 
 contract FeeAquaTest is AquaSwapVMTest {
     function setUp() public virtual override {
@@ -20,7 +18,7 @@ contract FeeAquaTest is AquaSwapVMTest {
     }
 
     function _makerSetup(
-        uint32 feeInBps
+        uint24 feeInBps
     ) internal pure returns (MakerSetup memory) {
         return MakerSetup({
             balanceA: INITIAL_BALANCE_A,
@@ -50,7 +48,7 @@ contract FeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_FeeIn_ExactIn_BalanceAfterSwap() public {
-        MakerSetup memory setup = _makerSetup(0.10e9); // 10% fee in
+        MakerSetup memory setup = _makerSetup(0.10e7); // 10% fee in
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB
@@ -66,7 +64,7 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 makerBalanceAAfter, uint256 makerBalanceBAfter) = getAquaBalances(strategyHash);
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
-        uint256 expectedFee = amountIn * setup.feeInBps / BPS;
+        uint256 expectedFee = amountIn * setup.feeInBps / FeeFlatIn.BPS;
         uint256 amountOutExpected = setup.balanceB * (amountIn - expectedFee) / (setup.balanceA + amountIn - expectedFee);
         assertEq(takerBalanceBAfter - takerBalanceBBefore, amountOutExpected, "Taker received correct amountOut");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
@@ -76,7 +74,7 @@ contract FeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_FeeIn_ExactOut_BalancesAfterSwap() public {
-        MakerSetup memory setup = _makerSetup(0.10e9); // 10% fee in
+        MakerSetup memory setup = _makerSetup(0.10e7); // 10% fee in
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, false); // Swap for 100 tokenB
@@ -93,7 +91,7 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
         uint256 baseAmountIn = Math.ceilDiv(setup.balanceA * amountOut, setup.balanceB - amountOut);
-        uint256 expectedFee = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), BPS - uint256(setup.feeInBps));
+        uint256 expectedFee = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), FeeFlatIn.BPS - uint256(setup.feeInBps));
         uint256 amountInExpected = baseAmountIn + expectedFee;
         assertApproxEqAbs(takerBalanceABefore - takerBalanceAAfter, amountInExpected, 1, "Taker paid correct amountIn");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
@@ -103,10 +101,11 @@ contract FeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_FeeIn_ExactIn_100Percent_ShouldRevert() public {
-        MakerSetup memory setup = _makerSetup(1e9); // 100% fee in
+        MakerSetup memory setup = _makerSetup(uint24(FeeFlatIn.BPS - 1)); // ~100% fee in (BPS-1, exactly 100% is rejected by build)
         ISwapVM.Order memory order = createStrategy(setup);
         shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
-        SwapProgram memory swapProgram = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB
+        // Amount below BPS so the ~100% fee rounds the net input down to zero
+        SwapProgram memory swapProgram = _swapProgram(1e6, true, true);
 
         mintTokenInToTaker(swapProgram);
         mintTokenOutToMaker(swapProgram, 200e18);
@@ -116,7 +115,7 @@ contract FeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_FeeIn_ExactOut_100Percent_ShouldRevert() public {
-        MakerSetup memory setup = _makerSetup(1e9); // 100% fee in
+        MakerSetup memory setup = _makerSetup(uint24(FeeFlatIn.BPS - 1)); // ~100% fee
         ISwapVM.Order memory order = createStrategy(setup);
         shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, false); // Swap for 100 tokenB

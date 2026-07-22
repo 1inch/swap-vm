@@ -15,11 +15,11 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
 
@@ -31,12 +31,12 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @notice Configuration for all fee types. Zero value means fee is disabled.
  */
 struct FeeConfig {
-    uint32 flatFeeInBps;
-    uint32 flatFeeOutBps;
-    uint32 progressiveFeeInBps;
-    uint32 progressiveFeeOutBps;
-    uint32 protocolFeeInBps;
-    uint32 protocolFeeOutBps;
+    uint24 flatFeeInBps;
+    uint24 flatFeeOutBps;
+    uint24 progressiveFeeInBps;
+    uint24 progressiveFeeOutBps;
+    uint24 protocolFeeInBps;
+    uint24 protocolFeeOutBps;
     address dynamicFeeProvider;
     address feeRecipient;
 }
@@ -48,8 +48,6 @@ struct FeeConfig {
  * @dev Tests pegged curve with different fee structures
  */
 contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -73,15 +71,15 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 internal rateGt = 1;        // Rate for greater address token (scales 1e18 -> 1e27)
 
     // Flat fees
-    uint32 internal flatFeeInBps = 0.003e9;    // 0.3%
-    uint32 internal flatFeeOutBps = 0.005e9;   // 0.5%
+    uint24 internal flatFeeInBps = 0.003e7;    // 0.3%
+    uint24 internal flatFeeOutBps = 0.005e7;   // 0.5%
 
     // Progressive fees
-    uint32 internal progressiveFeeInBps = 0.1e9;   // 10%
-    uint32 internal progressiveFeeOutBps = 0.1e9;  // 10%
+    uint24 internal progressiveFeeInBps = 0.1e7;   // 10%
+    uint24 internal progressiveFeeOutBps = 0.1e7;  // 10%
 
     // Protocol fee
-    uint32 internal protocolFeeOutBps = 0.002e9;   // 0.2%
+    uint24 internal protocolFeeOutBps = 0.002e7;   // 0.2%
     address internal feeRecipient = address(0xFEE);
 
     // Test amounts for invariants
@@ -106,8 +104,6 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // Monotonicity tolerance in bps
     uint256 internal monotonicityToleranceBps = 0;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public virtual {
         maker = vm.addr(makerPK);
@@ -153,7 +149,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 imbalanceRatio = minBalance > 0 ? (maxBalance / minBalance) + 1 : 1;
 
         uint256 maxFee = flatFeeInBps > flatFeeOutBps ? flatFeeInBps : flatFeeOutBps;
-        uint256 feeMultiplier = maxFee > 0 ? (1e9 / (1e9 - maxFee)) + 1 : 1;
+        uint256 feeMultiplier = maxFee > 0 ? (1e7 / (1e7 - maxFee)) + 1 : 1;
 
         uint256 multiplier = imbalanceRatio > feeMultiplier ? imbalanceRatio : feeMultiplier;
         uint256 mintAmount = amount * 10 * (multiplier > 10 ? multiplier : 10);
@@ -176,42 +172,23 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 _balanceB,
         FeeConfig memory fees
     ) internal view returns (bytes memory) {
-        Program program;
-
         return bytes.concat(
             // Protocol fees BEFORE balances
-            (fees.protocolFeeOutBps > 0) ? program.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(fees.protocolFeeOutBps, fees.feeRecipient)) : bytes(""),
-            (fees.protocolFeeInBps > 0) ? program.build(Opcode.ProtocolFeeAmountIn,
-                FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
-            (fees.dynamicFeeProvider != address(0)) ? program.build(Opcode.DynamicProtocolFeeAmountIn,
-                FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
+            (fees.protocolFeeOutBps > 0) ? FeeBuilders.protocolFeeOut(fees.protocolFeeOutBps, fees.feeRecipient) : bytes(""),
+            (fees.protocolFeeInBps > 0) ? FeeBuilders.protocolFeeIn(fees.protocolFeeInBps, fees.feeRecipient) : bytes(""),
+            (fees.dynamicFeeProvider != address(0)) ? FeeBuilders.protocolProviderIn(fees.dynamicFeeProvider) : bytes(""),
 
             // Balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([_balanceA, _balanceB])),
+            DynamicBalances.build(_balanceA, _balanceB),
 
             // Regular fees AFTER balances
-            (fees.flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(fees.flatFeeInBps)) : bytes(""),
-            (fees.flatFeeOutBps > 0) ? program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(fees.flatFeeOutBps)) : bytes(""),
-            (fees.progressiveFeeInBps > 0) ? program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
-            (fees.progressiveFeeOutBps > 0) ? program.build(Opcode.ProgressiveFeeOut,
-                FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
+            (fees.flatFeeInBps > 0) ? FeeFlatIn.build(fees.flatFeeInBps) : bytes(""),
+            (fees.flatFeeOutBps > 0) ? FeeFlatOut.build(fees.flatFeeOutBps) : bytes(""),
+            (fees.progressiveFeeInBps > 0) ? FeeProgressiveIn.build(fees.progressiveFeeInBps) : bytes(""),
+            (fees.progressiveFeeOutBps > 0) ? FeeProgressiveOut.build(fees.progressiveFeeOutBps) : bytes(""),
 
             // PeggedSwap instruction
-            program.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(
-                    PeggedSwapArgsBuilder.Args({
-                        x0: x0,
-                        y0: y0,
-                        linearWidth: linearWidth,
-                        rateLt: rateLt,
-                        rateGt: rateGt
-                    })
-                ))
+            PeggedSwap.build(x0, y0, linearWidth, rateLt, rateGt)
         );
     }
 
@@ -378,6 +355,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         // Deploy fee provider with 0.2% fee
         ProtocolFeeProviderMock feeProviderMock = new ProtocolFeeProviderMock(
             protocolFeeOutBps,
+            0,
             feeRecipient,
             address(this)
         );

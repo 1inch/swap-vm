@@ -15,11 +15,11 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { TWAPSwapArgsBuilder } from "../../src/instructions/TWAPSwap.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
+import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -34,8 +34,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * - Minimum trade size enforcement
  */
 contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -45,8 +43,6 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
     uint256 public makerPK = 0x1234;
     address public taker;
     address public protocolFeeCollector;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -107,21 +103,10 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceIn = 200e18;
 
         // TWAP modifies LimitSwap: staticBalancesXD -> TWAP -> LimitSwap1D
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(200e18), uint256(100e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.2e18,
-                    minTradeAmountOut: 0.1e18 // 0.1% of balanceOut
-                }))),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(200e18, 100e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.2e18, 0.1e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -155,25 +140,13 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 86400; // 24 hours
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 2000e18;
-        uint32 feeBps = 100; // 1% fee on input
+        uint24 feeBps = 100; // 1% fee on input
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(2000e18), uint256(1000e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.15e18,
-                    minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
-                }))),
-            p.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(2000e18, 1000e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.15e18, 0.001e18),
+            FeeFlatIn.build(feeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -211,25 +184,13 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 86400; // 24 hours
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 1500e18;
-        uint32 feeBps = 200; // 2% fee on output
+        uint24 feeBps = 200; // 2% fee on output
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1500e18), uint256(1000e18)])),  // 1.5:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.2e18,
-                    minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
-                }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(1500e18, 1000e18),  // 1.5:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.2e18, 0.001e18),
+            FeeFlatOut.build(feeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -266,25 +227,13 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 43200; // 12 hours
         uint256 balanceOut = 500e18;
         uint256 balanceIn = 1000e18;
-        uint32 feeBps = 150; // 1.5% protocol fee
+        uint24 feeBps = 150; // 1.5% protocol fee
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(500e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.3e18,
-                    minTradeAmountOut: 0.01e18 // 0.002% of 500e18
-                }))),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
+            StaticBalances.build(1000e18, 500e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.3e18, 0.01e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -308,7 +257,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // Verify protocol fee was collected
         uint256 feeCollected = tokenB.balanceOf(protocolFeeCollector) - feeBalanceBefore;
-        uint256 expectedFee = amountOut * feeBps / 1e9;
+        uint256 expectedFee = amountOut * feeBps / 1e7;
         assertApproxEqRel(feeCollected, expectedFee, 0.01e18, "Protocol fee should be collected");
 
         // Test invariants
@@ -341,28 +290,15 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 7200; // 2 hours
         uint256 balanceOut = 200e18;
         uint256 balanceIn = 400e18;
-        uint32 flatFeeBps = 50; // 0.5% flat fee on input
-        uint32 protocolFeeBps = 100; // 1% protocol fee on output
+        uint24 flatFeeBps = 50; // 0.5% flat fee on input
+        uint24 protocolFeeBps = 100; // 1% protocol fee on output
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.ProtocolFeeAmountOut,
-                FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(400e18), uint256(200e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.25e18,
-                    minTradeAmountOut: 0.2e18 // 0.1% of balanceOut
-                }))),
-            p.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
+            StaticBalances.build(400e18, 200e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.25e18, 0.2e18),
+            FeeFlatIn.build(flatFeeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -399,25 +335,13 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 duration = 3600; // 1 hour
         uint256 balanceOut = 100e18;
         uint256 balanceIn = 200e18;
-        uint32 feeBps = 150; // 1.5% fee
+        uint24 feeBps = 150; // 1.5% fee
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(200e18), uint256(100e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.4e18,
-                    minTradeAmountOut: 0.05e18 // Very small minimum
-                }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(200e18, 100e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.4e18, 0.05e18),
+            FeeFlatOut.build(feeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -433,7 +357,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         (, uint256 out1) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 5e18, exactInData);
         totalSoldExpected += out1;
 
-        (,, , uint256 stored1) = swapVM.twapLastSwaps(orderHash);
+        (,, , uint256 stored1) = swapVM.twapLastSwap(orderHash);
         assertApproxEqAbs(stored1, totalSoldExpected, 0.1e18, "25%: totalSold should match cumulative");
         assertLe(stored1, unlocked1, "25%: totalSold should not exceed unlocked");
 
@@ -444,7 +368,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         (, uint256 out2) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 10e18, exactInData);
         totalSoldExpected += out2;
 
-        (,, , uint256 stored2) = swapVM.twapLastSwaps(orderHash);
+        (,, , uint256 stored2) = swapVM.twapLastSwap(orderHash);
         assertApproxEqAbs(stored2, totalSoldExpected, 0.5e18, "50%: totalSold should match cumulative");
         assertLe(stored2, unlocked2, "50%: totalSold should not exceed unlocked");
         assertGt(stored2, stored1, "50%: totalSold should increase from previous");
@@ -456,7 +380,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         (, uint256 out3) = _executeSwap(swapVM, order, address(tokenA), address(tokenB), 20e18, exactInData);
         totalSoldExpected += out3;
 
-        (,, , uint256 stored3) = swapVM.twapLastSwaps(orderHash);
+        (,, , uint256 stored3) = swapVM.twapLastSwap(orderHash);
         assertApproxEqAbs(stored3, totalSoldExpected, 1e18, "100%: totalSold should match cumulative");
         assertLe(stored3, unlocked3, "100%: totalSold should not exceed unlocked");
         assertGt(stored3, stored2, "100%: totalSold should continue increasing");
@@ -472,21 +396,10 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 1000e18;
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),  // 1:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: 1.05e18,  // Lower bump
-                    minTradeAmountOut: 1e18 // Lower minimum
-                }))),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(1000e18, 1000e18),  // 1:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, 1.05e18, 1e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -510,7 +423,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
             _executeSwap(swapVM, order, address(tokenA), address(tokenB), swapAmount, exactInData);
 
             // Check invariants
-            (,, , uint256 currentSold) = swapVM.twapLastSwaps(orderHash);
+            (,, , uint256 currentSold) = swapVM.twapLastSwap(orderHash);
 
             // Invariant 1: totalSold should increase monotonically
             assertGt(currentSold, previousSold, string(abi.encodePacked("Swap ", vm.toString(i + 1), ": totalSold should increase")));
@@ -522,7 +435,7 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         }
 
         // Final check: totalSold should have accumulated significantly
-        (,, , uint256 finalSold) = swapVM.twapLastSwaps(orderHash);
+        (,, , uint256 finalSold) = swapVM.twapLastSwap(orderHash);
         assertGt(finalSold, 50e18, "Should have accumulated significant sales");
         assertLe(finalSold, balanceOut * 95 / 100, "Should not exceed 95% at 95% time");
     }
@@ -536,25 +449,13 @@ contract TWAPLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceOut = 1000e18;
         uint256 balanceIn = 2000e18;
         uint256 priceBump = 2.0e18; // 100% bump
-        uint32 feeBps = 300; // 3% fee
+        uint24 feeBps = 300; // 3% fee
 
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(2000e18), uint256(1000e18)])),  // 2:1 rate
-            p.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
-                    balanceIn: balanceIn,
-                    balanceOut: balanceOut,
-                    startTime: startTime,
-                    duration: duration,
-                    priceBumpAfterIlliquidity: priceBump,
-                    minTradeAmountOut: 0.001e18 // 0.0001% of 1000e18
-                }))),
-            p.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(feeBps)),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(2000e18, 1000e18),  // 2:1 rate
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, priceBump, 0.001e18),
+            FeeFlatOut.build(feeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

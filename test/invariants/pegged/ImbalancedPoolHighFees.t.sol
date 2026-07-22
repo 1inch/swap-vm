@@ -19,8 +19,8 @@ contract ImbalancedPoolHighFees is PeggedFeesInvariants {
         linearWidth = 0.5e27;
 
         // High fees
-        flatFeeInBps = 0.05e9;   // 5%
-        flatFeeOutBps = 0.05e9;  // 5%
+        flatFeeInBps = 0.05e7;   // 5%
+        flatFeeOutBps = 0.05e7;  // 5%
 
         testAmounts = new uint256[](3);
         testAmounts[0] = 5e18;

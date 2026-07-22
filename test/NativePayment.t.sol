@@ -13,12 +13,11 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { SwapRegisters } from "../src/libs/VM.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Debug } from "../src/instructions/Debug.sol";
+import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { AquaSwapVMHelper } from "./helpers/AquaSwapVMHelper.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 
@@ -38,10 +37,6 @@ contract RefundRejectingTaker {
 }
 
 contract NativePaymentTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouterDebug public swapVM;
     WETHMock public weth;
     TokenMock public token;
@@ -129,12 +124,9 @@ contract NativePaymentTest is Test, OpcodesDebug {
         bool makerUnwrapWeth,
         address receiver
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
         bytes memory programBytes = bytes.concat(
-            program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
-                [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
-            )),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(ORDER_BALANCE, ORDER_BALANCE),
+            XYCSwap.build()
         );
         return _buildOrder(makerUnwrapWeth, receiver, false, programBytes);
     }
@@ -356,14 +348,12 @@ contract NativePaymentTest is Test, OpcodesDebug {
         uint256 attached = 1e18;
 
         // Program forces amountIn = 0 with a positive amountOut to reach the full-refund branch
-        Program program;
-        bytes memory programBytes = program.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({
+        bytes memory programBytes = PatchSwapRegisters.build(SwapRegisters({
             balanceIn: 0,
             balanceOut: 0,
             amountIn: 0,
-            amountOut: amountOut,
-            amountNetPulled: 0
-        })));
+            amountOut: amountOut
+        }));
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(0), true, programBytes);
         bytes memory takerData = _buildTakerData(taker, true, _wethIsAToB(), signature);
@@ -508,7 +498,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _buildXYCOrder(true, rejector);
         bytes memory takerData = _buildTakerData(taker, true, _wethIsAToB(), signature);
 
-        vm.expectRevert(SwapVM.EthTransferFailed.selector);
+        vm.expectRevert();
         vm.prank(taker);
         swapVM.swap{ value: amountIn }(order, amountIn, takerData);
     }

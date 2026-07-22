@@ -15,10 +15,9 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { TWAPSwapArgsBuilder } from "../src/instructions/TWAPSwap.sol";
-import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { TWAPSwap } from "../src/instructions/TWAPSwap.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 /**
  * @title TWAPSwapTest
@@ -31,8 +30,6 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
  * @dev All tests use the instruction sequence: staticBalancesXD -> TWAP -> LimitSwap1D
  */
 contract TWAPSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -41,8 +38,6 @@ contract TWAPSwapTest is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -70,16 +65,17 @@ contract TWAPSwapTest is Test, OpcodesDebug {
     function _createTWAPBytecode(
         uint256 tokenABalance,
         uint256 tokenBBalance,
-        TWAPSwapArgsBuilder.TwapArgs memory twapArgs
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 startTime,
+        uint256 duration,
+        uint256 priceBumpAfterIlliquidity,
+        uint256 minTradeAmountOut
     ) private view returns (bytes memory) {
-        Program program;
         return bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(tokenABalance), tokenBBalance])),
-            program.build(Opcode.TWAPSwap,
-                TWAPSwapArgsBuilder.build(twapArgs)),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(tokenABalance, tokenBBalance),
+            TWAPSwap.build(balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
@@ -93,14 +89,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             200e18,
             100e18,  // 2:1 rate (tokenA:tokenB)
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 200e18,
-                balanceOut: 100e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.1e18,
-                minTradeAmountOut: 1e18
-            })
+            200e18,
+            100e18,
+            startTime,
+            duration,
+            1.1e18,
+            1e18
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -146,14 +140,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             2000e18,
             1000e18,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 2000e18,
-                balanceOut: 1000e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.2e18,
-                minTradeAmountOut: 1e18 // Very low minimum
-            })
+            2000e18,
+            1000e18,
+            startTime,
+            duration,
+            1.2e18,
+            1e18 // Very low minimum
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -198,14 +190,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             2000e18,
             1000e18,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 2000e18,
-                balanceOut: 1000e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.5e18, // 50% bump
-                minTradeAmountOut: 0.001e18 // Extremely low minimum
-            })
+            2000e18,
+            1000e18,
+            startTime,
+            duration,
+            1.5e18, // 50% bump
+            0.001e18 // Extremely low minimum
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -237,14 +227,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             200e18,
             100e18,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 200e18,
-                balanceOut: 100e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.1e18,
-                minTradeAmountOut: 5e18 // 5 token minimum
-            })
+            200e18,
+            100e18,
+            startTime,
+            duration,
+            1.1e18,
+            5e18 // 5 token minimum
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -287,14 +275,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             200e18,
             100e18,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 200e18,
-                balanceOut: 100e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.2e18,
-                minTradeAmountOut: 1e18
-            })
+            200e18,
+            100e18,
+            startTime,
+            duration,
+            1.2e18,
+            1e18
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -337,14 +323,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             2000e18,
             1000e18,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 2000e18,
-                balanceOut: 1000e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.15e18,
-                minTradeAmountOut: 0.01e18 // Much lower minimum
-            })
+            2000e18,
+            1000e18,
+            startTime,
+            duration,
+            1.15e18,
+            0.01e18 // Much lower minimum
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -375,14 +359,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             1000e18,
             1000e18,  // 1:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 1000e18,
-                balanceOut: 1000e18,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.5e18,
-                minTradeAmountOut: 0.1e18 // Much lower minimum
-            })
+            1000e18,
+            1000e18,
+            startTime,
+            duration,
+            1.5e18,
+            0.1e18 // Much lower minimum
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -430,14 +412,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             2000e18,
             totalBalance,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 2000e18,
-                balanceOut: totalBalance,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.1e18,
-                minTradeAmountOut: 0.1e18 // Lower minimum to account for decay
-            })
+            2000e18,
+            totalBalance,
+            startTime,
+            duration,
+            1.1e18,
+            0.1e18 // Lower minimum to account for decay
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -454,7 +434,7 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         cumulativeSold += out1;
 
         // Check stored state
-        (,, uint256 timestamp1, uint256 storedSold1) = swapVM.twapLastSwaps(orderHash);
+        (,, uint256 timestamp1, uint256 storedSold1) = swapVM.twapLastSwap(orderHash);
         assertEq(storedSold1, cumulativeSold, "Swap 1: totalSold should equal first amountOut");
         assertEq(timestamp1, block.timestamp, "Swap 1: timestamp should be updated");
         assertLe(storedSold1, unlocked1, "Swap 1: totalSold should not exceed unlocked");
@@ -467,7 +447,7 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         cumulativeSold += out2;
 
         // Check state after second swap
-        (,, uint256 timestamp2, uint256 storedSold2) = swapVM.twapLastSwaps(orderHash);
+        (,, uint256 timestamp2, uint256 storedSold2) = swapVM.twapLastSwap(orderHash);
         assertEq(storedSold2, cumulativeSold, "Swap 2: totalSold should be cumulative (sold1 + sold2)");
         assertEq(timestamp2, block.timestamp, "Swap 2: timestamp should be updated");
         assertLe(storedSold2, unlocked2, "Swap 2: totalSold should not exceed unlocked");
@@ -481,7 +461,7 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         cumulativeSold += out3;
 
         // Final check
-        (,, uint256 timestamp3, uint256 storedSold3) = swapVM.twapLastSwaps(orderHash);
+        (,, uint256 timestamp3, uint256 storedSold3) = swapVM.twapLastSwap(orderHash);
         assertEq(storedSold3, cumulativeSold, "Swap 3: totalSold should be cumulative (all swaps)");
         assertEq(timestamp3, block.timestamp, "Swap 3: timestamp should be updated");
         assertLe(storedSold3, unlocked3, "Swap 3: totalSold should not exceed unlocked");
@@ -503,14 +483,12 @@ contract TWAPSwapTest is Test, OpcodesDebug {
         bytes memory bytecode = _createTWAPBytecode(
             200e18,
             totalBalance,  // 2:1 rate
-            TWAPSwapArgsBuilder.TwapArgs({
-                balanceIn: 200e18,
-                balanceOut: totalBalance,
-                startTime: startTime,
-                duration: duration,
-                priceBumpAfterIlliquidity: 1.1e18,
-                minTradeAmountOut: 1e18
-            })
+            200e18,
+            totalBalance,
+            startTime,
+            duration,
+            1.1e18,
+            1e18
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

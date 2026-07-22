@@ -17,21 +17,15 @@ import { SwapVMRouterDebug } from "../src/routers/SwapVMRouterDebug.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
-import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
-import { Debug } from "../src/instructions/Debug.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 
 contract FeeTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(0)) {}
-
     SwapVMRouterDebug public swapVM;
     address public tokenA;
     address public tokenB;
@@ -77,25 +71,20 @@ contract FeeTest is Test, OpcodesDebug {
     struct MakerSetup {
         uint256 balanceA;
         uint256 balanceB;
-        uint32 feeInBps;
-        uint32 feeOutBps;
+        uint24 feeInBps;
+        uint24 feeOutBps;
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program program;
-
         bytes memory programBytes = bytes.concat(
             // 1. Set initial token balances
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
             // 2. Apply feeIn (optional)
-            setup.feeInBps > 0 ? program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
+            setup.feeInBps > 0 ? FeeFlatIn.build(setup.feeInBps) : bytes(""),
             // 3. Apply feeOut (optional)
-            setup.feeOutBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
-                FeeArgsBuilder.buildFlatFee(setup.feeOutBps)) : bytes(""),
+            setup.feeOutBps > 0 ? FeeFlatOut.build(setup.feeOutBps) : bytes(""),
             // 4. Perform the swap
-            program.build(Opcode.XYCSwap)
+            XYCSwap.build()
         );
 
         // === Create Order ===
@@ -161,7 +150,7 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% fee
+            feeInBps: 0.10e7, // 10% fee
             feeOutBps: 0 // no feeOut
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
@@ -182,7 +171,7 @@ contract FeeTest is Test, OpcodesDebug {
         assertEq(swappedAmountOut, quotedAmountOut, "Swap amountOut should match quote");
 
         // Verify fee calculation correctness
-        uint256 effectiveSwapInput = (amountIn * (BPS - setup.feeInBps)) / BPS;
+        uint256 effectiveSwapInput = (amountIn * (FeeFlatIn.BPS - setup.feeInBps)) / FeeFlatIn.BPS;
         uint256 expectedOutputWithFee = (effectiveSwapInput * setup.balanceB) / (setup.balanceA + effectiveSwapInput);
         assertEq(swappedAmountOut, expectedOutputWithFee, "Output should reflect fee-in calculation");
     }
@@ -192,7 +181,7 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% fee
+            feeInBps: 0.10e7, // 10% fee
             feeOutBps: 0 // no feeOut
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
@@ -214,7 +203,7 @@ contract FeeTest is Test, OpcodesDebug {
 
         // Verify fee calculation correctness
         uint256 baseInput = (amountOut * setup.balanceA + (setup.balanceB - amountOut - 1)) / (setup.balanceB - amountOut);
-        uint256 expectedInputWithFee = Math.ceilDiv(baseInput * BPS, BPS - setup.feeInBps);
+        uint256 expectedInputWithFee = Math.ceilDiv(baseInput * FeeFlatIn.BPS, FeeFlatIn.BPS - setup.feeInBps);
         assertEq(swappedAmountIn, expectedInputWithFee, "Input should reflect fee-in calculation");
     }
 
@@ -226,7 +215,7 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% fee
+            feeInBps: 0.10e7, // 10% fee
             feeOutBps: 0 // no feeOut
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -253,7 +242,7 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% fee
+            feeInBps: 0.10e7, // 10% fee
             feeOutBps: 0 // no feeOut
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -283,7 +272,7 @@ contract FeeTest is Test, OpcodesDebug {
             balanceA: 100e18,
             balanceB: 200e18,
             feeInBps: 0, // no feeIn
-            feeOutBps: 0.10e9 // 10% fee
+            feeOutBps: 0.10e7 // 10% fee
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -304,7 +293,7 @@ contract FeeTest is Test, OpcodesDebug {
 
         // Verify fee calculation correctness
         uint256 rawOutput = (amountIn * setup.balanceB) / (setup.balanceA + amountIn);
-        uint256 expectedOutputWithFee = rawOutput - rawOutput * setup.feeOutBps / BPS;
+        uint256 expectedOutputWithFee = rawOutput - Math.ceilDiv(rawOutput * setup.feeOutBps, FeeFlatOut.BPS);
         assertEq(swappedAmountOut, expectedOutputWithFee, "Output should reflect fee-out calculation");
     }
 
@@ -314,7 +303,7 @@ contract FeeTest is Test, OpcodesDebug {
             balanceA: 100e18,
             balanceB: 200e18,
             feeInBps: 0, // no feeIn
-            feeOutBps: 0.10e9 // 10% fee
+            feeOutBps: 0.10e7 // 10% fee
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
 
@@ -334,7 +323,7 @@ contract FeeTest is Test, OpcodesDebug {
         assertEq(swappedAmountOut, quotedAmountOut, "Swap amountOut should match quote");
 
         // Verify fee calculation correctness
-        uint256 rawOutputNeeded = (amountOut * BPS + (BPS - setup.feeOutBps - 1)) / (BPS - setup.feeOutBps);
+        uint256 rawOutputNeeded = (amountOut * FeeFlatOut.BPS + (FeeFlatOut.BPS - setup.feeOutBps - 1)) / (FeeFlatOut.BPS - setup.feeOutBps);
         uint256 expectedInputForRawOutput = (rawOutputNeeded * setup.balanceA + (setup.balanceB - rawOutputNeeded - 1)) / (setup.balanceB - rawOutputNeeded);
         assertEq(swappedAmountIn, expectedInputForRawOutput, "Input should reflect fee-out calculation");
     }
@@ -348,7 +337,7 @@ contract FeeTest is Test, OpcodesDebug {
             balanceA: 100e18,
             balanceB: 200e18,
             feeInBps: 0, // no feeIn
-            feeOutBps: 0.10e9 // 10% fee
+            feeOutBps: 0.10e7 // 10% fee
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
@@ -375,13 +364,13 @@ contract FeeTest is Test, OpcodesDebug {
             balanceA: 100e18,
             balanceB: 200e18,
             feeInBps: 0, // no feeIn
-            feeOutBps: 0.10e9 // 10% fee
+            feeOutBps: 0.10e7 // 10% fee
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
         // Step 0: ExactOut quoting - get input for 100% of balance B - fees
         bytes memory exactOutTakerData = _makeTakerData(TakerSetup({ isExactIn: false }), "");
-        (uint256 inputAmount,,) = swapVM.asView().quote(order,setup.balanceB * (BPS - setup.feeOutBps) / BPS - 1, exactOutTakerData);
+        (uint256 inputAmount,,) = swapVM.asView().quote(order,setup.balanceB * (FeeFlatOut.BPS - setup.feeOutBps) / FeeFlatOut.BPS - 1, exactOutTakerData);
 
         // Step 1: ExactIn quoting
         bytes memory exactInTakerData = _makeTakerData(TakerSetup({ isExactIn: true }), "");
@@ -402,8 +391,8 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% feeIn
-            feeOutBps: 0.15e9 // 15% feeOut
+            feeInBps: 0.10e7, // 10% feeIn
+            feeOutBps: 0.15e7 // 15% feeOut
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
@@ -431,7 +420,7 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.10e9, // 10% fee
+            feeInBps: 0.10e7, // 10% fee
             feeOutBps: 0
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
@@ -453,7 +442,7 @@ contract FeeTest is Test, OpcodesDebug {
             balanceA: 100e18,
             balanceB: 200e18,
             feeInBps: 0,
-            feeOutBps: 0.10e9 // 10% fee
+            feeOutBps: 0.10e7 // 10% fee
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 
@@ -473,8 +462,8 @@ contract FeeTest is Test, OpcodesDebug {
         MakerSetup memory setup = MakerSetup({
             balanceA: 100e18,
             balanceB: 200e18,
-            feeInBps: 0.05e9, // 5% fee in
-            feeOutBps: 0.05e9 // 5% fee out
+            feeInBps: 0.05e7, // 5% fee in
+            feeOutBps: 0.05e7 // 5% fee out
         });
         (ISwapVM.Order memory order,) = _createOrder(setup);
 

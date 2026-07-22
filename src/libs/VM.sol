@@ -9,6 +9,8 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
+import { FeeMeta, FeeReceiver } from "./ProtocolFee.sol";
+
 /// @dev Represents the state of the VM
 /// @param isStaticContext Whether the quote is in a static context (e.g., for quoting)
 /// @param nextPC The program counter for the next instruction to execute
@@ -30,6 +32,7 @@ struct VM {
 /// @param taker The address of the taker (the one who performs the swap)
 /// @param tokenIn The address of the input token
 /// @param tokenOut The address of the output token
+/// @param isExactIn Flag if taker-specified amount is of input or output token
 struct SwapQuery {
     bytes32 orderHash;
     address maker;
@@ -44,13 +47,19 @@ struct SwapQuery {
 /// @param balanceOut The current balance of the output token
 /// @param amountIn The amount of input token being swapped
 /// @param amountOut The amount of output token being swapped
-/// @param amountNetPulled The net amount pulled from the maker during the swap, used for fee calculations
 struct SwapRegisters {
     uint256 balanceIn;
     uint256 balanceOut;
     uint256 amountIn;
     uint256 amountOut;
-    uint256 amountNetPulled;
+}
+
+/// @dev Pending protocol fees to claim during transfers phase
+/// @param meta Packed meta information
+/// @param receivers Packed receivers array
+struct ProtocolFee {
+    FeeMeta meta;
+    FeeReceiver[] receivers;
 }
 
 /// @title SwapVM context
@@ -62,6 +71,7 @@ struct Context {
     VM vm;
     SwapQuery query;
     SwapRegisters swap;
+    ProtocolFee fee;
 }
 
 /// @title ContextLib
@@ -108,10 +118,6 @@ library ContextLib {
 
     /// @notice Execute program instructions sequentially
     /// @dev Iterates through bytecode, executing each instruction until program end
-    /// @dev LIMITATION: Program size is effectively limited to 65,535 bytes due to Controls
-    ///      jump instructions using uint16 addressing. Programs exceeding this size can execute,
-    ///      but jump instructions cannot address positions >= 65,536. For custom control flow in
-    ///      larger programs, use Extruction._extruction which supports arbitrary uint256 nextPC.
     /// @param ctx Execution context containing program and registers
     /// @return swapAmountIn Final computed input amount
     /// @return swapAmountOut Final computed output amount

@@ -24,8 +24,8 @@ contract SmallAmounts is PeggedFeesInvariants {
         testAmounts[2] = 1e18;
 
         // Low fees
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         symmetryTolerance = 1010;
         additivityTolerance = 2000;

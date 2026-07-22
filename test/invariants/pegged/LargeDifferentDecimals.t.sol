@@ -81,8 +81,8 @@ contract LargeDifferentDecimals is PeggedFeesInvariants {
         testAmountsExactOut[1] = 10_000 * unitOut;  // 10K tokens
         testAmountsExactOut[2] = 100_000 * unitOut; // 100K tokens
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // For different decimals, symmetry error = remainder from floor(deltaY / rateOut)
         // Maximum error = rateOut - 1 ≈ rateOut = 1e12

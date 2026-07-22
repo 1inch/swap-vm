@@ -22,10 +22,12 @@ contract OpcodeEnumCheckTest is Test {
         // Swap curves bank (0x50-0x6f)
         assertEq(uint8(Opcode.XYCSwap), 0x50);
         assertEq(uint8(Opcode.PeggedSwap), 0x58);
-        // Fees bank (0x70-0x8f), paired: Out = In + 0x10
-        assertEq(uint8(Opcode.FlatFeeAmountIn), 0x70);
-        assertEq(uint8(Opcode.FlatFeeAmountOut), 0x80);
-        assertEq(uint8(Opcode.ProgressiveFeeOut), uint8(Opcode.ProgressiveFeeIn) + 0x10);
+        // Fees bank (0x70-0x8f)
+        assertEq(uint8(Opcode.FeeFlatIn), 0x70);
+        assertEq(uint8(Opcode.FeeFlatOut), 0x71);
+        assertEq(uint8(Opcode.FeeProgressiveIn), 0x72);
+        assertEq(uint8(Opcode.FeeProgressiveOut), 0x73);
+        assertEq(uint8(Opcode.FeeProtocol), 0x80);
         // Balances tuning bank (0x90-0xaf)
         assertEq(uint8(Opcode.StaticBalances), 0x90);
         assertEq(uint8(Opcode.PiecewiseLinearScaleBalanceIn), 0x98);

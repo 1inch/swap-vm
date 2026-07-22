@@ -5,21 +5,22 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode } from "../libs/OpcodeList.sol";
+import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
 import { Opcodes } from "./Opcodes.sol";
-import { Debug } from "../instructions/Debug.sol";
+import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PrintFee, PatchSwapRegisters } from "../instructions/Debug.sol";
 
-contract OpcodesDebug is Opcodes, Debug {
-    constructor(address aqua) Opcodes(aqua) {}
+contract OpcodesDebug is Opcodes {
+    using OpcodeOps for Opcode;
 
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal override {
-             if (opcode == uint256(Opcode.PrintSwapRegisters)) Debug._printSwapRegisters(ctx, args);
-        else if (opcode == uint256(Opcode.PrintSwapQuery)) Debug._printSwapQuery(ctx, args);
-        else if (opcode == uint256(Opcode.PrintContext)) Debug._printContext(ctx, args);
-        else if (opcode == uint256(Opcode.PrintFreeMemoryPointer)) Debug._printFreeMemoryPointer(ctx, args);
-        else if (opcode == uint256(Opcode.PrintGasLeft)) Debug._printGasLeft(ctx, args);
-        else if (opcode == uint256(Opcode.PatchSwapRegisters)) Debug._patchSwapRegisters(ctx, args);
+             if (opcode == PrintSwapRegisters.opcode.asU8()) PrintSwapRegisters.exec(ctx, args);
+        else if (opcode == PrintSwapQuery.opcode.asU8()) PrintSwapQuery.exec(ctx, args);
+        else if (opcode == PrintVM.opcode.asU8()) PrintVM.exec(ctx, args);
+        else if (opcode == PrintFreeMemoryPointer.opcode.asU8()) PrintFreeMemoryPointer.exec(ctx, args);
+        else if (opcode == PrintGasLeft.opcode.asU8()) PrintGasLeft.exec(ctx, args);
+        else if (opcode == PrintFee.opcode.asU8()) PrintFee.exec(ctx, args);
+        else if (opcode == PatchSwapRegisters.opcode.asU8()) PatchSwapRegisters.exec(ctx, args);
         else super._runOpcode(ctx, opcode, args);
     }
 }

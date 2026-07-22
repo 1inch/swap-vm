@@ -4,165 +4,163 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library WhitelistArgsBuilder {
-    error WhitelistEmptyList();
-    error WhitelistListsLengthMismatch();
+/// @notice PrivateOrder opcode, allows the order to be executed only by the specified taker
+/// @dev Encoding: [uint80 allowedTaker]
+/// @dev Address packing trade-off: only the last 10 bytes of each address are compared
+///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
+///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
+library PrivateOrder {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    /// @notice Pack address for comparison
-    function buildPrivateOrder(address allowedTaker) internal pure returns (bytes memory) {
-        return abi.encodePacked(wrapToPackedAddress(allowedTaker));
+    error PrivateOrderInvalidTaker();
+
+    Opcode constant opcode = Opcode.PrivateOrder;
+
+    function build(address allowedTaker) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(uint80(uint160(allowedTaker)));
+        return InstructionBuilder.build(opcode, args);
     }
 
-    /// @notice Parse packed address
-    function parsePrivateOrder(bytes calldata args) internal pure returns (uint80 allowedTaker) {
-        assembly ("memory-safe") {
-            allowedTaker := shr(176, calldataload(args.offset))
-        }
+    function parse(bytes calldata args) internal pure returns (uint80 allowedTaker) {
+        allowedTaker = args.at(0).asU80();
     }
 
-    /// @notice Pack program counter and whitelist
-    function buildWhitelistCoequal(uint16 pc, address[] memory allowedTakers) internal pure returns (bytes memory args) {
-        require(allowedTakers.length > 0, WhitelistEmptyList());
-
-        args = abi.encodePacked(pc);
-        for (uint256 i; i < allowedTakers.length; i++) {
-            args = abi.encodePacked(args, wrapToPackedAddress(allowedTakers[i]));
-        }
-    }
-
-    /// @notice Parse encoded program counter
-    function parseWhitelistCoequalPC(bytes calldata args) internal pure returns (uint256 pcs) {
-        assembly ("memory-safe") {
-            pcs := shr(240, calldataload(args.offset))
-        }
-    }
-
-    /// @notice Parse specific whitelist entry
-    /// @dev Requires args to be shifted by 2 bytes
-    function parseWhitelistCoequalIx(bytes calldata args, uint256 id) internal pure returns (uint80 allowedTaker) {
-        assembly ("memory-safe") {
-            allowedTaker := shr(176, calldataload(add(args.offset, mul(id, 10))))
-        }
-    }
-
-    /// @notice Pack program counter and sequentially growing time-dependent whitelist
-    function buildWhitelistSequential(uint16 pc, uint40 start, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (bytes memory args) {
-        require(allowedTakers.length > 0, WhitelistEmptyList());
-        require(allowedTakers.length == durations.length, WhitelistListsLengthMismatch());
-
-        args = abi.encodePacked(pc, start);
-        for (uint256 i = 0; i < allowedTakers.length; i++) {
-            args = abi.encodePacked(args, durations[i], wrapToPackedAddress(allowedTakers[i]));
-        }
-    }
-
-    /// @notice Parse encoded program counter and whitelist start timestamp
-    function parseWhitelistSequentialStartPC(bytes calldata args) internal pure returns (uint40 ts, uint256 pcs) {
-        assembly ("memory-safe") {
-            let word := calldataload(args.offset)
-            ts := and(shr(200, word), 0xffffffffff)
-            pcs := shr(240, word)
-        }
-    }
-
-    /// @notice Parse specific whitelist entry
-    /// @dev Requires args to be shifted by 7 bytes
-    function parseWhitelistSequentialIx(bytes calldata args, uint256 id) internal pure returns (uint80 allowedTaker, uint256 duration) {
-        assembly ("memory-safe") {
-            let word := calldataload(add(args.offset, mul(id, 12)))
-            allowedTaker := and(shr(160, word), 0xffffffffffffffffffff)
-            duration := shr(240, word)
-        }
-    }
-
-    /// @notice Pack address helper
-    /// @dev Packing only last 10 bytes of address
-    function wrapToPackedAddress(address taker) internal pure returns (uint80 packed) {
-        packed = uint80(uint160(taker));
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        uint80 sender = uint80(uint160(ctx.query.taker));
+        require(sender == parse(args), PrivateOrderInvalidTaker());
     }
 }
 
-/// @notice Set of functions for Taker validation
-/// @dev Partial account validation trade-off:
-/// - For packing taker addresses, only last 80 bits of each address are used
-/// - Mining 80 bits of an Ethereum address is not truly impossible but would take millions of GPU-years time
-/// - Consider theoretical possibility of such address being mined for an address known for years,
-///   avoid orders with "free money" relying on the opcodes
-/// - The Oorschot–Wiener (birthday) attack can efficiently (though computationally expensively) find 80-bit collisions,
-///   however, this supposes attacker controls the both accounts, which means whitelist bypass is not a security break
-contract Whitelist {
-    using WhitelistArgsBuilder for bytes;
-    using Calldata for bytes;
+/// @notice WhitelistCoequal opcode, jumps to the specified program counter if the taker is whitelisted,
+///   continues execution normally otherwise
+/// @dev Encoding: [uint16 nextPC, uint80 allowedTakers[N]]
+/// @dev Address packing trade-off: only the last 10 bytes of each address are compared
+///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
+///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
+library WhitelistCoequal {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    error WhitelistInvalidTaker();
-    error WhitelistAllowedTimeViolation();
+    using ContextLib for Context;
 
-    /// @notice Allows order to be executed only by the specified Taker
-    /// @param args.allowedTaker | 10 bytes, last 10 bytes of address are used
-    function _privateOrder(Context memory ctx, bytes calldata args) internal pure {
-        uint80 sender = WhitelistArgsBuilder.wrapToPackedAddress(ctx.query.taker);
-        uint80 allowedTaker = args.parsePrivateOrder();
+    error WhitelistCoequalEmptyList();
 
-        require(sender == allowedTaker, WhitelistInvalidTaker());
+    Opcode constant opcode = Opcode.WhitelistCoequal;
+
+    function build(uint16 nextPC, address[] memory allowedTakers) internal pure returns (bytes memory) {
+        require(allowedTakers.length > 0, WhitelistCoequalEmptyList());
+
+        bytes memory args = abi.encodePacked(nextPC);
+        for (uint256 i; i < allowedTakers.length; i++) {
+            args = abi.encodePacked(args, uint80(uint160(allowedTakers[i])));
+        }
+
+        return InstructionBuilder.build(opcode, args);
     }
 
-    /// @notice Conditional opcode, jump to specified program counter if Taker is whitelisted
-    ///   Continue execution normally if Taker is not whitelisted
-    /// @param args.pc               | 2 bytes, program counter to jump to
-    /// @param args.allowedTakers[N] | 10 * N bytes, last 10 bytes of each address are used
-    function _whitelistCoequal(Context memory ctx, bytes calldata args) internal pure {
-        uint80 sender = WhitelistArgsBuilder.wrapToPackedAddress(ctx.query.taker);
-        bytes calldata list = args.slice(2);
+    function parseNextPC(bytes calldata args) internal pure returns (uint16 nextPC) {
+        nextPC = args.at(0).asU16();
+    }
 
-        unchecked {
-            uint256 i = list.length / 10;
-            while (i-- > 0) {
-                if (sender == list.parseWhitelistCoequalIx(i)) {
-                    ctx.vm.nextPC = args.parseWhitelistCoequalPC();
-                    return;
-                }
+    function parseTaker(bytes calldata args, uint256 i) internal pure returns (uint80 allowedTaker) {
+        unchecked { allowedTaker = args.at(2 + i * 10).asU80(); }
+    }
+
+    function parseTakersCount(bytes calldata args) internal pure returns (uint256 count) {
+        unchecked { count = (args.length - 2) / 10; }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        uint80 sender = uint80(uint160(ctx.query.taker));
+
+        uint256 count = parseTakersCount(args);
+        for (uint256 i; i < count; i++) {
+            if (sender == parseTaker(args, i)) {
+                ctx.setNextPC(parseNextPC(args));
+                return;
             }
         }
     }
+}
 
-    /// @notice Conditional sequentially growing time-dependent whitelist
-    ///   Jump to specified program counter if Taker is whitelisted and time-unlocked
-    ///   Continue normally if Taker is not whitelisted and the whole whitelist-exclusive period has passed
-    ///   Otherwise revert
-    /// @dev Whitelist is empty before `start`
-    ///   At timepoint `ts` such that `start + Σ(duration[0:k-1]) <= ts < start + Σ(duration[0:k])` whitelist has `k` items unlocked
-    /// @param args.pc               | 2 bytes, program counter to jump to
-    /// @param args.start            | 5 bytes, whitelist start timestamp
-    /// @param args.allowedTakers[N] | 10 * N bytes, last 10 bytes of each address are used
-    /// @param args.durations[N]     | 2 * N bytes, time interval before the next whitelist item is unlocked
-    function _whitelistSequential(Context memory ctx, bytes calldata args) internal view {
-        uint80 sender = WhitelistArgsBuilder.wrapToPackedAddress(ctx.query.taker);
-        (uint40 start, uint256 pc) = args.parseWhitelistSequentialStartPC();
-        uint256 timeLeft = block.timestamp;
+/// @notice WhitelistSequential opcode, time-phased whitelist unlocking takers one by one, jumps to the specified program counter if
+///   the taker is whitelisted and unlocked, continues execution normally once whitelist-exclusive period has passed, reverts otherwise
+/// @dev Encoding: [uint40 start, uint16 nextPC, (uint16 duration, uint80 allowedTaker)[N]]
+///   The whitelist is empty before `start`, the k-th taker unlocks at `start + sum(durations[0:k])`
+/// @dev Address packing trade-off: only the last 10 bytes of each address are compared
+///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
+///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
+library WhitelistSequential {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
+    using ContextLib for Context;
+
+    error WhitelistSequentialEmptyList();
+    error WhitelistSequentialLengthMismatch();
+    error WhitelistSequentialTimeViolation();
+
+    Opcode constant opcode = Opcode.WhitelistSequential;
+
+    function build(uint40 start, uint16 nextPC, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (bytes memory) {
+        require(allowedTakers.length > 0, WhitelistSequentialEmptyList());
+        require(allowedTakers.length == durations.length, WhitelistSequentialLengthMismatch());
+
+        bytes memory args = abi.encodePacked(start, nextPC);
+        for (uint256 i; i < allowedTakers.length; i++) {
+            args = abi.encodePacked(args, durations[i], uint80(uint160(allowedTakers[i])));
+        }
+
+        return InstructionBuilder.build(opcode, args);
+    }
+
+    function parseStart(bytes calldata args) internal pure returns (uint40 start) {
+        start = args.at(0).asU40();
+    }
+
+    function parseNextPC(bytes calldata args) internal pure returns (uint16 nextPC) {
+        nextPC = args.at(5).asU16();
+    }
+
+    function parseTaker(bytes calldata args, uint256 n) internal pure returns (uint16 duration, uint80 allowedTaker) {
         unchecked {
-            if (timeLeft < start) revert WhitelistAllowedTimeViolation();
-            timeLeft -= start;
+            // Skip [start, nextPC, n * [duration[k], allowedTaker[k]]]
+            uint256 shift = (5 + 2) + n * 12;
+            duration = args.at(shift).asU16();
+            allowedTaker = args.at(shift + 2).asU80();
+        }
+    }
 
-            bytes calldata list = args.slice(7);
+    function parseTakersCount(bytes calldata args) internal pure returns (uint256 count) {
+        // Skip [start, nextPC], divide by [duration, allowedTaker] length
+        unchecked { count = (args.length - (5 + 2)) / 12; }
+    }
 
-            uint256 i;
-            uint256 length = list.length / 12;
+    function exec(Context memory ctx, bytes calldata args) internal view {
+        uint80 sender = uint80(uint160(ctx.query.taker));
 
-            while (i < length) {
-                (uint80 allowedTaker, uint256 duration) = list.parseWhitelistSequentialIx(i++);
+        uint256 timeLeft = block.timestamp;
+        uint40 start = parseStart(args);
+        require(timeLeft >= start, WhitelistSequentialTimeViolation());
+        unchecked { timeLeft -= start; }
 
-                if (sender == allowedTaker) {
-                    ctx.vm.nextPC = pc;
-                    return;
-                }
+        uint256 count = parseTakersCount(args);
+        for (uint256 i; i < count; i++) {
+            (uint16 duration, uint80 allowedTaker) = parseTaker(args, i);
 
-                if (timeLeft < duration) revert WhitelistAllowedTimeViolation();
-                timeLeft -= duration;
+            if (sender == allowedTaker) {
+                ctx.setNextPC(parseNextPC(args));
+                return;
             }
+
+            require(timeLeft >= duration, WhitelistSequentialTimeViolation());
+            unchecked { timeLeft -= duration; }
         }
     }
 }

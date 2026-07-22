@@ -14,10 +14,9 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -29,10 +28,8 @@ import { dynamic } from "./utils/Dynamic.sol";
  *      3. Maker protection (liquidity must grow, not shrink)
  */
 contract ConcentrateXYCRounding is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     uint256 constant ONE = 1e18;
-    uint32 constant FEE_BPS = 3_000_000; // 0.3%
+    uint24 constant FEE_BPS = 0.003e7; // 0.3%
 
     SwapVMRouter public swapVM;
     address public tokenLt; // lower address
@@ -40,8 +37,6 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK;
     address public taker = makeAddr("taker");
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     function setUp() public {
         makerPK = 0x1234;
@@ -73,7 +68,6 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -95,13 +89,9 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
-                    [uint256(bLt), bGt]
-                )),
-                p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                DynamicBalances.build(bLt, bGt),
+                FeeFlatIn.build(FEE_BPS),
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -159,7 +149,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     ) internal {
         uint256 avail = 100_000e18;
         (uint256 initialL, uint256 bLt, uint256 bGt) =
-            XYCConcentrateArgsBuilder.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
+            XYCConcentrateSwap.computeLiquidityFromAmounts(avail, avail, sqrtPspot, sqrtPmin, sqrtPmax);
 
         (ISwapVM.Order memory order, bytes memory sig) = _createOrder(bLt, bGt, sqrtPmin, sqrtPmax);
         bytes32 h = swapVM.hash(order);
@@ -216,9 +206,9 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         assertLt(valueAfter, valueBefore, string.concat(label, ": taker profited from round-trips"));
 
         // === Check 3: Maker protection (liquidity grows) ===
-        (uint256 finalL,) = XYCConcentrateArgsBuilder.computeLiquidityAndPrice(
-            swapVM.balances(h, tokenLt),
-            swapVM.balances(h, tokenGt),
+        (uint256 finalL,) = XYCConcentrateSwap.computeLiquidityAndPrice(
+            swapVM.balance(h, tokenLt),
+            swapVM.balance(h, tokenGt),
             sqrtPmin,
             sqrtPmax
         );

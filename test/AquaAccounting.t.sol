@@ -17,15 +17,14 @@ import { AquaOpcodesDebug } from "../src/opcodes/AquaOpcodesDebug.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
-import { Controls } from "../src/instructions/Controls.sol";
-import { Decay, DecayArgsBuilder } from "../src/instructions/Decay.sol";
-import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { Salt } from "../src/instructions/Controls.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "./utils/FeeBuilders.sol";
+import { Decay } from "../src/instructions/Decay.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
-
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -33,16 +32,15 @@ import { dynamic } from "./utils/Dynamic.sol";
  * @notice Minimalistic POC to prove Aqua accounting correctness with fees
  */
 contract AquaAccounting is Test, AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     // Constants
+    uint256 constant BPS = 1e7;
     uint256 constant ONE = 1e18;
     uint256 constant INITIAL_BALANCE_A = 1000e18;
     uint256 constant INITIAL_BALANCE_B = 2000e18; // Asymmetric pool: ratio matters for CorrectVsWrong ordering tests
     uint256 constant SWAP_AMOUNT = 100e18;
 
-    uint256 constant PROTOCOL_FEE_BPS = 0.05e9; // 5%
-    uint256 constant FLAT_FEE_BPS = 0.10e9; // 10%
+    uint256 constant PROTOCOL_FEE_BPS = 0.05e7; // 5%
+    uint256 constant FLAT_FEE_BPS = 0.10e7; // 10%
     uint16 constant DECAY_PERIOD = 300; // 5 minutes in seconds
 
     // Contracts
@@ -50,8 +48,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     AquaSwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
-    Decay public decay;
-    PeggedSwap public peggedSwap;
 
     // Addresses
     address public maker;
@@ -59,17 +55,12 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     MockTaker public taker;
     address public protocolFeeRecipient;
 
-    constructor() AquaOpcodesDebug(address(aqua)) {}
-
     function setUp() public {
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
         swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
-
-        decay = Decay(address(swapVM));
-        peggedSwap = PeggedSwap(address(swapVM));
 
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -102,21 +93,10 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
 
     /// @notice Default symmetric price bounds for concentrate: sqrt(0.5)*sqrt(2.0) = 1.0
     function defaultConcentrateArgs() internal pure returns (bytes memory) {
-        return XYCConcentrateArgsBuilder.build2D(
+        return XYCConcentrateSwap.build(
             Math.sqrt(0.5e36),  // sqrtPmin = sqrt(0.5) ≈ 0.7071
             Math.sqrt(2.0e36)   // sqrtPmax = sqrt(2.0) ≈ 1.4142
         );
-    }
-
-    /// @notice Default PeggedSwap args for tokenA/tokenB (both 18 decimals)
-    function defaultPeggedArgs() internal pure returns (PeggedSwapArgsBuilder.Args memory) {
-        return PeggedSwapArgsBuilder.Args({
-            x0: INITIAL_BALANCE_A,
-            y0: INITIAL_BALANCE_B,
-            linearWidth: 1e27,
-            rateLt: 1,
-            rateGt: 1
-        });
     }
 
     /// @notice Deploy order (create + ship) and perform a single swap
@@ -185,131 +165,117 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== PROGRAM BUILDERS =====
 
     function buildProgram(
-        uint32 protocolFeeBps,
-        uint32 flatFeeInBps,
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps,
         bool includeConcentrate
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         bytes memory concentrateCode = includeConcentrate
-            ? p.build(Opcode.XYCConcentrateSwap,
-                     defaultConcentrateArgs())
+            ? defaultConcentrateArgs()
             : bytes("");
 
         bytes memory swapCode = includeConcentrate
             ? concentrateCode
-            : p.build(Opcode.XYCSwap);
+            : XYCSwap.build();
 
         return bytes.concat(
             protocolFeeCode,
             flatFeeCode,
             swapCode,
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
     function buildWrongProgram(
-        uint32 protocolFeeBps,
-        uint32 flatFeeInBps
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
     function buildProgramWithDecayConcentrate(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCConcentrateSwap,
-                   defaultConcentrateArgs()),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
     function buildProgramWithDecayPegged(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps,
-        PeggedSwapArgsBuilder.Args memory peggedArgs
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(peggedArgs)),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
     function buildProgramWithDecayXYCSwap(
-        uint32 protocolFeeBps,
+        uint24 protocolFeeBps,
         uint16 decayPeriod,
-        uint32 flatFeeInBps
+        uint24 flatFeeInBps
     ) internal view returns (bytes memory) {
-        Program p;
-
         bytes memory protocolFeeCode = protocolFeeBps > 0
-            ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeRecipient))
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
             : bytes("");
 
         bytes memory flatFeeCode = flatFeeInBps > 0
-            ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(flatFeeInBps))
+            ? FeeFlatIn.build(flatFeeInBps)
             : bytes("");
 
         return bytes.concat(
             protocolFeeCode,
-            p.build(Opcode.Decay, DecayArgsBuilder.build(decayPeriod)),
+            Decay.build(decayPeriod),
             flatFeeCode,
-            p.build(Opcode.XYCSwap),
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 
@@ -401,26 +367,26 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 1: XYCSwap Tests =====
 
     function test_XYCSwap_ProtocolFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, false), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), true);
 
         assertEq(r.amountIn, SWAP_AMOUNT, "AmountIn should match swap amount");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, false), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_With_FlatFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, false), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), true);
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
     }
 
     function test_XYCSwap_ProtocolFee_With_FlatFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, false), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
         assertConservation(r.orderHash, r.amountIn, r.amountOut);
@@ -429,7 +395,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 2: XYCConcentrate Tests =====
 
     function test_XYCConcentrate_ProtocolFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, true), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), true);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -439,7 +405,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0, true), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), false);
 
         assertEq(r.amountOut, SWAP_AMOUNT, "Exact out amount");
         assertTokenAConservation(r.orderHash, r.amountIn);
@@ -450,7 +416,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactIn() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), true);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -460,7 +426,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactOut() public {
-        SwapResult memory r = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), false);
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
 
         assertTokenAConservation(r.orderHash, r.amountIn);
 
@@ -472,9 +438,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== COMPARATIVE TESTS: Wrong vs Correct Instruction Order =====
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactIn() public {
-
-        SwapResult memory correct = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), true);
-        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e9, 0.10e9), true);
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), true);
 
         {
             (uint256 correctBal,) = getAquaBalances(correct.orderHash);
@@ -485,9 +450,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactOut() public {
-
-        SwapResult memory correct = deployAndSwap(buildProgram(0.05e9, 0.10e9, true), false);
-        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e9, 0.10e9), false);
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), false);
 
         {
             (uint256 correctBal,) = getAquaBalances(correct.orderHash);
@@ -500,7 +464,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 3: Decay + XYCConcentrate Tests =====
 
     function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayConcentrate(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -518,7 +482,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayConcentrate(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 
@@ -537,7 +501,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 4: Decay + PeggedSwap Tests =====
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e9, DECAY_PERIOD, 0.10e9, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -549,7 +513,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayPegged(0.05e9, DECAY_PERIOD, 0.10e9, defaultPeggedArgs());
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 
@@ -563,7 +527,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // ===== TEST GROUP 5: Decay + Regular Tokens (XYCSwap instead of PeggedSwap) =====
 
     function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactIn() public {
-        bytes memory program = buildProgramWithDecayXYCSwap(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
 
@@ -575,7 +539,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactOut() public {
-        bytes memory program = buildProgramWithDecayXYCSwap(0.05e9, DECAY_PERIOD, 0.10e9);
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
 
         DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
 

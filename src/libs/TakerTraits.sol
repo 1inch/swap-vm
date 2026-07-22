@@ -36,6 +36,7 @@ library TakerTraitsLib {
     /// @param isStrictThresholdAmount Require exact threshold match (vs min/max)
     /// @param isFirstTransferFromTaker Transfer order: taker->maker first or maker->taker first
     /// @param useTransferFromAndAquaPush Use transferFrom + Aqua push pattern
+    /// @param isAToB True for tokenA->tokenB swap, false for tokenB->tokenA swap
     /// @param threshold Min output (exactIn) or max input (exactOut), 32 bytes or empty
     /// @param to Recipient address (zero defaults to taker)
     /// @param deadline Expiration timestamp (0 = no deadline)
@@ -115,31 +116,30 @@ library TakerTraitsLib {
         }
 
         uint256 index0 = args.threshold.length;
-        uint256 index1 = (index0 + (args.to != address(0) && args.to != args.taker ? 20 : 0));
-        uint256 index2 = (index1 + (args.deadline != 0 ? 5 : 0));
-        uint256 index3 = (index2 + args.preTransferInHookData.length).toUint16();
-        uint256 index4 = (index3 + args.postTransferInHookData.length).toUint16();
-        uint256 index5 = (index4 + args.preTransferOutHookData.length).toUint16();
-        uint256 index6 = (index5 + args.postTransferOutHookData.length).toUint16();
-        uint256 index7 = (index6 + args.preTransferInCallbackData.length).toUint16();
-        uint256 index8 = (index7 + args.preTransferOutCallbackData.length).toUint16();
-        uint256 index9 = (index8 + args.instructionsArgs.length).toUint16();
+        uint256 index1 = index0 + (args.to != address(0) && args.to != args.taker ? 20 : 0);
+        uint256 index2 = index1 + (args.deadline != 0 ? 5 : 0);
+        uint256 index3 = index2 + args.preTransferInHookData.length;
+        uint256 index4 = index3 + args.postTransferInHookData.length;
+        uint256 index5 = index4 + args.preTransferOutHookData.length;
+        uint256 index6 = index5 + args.postTransferOutHookData.length;
+        uint256 index7 = index6 + args.preTransferInCallbackData.length;
+        uint256 index8 = index7 + args.preTransferOutCallbackData.length;
+        uint256 index9 = index8 + args.instructionsArgs.length;
 
-        uint160 slicesIndexes = uint160(
-            (uint160(index0) << 0) |
-            (uint160(index1) << 16) |
-            (uint160(index2) << 32) |
-            (uint160(index3) << 48) |
-            (uint160(index4) << 64) |
-            (uint160(index5) << 80) |
-            (uint160(index6) << 96) |
-            (uint160(index7) << 112) |
-            (uint160(index8) << 128) |
-            (uint160(index9) << 144)
+        bytes memory slicesIndexes = abi.encodePacked(
+            index9.toUint16(),
+            index8.toUint16(),
+            index7.toUint16(),
+            index6.toUint16(),
+            index5.toUint16(),
+            index4.toUint16(),
+            index3.toUint16(),
+            index2.toUint16(),
+            index1.toUint16(),
+            index0.toUint16()
         );
 
-        packed = abi.encodePacked(
-            slicesIndexes,
+        uint16 flags =
             (args.isExactIn ? IS_EXACT_IN_BIT_FLAG : 0) |
             (args.shouldUnwrapWeth ? SHOULD_UNWRAP_BIT_FLAG : 0) |
             (args.isStrictThresholdAmount ? IS_STRICT_THRESHOLD_BIT_FLAG : 0) |
@@ -147,7 +147,11 @@ library TakerTraitsLib {
             (args.useTransferFromAndAquaPush ? USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG : 0) |
             (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0) |
-            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0),
+            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0);
+
+        packed = abi.encodePacked(
+            slicesIndexes,
+            flags,
             args.threshold,
             (args.to != address(0) && args.to != args.taker ? abi.encodePacked(args.to) : bytes("")),
             (args.deadline != 0 ? abi.encodePacked(args.deadline) : bytes("")),
@@ -281,21 +285,13 @@ library TakerTraitsLib {
     }
 
     function _getDataSlice(TakerTraits traits, bytes calldata data, TakerDataSlices slice) private pure returns (bytes calldata) {
-        return data.slice(
-            _getStartOffset(traits, slice),
-            _getStopOffset(traits, slice, data.length),
-            TakerTraitsMissingHookData.selector
-        );
-    }
-
-    function _getStartOffset(TakerTraits traits, TakerDataSlices slice) private pure returns (uint256) {
         unchecked {
-            return (slice == TakerDataSlices.Threshold) ? 0 : _getOffset(traits, uint256(slice) - 1);
+            return data.slice(
+                (slice == type(TakerDataSlices).min) ? 0 : _getOffset(traits, uint256(slice) - 1),
+                (slice == type(TakerDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
+                TakerTraitsMissingHookData.selector
+            );
         }
-    }
-
-    function _getStopOffset(TakerTraits traits, TakerDataSlices slice, uint256 dataLength) private pure returns (uint256) {
-        return (slice == TakerDataSlices.Signature) ? dataLength : _getOffset(traits, uint256(slice));
     }
 
     function _getOffset(TakerTraits traits, uint256 sliceNumber) private pure returns (uint256) {

@@ -15,11 +15,11 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
-import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
+import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
+import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
@@ -31,8 +31,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
  * @dev Shows various patterns for testing different instruction types
  */
 contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -41,8 +39,6 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -100,12 +96,9 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      */
     function test_LimitOrderInvariants() public {
         // Build limit order program
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),  // 1:2 rate
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(100e18, 200e18),  // 1:2 rate
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -128,13 +121,10 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 2: Test an AMM with fees maintains invariants
      */
     function test_AMMWithFeesInvariants() public {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(1000e18, 1000e18),
+            FeeFlatIn.build(0.003e7), // 0.3% fee
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -164,13 +154,10 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 3: Test progressive fees with custom configuration
      */
     function test_ProgressiveFeeInvariants() public {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(Opcode.ProgressiveFeeIn,
-                FeeArgsBuilderExperimental.buildProgressiveFee(0.1e9)), // 10% progressive
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(1000e18, 1000e18),
+            FeeProgressiveIn.build(0.1e7), // 10% progressive
+            XYCSwap.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -200,12 +187,9 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      * Example 4: Test specific invariants individually
      */
     function test_SpecificInvariants() public view {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(100e18, 200e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -253,12 +237,9 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
      */
     function test_SkipCertainInvariants() public {
         // Create a flat-rate order (no price impact)
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(1000e18), uint256(2000e18)])),
-            program.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+            StaticBalances.build(1000e18, 2000e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

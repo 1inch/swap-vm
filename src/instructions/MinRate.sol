@@ -6,66 +6,85 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library MinRateArgsBuilder {
-    using Calldata for bytes;
+/// @notice RequireMinRate opcode, maker-favor rate guard, fails if rate is worse than specified
+///   Validates final amounts after rest of strategy executed
+/// @dev Encoding: [uint64 rateA, uint64 rateB]
+library RequireMinRate {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    function build(address tokenA, address tokenB, uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
-        (uint64 rateLt, uint64 rateGt) = tokenA < tokenB ? (rateA, rateB) : (rateB, rateA);
-        return abi.encodePacked(rateLt, rateGt);
+    using ContextLib for Context;
+
+    error RequireMinRateFailed(uint256 amountIn, uint256 amountOut, uint256 rateIn, uint256 rateOut);
+
+    Opcode constant opcode = Opcode.RequireMinRate;
+
+    function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(rateA, rateB);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function parse(bytes calldata args, address tokenIn, address tokenOut) internal pure returns (uint64 rateIn, uint64 rateOut) {
-        uint64 rateLt = uint64(bytes8(args));
-        uint64 rateGt = uint64(bytes8(args.slice(8)));
-        (rateIn, rateOut) = tokenIn < tokenOut ? (rateLt, rateGt) : (rateGt, rateLt);
+    function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {
+        rateA = args.at(0).asU64();
+        rateB = args.at(8).asU64();
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        uint64 rateIn;
+        uint64 rateOut;
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
+        else (rateOut, rateIn) = parse(args);
+
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+
+        // Cross-multiplication for: amountIn / amountOut >= rateIn / rateOut
+        require(amountIn * rateOut >= rateIn * amountOut, RequireMinRateFailed(amountIn, amountOut, rateIn, rateOut));
     }
 }
 
-contract MinRate {
-    using Math for uint256;
+/// @notice AdjustMinRate opcode, maker-favor rate guard, patches amounts if rate is worse than specified
+///   Validates and patches final amounts after rest of strategy executed
+/// @dev Encoding: [uint64 rateA, uint64 rateB]
+/// @dev Later opcodes in the execution sequence should consider the amounts are not final and might change
+library AdjustMinRate {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
+
     using ContextLib for Context;
+    using Math for uint256;
 
-    error MinRateFailed(uint256 swapAmountIn, uint256 swapAmountOut, uint256 rateIn, uint256 ratedAmountOut);
-    error MinRateExpectedBeforeSwapAmountsComputed(uint256 amountIn, uint256 amountOut);
-    error MinRateRunLoopExpectToComputeSwapAmounts(uint256 amountIn, uint256 amountOut);
+    Opcode constant opcode = Opcode.AdjustMinRate;
 
-    /// @param args.rateLt | 8 bytes (uint64)
-    /// @param args.rateGt | 8 bytes (uint64)
-    function _requireMinRate1D(Context memory ctx, bytes calldata args) internal {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
-
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
-
-        // Checking that: actual_rate >= required_rate
-        // But, instead of: swapAmountIn / swapAmountOut >= rateIn / rateOut use cross-multiplication:
-        require(
-            swapAmountIn * rateOut >= rateIn * swapAmountOut,
-            MinRateFailed(swapAmountIn, swapAmountOut, rateIn, rateOut)
-        );
+    function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(rateA, rateB);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    /// @param args.rateLt | 8 bytes (uint64)
-    /// @param args.rateGt | 8 bytes (uint64)
-    function _adjustMinRate1D(Context memory ctx, bytes calldata args) internal {
-        (uint256 rateIn, uint256 rateOut) = MinRateArgsBuilder.parse(args, ctx.query.tokenIn, ctx.query.tokenOut);
+    function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {
+        rateA = args.at(0).asU64();
+        rateB = args.at(8).asU64();
+    }
 
-        uint256 amountIn = ctx.swap.amountIn;
-        uint256 amountOut = ctx.swap.amountOut;
+    function exec(Context memory ctx, bytes calldata args) internal {
+        uint64 rateIn;
+        uint64 rateOut;
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
+        else (rateOut, rateIn) = parse(args);
 
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, MinRateExpectedBeforeSwapAmountsComputed(ctx.swap.amountIn, ctx.swap.amountOut));
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
-        require(ctx.swap.amountIn > 0 && ctx.swap.amountOut > 0, MinRateRunLoopExpectToComputeSwapAmounts(ctx.swap.amountIn, ctx.swap.amountOut));
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        // Checking that: actual_rate < required_rate
-        // But, instead of: swapAmountIn / swapAmountOut < rateIn / rateOut use cross-multiplication:
-        if (swapAmountIn * rateOut < rateIn * swapAmountOut) {
+        // Cross-multiplication for: amountIn / amountOut < rateIn / rateOut
+        if (amountIn * rateOut < rateIn * amountOut) {
             if (ctx.query.isExactIn) {
+                // Floor division for tokenOut favors maker
                 ctx.swap.amountOut = amountIn * rateOut / rateIn;
             } else {
+                // Ceil division for tokenIn favors maker
                 ctx.swap.amountIn = (amountOut * rateIn).ceilDiv(rateOut);
             }
         }

@@ -15,9 +15,8 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
+import { XYCConcentrateSwap } from "../src/instructions/XYCConcentrate.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 
 /// @title XYCConcentrate Capital Efficiency vs XYCSwap
 /// @notice Proves that XYCConcentrate achieves higher capital efficiency than plain XYCSwap.
@@ -54,8 +53,6 @@ import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 ///         TEST 4 — Slippage comparison:
 ///           concentrate achieves the same output amount for a SMALLER input
 contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     uint256 constant ONE = 1e18;
 
     // Center-symmetric range [0.25, 4] — sqrtPmin=0.5, sqrtPmax=2
@@ -68,8 +65,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     uint256 constant SQRT_P_MIN_NARROW = 900_000_000_000_000_000;          // 0.9e18
     uint256 constant SQRT_P_MAX_NARROW = 3_333_333_333_333_333_333;        // ~3.33e18 (≈10/3)
     // For sqrtPmin=0.9: R = 1/(1-0.9) = 10
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
 
     SwapVMRouter public swapVM;
     address public tokenLt;
@@ -107,7 +102,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 bLt,
         uint256 bGt
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -125,8 +119,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(Opcode.XYCSwap)
+                DynamicBalances.build(bLt, bGt),
+                XYCSwap.build()
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
@@ -140,7 +134,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        Program p;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: tokenLt,
@@ -158,10 +151,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             preTransferOutTarget: address(0), preTransferOutData: "",
             postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
-                p.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(bLt), bGt])),
-                p.build(Opcode.XYCConcentrateSwap,
-                    XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-                )
+                DynamicBalances.build(bLt, bGt),
+                XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
             )
         }));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));

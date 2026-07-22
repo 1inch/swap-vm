@@ -4,8 +4,14 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+library OpcodeOps {
+    function asU8(Opcode opcode) internal pure returns (uint8) {
+        return uint8(opcode);
+    }
+}
+
 /// @notice Opcode space layout, banked by instruction family
-/// @dev New instruction MUST take the next free `_Ix` slot of its family bank
+/// @dev For new instructions take the next free `_Ix` slots of their family bank
 /// @dev The reserved bank (0xf0-0xff) is never allocated
 enum Opcode {
     // 0x00-0x0f | Core control flow: halt, revert, jumps, extensions
@@ -29,10 +35,10 @@ enum Opcode {
     // 0x10-0x1f | Debug: wired only into *Debug opcode sets
     /* 10 */ PrintSwapRegisters,
     /* 11 */ PrintSwapQuery,
-    /* 12 */ PrintContext,
+    /* 12 */ PrintVM,
     /* 13 */ PrintFreeMemoryPointer,
     /* 14 */ PrintGasLeft,
-    /* 15 */ _15,
+    /* 15 */ PrintFee,
     /* 16 */ _16,
     /* 17 */ _17,
     /* 18 */ _18,
@@ -131,12 +137,12 @@ enum Opcode {
     /* 6f */ _6f,
 
     // 0x70-0x8f | Fees
-    /* 70 */ FlatFeeAmountIn,
-    /* 71 */ ProtocolFeeAmountIn,
-    /* 72 */ AquaProtocolFeeAmountIn,
-    /* 73 */ ProgressiveFeeIn,
-    /* 74 */ DynamicProtocolFeeAmountIn,
-    /* 75 */ AquaDynamicProtocolFeeAmountIn,
+    /* 70 */ FeeFlatIn,
+    /* 71 */ FeeFlatOut,
+    /* 72 */ FeeProgressiveIn,
+    /* 73 */ FeeProgressiveOut,
+    /* 74 */ _74,
+    /* 75 */ _75,
     /* 76 */ _76,
     /* 77 */ _77,
     /* 78 */ _78,
@@ -147,10 +153,10 @@ enum Opcode {
     /* 7d */ _7d,
     /* 7e */ _7e,
     /* 7f */ _7f,
-    /* 80 */ FlatFeeAmountOut,
-    /* 81 */ ProtocolFeeAmountOut,
-    /* 82 */ AquaProtocolFeeAmountOut,
-    /* 83 */ ProgressiveFeeOut,
+    /* 80 */ FeeProtocol,
+    /* 81 */ _81,
+    /* 82 */ _82,
+    /* 83 */ _83,
     /* 84 */ _84,
     /* 85 */ _85,
     /* 86 */ _86,
@@ -201,7 +207,7 @@ enum Opcode {
     // 0xb0-0xcf | Rates tuning: exchange-rate constraints and price adjustment
     /* b0 */ RequireMinRate,
     /* b1 */ AdjustMinRate,
-    /* b2 */ _b2,
+    /* b2 */ OraclePriceAdjuster,
     /* b3 */ _b3,
     /* b4 */ BaseFeeAdjuster,
     /* b5 */ _b5,

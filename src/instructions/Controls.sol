@@ -4,176 +4,89 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library ControlsArgsBuilder {
-    function buildSalt(uint64 salt) internal pure returns (bytes memory) {
-        return abi.encodePacked(salt);
+/// @notice Salt opcode, produce different hashes for duplicated strategies
+/// @dev Encoding: [uint64 salt] or [bytes salt]
+library Salt {
+    Opcode constant opcode = Opcode.Salt;
+
+    function build(uint64 salt) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(salt);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function buildSalt(bytes memory salt) internal pure returns (bytes memory) {
-        return salt;
+    function build(bytes memory salt) internal pure returns (bytes memory) {
+        bytes memory args = salt;
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function buildRevert(bytes4 exception) internal pure returns (bytes memory) {
-        return abi.encodePacked(exception);
+    function exec(Context memory, bytes calldata) internal pure { }
+}
+
+/// @notice Revert opcode, fail with hardcoded exception if reached
+/// @dev Encoding: [bytes4 exception] or [bytes exception]
+library Revert {
+    error InstructionRevert(bytes exception);
+
+    Opcode constant opcode = Opcode.Revert;
+
+    function build(bytes4 exception) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(exception);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function buildRevert(bytes memory exception) internal pure returns (bytes memory) {
-        return exception;
+    function build(bytes memory exception) internal pure returns (bytes memory) {
+        bytes memory args = exception;
+        return InstructionBuilder.build(opcode, args);
     }
 
-    function buildJump(uint16 nextPC) internal pure returns (bytes memory) {
-        return abi.encodePacked(nextPC);
-    }
-
-    function buildJumpIfDirection(address tokenIn, address tokenOut, uint16 nextPC) internal pure returns (bytes memory) {
-        return abi.encodePacked(tokenIn < tokenOut, nextPC);
-    }
-
-    function buildJumpIfToken(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return abi.encodePacked(token, nextPC);
-    }
-
-    function buildDeadline(uint40 deadline) internal pure returns (bytes memory) {
-        return abi.encodePacked(deadline);
-    }
-
-    function buildTokenBalanceNonZero(address token) internal pure returns (bytes memory) {
-        return abi.encodePacked(token);
-    }
-
-    function buildTakerTokenBalanceGte(address token, uint256 minAmount) internal pure returns (bytes memory) {
-        return abi.encodePacked(token, minAmount);
-    }
-
-    function buildTakerTokenSupplyShareGte(address token, uint64 minShareE18) internal pure returns (bytes memory) {
-        return abi.encodePacked(token, minShareE18);
+    function exec(Context memory, bytes calldata args) internal pure {
+        revert InstructionRevert(args);
     }
 }
 
-/// @title Controls
-/// @dev A set of functions for executing hooks in the SwapVM protocol
-/// It manages the program counter and executes hooks based on the current state
-contract Controls {
-    using Calldata for bytes;
+/// @notice Stop opcode, successfully ends program execution
+/// @dev Encoding: []
+library Stop {
     using ContextLib for Context;
 
-    error InstructionRevert(bytes);
-    error DeadlineReached(address taker, uint256 deadline);
-    error TakerTokenBalanceIsZero(address taker, address token);
-    error TxOriginTokenBalanceIsZero(address txOrigin, address token);
-    error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 minAmount);
-    error TakerTokenBalanceSupplyShareIsLessThanRequired(address taker, address token, uint256 balance, uint256 totalSupply, uint256 minShareE18);
+    Opcode constant opcode = Opcode.Stop;
 
-    /// @dev This instruction does nothing and can be used for uniqueness order hash value.
-    function _salt(Context memory /* ctx */, bytes calldata /* args */) internal pure { }
-
-    /// @dev Unconditional jump to the specified program counter
-    /// @dev LIMITATION: Jump targets are limited to uint16 (0-65,535) due to 2-byte encoding.
-    ///      For jumps to positions >= 65,536, use Extruction with custom control flow logic.
-    /// @param args.nextPC | 2 bytes (uint16)
-    function _jump(Context memory ctx, bytes calldata args) internal pure {
-        uint256 nextPC = uint16(bytes2(args));
-        ctx.setNextPC(nextPC);
+    function build() internal pure returns (bytes memory) {
+        return InstructionBuilder.build(opcode);
     }
 
-    /// @dev Unconditional revert with specified reason encoded
-    function _revert(Context memory, bytes calldata args) internal pure {
-        revert InstructionRevert(args);
-    }
-
-    /// @dev Unconditional succesful execution stop
-    function _stop(Context memory ctx, bytes calldata) internal pure {
-        // VM has nothing to execute out of program bounds
+    function exec(Context memory ctx, bytes calldata) internal pure {
+        // Nothing to do out of program bytecode
         ctx.setNextPC(type(uint256).max);
     }
+}
 
-    /// @dev Jumps if swap direction matches the expected one
-    function _jumpIfDirection(Context memory ctx, bytes calldata args) internal pure {
-        bool expectedDirection = bytes1(args) != 0;
-        bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
-        if (expectedDirection == swapDirection) {
-            uint256 nextPC = uint16(bytes2(args.slice(1)));
-            ctx.setNextPC(nextPC);
-        }
+/// @notice Deadline opcode, fail if deadline is in past
+/// @dev Encoding: [uint40 deadline]
+library Deadline {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
+
+    error DeadlineReached(uint256 deadline);
+
+    Opcode constant opcode = Opcode.Deadline;
+
+    function build(uint40 deadline) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(deadline);
+        return InstructionBuilder.build(opcode, args);
     }
 
-    /// @dev Jumps if tokenIn is the specified token
-    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
-    /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes (uint16)
-    function _jumpIfTokenIn(Context memory ctx, bytes calldata args) internal pure {
-        address token = address(bytes20(args));
-        if (token == ctx.query.tokenIn) {
-            uint256 nextPC = uint16(bytes2(args.slice(20)));
-            ctx.setNextPC(nextPC);
-        }
+    function parse(bytes calldata args) internal pure returns (uint40 deadline) {
+        deadline = args.at(0).asU40();
     }
 
-    /// @dev Jumps if tokenOut is the specified token
-    /// @dev LIMITATION: Jump targets limited to uint16 (0-65,535). See _jump for details.
-    /// @param args.token  | 20 bytes
-    /// @param args.nextPC | 2 bytes (uint16)
-    function _jumpIfTokenOut(Context memory ctx, bytes calldata args) internal pure {
-        address token = address(bytes20(args));
-        if (token == ctx.query.tokenOut) {
-            uint256 nextPC = uint16(bytes2(args.slice(20)));
-            ctx.setNextPC(nextPC);
-        }
-    }
-
-    /// @dev Reverts if the deadline has been reached
-    /// @param args.deadline | 5 bytes
-    function _deadline(Context memory ctx, bytes calldata args) internal view {
-        uint256 deadline = uint40(bytes5(args));
-        require(block.timestamp <= deadline, DeadlineReached(ctx.query.taker, deadline));
-    }
-
-    /// @dev Checks if the taker holds any amount of the specified token (NFTs are natively supported)
-    /// @dev Since EIP-7702, user may delegate it's account to certain code, potentially sharing authorization
-    ///   given even by soulbound NFT with other users
-    /// @param args.token | 20 bytes
-    function _onlyTakerTokenBalanceNonZero(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args));
-        uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
-    }
-
-    /// @dev Checks if tx.origin holds any amount of the specified token (NFTs are natively supported)
-    /// @dev The opcode allows authorized user to fill the order through 3rd-party contracts
-    ///   Validations through tx.origin are considered weak due to possible transaction flow interception
-    ///   E.g. authorized user performs transaction to 3rd-party protocol with no order filling intention,
-    ///   the 3rd-party protocol may use the authorization to fill the order
-    /// @param args.token | 20 bytes
-    function _onlyTxOriginTokenBalanceNonZero(Context memory /* ctx */, bytes calldata args) internal view {
-        address token = address(bytes20(args));
-        uint256 balance = IERC20(token).balanceOf(tx.origin);
-        require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
-    }
-
-    /// @dev Checks if the taker holds at least a certain amount of tokens
-    /// @param args.token     | 20 bytes
-    /// @param args.minAmount | 32 bytes
-    function _onlyTakerTokenBalanceGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args));
-        uint256 minAmount = uint256(bytes32(args.slice(20)));
-        uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance >= minAmount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, minAmount));
-    }
-
-    /// @dev Checks if the taker holds at least a certain share of the total token supply
-    /// @param args.token       | 20 bytes
-    /// @param args.minShareE18 | 8 bytes
-    function _onlyTakerTokenSupplyShareGte(Context memory ctx, bytes calldata args) internal view {
-        address token = address(bytes20(args));
-        uint256 minShareE18 = uint64(bytes8(args.slice(20)));
-        uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        uint256 totalSupply = IERC20(token).totalSupply();
-        // balance * 1e18 / totalSupply >= minShareE18
-        require(totalSupply > 0 && balance * 1e18 >= minShareE18 * totalSupply, TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, minShareE18));
+    function exec(Context memory, bytes calldata args) internal view {
+        uint40 deadline = parse(args);
+        require(block.timestamp <= deadline, DeadlineReached(deadline));
     }
 }

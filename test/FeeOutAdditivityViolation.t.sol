@@ -16,9 +16,9 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -30,8 +30,6 @@ import { dynamic } from "./utils/Dynamic.sol";
  *   3. When splitting swaps is profitable considering gas costs
  */
 contract FeeOutAdditivityViolation is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -42,12 +40,10 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     address public taker;
 
     uint256 constant BALANCE = 1000e18;
-    uint32 constant FEE_BPS = 0.005e9; // 0.5% fee
+    uint24 constant FEE_BPS = 0.005e7; // 0.5% fee
 
     // Base tx cost (always 21000)
     uint256 constant BASE_TX_COST = 21_000;
-
-    constructor() OpcodesDebug(address(aqua = new Aqua())) {}
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -350,23 +346,19 @@ contract FeeOutAdditivityViolation is Test, OpcodesDebug {
     }
 
     function _createOrderWithFlatFeeOut() private view returns (ISwapVM.Order memory) {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
-            program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(BALANCE, BALANCE),
+            FeeFlatOut.build(FEE_BPS),
+            XYCSwap.build()
         );
         return _createOrder(bytecode);
     }
 
     function _createOrderWithFlatFeeIn() private view returns (ISwapVM.Order memory) {
-        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(BALANCE), BALANCE])),
-            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(FEE_BPS)),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(BALANCE, BALANCE),
+            FeeFlatIn.build(FEE_BPS),
+            XYCSwap.build()
         );
         return _createOrder(bytecode);
     }

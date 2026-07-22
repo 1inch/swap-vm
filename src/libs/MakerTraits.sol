@@ -7,15 +7,20 @@ pragma solidity 0.8.30;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { InstructionArgs } from "./InstructionArgs.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
 type MakerTraits is uint256;
 
 library MakerTraitsLib {
-    using SafeCast for uint256;
-    using Calldata for bytes;
     using MakerTraitsLib for MakerTraits;
+    using SafeCast for uint256;
+
+    using Calldata for bytes;
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
+
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
@@ -53,6 +58,8 @@ library MakerTraitsLib {
     /// @notice Arguments for building maker order
     /// @param maker Liquidity provider address
     /// @param receiver Recipient address (address(0) defaults to maker)
+    /// @param tokenA Token with lower address
+    /// @param tokenB Token with greater address
     /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
     /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
     /// @param allowZeroAmountIn Allow zero input amount swaps
@@ -119,17 +126,17 @@ library MakerTraitsLib {
             require(args.hasPostTransferOutHook, MakerTraitsMissingHasPostTransferOutFlag());
         }
 
-        uint256 index0 = (40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length).toUint16();
-        uint256 index1 = (index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length).toUint16();
-        uint256 index2 = (index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length).toUint16();
-        uint256 index3 = (index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length).toUint16();
+        uint256 index0 = 40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length;
+        uint256 index1 = index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length;
+        uint256 index2 = index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length;
+        uint256 index3 = index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length;
 
-        uint64 orderDataIndexes = (
-            (uint64(index0) << 0) |
-            (uint64(index1) << 16) |
-            (uint64(index2) << 32) |
-            (uint64(index3) << 48)
-        );
+        uint64 orderDataIndexes = uint64(bytes8(abi.encodePacked(
+            index3.toUint16(),
+            index2.toUint16(),
+            index1.toUint16(),
+            index0.toUint16()
+        )));
 
         return ISwapVM.Order({
             maker: args.maker,
@@ -202,13 +209,11 @@ library MakerTraitsLib {
 
     // Slices getters
 
-    function tokens(MakerTraits traits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
+    function tokens(MakerTraits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
         // In case there are not enough bytes in `data`, this block would fill missing bytes with zeros
         // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
-        assembly ("memory-safe") {
-            tokenA := shr(96, calldataload(data.offset))
-            tokenB := shr(96, calldataload(add(data.offset, 20)))
-        }
+        tokenA = data.at(0).asAddress();
+        tokenB = data.at(20).asAddress();
     }
 
     function program(MakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
@@ -245,8 +250,8 @@ library MakerTraitsLib {
     function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
         unchecked {
             return data.slice(
-                (slice == OrderDataSlices.PreTransferInHook) ? 40 : _getOffset(traits, uint256(slice) - 1),
-                (slice == OrderDataSlices.Program) ? data.length : _getOffset(traits, uint256(slice)),
+                (slice == type(OrderDataSlices).min) ? 40 : _getOffset(traits, uint256(slice) - 1),
+                (slice == type(OrderDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
                 MakerTraitsMissingHookData.selector
             );
         }

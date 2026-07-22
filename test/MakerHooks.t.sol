@@ -17,19 +17,14 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 import { RevertingMakerHooks } from "./mocks/RevertingMakerHooks.sol";
 
 contract MakerHooksTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
@@ -95,14 +90,10 @@ contract MakerHooksTest is Test, OpcodesDebug {
     // ==================== Helper Functions ====================
 
     function _buildProgram(uint64 salt) internal view returns (bytes memory) {
-        Program p;
         return bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(100e18), uint256(200e18)])),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Opcode.Salt,
-                ControlsArgsBuilder.buildSalt(salt))
+            StaticBalances.build(100e18, 200e18),
+            LimitSwap.build(address(tokenB), address(tokenA)),
+            Salt.build(salt)
         );
     }
 

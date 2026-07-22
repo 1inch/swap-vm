@@ -9,9 +9,8 @@ import { MakerTraitsLib } from "../../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../src/libs/TakerTraits.sol";
 import { PeggedFeesInvariants } from "../PeggedFeesInvariants.t.sol";
 import { TokenMockDecimals } from "../../mocks/TokenMockDecimals.sol";
-import { Program, ProgramBuilder, Opcode } from "../../utils/ProgramBuilder.sol";
-import { BalancesArgsBuilder } from "../../../src/instructions/Balances.sol";
-import { PeggedSwapArgsBuilder } from "../../../src/instructions/PeggedSwap.sol";
+import { StaticBalances, DynamicBalances } from "../../../src/instructions/Balances.sol";
+import { PeggedSwap } from "../../../src/instructions/PeggedSwap.sol";
 
 /**
  * @title VeryImbalancedDifferentDecimals
@@ -19,8 +18,6 @@ import { PeggedSwapArgsBuilder } from "../../../src/instructions/PeggedSwap.sol"
  * @dev Token A has 18 decimals, Token B has 6 decimals (like USDC)
  */
 contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
-    using ProgramBuilder for Program;
-
     function setUp() public override {
         // Skip super.setUp() - do custom initialization
         maker = vm.addr(makerPK);
@@ -88,8 +85,8 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         testAmountsExactOut[1] = unitOut / 2;   // 0.5 tokens
         testAmountsExactOut[2] = unitOut;       // 1 token
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // Very imbalanced pools with different decimals have higher rounding errors
         // For small amounts (1 wei in 6-dec), sqrt error > swap size
@@ -127,18 +124,9 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Build order with asymmetric pool. Balances are positional in ascending
         // token address order (tokenA, tokenB).
-        Program p;
         bytes memory bytecode = bytes.concat(
-            p.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([balanceTokenA, balanceTokenB])),
-            p.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: x0Config,
-                    y0: y0Config,
-                    linearWidth: linearWidth,
-                    rateLt: rateLtTest,
-                    rateGt: rateGtTest
-                })))
+            DynamicBalances.build(balanceTokenA, balanceTokenB),
+            PeggedSwap.build(x0Config, y0Config, linearWidth, rateLtTest, rateGtTest)
         );
 
         // Create order (using maker and swapVM from parent setup)
