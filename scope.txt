@@ -1,0 +1,15 @@
+src/*.sol
+src/routers/AquaSwapVMRouter.sol
+src/opcodes/AquaOpcodes.sol
+src/instructions/Balances.sol
+src/instructions/Controls.sol
+src/instructions/Decay.sol
+src/instructions/Extruction.sol
+src/instructions/Fee.sol
+src/instructions/PeggedSwap.sol
+src/instructions/XYCConcentrate.sol
+src/instructions/XYCSwap.sol
+src/libs/MakerTraits.sol
+src/libs/PeggedSwapMath.sol
+src/libs/TakerTraits.sol
+src/libs/VM.sol
