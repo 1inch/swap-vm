@@ -31,8 +31,8 @@
     "test:solidity": "npx hardhat test solidity",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
-    "snapshot": "npx hardhat test solidity --snapshot --grep test_",
-    "snapshot:check": "npx hardhat test solidity --snapshot-check",
+    "snapshot": "npx hardhat clean && npx hardhat test solidity --snapshot --grep test_",
+    "snapshot:check": "npx hardhat clean && npx hardhat test solidity --snapshot-check",
     "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
   },
   "repository": {
