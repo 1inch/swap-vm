@@ -60,7 +60,7 @@ export default defineConfig({
     "src/routers/*Debug.sol": {
       "code-size": "off",
     },
-    "npm/@1inch/solidity-utils/*": {
+    "npm/@1inch/solidity-utils@*/**/*": {
       "transient-storage": "off",
     },
   },
