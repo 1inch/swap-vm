@@ -265,12 +265,16 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
 
         uint256 preRate = _preExhaustRate(order, _td(sig, true));
 
-        // Exhaust all Gt (buying moves price toward sqrtPmin)
+        // Buy (almost) all Gt (buying moves price toward sqrtPmin). Leave a small dust so the
+        // post-exhaust marginal exact-in quote stays executable AND its natural output
+        // (~P_min·1e18 ≈ 0.04e18) is not clamped by partialFill to the remaining balance.
+        // The pool is still ~1e-5 fraction full, so the measured price stays ≈ P_min.
         // tokenLt -> tokenGt (buy Gt): isAToB = true.
+        uint256 dust = 1e18;
         vm.prank(taker);
-        swapVM.swap(order, bGt, _td(sig, false));
-        assertEq(swapVM.balances(swapVM.hash(order), tokenGt), 0,
-            string.concat(label, ": all Gt should be bought out"));
+        swapVM.swap(order, bGt - dust, _td(sig, false));
+        assertEq(swapVM.balances(swapVM.hash(order), tokenGt), dust,
+            string.concat(label, ": only dust Gt should remain"));
 
         uint256 postRate = _postExhaustRate(order, _td(sig, true));
         // preRate / postRate ≈ P_spot / P_min = sqrtPspot² / sqrtPmin² (both in 1e18 scale)

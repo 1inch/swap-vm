@@ -142,12 +142,16 @@ contract XYCConcentrate {
 
         if (ctx.query.isExactIn) {
             require(ctx.swap.amountOut == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
-            ctx.swap.amountOut = (
-                (ctx.swap.amountIn * virtualBalanceOut) /
-                (virtualBalanceIn + ctx.swap.amountIn)
-            );
+            uint256 out = (ctx.swap.amountIn * virtualBalanceOut) / (virtualBalanceIn + ctx.swap.amountIn);
+            if (out > ctx.swap.balanceOut) {
+                out = ctx.swap.balanceOut;
+                ctx.swap.amountIn = Math.ceilDiv(out * virtualBalanceIn, virtualBalanceOut - out);
+            }
+            ctx.swap.amountOut = out;
         } else {
             require(ctx.swap.amountIn == 0, ConcentrateRecomputeDetected(ctx.swap.amountIn, ctx.swap.amountOut));
+            if (ctx.swap.amountOut > ctx.swap.balanceOut)
+                ctx.swap.amountOut = ctx.swap.balanceOut;
             ctx.swap.amountIn = Math.ceilDiv(
                 ctx.swap.amountOut * virtualBalanceIn,
                 (virtualBalanceOut - ctx.swap.amountOut)

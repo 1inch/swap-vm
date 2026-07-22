@@ -161,24 +161,50 @@ contract PeggedSwap {
             // Solve for y1: given x1, find y1 that maintains invariant
             // x1 * ONE / x0 - safe: x1 ≤ 1e30, ONE = 1e27 → 1e57 < 1e77
             uint256 u1 = x1 * PeggedSwapMath.ONE / x0_init;  // Round DOWN u1
-            uint256 v1 = PeggedSwapMath.solve(u1, config.linearWidth, targetInvariant);
 
-            // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
-            // v1 * y0_init - safe: v1 ≤ u* ≤ 4e27 (boundary for any A ≥ 0), y0_init ≤ 1e30 → 4e57 < 1e77
-            uint256 y1 = Math.ceilDiv(v1 * y0_init, PeggedSwapMath.ONE);
+            // u-side invariant contribution: √u1 + a·u1
+            // a * u1 / ONE - safe: a ≤ 2e27, u1 ≤ 2e27 → 4e54 < 1e77
+            uint256 invariantU1 = Math.sqrt(u1 * PeggedSwapMath.ONE) + config.linearWidth * u1 / PeggedSwapMath.ONE;
 
-            // Convert back from normalized scale: amountOut = (y0 - y1) / rateOut
-            // Round DOWN to protect maker
-            ctx.swap.amountOut = (y0 - y1) / rateOut;
+            // Capacity check without a dedicated solve(uMax):
+            // g(u) = √u + a·u is strictly increasing and g(uMax) = targetInvariant,
+            // so u1 >= uMax  ⟺  invariantU1 >= targetInvariant  ⟺  solve(u1) has no solution.
+            // This avoids solving for uMax on the common path; we only pay for it on drain.
+            if (invariantU1 >= targetInvariant) {
+                // Input exceeds capacity (v would be ≤ 0): drain output reserve, recompute amountIn.
+                // Cap x1 at uMax (v=0 → rightSide = targetInvariant), round UP (protects maker)
+                uint256 uMax = PeggedSwapMath.solve(targetInvariant, config.linearWidth);
+                uint256 x1Capped = Math.ceilDiv(uMax * x0_init, PeggedSwapMath.ONE);
+
+                ctx.swap.amountIn = Math.ceilDiv(x1Capped - x0, rateIn);
+                ctx.swap.amountOut = y0_raw; // drain output reserve
+            } else {
+                uint256 rightSide = targetInvariant - invariantU1;
+                uint256 v1 = PeggedSwapMath.solve(rightSide, config.linearWidth);
+
+                // Round UP y1 (normalized) to ensure amountOut rounds DOWN (protects maker)
+                // v1 * y0 - safe: v1 ≤ 2e27, y0 ≤ 1e27 → 2e54 < 1e77
+                uint256 y1 = Math.ceilDiv(v1 * y0_init, PeggedSwapMath.ONE);
+
+                // Convert back from normalized scale: amountOut = (y0 - y1) / rateOut
+                // Round DOWN to protect maker
+                ctx.swap.amountOut = (y0 - y1) / rateOut;
+            }
         } else {
             require(ctx.swap.amountIn == 0, PeggedSwapRecomputeDetected());
+
+            if (ctx.swap.amountOut > y0_raw) ctx.swap.amountOut = y0_raw;
+
             // ExactOut: calculate x1 from y1 = y0 - amountOut (normalized)
             uint256 y1 = y0 - ctx.swap.amountOut * rateOut;
 
             // Solve for x1: given y1, find x1 that maintains invariant
             // y1 * ONE / y0 - safe: y1 ≤ 1e30, ONE = 1e27 → 1e57 < 1e77
             uint256 v1 = y1 * PeggedSwapMath.ONE / y0_init;  // Round DOWN v1
-            uint256 u1 = PeggedSwapMath.solve(v1, config.linearWidth, targetInvariant);
+
+            uint256 invariantV1 = Math.sqrt(v1 * PeggedSwapMath.ONE) + config.linearWidth * v1 / PeggedSwapMath.ONE;
+            require(targetInvariant >= invariantV1, PeggedSwapMath.PeggedSwapMathInvalidInput());
+            uint256 u1 = PeggedSwapMath.solve(targetInvariant - invariantV1, config.linearWidth);
 
             // Round UP x1 (normalized) to ensure amountIn rounds UP (protects maker)
             // u1 * x0_init - safe: u1 ≤ u* ≤ 4e27 (boundary for any A ≥ 0), x0_init ≤ 1e30 → 4e57 < 1e77
