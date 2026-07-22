@@ -11,14 +11,6 @@ const swapVmCompiler = {
     optimizer: {
       enabled: true,
       runs: 700,
-      details: {
-        yul: true,
-        yulDetails: {
-          stackAllocation: true,
-          optimizerSteps:
-            "dhfoDgvulfnTUtnIf[xa[r]EscLMcCTUtTOntnfDIulLculVcul Tpeul]jmul[jul] VcTOcul jmul : fDnTOcmu",
-        },
-      },
     },
     viaIR: true,
   },
@@ -68,7 +60,7 @@ export default defineConfig({
     "src/routers/*Debug.sol": {
       "code-size": "off",
     },
-    "npm/@1inch/**/*": {
+    "npm/@1inch/solidity-utils/*": {
       "transient-storage": "off",
     },
   },
