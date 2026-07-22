@@ -2,26 +2,38 @@
   "name": "@1inch/swap-vm",
   "version": "0.0.6",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
+  "type": "module",
   "main": "index.js",
   "directories": {
     "lib": "lib",
     "test": "test"
   },
   "dependencies": {
-    "@1inch/aqua": "github:1inch/aqua#0.1.0",
-    "@1inch/solidity-utils": "6.9.7",
+    "@1inch/aqua": "github:1inch/aqua#v1.0.0",
+    "@1inch/solidity-utils": "6.9.10",
     "@openzeppelin/contracts": "5.4.0",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.1.6",
+    "@nomicfoundation/hardhat-keystore": "^3.0.11",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
+    "@nomicfoundation/hardhat-verify": "^3.0.0",
+    "hardhat": "^3.8.0",
+    "hardhat-ignore-warnings": "0.3.0"
+  },
   "resolutions": {
-    "elliptic": "6.6.1"
+    "elliptic": "6.6.1",
+    "@1inch/solidity-utils": "6.9.10"
   },
   "scripts": {
-    "test": "forge test",
-    "build": "forge build",
-    "lint": "forge fmt --check",
-    "format": "forge fmt",
-    "snapshot": "forge snapshot --force --no-match-test \"testFuzz_*\""
+    "test": "npx hardhat test",
+    "test:solidity": "npx hardhat test solidity",
+    "test:typescript": "npx hardhat test nodejs",
+    "build": "npx hardhat compile",
+    "snapshot": "npx hardhat clean && npx hardhat test solidity --snapshot --grep test_",
+    "snapshot:check": "npx hardhat clean && npx hardhat test solidity --snapshot-check",
+    "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
   },
   "repository": {
     "type": "git",
