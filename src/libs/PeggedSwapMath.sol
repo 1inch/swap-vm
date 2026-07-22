@@ -55,23 +55,12 @@ library PeggedSwapMath {
     /// @dev Let w = √v, then: aw² + w = [c - √u - au]
     /// @dev Quadratic in w: aw² + w - rightSide = 0
     /// @dev Solution: w = (-1 + √(1 + 4a * rightSide)) / (2a)
-    /// @param u Normalized x value (x/X₀) scaled by ONE
+    /// @dev Takes rightSide = c - (√u + au) directly. The caller computes it, which lets callers that
+    ///      already know c >= (√u+au) (e.g. from a capacity check) skip a redundant bounds check.
+    /// @param rightSide c - (√u + au), scaled by sqrt(ONE); caller MUST guarantee it's non-negative
     /// @param a Linear width parameter scaled by ONE
-    /// @param invariantC Target invariant constant scaled by sqrt(ONE)
     /// @return v Normalized y value (y/Y₀) scaled by ONE
-    function solve(uint256 u, uint256 a, uint256 invariantC) internal pure returns (uint256 v) {
-        uint256 sqrtU = Math.sqrt(u * ONE);
-
-        // a * u / ONE - safe: a ≤ 5000e27 = 5e30, u ≤ u* ≤ 4·ONE = 4e27 → 2e58 < 1e77
-        uint256 au = a * u / ONE;
-
-        // Calculate rightSide = c - √u - au
-        // Need to check: invariantC >= sqrtU + au
-        uint256 sqrtUPlusAu = sqrtU + au;
-        require(invariantC >= sqrtUPlusAu, PeggedSwapMathInvalidInput());
-
-        uint256 rightSide = invariantC - sqrtUPlusAu;
-
+    function solve(uint256 rightSide, uint256 a) internal pure returns (uint256 v) {
         if (a == 0) {
             // Equation becomes: √v = rightSide, so v = rightSide²
             v = (rightSide * rightSide) / ONE;
