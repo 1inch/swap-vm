@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
 
@@ -130,13 +130,13 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_DecayXYCHalfwayDecay() public {
         uint16 period = 120; // 2 minutes
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(_decayXD,
+            program.build(Opcode.Decay,
                 DecayArgsBuilder.build(period)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -165,13 +165,13 @@ contract DecayXYCInvariants is Test, OpcodesDebug, CoreInvariants {
      * Helper to test Decay + XYC with specific period
      */
     function _testDecayXYCWithPeriod(uint16 period) private {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(1000e18), uint256(1000e18)])),
-            program.build(_decayXD,
+            program.build(Opcode.Decay,
                 DecayArgsBuilder.build(period)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

@@ -50,5 +50,5 @@ interface ISwapVM {
         Order calldata order,
         uint256 amount,
         bytes calldata takerTraitsAndData
-    ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash);
+    ) external payable returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash);
 }

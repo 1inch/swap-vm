@@ -17,7 +17,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 
 /**
@@ -497,13 +497,13 @@ contract TakerTraitsTest is Test, OpcodesDebug {
     }
 
     function _createLimitOrder(uint64 salt) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Balances._staticBalancesXD,
+            p.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
-            p.build(LimitSwap._limitSwap1D,
+            p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Controls._salt,
+            p.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(salt))
         );
 
@@ -543,13 +543,13 @@ contract TakerTraitsTest is Test, OpcodesDebug {
         bytes memory preOutData,
         bytes memory postOutData
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Balances._staticBalancesXD,
+            p.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(MAKER_BALANCE_A), MAKER_BALANCE_B])),
-            p.build(LimitSwap._limitSwap1D,
+            p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenB), address(tokenA))),
-            p.build(Controls._salt,
+            p.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(salt))
         );
 

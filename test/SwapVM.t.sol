@@ -19,7 +19,7 @@ import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol"
 import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { Invalidators, InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 contract SwapVMTest is Test, OpcodesDebug {
     using ProgramBuilder for Program;
@@ -86,14 +86,14 @@ contract SwapVMTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Balances._staticBalancesXD,
+            p.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            p.build(LimitSwap._limitSwap1D,
+            p.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(setup.tokenIn, setup.tokenOut)),
-            setup.useInvalidator ? p.build(Invalidators._invalidateTokenOut1D) : bytes(""),
-            setup.salt != 0 ? p.build(Controls._salt, ControlsArgsBuilder.buildSalt(uint64(setup.salt))) : bytes("")
+            setup.useInvalidator ? p.build(Opcode.InvalidateTokenOut) : bytes(""),
+            setup.salt != 0 ? p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(setup.salt))) : bytes("")
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

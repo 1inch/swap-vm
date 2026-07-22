@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 
@@ -98,11 +98,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
@@ -188,11 +188,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
@@ -255,11 +255,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
@@ -305,11 +305,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 y0Initial = 10000e18;
         uint256 linearWidth = 0.8e27; // A = 0.8 (standard for stablecoins)
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: x0Initial,
                     y0: y0Initial,
@@ -353,11 +353,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         uint256 linearWidth = 0.8e27; // A = 0.8
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceIn, balanceOut])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,
                     y0: balanceOut,
@@ -407,11 +407,11 @@ contract PeggedSwapInvariants is Test, OpcodesDebug, CoreInvariants {
 
         uint256 linearWidth = 0;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceIn, balanceOut])),
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                     x0: balanceIn,
                     y0: balanceOut,

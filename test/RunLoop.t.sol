@@ -14,7 +14,7 @@ import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Opcodes } from "../src/opcodes/Opcodes.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { ControlsArgsBuilder } from "../src/instructions/Controls.sol";
@@ -85,18 +85,18 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @dev Tests that runLoop properly advances PC and terminates
      */
     function test_RunLoopTermination() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         // Create a valid program that properly terminates
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
             // Multiple instructions to verify PC advances correctly
-            program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(1))),
-            program.build(_salt, ControlsArgsBuilder.buildSalt(uint64(2))),
+            program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(1))),
+            program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(2))),
             // NestedRunLoop instruction
-            program.build(_decayXD, DecayArgsBuilder.build(3600)),
-            program.build(_xycSwapXD) // Terminal - computes amounts and stops
+            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            program.build(Opcode.XYCSwap) // Terminal - computes amounts and stops
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -186,16 +186,16 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test deep nesting (5 levels): DynamicBalances → Decay → Fee → MinRate → XYCConcentrate(terminal)
      */
     function test_NestedRunLoop_Deep_SixLevels() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])), // Level 0: DynamicBalances → runLoop
-            program.build(_decayXD, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
-            program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
-            program.build(_requireMinRate1D,
+            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)), // Level 1: Decay → runLoop
+            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)), // Level 2: Fee (1%) → runLoop
+            program.build(Opcode.RequireMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), uint64(0.8e9), uint64(1.2e9))), // Level 3: MinRate → runLoop
-            program.build(_xycConcentrateGrowLiquidity2D,
+            program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(Math.sqrt(0.5e36), Math.sqrt(2.0e36))) // Level 4: XYCConcentrate (terminal)
         );
 
@@ -210,13 +210,13 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test static context (quote mode) with nested runLoop
      */
     function test_NestedRunLoop_StaticContext() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
-            program.build(_decayXD, DecayArgsBuilder.build(3600)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            program.build(Opcode.XYCSwap)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -241,29 +241,29 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @notice Test very long program (50+ instructions)
      */
     function test_VeryLongProgram() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
-        bytes memory bytecode = program.build(_dynamicBalancesXD,
+        bytes memory bytecode = program.build(Opcode.DynamicBalances,
             BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)]));
 
         // Add 20 salt instructions (harmless, just increase program length)
         for (uint64 i = 0; i < 20; i++) {
             bytecode = bytes.concat(bytecode,
-                program.build(_salt, ControlsArgsBuilder.buildSalt(i)));
+                program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(i)));
         }
 
         // Add nested runLoop chain
         bytecode = bytes.concat(
             bytecode,
-            program.build(_decayXD, DecayArgsBuilder.build(3600)),
-            program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.01e9)),
-            program.build(_xycSwapXD)
+            program.build(Opcode.Decay, DecayArgsBuilder.build(3600)),
+            program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.01e9)),
+            program.build(Opcode.XYCSwap)
         );
 
         // Add more salts
         for (uint64 i = 20; i < 40; i++) {
             bytecode = bytes.concat(bytecode,
-                program.build(_salt, ControlsArgsBuilder.buildSalt(i)));
+                program.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(i)));
         }
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -278,14 +278,14 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @dev Key insight: Same balances, DIFFERENT strategies
      */
     function test_BestRouteSelector_XYC_vs_Pegged() public {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         BestRouteSelector selector = new BestRouteSelector(address(aqua));
 
         // Strategy 1: XYC (constant product)
-        bytes memory strategy1 = program.build(_xycSwapXD);
+        bytes memory strategy1 = program.build(Opcode.XYCSwap);
 
         // Strategy 2: Pegged (optimized for stable pairs)
-        bytes memory strategy2 = program.build(_peggedSwapGrowPriceRange2D,
+        bytes memory strategy2 = program.build(Opcode.PeggedSwap,
             PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
                 x0: 50e18,          // balanceIn
                 y0: 50e18,          // balanceOut
@@ -306,9 +306,9 @@ contract RunLoopTest is Test, OpcodesDebug {
 
         // Main program: Balances → BestRouteSelector
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])),
-            program.build(_extruction, selectorArgs)
+            program.build(Opcode.Extruction, selectorArgs)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
