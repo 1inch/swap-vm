@@ -21,7 +21,7 @@ import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e9;
@@ -86,28 +86,28 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
     }
 
     function _createOrderWithFeeType(MakerSetup memory setup, bool protocolFeeOnAmountIn) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory programBytes = bytes.concat(
             // 0. Apply protocol fee (optional)
             setup.protocolFeeBps > 0 ? (
                 protocolFeeOnAmountIn
-                    ? program.build(Fee._protocolFeeAmountInXD,
+                    ? program.build(Opcode.ProtocolFeeAmountIn,
                         FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
-                    : program.build(FeeExperimental._protocolFeeAmountOutXD,
+                    : program.build(Opcode.ProtocolFeeAmountOut,
                         FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, protocolFeeRecipient))
             ) : bytes(""),
             // 1. Set initial token balances
-            program.build(Balances._dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
             // 2. Apply flat feeIn (optional)
-            setup.flatInFeeBps > 0 ? program.build(Fee._flatFeeAmountInXD,
+            setup.flatInFeeBps > 0 ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(setup.flatInFeeBps)) : bytes(""),
             // 3. Apply flat feeOut (optional)
-            setup.flatOutFeeBps > 0 ? program.build(FeeExperimental._flatFeeAmountOutXD,
+            setup.flatOutFeeBps > 0 ? program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(setup.flatOutFeeBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(XYCSwap._xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         // === Create Order ===

@@ -20,7 +20,7 @@ import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol"
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
 contract MockToken is ERC20 {
@@ -75,19 +75,19 @@ contract XYCSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _makeOrder(uint256 balanceA, uint256 balanceB, uint256 feeIn) internal view returns (ISwapVM.Order memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory bytecode;
         if (feeIn > 0) {
             bytecode = bytes.concat(
-                program.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
-                program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
-                program.build(_xycSwapXD)
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
+                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(uint32(feeIn))),
+                program.build(Opcode.XYCSwap)
             );
         } else {
             bytecode = bytes.concat(
-                program.build(_dynamicBalancesXD, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
-                program.build(_xycSwapXD)
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceA), balanceB])),
+                program.build(Opcode.XYCSwap)
             );
         }
 

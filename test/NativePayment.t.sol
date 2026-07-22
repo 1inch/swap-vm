@@ -18,7 +18,7 @@ import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { AquaSwapVMHelper } from "./helpers/AquaSwapVMHelper.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 
@@ -129,12 +129,12 @@ contract NativePaymentTest is Test, OpcodesDebug {
         bool makerUnwrapWeth,
         address receiver
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory programBytes = bytes.concat(
-            program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+            program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
                 [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
             )),
-            program.build(XYCSwap._xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
         return _buildOrder(makerUnwrapWeth, receiver, false, programBytes);
     }
@@ -356,8 +356,8 @@ contract NativePaymentTest is Test, OpcodesDebug {
         uint256 attached = 1e18;
 
         // Program forces amountIn = 0 with a positive amountOut to reach the full-refund branch
-        Program memory program = ProgramBuilder.init(_opcodes());
-        bytes memory programBytes = program.build(Debug._patchSwapRegisters, abi.encode(SwapRegisters({
+        Program program;
+        bytes memory programBytes = program.build(Opcode.PatchSwapRegisters, abi.encode(SwapRegisters({
             balanceIn: 0,
             balanceOut: 0,
             amountIn: 0,

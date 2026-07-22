@@ -23,7 +23,7 @@ import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { FeeExperimental, FeeArgsBuilderExperimental } from "../src/instructions/FeeExperimental.sol";
 import { Debug } from "../src/instructions/Debug.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 uint256 constant ONE = 1e18;
 
@@ -80,19 +80,19 @@ contract ProgressiveFeeTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory programBytes = bytes.concat(
             // 1. Set initial token balances
-            program.build(Balances._dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
             // 2. Apply progressive fee based on rate change
-            program.build(FeeExperimental._progressiveFeeInXD,
+            program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(setup.progressiveFeeBps)),
             // 3. Apply flat fee on top of progressive fee
-            (setup.flatFeeBps) > 0 ? program.build(Fee._flatFeeAmountInXD,
+            (setup.flatFeeBps) > 0 ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(setup.flatFeeBps)) : bytes(""),
             // 4. Perform the swap
-            program.build(XYCSwap._xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         // === Create Order ===

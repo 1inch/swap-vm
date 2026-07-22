@@ -18,7 +18,7 @@ import { BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
 import { SeriesEpochManager, SeriesEpochManagerArgsBuilder } from "../src/instructions/SeriesEpochManager.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 /// @title SeriesEpochManager tests
 contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
@@ -60,12 +60,12 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
 
     /// @dev Program: validate (seriesId, epoch) -> staticBalances -> limitSwap
     function _epochProgram(uint32 seriesId, uint32 epoch, uint64 salt) internal view returns (bytes memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         return bytes.concat(
-            p.build(_validateSeriesEpochXD, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
-            p.build(_staticBalancesXD, BalancesArgsBuilder.build([uint256(1e18), uint256(2e18)])),
-            p.build(_limitSwap1D, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            p.build(_salt, abi.encodePacked(salt))
+            p.build(Opcode.ValidateSeriesEpoch, SeriesEpochManagerArgsBuilder.buildEpochValidation(seriesId, epoch)),
+            p.build(Opcode.StaticBalances, BalancesArgsBuilder.build([uint256(1e18), uint256(2e18)])),
+            p.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
+            p.build(Opcode.Salt, abi.encodePacked(salt))
         );
     }
 

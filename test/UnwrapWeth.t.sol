@@ -14,7 +14,7 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 
 contract UnwrapWethTest is Test, OpcodesDebug {
@@ -63,12 +63,12 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         // MakerTraits requires tokenA < tokenB; balances are symmetric so ordering of values is irrelevant
         (address lowerToken, address higherToken) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory programBytes = bytes.concat(
-            program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build(
+            program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
                 [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
             )),
-            program.build(XYCSwap._xycSwapXD)
+            program.build(Opcode.XYCSwap)
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
