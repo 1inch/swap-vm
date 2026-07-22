@@ -2,15 +2,15 @@
 # yarn lockfile v1
 
 
-"@1inch/aqua@github:1inch/aqua#0.1.0":
+"@1inch/aqua@github:1inch/aqua#v1.0.0":
   version "0.1.0"
-  resolved "https://codeload.github.com/1inch/aqua/tar.gz/b51f3b6e3c02fa5208e1429f0f14706b025d9dd6"
+  resolved "https://codeload.github.com/1inch/aqua/tar.gz/81c26e4619ce21556ab02b3284ee2685de21fb18"
   dependencies:
-    "@1inch/solidity-utils" "6.9.5"
+    "@1inch/solidity-utils" "6.9.7"
     "@openzeppelin/contracts" "5.4.0"
     forge-std "github:foundry-rs/forge-std#v1.11.0"
 
-"@1inch/solidity-utils@6.9.10", "@1inch/solidity-utils@6.9.5":
+"@1inch/solidity-utils@6.9.10", "@1inch/solidity-utils@6.9.7":
   version "6.9.10"
   resolved "https://registry.yarnpkg.com/@1inch/solidity-utils/-/solidity-utils-6.9.10.tgz#089a03585024dc44bf244ecb2581997d8600005a"
   integrity sha512-32pJ2cTuXLV55nQBJ9rxkFvzf+MYHPtNEEI3iDYxztnEkh8pPVLbO9DDQb/fVphuaTNQ/g8dE+Prprq5Cm+Tmg==
