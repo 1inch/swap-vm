@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
@@ -393,11 +393,11 @@ contract LimitSwapGas is Test, OpcodesDebug {
     // ==================== Helper Functions ====================
 
     function _createLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -412,16 +412,16 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint16 duration = 300;
         uint64 decayFactor = 0.5e18; // 50% decay
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             isAuctionIn ?
-                program.build(_dutchAuctionBalanceIn1D,
+                program.build(Opcode.DutchAuctionBalanceIn,
                     DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)) :
-                program.build(_dutchAuctionBalanceOut1D,
+                program.build(Opcode.DutchAuctionBalanceOut,
                     DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -437,11 +437,11 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint256 balanceOut = BALANCE_B;
         uint256 balanceIn = BALANCE_A;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_twap,
+            program.build(Opcode.TWAPSwap,
                 TWAPSwapArgsBuilder.build(TWAPSwapArgsBuilder.TwapArgs({
                     balanceIn: balanceIn,
                     balanceOut: balanceOut,
@@ -450,7 +450,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
                     priceBumpAfterIlliquidity: 1.2e18,
                     minTradeAmountOut: 0.1e18
                 }))),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -464,13 +464,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint64 rateA = 1e8; // 1 tokenA
         uint64 rateB = 1.5e8; // 1.5 tokenB per tokenA
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_adjustMinRate1D,
+            program.build(Opcode.AdjustMinRate,
                 MinRateArgsBuilder.build(address(tokenA), address(tokenB), rateA, rateB)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -483,22 +483,22 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createLimitSwapWithFeeOrder(bool isFeeIn, bool isExactIn, bool isProgressive) private view returns (ISwapVM.Order memory, bytes memory) {
         uint32 feeBps = 100; // 1%
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         bytes memory feeInstruction;
         if (isProgressive) {
-            feeInstruction = program.build(_progressiveFeeInXD, FeeArgsBuilderExperimental.buildProgressiveFee(feeBps));
+            feeInstruction = program.build(Opcode.ProgressiveFeeIn, FeeArgsBuilderExperimental.buildProgressiveFee(feeBps));
         } else if (isFeeIn) {
-            feeInstruction = program.build(_flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(feeBps));
+            feeInstruction = program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(feeBps));
         } else {
-            feeInstruction = program.build(_flatFeeAmountOutXD, FeeArgsBuilder.buildFlatFee(feeBps));
+            feeInstruction = program.build(Opcode.FlatFeeAmountOut, FeeArgsBuilder.buildFlatFee(feeBps));
         }
 
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
             feeInstruction,
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -573,13 +573,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createDeadlineLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint40 deadline = uint40(block.timestamp + 3600); // 1 hour from now
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_deadline,
+            program.build(Opcode.Deadline,
                 ControlsArgsBuilder.buildDeadline(deadline)),
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -592,13 +592,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createSaltLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint64 salt = 12345678;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_salt,
+            program.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(salt)),
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -611,13 +611,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
     function _createInvalidateBitLimitSwapOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint32 bitIndex = 42;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_invalidateBit1D,
+            program.build(Opcode.InvalidateBit,
                 InvalidatorsArgsBuilder.buildInvalidateBit(bitIndex)),
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 
@@ -628,13 +628,13 @@ contract LimitSwapGas is Test, OpcodesDebug {
     }
 
     function _createLimitSwapInvalidateTokenInOrder(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_invalidateTokenIn1D)
+            program.build(Opcode.InvalidateTokenIn)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -648,19 +648,19 @@ contract LimitSwapGas is Test, OpcodesDebug {
         uint64 salt = 99999;
         uint32 feeBps = 30; // 0.3%
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_deadline,
+            program.build(Opcode.Deadline,
                 ControlsArgsBuilder.buildDeadline(deadline)),
-            program.build(_salt,
+            program.build(Opcode.Salt,
                 ControlsArgsBuilder.buildSalt(salt)),
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(BALANCE_A), BALANCE_B])),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_invalidateTokenIn1D)
+            program.build(Opcode.InvalidateTokenIn)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

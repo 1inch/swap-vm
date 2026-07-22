@@ -16,7 +16,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 import { MockNFT } from "./mocks/MockNft.sol";
@@ -46,11 +46,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForDeadline(uint40 deadline) internal view returns (ISwapVM.Order memory) {
         // Build program with deadline check and XYC swap
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._deadline, ControlsArgsBuilder.buildDeadline(deadline)),
-            program.build(XYCSwap._xycSwapXD),
-            program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            program.build(Opcode.Deadline, ControlsArgsBuilder.buildDeadline(deadline)),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -142,11 +142,11 @@ contract ControlsAquaTest is AquaSwapVMTest {
 
     function _createStrategyForCheckNft() internal view returns (ISwapVM.Order memory) {
         // Build program with NFT gate check and XYC swap
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(Controls._onlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTakerTokenBalanceNonZero(address(nftGate))),
-            program.build(XYCSwap._xycSwapXD),
-            program.build(Controls._salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+            program.build(Opcode.OnlyTakerTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
         );
 
         // Create order using Aqua
@@ -232,5 +232,94 @@ contract ControlsAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(taker);
         assertEq(takerBalanceA, 0, "Taker should have no tokenA");
         assertEq(takerBalanceB, 1050e18, "Taker should still have initial tokenB plus minted");
+    }
+
+    function _createStrategyForCheckNftTxOrigin() internal view returns (ISwapVM.Order memory) {
+        // Build program with tx.origin NFT gate check and XYC swap
+        Program program;
+        bytes memory bytecode = bytes.concat(
+            program.build(Opcode.OnlyTxOriginTokenBalanceNonZero, ControlsArgsBuilder.buildTokenBalanceNonZero(address(nftGate))),
+            program.build(Opcode.XYCSwap),
+            program.build(Opcode.Salt, abi.encodePacked(vm.randomUint())) // ensure unique order hash
+        );
+
+        // Create order using Aqua
+        ISwapVM.Order memory order = createStrategy(bytecode);
+        return order;
+    }
+
+    function test_OnlyTxOriginTokenBalanceNonZero_Success() public {
+        address trader = makeAddr("trader");
+
+        // Mint NFT to trader (tx.origin), NOT to the taker contract
+        nftGate.mint(trader);
+
+        // Create order using Aqua
+        ISwapVM.Order memory order = _createStrategyForCheckNftTxOrigin();
+
+        // Ship strategy to Aqua
+        shipStrategy(order, tokenA, tokenB, 100e18, 100e18);
+
+        // Prepare swap
+        SwapProgram memory swapProgram = SwapProgram({
+            amount: 50e18,
+            taker: taker,
+            tokenA: tokenA,
+            tokenB: tokenB,
+            zeroForOne: false,  // swap B for A
+            isExactIn: true
+        });
+
+        mintTokenInToTaker(swapProgram);
+
+        // Execute swap with trader as tx.origin while taker contract is the actual taker
+        vm.prank(address(this), trader);
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+
+        // Verify swap succeeded
+        assertEq(amountIn, 50e18, "Incorrect amountIn");
+        uint256 expectedOut = uint256(50e18) * uint256(100e18) / (uint256(100e18) + uint256(50e18)); // ~33.33e18
+        assertEq(amountOut, expectedOut, "Incorrect amountOut");
+
+        // Verify the taker contract itself holds no NFT - the gate passed via tx.origin
+        assertEq(nftGate.balanceOf(address(taker)), 0, "Taker contract should not have the NFT");
+        assertEq(nftGate.balanceOf(trader), 1, "Trader should still have the NFT");
+    }
+
+    function test_OnlyTxOriginTokenBalanceNonZero_Fail() public {
+        address trader = makeAddr("trader");
+
+        // DO NOT mint NFT to trader - the gate check should fail
+        // Mint NFT to the taker contract to prove the check is on tx.origin, not the taker
+        nftGate.mint(address(taker));
+
+        // Create order using Aqua
+        ISwapVM.Order memory order = _createStrategyForCheckNftTxOrigin();
+
+        // Ship strategy to Aqua
+        shipStrategy(order, tokenA, tokenB, 100e18, 100e18);
+
+        // Prepare swap
+        SwapProgram memory swapProgram = SwapProgram({
+            amount: 50e18,
+            taker: taker,
+            tokenA: tokenA,
+            tokenB: tokenB,
+            zeroForOne: false,  // swap B for A
+            isExactIn: true
+        });
+
+        mintTokenInToTaker(swapProgram);
+
+        // Execute swap - should fail because tx.origin doesn't hold the NFT
+        vm.prank(address(this), trader);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Controls.TxOriginTokenBalanceIsZero.selector,
+                trader,
+                address(nftGate)
+            )
+        );
+        swap(swapProgram, order);
     }
 }

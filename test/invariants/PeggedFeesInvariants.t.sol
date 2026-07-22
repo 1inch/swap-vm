@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { PeggedSwapArgsBuilder } from "../../src/instructions/PeggedSwap.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
@@ -176,33 +176,33 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 _balanceB,
         FeeConfig memory fees
     ) internal view returns (bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
 
         return bytes.concat(
             // Protocol fees BEFORE balances
-            (fees.protocolFeeOutBps > 0) ? program.build(_protocolFeeAmountOutXD,
+            (fees.protocolFeeOutBps > 0) ? program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeOutBps, fees.feeRecipient)) : bytes(""),
-            (fees.protocolFeeInBps > 0) ? program.build(_protocolFeeAmountInXD,
+            (fees.protocolFeeInBps > 0) ? program.build(Opcode.ProtocolFeeAmountIn,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
-            (fees.dynamicFeeProvider != address(0)) ? program.build(_dynamicProtocolFeeAmountInXD,
+            (fees.dynamicFeeProvider != address(0)) ? program.build(Opcode.DynamicProtocolFeeAmountIn,
                 FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
 
             // Balances
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([_balanceA, _balanceB])),
 
             // Regular fees AFTER balances
-            (fees.flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
+            (fees.flatFeeInBps > 0) ? program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeInBps)) : bytes(""),
-            (fees.flatFeeOutBps > 0) ? program.build(_flatFeeAmountOutXD,
+            (fees.flatFeeOutBps > 0) ? program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeOutBps)) : bytes(""),
-            (fees.progressiveFeeInBps > 0) ? program.build(_progressiveFeeInXD,
+            (fees.progressiveFeeInBps > 0) ? program.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
-            (fees.progressiveFeeOutBps > 0) ? program.build(_progressiveFeeOutXD,
+            (fees.progressiveFeeOutBps > 0) ? program.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
             // PeggedSwap instruction
-            program.build(_peggedSwapGrowPriceRange2D,
+            program.build(Opcode.PeggedSwap,
                 PeggedSwapArgsBuilder.build(
                     PeggedSwapArgsBuilder.Args({
                         x0: x0,

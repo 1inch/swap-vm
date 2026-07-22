@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 
 import { ISwapVM } from "../../src/SwapVM.sol";
 import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
@@ -30,10 +30,10 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
         TokenMock tokenA,
         TokenMock tokenB
     ) external view returns (ISwapVM.Order memory) {
-        Program memory p = ProgramBuilder.init(_opcodes());
+        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(XYCSwap._xycSwapXD),
-            p.build(Controls._salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
+            p.build(Opcode.XYCSwap),
+            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({

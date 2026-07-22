@@ -17,7 +17,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
@@ -96,15 +96,15 @@ contract DutchAuctionLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         uint16 duration = 300;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            useIn ? program.build(_dutchAuctionBalanceIn1D,
+            useIn ? program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)) :
-                program.build(_dutchAuctionBalanceOut1D,
+                program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
         );
 

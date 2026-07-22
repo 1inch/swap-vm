@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { LimitSwapArgsBuilder } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionArgsBuilder } from "../../src/instructions/DutchAuction.sol";
@@ -104,15 +104,15 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint32 feeBps = 100; // 1% fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -135,15 +135,15 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 98e16;
         uint32 feeBps = 200; // 2% fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_flatFeeAmountOutXD,
+            program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -167,15 +167,15 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 98e16;
         uint32 feeBps = 150; // 1.5% protocol fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_protocolFeeAmountOutXD,
+            program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -199,18 +199,18 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint32 flatFeeBps = 50; // 0.5% flat fee
         uint32 protocolFeeBps = 100; // 1% protocol fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
             // Multiple fees
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(_protocolFeeAmountOutXD,
+            program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -233,15 +233,15 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 95e16; // More aggressive adjustment
         uint32 feeBps = 1000; // 10% fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -268,17 +268,17 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint32 feeBps = 100; // 1% fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceIn1D,
+            program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -307,17 +307,17 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;
         uint32 feeBps = 150; // 1.5% fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceOut1D,
+            program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_flatFeeAmountOutXD,
+            program.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(feeBps)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -346,17 +346,17 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 maxPriceDecay = 99e16;  // Less aggressive max price adjustment
         uint32 feeBps = 200; // 2% protocol fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceIn1D,
+            program.build(Opcode.DutchAuctionBalanceIn,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_protocolFeeAmountOutXD,
+            program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(feeBps, protocolFeeCollector)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,
@@ -386,19 +386,19 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint32 flatFeeBps = 75; // 0.75% flat fee
         uint32 protocolFeeBps = 100; // 1% protocol fee
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_staticBalancesXD,
+            program.build(Opcode.StaticBalances,
                 BalancesArgsBuilder.build([uint256(1e30), uint256(2e30)])),
-            program.build(_dutchAuctionBalanceOut1D,
+            program.build(Opcode.DutchAuctionBalanceOut,
                 DutchAuctionArgsBuilder.build(startTime, duration, decayFactor)),
-            program.build(_flatFeeAmountInXD,
+            program.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(flatFeeBps)),
-            program.build(_protocolFeeAmountOutXD,
+            program.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(protocolFeeBps, protocolFeeCollector)),
-            program.build(_limitSwap1D,
+            program.build(Opcode.LimitSwap,
                 LimitSwapArgsBuilder.build(address(tokenA), address(tokenB))),
-            program.build(_baseFeeAdjuster1D,
+            program.build(Opcode.BaseFeeAdjuster,
                 BaseFeeAdjusterArgsBuilder.build(
                     baseGasPrice,
                     ethToTokenPrice,

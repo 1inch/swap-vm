@@ -24,7 +24,7 @@ import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol"
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
 
-import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
 
@@ -118,7 +118,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 actualBalanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -140,9 +140,9 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(actualBalanceB), actualBalanceA])),
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
-                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(actualBalanceB), actualBalanceA])),
+                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.flatFee.toUint32())),
+                program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )
@@ -586,7 +586,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -608,9 +608,9 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(balanceB), balanceA])),
-                program.build(Fee._flatFeeAmountInXD, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
-                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceB), balanceA])),
+                program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)), // 0.3% fee
+                program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )
@@ -631,7 +631,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? balanceGt : balanceLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? balanceLt : balanceGt;
 
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenB),
@@ -653,8 +653,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
             postTransferOutTarget: address(0),
             postTransferOutData: "",
             program: bytes.concat(
-                program.build(Balances._dynamicBalancesXD, BalancesArgsBuilder.build([uint256(balanceB), balanceA])),
-                program.build(XYCConcentrate._xycConcentrateGrowLiquidity2D,
+                program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build([uint256(balanceB), balanceA])),
+                program.build(Opcode.XYCConcentrateSwap,
                     XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
                 )
             )

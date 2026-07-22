@@ -16,7 +16,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
 import { DecayArgsBuilder } from "../../src/instructions/Decay.sol";
@@ -115,13 +115,13 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1000e18, sqrtPmin, sqrtPmax);
         uint16 decayPeriod = 300; // 5 minutes
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_decayXD,
+            program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycConcentrateGrowLiquidity2D,
+            program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
 
@@ -162,13 +162,13 @@ contract ConcentrateXYCDecayInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 sqrtPmin = Math.sqrt(0.8e36);
         uint256 sqrtPmax = Math.sqrt(1.25e36);
         (uint256 balanceA, uint256 balanceB) = _concentrateBalances(1500e18, sqrtPmin, sqrtPmax);
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program program;
         bytes memory bytecode = bytes.concat(
-            program.build(_dynamicBalancesXD,
+            program.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([balanceA, balanceB])),
-            program.build(_decayXD,
+            program.build(Opcode.Decay,
                 DecayArgsBuilder.build(decayPeriod)),
-            program.build(_xycConcentrateGrowLiquidity2D,
+            program.build(Opcode.XYCConcentrateSwap,
                 XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax))
         );
 

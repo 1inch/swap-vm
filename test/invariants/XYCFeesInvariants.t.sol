@@ -15,7 +15,7 @@ import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
-import { Program, ProgramBuilder } from "../utils/ProgramBuilder.sol";
+import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { BalancesArgsBuilder } from "../../src/instructions/Balances.sol";
 import { FeeArgsBuilder } from "../../src/instructions/Fee.sol";
 import { FeeArgsBuilderExperimental } from "../../src/instructions/FeeExperimental.sol";
@@ -179,37 +179,37 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 _balanceB,
         FeeConfig memory fees
     ) internal view returns (bytes memory) {
-        Program memory program = ProgramBuilder.init(_opcodes());
+        Program p;
 
         return bytes.concat(
             // Protocol fees BEFORE balances
-            (fees.protocolFeeOutBps > 0) ? program.build(_protocolFeeAmountOutXD,
+            (fees.protocolFeeOutBps > 0) ? p.build(Opcode.ProtocolFeeAmountOut,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeOutBps, fees.feeRecipient)) : bytes(""),
 
             // Dynamic protocol fee on amountIn BEFORE balances
-            (fees.dynamicFeeProvider != address(0)) ? program.build(_dynamicProtocolFeeAmountInXD,
+            (fees.dynamicFeeProvider != address(0)) ? p.build(Opcode.DynamicProtocolFeeAmountIn,
                 FeeArgsBuilder.buildDynamicProtocolFee(fees.dynamicFeeProvider)) : bytes(""),
 
             // Protocol fee on amountIn BEFORE balances
-            (fees.protocolFeeInBps > 0) ? program.build(_protocolFeeAmountInXD,
+            (fees.protocolFeeInBps > 0) ? p.build(Opcode.ProtocolFeeAmountIn,
                 FeeArgsBuilder.buildProtocolFee(fees.protocolFeeInBps, fees.feeRecipient)) : bytes(""),
 
             // Balances
-            program.build(_dynamicBalancesXD,
+            p.build(Opcode.DynamicBalances,
                 BalancesArgsBuilder.build([_balanceA, _balanceB])),
 
             // Regular fees AFTER balances (0 = disabled)
-            (fees.flatFeeInBps > 0) ? program.build(_flatFeeAmountInXD,
+            (fees.flatFeeInBps > 0) ? p.build(Opcode.FlatFeeAmountIn,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeInBps)) : bytes(""),
-            (fees.flatFeeOutBps > 0) ? program.build(_flatFeeAmountOutXD,
+            (fees.flatFeeOutBps > 0) ? p.build(Opcode.FlatFeeAmountOut,
                 FeeArgsBuilder.buildFlatFee(fees.flatFeeOutBps)) : bytes(""),
-            (fees.progressiveFeeInBps > 0) ? program.build(_progressiveFeeInXD,
+            (fees.progressiveFeeInBps > 0) ? p.build(Opcode.ProgressiveFeeIn,
                 FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeInBps)) : bytes(""),
-            (fees.progressiveFeeOutBps > 0) ? program.build(_progressiveFeeOutXD,
+            (fees.progressiveFeeOutBps > 0) ? p.build(Opcode.ProgressiveFeeOut,
                 FeeArgsBuilderExperimental.buildProgressiveFee(fees.progressiveFeeOutBps)) : bytes(""),
 
             // Swap instruction
-            program.build(_xycSwapXD)
+            p.build(Opcode.XYCSwap)
         );
     }
 
