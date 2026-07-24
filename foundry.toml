@@ -21,3 +21,17 @@ solc_version   = "0.8.30"
 optimizer      = true
 optimizer_runs = 700
 via_ir         = true
+
+# Profile used by Kontrol symbolic execution (`FOUNDRY_PROFILE=kontrol kontrol build`).
+# Kept separate from `default` on purpose: `evm_version` is unpinned in `default`, and
+# pinning it there would change the emitted bytecode and invalidate `.gas-snapshot`,
+# which CI gates on via `yarn snapshot:check`. Proofs, unlike snapshots, must pin the
+# EVM version — gas costs and opcode availability are hardfork-dependent, so an
+# unpinned version means a proof does not identify which semantics it verified.
+# Keep this in sync with the `--schedule` value in kontrol.toml.
+[profile.kontrol]
+solc_version   = "0.8.30"
+optimizer      = true
+optimizer_runs = 700
+via_ir         = true
+evm_version    = "cancun"

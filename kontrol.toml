@@ -1,0 +1,59 @@
+[build.default]
+foundry-project-root       = '.'
+regen                      = false
+rekompile                  = false
+verbose                    = false
+debug                      = false
+require                    = 'lemmas.k'
+module-import              = 'TestBase:SWAPVM-LEMMAS'
+auxiliary-lemmas           = true
+o2                         = true
+
+[prove.default]
+foundry-project-root       = '.'
+verbose                    = false
+debug                      = false
+reinit                     = false
+cse                        = false
+workers                    = 4
+failure-information        = true
+counterexample-information = true
+minimize-proofs            = false
+fail-fast                  = false
+smt-timeout                = 5000
+run-constructor            = false
+no-stack-checks            = true
+
+# Pin the hardfork the proof is carried out under. Must match `evm_version` in the
+# `kontrol` profile of foundry.toml, otherwise the proof verifies bytecode compiled
+# for one schedule against the cost/opcode rules of another.
+schedule                   = 'CANCUN'
+
+# Checkpointing. Kontrol persists proof state *between* nodes, so the distance between
+# nodes determines how much work a crash or timeout discards. The upstream default
+# (max-depth 25000, every break-on-* disabled) produces edges thousands of steps long:
+# a backend crash mid-edge loses everything since the last node, and the node count
+# stays frozen so the proof looks hung when it is in fact progressing.
+#
+# These settings trade some per-node overhead for durable, observable progress:
+# a crash costs one small node, `kontrol list` node counts become a live progress
+# signal, and a stall can be localised to a single basic block instead of one opaque
+# multi-thousand-step edge. Raise max-depth once a proof is known to close quickly.
+max-depth                  = 2000
+break-on-basic-blocks      = true
+break-on-calls             = true
+break-on-jumpi             = false
+break-on-jump              = false
+break-on-storage           = false
+break-on-cheatcodes        = false
+optimize-kcfg              = true
+
+[show.default]
+foundry-project-root       = '.'
+verbose                    = false
+debug                      = false
+use-hex-encoding           = false
+
+[view-kcfg.default]
+foundry-project-root       = '.'
+use-hex-encoding           = false
