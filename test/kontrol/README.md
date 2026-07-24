@@ -90,14 +90,19 @@ version of your lemmas — so a proof that still fails looks like "the lemmas di
 when in fact they were never loaded. Always verify:
 
 ```bash
-grep -c 'mul-bound-transfer' out/kompiled/definition.kore   # expect > 0
+grep -c 'mul-bound-transfer' kompiled/definition.kore   # expect > 0
 ```
 
 If the count is zero, refresh the copy by hand and rebuild:
 
 ```bash
-cp lemmas.k out/kompiled/requires/lemmas.k && FOUNDRY_PROFILE=kontrol kontrol build --rekompile
+cp lemmas.k kompiled/requires/lemmas.k && FOUNDRY_PROFILE=kontrol kontrol build --rekompile
 ```
+
+Note the output location: in this repo `kontrol build` writes to a **top-level
+`kompiled/`**, not `out/kompiled/`. The path depends on the project's foundry `out`
+setting, so check `find . -maxdepth 2 -name definition.kore` before assuming either. Both
+`kompiled/` and the `digest` file are gitignored — the compiled definition is ~317 MB.
 
 This is why every rule in `lemmas.k` carries a unique label.
 

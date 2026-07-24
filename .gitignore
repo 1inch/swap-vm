@@ -13,3 +13,10 @@ build
 !.env.example
 venv/
 .yarn
+
+# Kontrol build and proof artifacts. `kontrol build` writes the compiled K
+# definition to a top-level `kompiled/` (~317 MB) plus a `digest` file, neither
+# of which is covered by the `out` rule above.
+kompiled/
+digest
+kontrol-proofs/
