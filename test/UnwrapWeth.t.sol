@@ -223,13 +223,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
     // ==================== FUZZ TESTS ====================
 
     function testFuzz_UnwrapWeth(
-        bool makerUnwrapWeth,
-        bool takerUnwrapWeth,
+        uint8 seedUnwrapWeth,
         bool isExactIn,
         uint128 rawAmount
     ) public {
         // Can't have same token for both in and out
-        vm.assume(!(makerUnwrapWeth && takerUnwrapWeth));
+        bool makerUnwrapWeth = seedUnwrapWeth % 3 == 0;
+        bool takerUnwrapWeth = seedUnwrapWeth % 3 == 1;
 
         uint256 amount = bound(uint256(rawAmount), 1e15, ORDER_BALANCE / 2);
 

@@ -42,15 +42,17 @@ library FeeFlatIn {
 
         if (ctx.query.isExactIn) {
             uint256 fee = (ctx.swap.amountIn * feeBps).ceilDiv(BPS);
-
             ctx.swap.amountIn -= fee;
+
+            uint256 reduction = ctx.swap.amountIn;
             ctx.runLoop();
-            ctx.swap.amountIn += fee;
+            reduction -= ctx.swap.amountIn;
+
+            if (reduction == 0) ctx.swap.amountIn += fee;
+            else ctx.swap.amountIn += (ctx.swap.amountIn * feeBps).ceilDiv(BPS - feeBps);
         } else {
             ctx.runLoop();
-
-            uint256 fee = (ctx.swap.amountIn * feeBps).ceilDiv(BPS - feeBps);
-            ctx.swap.amountIn += fee;
+            ctx.swap.amountIn += (ctx.swap.amountIn * feeBps).ceilDiv(BPS - feeBps);
         }
     }
 }
@@ -86,17 +88,8 @@ library FeeFlatOut {
     function exec(Context memory ctx, bytes calldata args) internal {
         uint24 feeBps = parse(args);
 
-        if (ctx.query.isExactIn) {
-            ctx.runLoop();
-
-            uint256 fee = (ctx.swap.amountOut * feeBps).ceilDiv(BPS);
-            ctx.swap.amountOut -= fee;
-        } else {
-            uint256 fee = (ctx.swap.amountOut * feeBps).ceilDiv(BPS - feeBps);
-
-            ctx.swap.amountOut += fee;
-            ctx.runLoop();
-            ctx.swap.amountOut -= fee;
-        }
+        if (!ctx.query.isExactIn) ctx.swap.amountOut += (ctx.swap.amountOut * feeBps).ceilDiv(BPS - feeBps);
+        ctx.runLoop();
+        ctx.swap.amountOut -= (ctx.swap.amountOut * feeBps).ceilDiv(BPS);
     }
 }

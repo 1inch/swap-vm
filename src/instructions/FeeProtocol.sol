@@ -199,15 +199,17 @@ library FeeProtocol {
         if (isTokenIn) {
             if (ctx.query.isExactIn) {
                 uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
-
                 ctx.swap.amountIn -= fee;
+
+                uint256 reduction = ctx.swap.amountIn;
                 ctx.runLoop();
-                ctx.swap.amountIn += fee;
+                reduction -= ctx.swap.amountIn;
+
+                if (reduction == 0) ctx.swap.amountIn += fee;
+                else ctx.swap.amountIn += ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             } else {
                 ctx.runLoop();
-
-                uint256 fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
-                ctx.swap.amountIn += fee;
+                ctx.swap.amountIn += ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             }
 
             if (totalSurplusBps > 0) {
@@ -216,18 +218,9 @@ library FeeProtocol {
                 surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(ctx.swap.balanceOut);
             }
         } else {
-            if (ctx.query.isExactIn) {
-                ctx.runLoop();
-
-                uint256 fee = ctx.swap.amountOut * totalFeeBps / BPS;
-                ctx.swap.amountOut -= fee;
-            } else {
-                uint256 fee = ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
-
-                ctx.swap.amountOut += fee;
-                ctx.runLoop();
-                ctx.swap.amountOut -= fee;
-            }
+            if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
+            ctx.runLoop();
+            ctx.swap.amountOut -= ctx.swap.amountOut * totalFeeBps / BPS;
 
             if (totalSurplusBps > 0) {
                 // Using floor division favors maker
