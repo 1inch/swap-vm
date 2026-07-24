@@ -68,14 +68,12 @@ Analog: RFQ/limit-order style flow (not a pool AMM).
 Difference note: SwapVM composes this behavior via instruction ordering and invalidators, so execution/fee behavior can differ from traditional order protocols.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_invalidateBit1D, InvalidatorsArgsBuilder.buildInvalidateBit(123)), // One-time replay protection
-    program.build(_staticBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenA, tokenB]),
-        dynamic([uint256(1000e18), uint256(2000e18)])
-    )), // Set fixed-rate balances for 1D swap
-    program.build(_limitSwap1D, LimitSwapArgsBuilder.build(tokenA, tokenB)) // Compute limit-order amounts
+    program.build(Opcode.InvalidateBit, InvalidatorsArgsBuilder.buildInvalidateBit(123)), // One-time replay protection
+    program.build(Opcode.StaticBalances,
+        BalancesArgsBuilder.build([uint256(1000e18), uint256(2000e18)])), // Set fixed-rate balances for 1D swap
+    program.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(tokenA, tokenB)) // Compute limit-order amounts
 );
 ```
 
@@ -86,14 +84,12 @@ Analog: partially fillable limit-order systems.
 Difference note: partial-fill accounting is instruction-driven (`_invalidateTokenOut1D`) and can differ from external orderbook accounting models.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_staticBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenA, tokenB]),
-        dynamic([uint256(1000e18), uint256(2000e18)])
-    )), // Set fixed-rate balances for 1D swap
-    program.build(_limitSwap1D, LimitSwapArgsBuilder.build(tokenA, tokenB)), // Compute limit-order amounts
-    program.build(_invalidateTokenOut1D) // Track cumulative output for partial fills
+    program.build(Opcode.StaticBalances,
+        BalancesArgsBuilder.build([uint256(1000e18), uint256(2000e18)])), // Set fixed-rate balances for 1D swap
+    program.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(tokenA, tokenB)), // Compute limit-order amounts
+    program.build(Opcode.InvalidateTokenOut) // Track cumulative output for partial fills
 );
 ```
 
@@ -112,7 +108,6 @@ bytes memory bytecode = bytes.concat(
     - `XYCSwap._xycSwapXD`
     - `PeggedSwap._peggedSwapGrowPriceRange2D`
     - `XYCConcentrate._xycConcentrateGrowLiquidity2D`
-    - `XYCConcentrateExperimental._xycConcentrateGrowPriceRange2D`
 - **Common Add-ons:**
   - Fee instructions (flat/progressive/protocol/dynamic-protocol variants)
   - `Decay._decayXD`
@@ -127,13 +122,11 @@ Analog: Uniswap V2-style `x*y=k` pool.
 Difference note: SwapVM uses composable VM instructions, so fee layering and exact internal math may differ from canonical Uniswap V2 implementations.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenA, tokenB]),
-        dynamic([uint256(1_000e18), uint256(1_000e18)])
-    )), // Initialize AMM reserves in dynamic storage
-    program.build(_xycSwapXD) // Apply x*y=k swap pricing
+    program.build(Opcode.DynamicBalances,
+        BalancesArgsBuilder.build([uint256(1_000e18), uint256(1_000e18)])), // Initialize AMM reserves in dynamic storage
+    program.build(Opcode.XYCSwap) // Apply x*y=k swap pricing
 );
 ```
 
@@ -144,17 +137,14 @@ Analog: Uniswap V3-style concentrated liquidity behavior.
 Difference note: price-range logic and fee composition are implemented through SwapVM instructions and can differ from Uniswap V3 internals/math details.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenLt, tokenGt]),
-        dynamic([uint256(1_000e18), uint256(1_000e18)])
-    )), // Initialize AMM reserves in dynamic storage
-    program.build(_xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(
+    program.build(Opcode.DynamicBalances,
+        BalancesArgsBuilder.build([uint256(1_000e18), uint256(1_000e18)])), // Initialize AMM reserves in dynamic storage
+    program.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(
         sqrtPriceMin,
         sqrtPriceMax
-    )), // Apply concentrated-liquidity bounds
-    program.build(_xycSwapXD) // Execute swap using concentrated state
+    )) // Apply concentrated-liquidity bounds and compute swap amounts
 );
 ```
 
@@ -165,13 +155,11 @@ Analog: Curve StableSwap-style behavior.
 Difference note: SwapVM pegged math and fee integration are not byte-for-byte Curve StableSwap and may produce different edge-case behavior.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenLt, tokenGt]),
-        dynamic([uint256(1_000e18), uint256(1_000e18)])
-    )), // Initialize AMM reserves in dynamic storage
-    program.build(_peggedSwapGrowPriceRange2D, PeggedSwapArgsBuilder.build(
+    program.build(Opcode.DynamicBalances,
+        BalancesArgsBuilder.build([uint256(1_000e18), uint256(1_000e18)])), // Initialize AMM reserves in dynamic storage
+    program.build(Opcode.PeggedSwap, PeggedSwapArgsBuilder.build(
         PeggedSwapArgsBuilder.Args({
             x0: x0,
             y0: y0,
@@ -190,14 +178,12 @@ Analog: Mooniswap-style virtual balances/decay behavior.
 Difference note: decay is composed as a dedicated instruction with SwapVM-specific interaction with fees and swap primitives.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
-    program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenA, tokenB]),
-        dynamic([uint256(1_000e18), uint256(1_000e18)])
-    )), // Initialize AMM reserves in dynamic storage
-    program.build(_decayXD, DecayArgsBuilder.build(300)), // Apply virtual-balance decay offset
-    program.build(_xycSwapXD) // Execute swap with decay-adjusted state
+    program.build(Opcode.DynamicBalances,
+        BalancesArgsBuilder.build([uint256(1_000e18), uint256(1_000e18)])), // Initialize AMM reserves in dynamic storage
+    program.build(Opcode.Decay, DecayArgsBuilder.build(300)), // Apply virtual-balance decay offset
+    program.build(Opcode.XYCSwap) // Execute swap with decay-adjusted state
 );
 ```
 
@@ -231,17 +217,15 @@ bytes memory bytecode = bytes.concat(
 Use case: allow execution only for takers that hold a required token/NFT balance.
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 bytes memory bytecode = bytes.concat(
     // Gate: taker must hold gateToken (or NFT) balance > 0
-    program.build(_onlyTakerTokenBalanceNonZero,
+    program.build(Opcode.OnlyTakerTokenBalanceNonZero,
         ControlsArgsBuilder.buildTokenBalanceNonZero(gateToken)), // Restrict execution to eligible takers
     // Regular limit-order path
-    program.build(_staticBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenIn, tokenOut]),
-        dynamic([uint256(1_000e18), uint256(2_000e18)])
-    )), // Set fixed-rate balances for 1D swap
-    program.build(_limitSwap1D, LimitSwapArgsBuilder.build(tokenIn, tokenOut)) // Compute limit-order amounts
+    program.build(Opcode.StaticBalances,
+        BalancesArgsBuilder.build([uint256(1_000e18), uint256(2_000e18)])), // Set fixed-rate balances for 1D swap
+    program.build(Opcode.LimitSwap, LimitSwapArgsBuilder.build(tokenIn, tokenOut)) // Compute limit-order amounts
 );
 ```
 
@@ -251,11 +235,11 @@ Use case: evaluate multiple AMM strategy branches and execute the one that gives
 Reference: `test/RunLoop.t.sol` (`test_BestRouteSelector_XYC_vs_Pegged`).
 
 ```solidity
-Program memory program = ProgramBuilder.init(_opcodes());
+Program program;
 
-bytes memory strategy1 = program.build(_xycSwapXD); // Branch A: x*y=k swap
+bytes memory strategy1 = program.build(Opcode.XYCSwap); // Branch A: x*y=k swap
 bytes memory strategy2 = program.build(
-    _peggedSwapGrowPriceRange2D,
+    Opcode.PeggedSwap,
     PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
         x0: 50e18,
         y0: 50e18,
@@ -273,11 +257,9 @@ bytes memory selectorArgs = abi.encodePacked(
 ); // Packed branch bytecodes
 
 bytes memory bytecode = bytes.concat(
-    program.build(_dynamicBalancesXD, BalancesArgsBuilder.build(
-        dynamic([tokenA, tokenB]),
-        dynamic([uint256(100e18), uint256(100e18)])
-    )), // Initialize shared reserves
-    program.build(_extruction, selectorArgs) // Delegate to selector and run best branch
+    program.build(Opcode.DynamicBalances,
+        BalancesArgsBuilder.build([uint256(100e18), uint256(100e18)])), // Initialize shared reserves
+    program.build(Opcode.Extruction, selectorArgs) // Delegate to selector and run best branch
 );
 ```
 
@@ -289,4 +271,3 @@ Complex scenarios with conditional jumps/branching (and, especially, containing 
 - Authorization/gating correctness (restricted users fail, authorized users pass as intended).
 - Economic safety across all branches (no branch yields unintended favorable pricing or bypasses checks).
 - Termination/liveness: no hidden loops or dead-end paths that break execution.
-
