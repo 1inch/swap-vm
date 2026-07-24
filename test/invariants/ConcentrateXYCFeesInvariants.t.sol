@@ -341,6 +341,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: aToB,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

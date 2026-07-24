@@ -123,6 +123,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

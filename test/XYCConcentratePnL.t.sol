@@ -126,6 +126,7 @@ contract XYCConcentratePnLTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

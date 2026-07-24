@@ -198,13 +198,14 @@ contract TransferModesCombinationsTest is Test {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
             isExactIn: true,
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
             hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: useTransferFromAndAquaPush,
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -223,13 +224,14 @@ contract TransferModesCombinationsTest is Test {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
             isExactIn: true,
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
             hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

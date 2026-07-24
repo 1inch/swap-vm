@@ -58,7 +58,10 @@ contract FeeProgressivePartialFillTest is Test {
             }))
         );
 
-        uint256 realAmount = _quoteResult(_createOrder(program), amount, true);
+        uint256 realAmount;
+        try swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(true))returns (uint256 amountIn, uint256, bytes32) { realAmount = amountIn; }
+        catch (bytes memory reason) { require(bytes4(reason) == TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector); }
+
         uint256 realFee = realAmount - amountPartial;
 
         uint256 feeDesired = (feeBps * realAmount * realAmount).ceilDiv(denominator + feeBps * realAmount);
@@ -105,7 +108,10 @@ contract FeeProgressivePartialFillTest is Test {
             }))
         );
 
-        uint256 realAmount = _quoteResult(_createOrder(program), amount, false);
+        uint256 realAmount;
+        try swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(false))returns (uint256, uint256 amountOut, bytes32) { realAmount = amountOut; }
+        catch (bytes memory reason) { require(bytes4(reason) == TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector); }
+
         uint256 realFee = amountPartial - realAmount;
 
         uint256 feeDesired = (feeBps * amountPartial * amountPartial).ceilDiv(denominator + feeBps * amountPartial);
@@ -128,25 +134,6 @@ contract FeeProgressivePartialFillTest is Test {
 
         // Imagine realFee is 1 wei less -> progressive feeBps breaks
         if (realFee != 0) assertLt((realFee - 1) * (denominator + feeBps * amountPartial), feeBps * amountPartial * amountPartial, "One wei less realFee would favor taker");
-    }
-
-    /// @dev TakerTraits validation requires the queried amount to match the computed one,
-    ///   so a partially filled quote reverts — recover the computed amount from the error
-    function _quoteResult(ISwapVM.Order memory order, uint256 amount, bool isExactIn) internal view returns (uint256) {
-        try swapVM.asView().quote(order, amount, _makeTakerData(isExactIn)) returns (uint256 amountIn, uint256 amountOut, bytes32) {
-            return isExactIn ? amountIn : amountOut;
-        } catch (bytes memory reason) {
-            bytes4 selector = bytes4(reason);
-            if (selector == TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector && !isExactIn) return 0;
-            if (
-                selector == TakerTraitsLib.TakerTraitsTakerAmountInMismatch.selector && isExactIn ||
-                selector == TakerTraitsLib.TakerTraitsTakerAmountOutMismatch.selector && !isExactIn
-            ) {
-                (, uint256 computedAmount) = this.decodeMismatch(reason);
-                return computedAmount;
-            }
-            assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
-        }
     }
 
     function decodeMismatch(bytes calldata reason) external pure returns (uint256 takerAmount, uint256 computedAmount) {
@@ -189,6 +176,7 @@ contract FeeProgressivePartialFillTest is Test {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: true,
             threshold: "",
             to: address(0),
             deadline: 0,

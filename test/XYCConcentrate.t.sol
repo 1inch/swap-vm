@@ -160,6 +160,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
+            allowPartialFill: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,
@@ -185,6 +186,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
+            allowPartialFill: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,

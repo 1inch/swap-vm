@@ -58,13 +58,14 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddress,
             isExactIn: isExactIn,
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
             hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false, // Taker should push via callback
+            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

@@ -131,6 +131,7 @@ contract FeeTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,

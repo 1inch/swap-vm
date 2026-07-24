@@ -345,6 +345,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: zeroForOne,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

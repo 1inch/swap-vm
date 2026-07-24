@@ -335,6 +335,7 @@ contract RunLoopTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: bytes(""),
             to: taker,
             deadline: 0,

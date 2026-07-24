@@ -101,11 +101,12 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
-            isAToB: isAToB,
             shouldUnwrapWeth: takerUnwrapWeth,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "",
             to: recipient,
             deadline: 0,

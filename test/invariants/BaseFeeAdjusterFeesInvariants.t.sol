@@ -414,6 +414,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

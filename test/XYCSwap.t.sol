@@ -129,6 +129,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: taker,
             deadline: 0,

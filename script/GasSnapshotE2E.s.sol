@@ -422,6 +422,7 @@ contract GasSnapshotE2E is Script {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

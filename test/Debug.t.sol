@@ -105,11 +105,12 @@ contract DebugTest is Test {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: true,
-            isAToB: true,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(this),
             deadline: 0,

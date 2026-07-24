@@ -251,6 +251,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: false,
             threshold: bytes(""),
             to: address(this),
             deadline: 0,

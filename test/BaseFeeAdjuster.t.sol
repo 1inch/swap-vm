@@ -386,6 +386,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: false,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

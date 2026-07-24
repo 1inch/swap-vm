@@ -116,6 +116,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,
