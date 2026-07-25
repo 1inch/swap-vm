@@ -189,8 +189,15 @@ library TWAPSwap {
         }
 
         uint256 decay = DECAY_FACTOR.pow(block.timestamp - auctionStartTime, ONE);
-        ctx.swap.balanceIn = baseAmountIn;
-        ctx.swap.balanceOut = baseAmountOut * decay / ONE;
+        uint256 scaledOut = baseAmountOut * decay / ONE;
+
+        if (available > 0 && scaledOut > 0) {
+            ctx.swap.balanceIn = (baseAmountIn * available).ceilDiv(scaledOut);
+            ctx.swap.balanceOut = available;
+        } else {
+            ctx.swap.balanceIn = baseAmountIn;
+            ctx.swap.balanceOut = scaledOut;
+        }
 
         ctx.runLoop(); // Reuse LimitSwap logic for final amount calculation
 

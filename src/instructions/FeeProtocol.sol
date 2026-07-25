@@ -19,7 +19,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev Flat percent fee is payed by taker
 ///   Fee in token in is added to amount in, fee in token out is charged from amount out
 /// @dev Surplus fee is payed by maker
-///   Estimated amount in / out is linearly scaled to the swap amount
+///   Estimated amount in / out is linearly scaled to the swap amount (include FeeProtocol before InvalidateTokenIn / InvalidateTokenOut)
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
 /// @dev Encoding: [uint8 header, [uint8 flags, address target, uint24 feeBps?, uint24 surplusBps?] * count, uint216 surplusEstimate?]
 ///   header: [bit isTokenIn, bit3 _, uint4 count]
@@ -197,6 +197,8 @@ library FeeProtocol {
 
         // Using floor division, protocol fees should not be rapacious
         if (isTokenIn) {
+            uint256 balanceOut = ctx.swap.balanceOut;
+
             if (ctx.query.isExactIn) {
                 uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
                 ctx.swap.amountIn -= fee;
@@ -215,9 +217,11 @@ library FeeProtocol {
             if (totalSurplusBps > 0) {
                 // Using ceil division favors maker
                 uint256 estimatedIn = parseSurplusEstimated(args, shift);
-                surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(ctx.swap.balanceOut);
+                surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(balanceOut);
             }
         } else {
+            uint256 balanceIn = ctx.swap.balanceIn;
+
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
             ctx.swap.amountOut -= ctx.swap.amountOut * totalFeeBps / BPS;
@@ -225,7 +229,7 @@ library FeeProtocol {
             if (totalSurplusBps > 0) {
                 // Using floor division favors maker
                 uint256 estimatedOut = parseSurplusEstimated(args, shift);
-                surplusEstimate = estimatedOut * ctx.swap.amountIn / ctx.swap.balanceIn;
+                surplusEstimate = estimatedOut * ctx.swap.amountIn / balanceIn;
             }
         }
 

@@ -4,6 +4,8 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
@@ -84,6 +86,7 @@ contract InvalidateBitExternal {
 }
 
 /// @notice InvalidateTokenIn opcode, bounds cumulative amount in across all fills by the strategy balance in
+///   Reduces balance registries according to the filled portion
 ///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
 /// @dev Encoding: []
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
@@ -113,6 +116,9 @@ library InvalidateTokenIn {
         uint256 balanceIn = ctx.swap.balanceIn;
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
 
+        ctx.swap.balanceIn = balanceIn - filled;
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn;
+
         (uint256 amountIn,) = ctx.runLoop();
 
         filled += amountIn;
@@ -141,11 +147,13 @@ contract InvalidateTokenInExternal {
 }
 
 /// @notice InvalidateTokenOut opcode, bounds cumulative amount out across all fills by the strategy balance out
+///   Reduces balance registries according to the filled portion
 ///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
 /// @dev Encoding: []
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using ContextLib for Context;
+    using Math for uint256;
 
     error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
 
@@ -169,6 +177,9 @@ library InvalidateTokenOut {
 
         uint256 balanceOut = ctx.swap.balanceOut;
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
+
+        ctx.swap.balanceOut = balanceOut - filled;
+        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut);
 
         (, uint256 amountOut) = ctx.runLoop();
 
