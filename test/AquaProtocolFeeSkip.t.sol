@@ -15,6 +15,7 @@ import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { SwapVM } from "../src/SwapVM.sol";
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { Context } from "../src/libs/VM.sol";
+import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
 import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
@@ -132,6 +133,41 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
         brokenTaker.swap(order, address(tokenA), address(tokenB), amount, takerData(address(brokenTaker), true));
     }
 
+    /// @dev Direct-push settlement: SwapVM pulls tokenIn from the taker and pushes it into Aqua itself, so
+    ///      the taker is a plain EOA with an allowance rather than a callback contract. The shared
+    ///      takerData helper hardcodes the pre-push mode, hence the local builder.
+    function _directPushSwap(ISwapVM.Order memory order, uint256 amount) internal returns (uint256 amountIn, uint256 amountOut) {
+        address eoaTaker = vm.addr(0x7777);
+        tokenA.mint(eoaTaker, amount);
+        vm.prank(eoaTaker);
+        tokenA.approve(address(swapVM), amount);
+
+        bytes memory data = TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: eoaTaker,
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: true,
+            threshold: "",
+            to: address(0),
+            deadline: 0,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: ""
+        }));
+
+        vm.prank(eoaTaker);
+        (amountIn, amountOut,) = swapVM.swap(order, address(tokenA), address(tokenB), amount, data);
+    }
+
     function _countSkipEvents(Vm.Log[] memory logs) internal pure returns (uint256 count) {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length > 0 && logs[i].topics[0] == ProtocolFeeSkipped.selector) {
@@ -184,6 +220,32 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
         swap(swapProgram, order);
 
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "dynamic provider fee is skipped too");
+    }
+
+    /// @notice And it still collects when the maker can pay. The dynamic opcode reaches the same helper as
+    ///         the static one but had no coverage at all before this suite, so the collecting side of it is
+    ///         asserted rather than assumed.
+    function test_DynamicFeeProvider_FeeCollected() public {
+        bytes memory program = _feeProgram(
+            Fee._aquaDynamicProtocolFeeAmountInXD,
+            FeeArgsBuilder.buildDynamicProtocolFee(address(feeProvider)),
+            false
+        );
+        (ISwapVM.Order memory order, bytes32 strategyHash) =
+            _shipProgram(program, INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+
+        SwapProgram memory swapProgram = _swapProgram(SWAP_AMOUNT, true);
+        mintTokenInToTaker(swapProgram);
+
+        vm.recordLogs();
+        (uint256 amountIn,) = swap(swapProgram, order);
+
+        uint256 fee = amountIn * PROTOCOL_FEE_BPS / BPS;
+        assertEq(_countSkipEvents(vm.getRecordedLogs()), 0, "nothing is skipped");
+        assertEq(tokenA.balanceOf(protocolFeeRecipient), fee, "dynamic provider fee collected in full");
+
+        (uint256 balanceA,) = getAquaBalances(strategyHash);
+        assertEq(balanceA, INITIAL_BALANCE_A + amountIn - fee, "ledger nets out to amountIn minus the fee");
     }
 
     /// @notice ExactOut takes the other branch of _feeAmountIn, where the fee is added on after the curve.
@@ -366,6 +428,38 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
         assertEq(tokenA.balanceOf(protocolFeeRecipient), fee, "fee collected");
         (uint256 balanceA,) = getAquaBalances(strategyHash);
         assertEq(balanceA, THIN_BALANCE_IN + MAX_PAYABLE_IN - fee, "ledger nets out to amountIn minus the fee");
+    }
+
+    /// @notice Direct-push settlement never consults amountNetPulled: SwapVM moves exactly ctx.swap.amountIn
+    ///         into the ledger itself. A skip therefore simply leaves the fee in the pool. This settlement
+    ///         mode had no coverage anywhere in the repo before.
+    function test_DirectPushMode_SkippedFee_LandsInThePool() public {
+        (ISwapVM.Order memory order, bytes32 strategyHash) =
+            _ship(_setup(0, INITIAL_BALANCE_B, SwapType.CONCENTRATE_GROW_LIQUIDITY));
+
+        vm.recordLogs();
+        (uint256 amountIn,) = _directPushSwap(order, SWAP_AMOUNT);
+
+        assertEq(_countSkipEvents(vm.getRecordedLogs()), 1, "the fee is reported as skipped");
+        assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "recipient is paid nothing");
+
+        (uint256 balanceA,) = getAquaBalances(strategyHash);
+        assertEq(balanceA, amountIn, "the whole amountIn lands in the pool, fee included");
+    }
+
+    function test_DirectPushMode_CollectedFee_LeavesTheLedgerNetOfTheFee() public {
+        (ISwapVM.Order memory order, bytes32 strategyHash) =
+            _ship(_setup(INITIAL_BALANCE_A, INITIAL_BALANCE_B, SwapType.XYC));
+
+        vm.recordLogs();
+        (uint256 amountIn,) = _directPushSwap(order, SWAP_AMOUNT);
+
+        uint256 fee = amountIn * PROTOCOL_FEE_BPS / BPS;
+        assertEq(_countSkipEvents(vm.getRecordedLogs()), 0, "nothing is skipped");
+        assertEq(tokenA.balanceOf(protocolFeeRecipient), fee, "fee collected in full");
+
+        (uint256 balanceA,) = getAquaBalances(strategyHash);
+        assertEq(balanceA, INITIAL_BALANCE_A + amountIn - fee, "ledger nets out to amountIn minus the fee");
     }
 
     // ===== QUOTE/SWAP CONSISTENCY =====
