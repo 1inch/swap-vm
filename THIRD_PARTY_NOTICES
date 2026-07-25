@@ -66,3 +66,15 @@ Notes: Documentation only, reproduced verbatim under /.agents/skills/ as
        solidity-auditor (skill VERSION 3).
 
 ================================================================================
+
+Component: Nomic Foundation Hardhat agent skills
+Repo: https://github.com/NomicFoundation/hardhat-skills
+Version: 2f1530cca5e97e319d4edb6f2f552cf7ce922258
+License: ISC
+Copyright: © Nomic Foundation
+License: /LICENSES/ISC-Nomic-Hardhat-Skills.txt
+Notes: Documentation only, reproduced verbatim under /.agents/skills/ as
+       hardhat. Upstream declares ISC in package.json but ships no LICENSE
+       file; see the note in the license text.
+
+================================================================================
