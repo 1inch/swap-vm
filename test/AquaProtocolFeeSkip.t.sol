@@ -470,14 +470,22 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "recipient is paid nothing");
     }
 
-    /// @notice A zero fee is not a skipped fee, so it must not pollute the monitoring signal.
-    function test_ZeroFeeBps_EmitsNothing() public {
+    /// @notice A zero fee is not a skipped fee, so it must not pollute the monitoring signal. The pull is
+    ///         not even attempted: tokenA is made to reject zero-value transfers, which is a real ERC20
+    ///         behaviour that would otherwise turn every swap on a zero-fee strategy into a skip event.
+    function test_ZeroFeeBps_DoesNotPullAndEmitsNothing() public {
         bytes memory program = _feeProgram(
             Fee._aquaProtocolFeeAmountInXD,
             FeeArgsBuilder.buildProtocolFee(0, protocolFeeRecipient),
             false
         );
         (ISwapVM.Order memory order,) = _shipProgram(program, INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+
+        vm.mockCallRevert(
+            address(tokenA),
+            abi.encodeCall(IERC20.transferFrom, (maker, protocolFeeRecipient, 0)),
+            abi.encodeWithSignature("Error(string)", "zero value transfer")
+        );
 
         SwapProgram memory swapProgram = _swapProgram(SWAP_AMOUNT, true);
         mintTokenInToTaker(swapProgram);
@@ -487,6 +495,24 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
 
         assertEq(_countSkipEvents(vm.getRecordedLogs()), 0, "a zero fee is not a skipped fee");
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "nothing to collect");
+    }
+
+    /// @notice A fee that names no recipient can never be paid, which is a configuration error rather than
+    ///         a maker who is temporarily short. It must fail loudly instead of disappearing into the skip
+    ///         path on every swap forever.
+    function test_ZeroRecipient_Reverts() public {
+        bytes memory program = _feeProgram(
+            Fee._aquaProtocolFeeAmountInXD,
+            FeeArgsBuilder.buildProtocolFee(PROTOCOL_FEE_BPS, address(0)),
+            false
+        );
+        (ISwapVM.Order memory order,) = _shipProgram(program, INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+
+        SwapProgram memory swapProgram = _swapProgram(SWAP_AMOUNT, true);
+        mintTokenInToTaker(swapProgram);
+
+        vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
+        swap(swapProgram, order);
     }
 
     // ===== BLAST RADIUS: THE WALLET-CHARGING OPCODES ARE UNCHANGED =====

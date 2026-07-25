@@ -250,6 +250,12 @@ contract Fee {
     ///   ledger mid-swap. Crediting it for a pull that never happened would drop that requirement to
     ///   amountIn - fee and let the taker keep the fee instead of the maker.
     function _tryPullFee(Context memory ctx, address to, uint256 feeAmountIn) private {
+        if (feeAmountIn == 0) return; // Nothing was skipped, so do not report a skip
+
+        // A fee that names no recipient can never be paid, so it is a configuration error rather than a
+        // maker who is temporarily short, and it must not disappear into the skip path
+        require(to != address(0), FeeDynamicProtocolInvalidRecipient());
+
         // A parameterless catch is deliberate: it is the only form that catches both the Panic from Aqua's
         // balance underflow and the custom error from the token leg, and it avoids copying revert data that
         // a malicious tokenIn could inflate.
