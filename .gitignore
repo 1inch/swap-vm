@@ -13,10 +13,3 @@ build
 !.env.example
 venv/
 .yarn
-
-# Scratch output written into the repo root by the agent skills in .agents/skills
-.audit-*
-*-pashov-ai-audit-report-*.md
-DIFFERENTIAL_REVIEW_REPORT.md
-DIMENSIONAL_SCOPE.json
-DIMENSIONAL_UNITS.md
