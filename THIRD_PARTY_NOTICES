@@ -39,3 +39,30 @@ Copyright: © 2025 Degensoft Ltd
 License: /LICENSES/Aqua-Source-1.1.txt
 
 ================================================================================
+
+Component: Trail of Bits agent skills
+Repo: https://github.com/trailofbits/skills
+Version: cfe5d7b1619e47fb5b38b7e2561dad7e5f1e89af
+License: CC-BY-SA-4.0
+Copyright: © Trail of Bits
+License: /LICENSES/CC-BY-SA-4.0-TrailOfBits.txt
+Notes: Documentation only, reproduced verbatim under /.agents/skills/ as
+       differential-review, dimensional-analysis, entry-point-analyzer,
+       property-based-testing and token-integration-analyzer. These files are
+       agent instructions; they are not compiled into or linked with any
+       contract in this repository. Modifying them in place creates Adapted
+       Material under the ShareAlike terms — extend them via /.cursor/rules/
+       instead.
+
+================================================================================
+
+Component: Pashov Audit Group agent skills
+Repo: https://github.com/pashov/skills
+Version: c577eb7799c349de0acb187ba00ca98e14e436fd
+License: MIT
+Copyright: © 2024 AI Skills Contributors
+License: /LICENSES/MIT-Pashov-Skills.txt
+Notes: Documentation only, reproduced verbatim under /.agents/skills/ as
+       solidity-auditor (skill VERSION 3).
+
+================================================================================
