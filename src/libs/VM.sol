@@ -53,15 +53,27 @@ struct SwapRegisters {
     uint256 amountNetPulled;
 }
 
+/// @dev A tokenIn fee owed by the maker, settled by SwapVM once the taker's tokenIn has been delivered
+/// @param recipient The address the fee is paid to
+/// @param useAqua Whether the fee is pulled through Aqua or transferred from the maker's wallet
+/// @param amount The tokenIn amount owed
+struct PendingFee {
+    address recipient;
+    bool useAqua;
+    uint256 amount;
+}
+
 /// @title SwapVM context
 /// @notice Complete execution state for a swap operation
 /// @param vm The VM execution state including program counter and bytecode
 /// @param query Read-only swap information (maker, taker, tokens, etc.)
 /// @param swap Mutable registers for computing swap amounts
+/// @param fees Fees on tokenIn accrued by the program, settled after the transfer phase
 struct Context {
     VM vm;
     SwapQuery query;
     SwapRegisters swap;
+    PendingFee[] fees;
 }
 
 /// @title ContextLib
@@ -93,6 +105,35 @@ library ContextLib {
     /// @param pc New program counter value
     function setNextPC(Context memory ctx, uint256 pc) internal pure {
         ctx.vm.nextPC = pc;
+    }
+
+    /// @notice Record a tokenIn fee owed by the maker for settlement after the transfer phase
+    /// @dev Fee-on-amountIn instructions cannot move tokens while the program runs: the maker is only
+    ///      credited with the taker's tokenIn once SwapVM reaches the transfer phase. Accruing here and
+    ///      settling later keeps the fee payable out of the incoming amount instead of requiring the
+    ///      maker to pre-fund tokenIn. Amounts for the same recipient and settlement path are merged.
+    /// @param ctx Execution context
+    /// @param recipient Address the fee is paid to
+    /// @param useAqua Whether the fee is pulled through Aqua or transferred from the maker's wallet
+    /// @param amount Fee amount in tokenIn
+    function accrueFee(Context memory ctx, address recipient, bool useAqua, uint256 amount) internal pure {
+        if (amount == 0) return;
+
+        PendingFee[] memory fees = ctx.fees;
+        uint256 length = fees.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (fees[i].recipient == recipient && fees[i].useAqua == useAqua) {
+                fees[i].amount += amount;
+                return;
+            }
+        }
+
+        PendingFee[] memory extended = new PendingFee[](length + 1);
+        for (uint256 i = 0; i < length; i++) {
+            extended[i] = fees[i];
+        }
+        extended[length] = PendingFee({ recipient: recipient, useAqua: useAqua, amount: amount });
+        ctx.fees = extended;
     }
 
     /// @notice Consume and return taker arguments from the front

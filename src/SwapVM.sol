@@ -18,7 +18,7 @@ import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol"
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
 import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
-import { Context, ContextLib, VM, SwapRegisters, SwapQuery  } from "./libs/VM.sol";
+import { Context, ContextLib, VM, PendingFee, SwapRegisters, SwapQuery  } from "./libs/VM.sol";
 import { MakerTraits, MakerTraitsLib } from "./libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 
@@ -156,7 +156,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 amountIn: isExactIn ? amount : 0,
                 amountOut: isExactIn ? 0 : amount,
                 amountNetPulled: 0
-            })
+            }),
+            fees: new PendingFee[](0)
         });
 
         if (order.traits.useAquaInsteadOfSignature()) {
@@ -206,7 +207,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
                 amountIn: isExactIn ? amount : 0,
                 amountOut: isExactIn ? 0 : amount,
                 amountNetPulled: 0
-            })
+            }),
+            fees: new PendingFee[](0)
         });
 
         if (order.traits.useAquaInsteadOfSignature()) {
@@ -229,8 +231,21 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
         }
 
+        _settleFees(ctx, order);
+
         _reentrancyGuards[orderHash].unlock();
         emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
+    }
+
+    /// @dev Pays out the tokenIn fees accrued by the program. Runs after the transfer phase so the fee
+    ///      comes out of the amountIn just delivered by the taker rather than out of maker inventory that
+    ///      a one-sided position does not hold. Fees never exceed amountIn, so an Aqua-mode maker is
+    ///      always solvent here. Still inside the order's reentrancy lock.
+    function _settleFees(Context memory ctx, ISwapVM.Order calldata order) private {
+        PendingFee[] memory fees = ctx.fees;
+        for (uint256 i = 0; i < fees.length; i++) {
+            _transferOrPull(order.maker, fees[i].recipient, ctx.query.tokenIn, fees[i].amount, ctx.query.orderHash, fees[i].useAqua);
+        }
     }
 
     function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {

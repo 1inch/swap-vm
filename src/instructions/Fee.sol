@@ -81,15 +81,14 @@ contract Fee {
         }
     }
 
-    /// @notice Protocol fee on amountIn — transfers fee from maker to recipient via safeTransferFrom.
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance and have approved this contract
-    ///   BEFORE the swap is executed. The fee transfer occurs during program execution (inside runLoop),
-    ///   which is before SwapVM completes the taker→maker tokenIn transfer. If the maker lacks tokenIn
-    ///   balance or allowance, the swap will revert.
+    /// @notice Protocol fee on amountIn — charges the maker's wallet via safeTransferFrom.
+    /// @dev The fee is accrued on the context and settled by SwapVM after the transfer phase, so it is
+    ///   payable out of the tokenIn the taker delivers. A maker whose tokenIn is routed to a custom
+    ///   receiver or unwrapped to native coin still has to hold tokenIn and approve this contract.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
-    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
-    ///   break numerical consistency between quote() and swap().
+    ///   but accrues nothing. Quote may succeed while swap reverts due to a missing approval. Makers MUST
+    ///   NOT use backward jumps to this instruction as it may break numerical consistency between quote()
+    ///   and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _protocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
@@ -97,40 +96,36 @@ contract Fee {
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
         if (!ctx.vm.isStaticContext) {
-            IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+            ctx.accrueFee(to, false, feeAmountIn);
         }
     }
 
     /// @notice Protocol fee on amountIn for Aqua — pulls fee from maker's Aqua balance to recipient.
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance in Aqua BEFORE the swap
-    ///   is executed. The fee pull occurs during program execution (inside runLoop), which is before
-    ///   SwapVM completes the taker→maker tokenIn transfer. If the maker's Aqua tokenIn balance is
-    ///   insufficient, the swap will revert.
+    /// @dev The fee is accrued on the context and settled by SwapVM after the transfer phase, once the
+    ///   taker's tokenIn has landed in the maker's Aqua balance. The maker does not need any pre-existing
+    ///   tokenIn balance, which is what makes single-sided positions tradable.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
-    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
-    ///   consistency between quote() and swap().
+    ///   but accrues nothing. Makers MUST NOT use backward jumps to this instruction as it may break
+    ///   numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
-        ctx.swap.amountNetPulled += feeAmountIn;
 
         if (!ctx.vm.isStaticContext) {
-            _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            ctx.accrueFee(to, true, feeAmountIn);
         }
     }
 
     /// @notice Dynamic protocol fee with external fee provider
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance and have approved this contract
-    ///   BEFORE the swap is executed. The fee transfer occurs during program execution (inside runLoop),
-    ///   which is before SwapVM completes the taker→maker tokenIn transfer. If the maker lacks tokenIn
-    ///   balance or allowance, the swap will revert.
+    /// @dev The fee is accrued on the context and settled by SwapVM after the transfer phase, so it is
+    ///   payable out of the tokenIn the taker delivers. A maker whose tokenIn is routed to a custom
+    ///   receiver or unwrapped to native coin still has to hold tokenIn and approve this contract.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
-    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
-    ///   break numerical consistency between quote() and swap().
+    ///   but accrues nothing. Quote may succeed while swap reverts due to a missing approval. Makers MUST
+    ///   NOT use backward jumps to this instruction as it may break numerical consistency between quote()
+    ///   and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
     ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
@@ -165,21 +160,19 @@ contract Fee {
 
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
-            if (!ctx.vm.isStaticContext && feeAmountIn > 0) {
-                IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+            if (!ctx.vm.isStaticContext) {
+                ctx.accrueFee(to, false, feeAmountIn);
             }
         }
     }
 
     /// @notice Dynamic protocol fee with external fee provider (Aqua version)
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance in Aqua BEFORE the swap
-    ///   is executed. The fee pull occurs during program execution (inside runLoop), which is before
-    ///   SwapVM completes the taker→maker tokenIn transfer. If the maker's Aqua tokenIn balance is
-    ///   insufficient, the swap will revert.
+    /// @dev The fee is accrued on the context and settled by SwapVM after the transfer phase, once the
+    ///   taker's tokenIn has landed in the maker's Aqua balance. The maker does not need any pre-existing
+    ///   tokenIn balance, which is what makes single-sided positions tradable.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
-    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
-    ///   consistency between quote() and swap().
+    ///   but accrues nothing. Makers MUST NOT use backward jumps to this instruction as it may break
+    ///   numerical consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
     ///   - Protected by TransientLockUnsafe on orderHash level in SwapVM.swap()
@@ -213,10 +206,9 @@ contract Fee {
             require(to != address(0), FeeDynamicProtocolInvalidRecipient());
 
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
-            ctx.swap.amountNetPulled += feeAmountIn;
 
-            if (!ctx.vm.isStaticContext && feeAmountIn > 0) {
-                _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            if (!ctx.vm.isStaticContext) {
+                ctx.accrueFee(to, true, feeAmountIn);
             }
         }
     }
