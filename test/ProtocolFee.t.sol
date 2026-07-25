@@ -423,4 +423,38 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         uint256 noFeeAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
         assertLt(amountOut, noFeeAmountOut, "AmountOut should be less with both fees applied");
     }
+
+    /// @notice Fee charging is best-effort: if the fee transferFrom fails (no maker
+    ///         allowance for tokenIn), the fee is skipped with FeeChargeFailed and the
+    ///         swap proceeds — the swap itself does not need the maker's tokenIn allowance.
+    function test_ProtocolFeeAmountIn_MakerWithoutAllowance_FeeSkippedAndSwapSucceeds() public {
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            protocolFeeBps: 0.10e9, // 10% fee
+            flatInFeeBps: 0,
+            flatOutFeeBps: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithFeeType(setup, true);
+
+        // Revoke maker's tokenIn allowance so only the fee transferFrom fails
+        vm.prank(maker);
+        TokenMock(tokenA).approve(address(swapVM), 0);
+
+        bytes memory exactInTakerData = _quotingTakerData(TakerSetup({ isExactIn: true }));
+        bytes memory exactInTakerDataSwap = _swappingTakerData(exactInTakerData, signature);
+
+        bytes32 orderHash = swapVM.hash(order);
+        uint256 amountIn = 10e18;
+
+        // Only the event signature and emitter are asserted (checkData=false):
+        // the exact fee amount depends on the effective exactIn/exactOut mode
+        vm.expectEmit(false, false, false, false, address(swapVM));
+        emit FeeChargeFailed(orderHash, tokenA, 0, protocolFeeRecipient);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
+
+        assertGt(amountOut, 0, "Swap should succeed with the fee skipped");
+        assertEq(TokenMock(tokenA).balanceOf(protocolFeeRecipient), 0, "Recipient should not receive the skipped fee");
+    }
 }

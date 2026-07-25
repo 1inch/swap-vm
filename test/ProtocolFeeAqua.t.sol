@@ -189,4 +189,148 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
         assertApproxEqAbs(amountIn, amountIn2, 2, "AmountIn should be consistent between exactIn and exactOut swaps");
         assertApproxEqAbs(amountOut, amountOut2, 2, "AmountOut should be consistent between exactIn and exactOut swaps");
     }
+
+    /// @dev Concentrated pool with equal balances: P_spot = 1 regardless of tokenA/tokenB
+    ///      address ordering, price range [0.25, 4] is symmetric around the spot.
+    function _concentrateMakerSetup(uint32 protocolFeeBps) internal view returns (MakerSetup memory) {
+        return MakerSetup({
+            balanceA: 1000e18,
+            balanceB: 1000e18,
+            priceMin: 0.25e18,
+            priceMax: 4e18,
+            protocolFeeBps: protocolFeeBps,
+            feeInBps: 0,
+            protocolFeeRecipient: protocolFeeRecipient,
+            swapType: SwapType.CONCENTRATE_GROW_LIQUIDITY
+        });
+    }
+
+    /// @dev Drives the pool to the range boundary by buying the entire tokenB balance,
+    ///      leaving the strategy's Aqua accounting balance of tokenB at exactly zero.
+    function _drainTokenBToRangeBoundary(ISwapVM.Order memory order, bytes32 strategyHash) internal {
+        // Maker wallet holds plenty of both tokens, so wallet funds are never the
+        // constraint — only the strategy's Aqua accounting balance matters below.
+        tokenA.mint(maker, 1_000_000e18);
+        tokenB.mint(maker, 1_000_000e18);
+
+        tradeToZeroBalance(order, tokenB);
+
+        (, uint256 aquaBalanceB) = getAquaBalances(strategyHash);
+        assertEq(aquaBalanceB, 0, "tokenB should be fully drained to the range boundary");
+    }
+
+    /// @notice Control: without protocol fee the AMM math allows swapping back
+    ///         from the range boundary (virtual reserves cover the zero real balance).
+    function test_Aqua_Concentrate_SwapBackAtRangeBoundary_NoProtocolFee_Succeeds() public {
+        MakerSetup memory setup = _concentrateMakerSetup(0);
+        ISwapVM.Order memory order = createStrategy(setup);
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+
+        _drainTokenBToRangeBoundary(order, strategyHash);
+
+        // Swap back: tokenB (drained) -> tokenA
+        SwapProgram memory backSwap = _swapProgram(10e18, false, true);
+        mintTokenInToTaker(backSwap);
+
+        (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
+
+        assertEq(amountIn, backSwap.amount, "Swap back should consume the exact amountIn");
+        assertGt(amountOut, 0, "Swap back should produce non-zero amountOut");
+    }
+
+    /// @notice With Aqua protocol fee the swap back from the range boundary succeeds:
+    ///         fee charging is best-effort. The fee pull in tokenIn fails (the strategy's
+    ///         tokenIn balance is drained to zero, and the pull happens before the taker
+    ///         pushes tokenIn), so the fee is skipped with a FeeChargeFailed event and
+    ///         the fee share remains in the maker's strategy balance.
+    function test_Aqua_ProtocolFee_Concentrate_SwapBackAtRangeBoundary_Succeeds() public {
+        MakerSetup memory setup = _concentrateMakerSetup(0.01e9); // 1% protocol fee
+        ISwapVM.Order memory order = createStrategy(setup);
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+
+        _drainTokenBToRangeBoundary(order, strategyHash);
+
+        // Recipient already collected fees in tokenA during the drain — snapshot here
+        (uint256 recipientBalanceABefore, uint256 recipientBalanceBBefore) = getProtocolRecipientBalances();
+
+        // Swap back: tokenB (drained) -> tokenA
+        SwapProgram memory backSwap = _swapProgram(10e18, false, true);
+        mintTokenInToTaker(backSwap);
+
+        // Quote agrees the swap back is possible (static context skips the fee pull)
+        (, uint256 quotedAmountOut) = quote(backSwap, order);
+        assertGt(quotedAmountOut, 0, "Quote for swap back should succeed");
+
+        uint256 expectedFee = backSwap.amount * setup.protocolFeeBps / BPS;
+        vm.expectEmit(address(swapVM));
+        emit FeeChargeFailed(swapVM.hash(order), address(tokenB), expectedFee, protocolFeeRecipient);
+
+        (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
+
+        assertEq(amountIn, backSwap.amount, "Swap back should consume the exact amountIn");
+        assertGt(amountOut, 0, "Swap back should produce non-zero amountOut");
+        assertEq(amountOut, quotedAmountOut, "Swap should match quote (quote/swap parity)");
+
+        // Fee was skipped: recipient got nothing, the full amountIn stayed in the strategy
+        (uint256 recipientBalanceAAfter, uint256 recipientBalanceBAfter) = getProtocolRecipientBalances();
+        assertEq(recipientBalanceAAfter, recipientBalanceABefore, "Recipient balance A should not change");
+        assertEq(recipientBalanceBAfter, recipientBalanceBBefore, "Recipient should not receive the skipped fee");
+        (, uint256 aquaBalanceBAfter) = getAquaBalances(strategyHash);
+        assertEq(aquaBalanceBAfter, amountIn, "Full amountIn incl. fee share should stay in the strategy");
+    }
+
+    /// @dev Same as _drainTokenBToRangeBoundary, but drains with a real swap only —
+    ///      no quote() involved: the taker is simply funded generously upfront.
+    function _drainTokenBToRangeBoundaryViaSwap(ISwapVM.Order memory order, bytes32 strategyHash) internal {
+        // Maker wallet holds plenty of both tokens, so wallet funds are never the
+        // constraint — only the strategy's Aqua accounting balance matters below.
+        tokenA.mint(maker, 1_000_000e18);
+        tokenB.mint(maker, 1_000_000e18);
+
+        (, uint256 aquaBalanceB) = getAquaBalances(strategyHash);
+        SwapProgram memory drainSwap = _swapProgram(aquaBalanceB, true, false); // tokenA -> tokenB, exactOut full balance
+        mintTokenInToTaker(drainSwap, 1_000_000e18);
+        swap(drainSwap, order);
+
+        (, uint256 aquaBalanceBAfter) = getAquaBalances(strategyHash);
+        assertEq(aquaBalanceBAfter, 0, "tokenB should be fully drained to the range boundary");
+    }
+
+    /// @notice Control (swap-only, exactOut): without protocol fee the swap back from
+    ///         the range boundary succeeds. No quote() is used anywhere in this test.
+    function test_Aqua_Concentrate_SwapBackAtRangeBoundary_NoProtocolFee_ExactOut_Succeeds() public {
+        MakerSetup memory setup = _concentrateMakerSetup(0);
+        ISwapVM.Order memory order = createStrategy(setup);
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+
+        _drainTokenBToRangeBoundaryViaSwap(order, strategyHash);
+
+        // Swap back: tokenB (drained) -> tokenA, exactOut
+        SwapProgram memory backSwap = _swapProgram(10e18, false, false);
+        mintTokenInToTaker(backSwap, 1_000_000e18);
+
+        (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
+
+        assertEq(amountOut, backSwap.amount, "Swap back should produce the exact amountOut");
+        assertGt(amountIn, 0, "Swap back should consume non-zero amountIn");
+    }
+
+    /// @notice Same as above in exactOut mode (swap-only, no quote() anywhere): the fee
+    ///         pull in drained tokenIn fails, the fee is skipped and the swap succeeds.
+    function test_Aqua_ProtocolFee_Concentrate_SwapBackAtRangeBoundary_ExactOut_Succeeds() public {
+        MakerSetup memory setup = _concentrateMakerSetup(0.01e9); // 1% protocol fee
+        ISwapVM.Order memory order = createStrategy(setup);
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
+
+        _drainTokenBToRangeBoundaryViaSwap(order, strategyHash);
+
+        // Swap back: tokenB (drained) -> tokenA, exactOut
+        SwapProgram memory backSwap = _swapProgram(10e18, false, false);
+        mintTokenInToTaker(backSwap, 1_000_000e18);
+
+        (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
+
+        assertEq(amountOut, backSwap.amount, "Swap back should produce the exact amountOut");
+        assertGt(amountIn, 0, "Swap back should consume non-zero amountIn");
+    }
 }
