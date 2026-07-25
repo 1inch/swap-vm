@@ -119,6 +119,10 @@ bytes memory bytecode = bytes.concat(
   - `TWAPSwap._twap`
   - Control flow instructions (`_jump`, `_jumpIfTokenIn`, `_jumpIfTokenOut`, `_deadline`, `_salt`, ...)
 - **Ordering Note:** Fee instruction placement is security-critical and changes pricing/settlement behavior.
+- **Protocol fee on amountIn:** charged before the taker's tokenIn is settled, so it comes out of inventory
+  the maker already holds. The Aqua variants skip the fee and emit `ProtocolFeeSkipped` when the maker cannot
+  cover it, which keeps one-sided positions tradable; the wallet variants revert instead. Only use an Aqua
+  fee instruction on an Aqua order. See "Protocol Fee on amountIn" in the README.
 
 **Example A - XYCSwap AMM:**
 
