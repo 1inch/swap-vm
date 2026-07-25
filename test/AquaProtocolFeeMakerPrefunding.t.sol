@@ -4,6 +4,8 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
+
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
@@ -12,10 +14,10 @@ import { XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.so
 import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
-/// @notice Protocol-fee-on-amountIn is charged against the maker's own tokenIn inventory while the program
-///         runs, before SwapVM credits the taker's tokenIn. A maker that is short of tokenIn no longer
-///         blocks the swap: the fee is skipped and reported. These tests cover what that costs — pricing
-///         still charges the taker for the fee, so a skipped fee lands in the maker's pool instead.
+/// @notice The Aqua protocol fee on amountIn is charged against the maker's own tokenIn balance while the
+///         program runs, before SwapVM credits the taker's tokenIn. A maker that is short of tokenIn no
+///         longer blocks the swap: the fee is skipped and reported. These tests cover both what that
+///         unblocks and what it costs.
 contract AquaProtocolFeeMakerPrefundingTest is AquaSwapVMTest {
     using ProgramBuilder for Program;
 
@@ -41,15 +43,10 @@ contract AquaProtocolFeeMakerPrefundingTest is AquaSwapVMTest {
     }
 
     function _concentratedProgram(Opcode feeOpcode) internal view returns (bytes memory) {
-        return _concentratedProgram(feeOpcode, 0);
-    }
-
-    function _concentratedProgram(Opcode feeOpcode, uint256 salt) internal view returns (bytes memory) {
         Program p;
         return bytes.concat(
             p.build(feeOpcode, FeeArgsBuilder.buildProtocolFee(PROTOCOL_FEE_BPS, protocolFeeRecipient)),
-            p.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(SQRT_PRICE_MIN, SQRT_PRICE_MAX)),
-            p.build(Opcode.Salt, abi.encodePacked(salt))
+            p.build(Opcode.XYCConcentrateSwap, XYCConcentrateArgsBuilder.build2D(SQRT_PRICE_MIN, SQRT_PRICE_MAX))
         );
     }
 
@@ -72,8 +69,15 @@ contract AquaProtocolFeeMakerPrefundingTest is AquaSwapVMTest {
         });
     }
 
+    /// @dev Ships a thin two-sided XYC position and funds the maker's wallet to match the ledger
+    function _shipThinPosition(ISwapVM.Order memory order) internal returns (bytes32 strategyHash) {
+        strategyHash = shipStrategy(order, tokenA, tokenB, THIN_BALANCE_IN, DEEP_BALANCE_OUT);
+        tokenA.mint(maker, THIN_BALANCE_IN);
+        tokenB.mint(maker, DEEP_BALANCE_OUT);
+    }
+
     /// @notice A position holding only tokenB sits at the top of its price range and sells tokenB for
-    ///         tokenA. It never holds tokenA, so the fee is skipped on every single swap it ever serves.
+    ///         tokenA. It never holds tokenA, so it used to revert on every swap and now goes through.
     function test_SingleSidedPosition_SwapSucceeds_FeeSkipped() public {
         ISwapVM.Order memory order = createStrategy(_concentratedProgram(Opcode.AquaProtocolFeeAmountIn));
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, 0, INITIAL_BALANCE_B);
@@ -82,79 +86,58 @@ contract AquaProtocolFeeMakerPrefundingTest is AquaSwapVMTest {
         SwapProgram memory swapProgram = _swapProgram(10e18);
         mintTokenInToTaker(swapProgram);
 
-        (uint256 amountIn,) = swap(swapProgram, order);
+        (uint256 quotedIn, uint256 quotedOut) = quote(swapProgram, order);
 
-        assertEq(amountIn, 10e18, "taker pays the full fee-inclusive amountIn");
+        vm.expectEmit(address(swapVM));
+        emit ProtocolFeeSkipped(strategyHash, address(tokenA), protocolFeeRecipient, quotedIn * PROTOCOL_FEE_BPS / BPS);
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+
+        assertEq(amountIn, quotedIn, "swap consumes the quoted amountIn");
+        assertEq(amountOut, quotedOut, "swap delivers the quoted amountOut");
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "recipient is paid nothing");
 
         (uint256 balanceA,) = getAquaBalances(strategyHash);
         assertEq(balanceA, amountIn, "the whole amountIn lands in the pool, fee included");
     }
 
-    /// @notice Runs the same trade against two identical positions, one where the fee is collectible and
-    ///         one where it is not. The taker gets the same output either way, so a skipped fee is not a
-    ///         discount for the taker — it is income for the maker.
+    /// @notice Pricing does not change when the fee is skipped, so the taker still pays for it. Checks the
+    ///         output against the curve applied to amountIn net of the fee, then shows the pool keeping the
+    ///         difference the recipient did not get.
     function test_SkippedFeeIsCapturedByTheMaker() public {
-        SwapProgram memory swapProgram = _swapProgram(10e18);
-
-        // The wallet-charging opcode leaves the Aqua ledger untouched, so both positions price identically
-        // and the only variable is whether the maker granted the allowance the fee needs.
-        ISwapVM.Order memory skipped = createStrategy(_concentratedProgram(Opcode.ProtocolFeeAmountIn, 1));
-        shipStrategy(skipped, tokenA, tokenB, 0, INITIAL_BALANCE_B);
-        tokenB.mint(maker, INITIAL_BALANCE_B);
-        mintTokenInToTaker(swapProgram);
-
-        uint256 makerBefore = tokenA.balanceOf(maker);
-        (uint256 amountIn, uint256 skippedOut) = swap(swapProgram, skipped);
-        uint256 makerGainWhenSkipped = tokenA.balanceOf(maker) - makerBefore;
-        assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "no allowance, no fee");
-
-        ISwapVM.Order memory collected = createStrategy(_concentratedProgram(Opcode.ProtocolFeeAmountIn, 2));
-        shipStrategy(collected, tokenA, tokenB, 0, INITIAL_BALANCE_B);
-        tokenB.mint(maker, INITIAL_BALANCE_B);
-        vm.prank(maker);
-        tokenA.approve(address(swapVM), type(uint256).max);
-        mintTokenInToTaker(swapProgram);
-
-        makerBefore = tokenA.balanceOf(maker);
-        (, uint256 collectedOut) = swap(swapProgram, collected);
-        uint256 makerGainWhenCollected = tokenA.balanceOf(maker) - makerBefore;
-
-        uint256 feePaid = tokenA.balanceOf(protocolFeeRecipient);
-        assertEq(feePaid, amountIn * PROTOCOL_FEE_BPS / BPS, "the collectible position pays 1% of amountIn");
-        assertEq(skippedOut, collectedOut, "the taker is charged for the fee either way");
-        assertEq(makerGainWhenSkipped - makerGainWhenCollected, feePaid, "the maker keeps what the recipient lost");
-    }
-
-    /// @notice Trades above `balanceIn * BPS / feeBps` now go through, paying no fee at all.
-    function test_ThinTokenInSide_LargeTradeSkipsTheWholeFee() public {
         ISwapVM.Order memory order = createStrategy(_xycProgram());
-        shipStrategy(order, tokenA, tokenB, THIN_BALANCE_IN, DEEP_BALANCE_OUT);
-        tokenA.mint(maker, THIN_BALANCE_IN);
-        tokenB.mint(maker, DEEP_BALANCE_OUT);
+        bytes32 strategyHash = _shipThinPosition(order);
 
         SwapProgram memory swapProgram = _swapProgram(MAX_PAYABLE_IN + 0.1e18);
         mintTokenInToTaker(swapProgram);
 
-        (uint256 amountIn,) = swap(swapProgram, order);
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
 
-        uint256 chargedToTaker = amountIn * PROTOCOL_FEE_BPS / BPS;
-        assertGt(chargedToTaker, THIN_BALANCE_IN, "the fee is larger than the tokenIn side of the position");
+        uint256 fee = amountIn * PROTOCOL_FEE_BPS / BPS;
+        uint256 netAmountIn = amountIn - fee;
+        uint256 pricedOut = netAmountIn * DEEP_BALANCE_OUT / (THIN_BALANCE_IN + netAmountIn);
+
+        assertGt(fee, THIN_BALANCE_IN, "the fee is larger than the tokenIn side of the position");
+        assertEq(amountOut, pricedOut, "the taker is priced as if the fee had been taken");
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "no partial collection, the whole fee is dropped");
+
+        (uint256 balanceA,) = getAquaBalances(strategyHash);
+        assertEq(balanceA, THIN_BALANCE_IN + amountIn, "the pool keeps the fee the recipient did not get");
     }
 
     /// @notice Below the ceiling nothing changes: the fee is still collected in full.
     function test_ThinTokenInSide_SmallTradeStillPaysTheFee() public {
         ISwapVM.Order memory order = createStrategy(_xycProgram());
-        shipStrategy(order, tokenA, tokenB, THIN_BALANCE_IN, DEEP_BALANCE_OUT);
-        tokenA.mint(maker, THIN_BALANCE_IN);
-        tokenB.mint(maker, DEEP_BALANCE_OUT);
+        bytes32 strategyHash = _shipThinPosition(order);
 
         SwapProgram memory swapProgram = _swapProgram(MAX_PAYABLE_IN);
         mintTokenInToTaker(swapProgram);
 
         (uint256 amountIn,) = swap(swapProgram, order);
+
         assertEq(tokenA.balanceOf(protocolFeeRecipient), amountIn * PROTOCOL_FEE_BPS / BPS, "fee is collected");
+
+        (uint256 balanceA,) = getAquaBalances(strategyHash);
+        assertEq(balanceA, amountIn, "pool keeps amountIn net of the fee it had pre-funded");
     }
 
     /// @notice The dynamic provider variant behaves the same way.
@@ -176,17 +159,17 @@ contract AquaProtocolFeeMakerPrefundingTest is AquaSwapVMTest {
         assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "dynamic fee is skipped too");
     }
 
-    /// @notice The wallet-charging variant skips on a missing allowance, which is the maker's own setting.
-    function test_WalletFeeOpcode_SkipsWithoutApproval() public {
+    /// @notice Only the Aqua variants gained a skip path. The wallet-charging opcode still reverts, so an
+    ///         Aqua strategy built on it stays blocked until the maker funds and approves tokenIn.
+    function test_WalletFeeOpcode_StillReverts() public {
         ISwapVM.Order memory order = createStrategy(_concentratedProgram(Opcode.ProtocolFeeAmountIn));
         shipStrategy(order, tokenA, tokenB, 0, INITIAL_BALANCE_B);
         tokenB.mint(maker, INITIAL_BALANCE_B);
-        tokenA.mint(maker, 1e18);
 
         SwapProgram memory swapProgram = _swapProgram(10e18);
         mintTokenInToTaker(swapProgram);
 
+        vm.expectRevert(SafeERC20.SafeTransferFromFailed.selector);
         swap(swapProgram, order);
-        assertEq(tokenA.balanceOf(protocolFeeRecipient), 0, "no router allowance means no fee");
     }
 }
