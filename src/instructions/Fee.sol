@@ -57,6 +57,13 @@ contract Fee {
     error FeeBpsOutOfRange(uint256 feeBps);
     error FeeProtocolProviderFailedCall();
 
+    /// @notice Emitted when the protocol fee could not be collected and the swap proceeded without it
+    /// @param orderHash Strategy the fee was charged against
+    /// @param token The tokenIn the fee was denominated in
+    /// @param to Recipient that was not paid
+    /// @param amount Fee amount that was not collected
+    event ProtocolFeeSkipped(bytes32 orderHash, address token, address to, uint256 amount);
+
     IAqua internal immutable _AQUA;
 
     constructor(address aqua) {
@@ -81,15 +88,14 @@ contract Fee {
         }
     }
 
-    /// @notice Protocol fee on amountIn — transfers fee from maker to recipient via safeTransferFrom.
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance and have approved this contract
-    ///   BEFORE the swap is executed. The fee transfer occurs during program execution (inside runLoop),
-    ///   which is before SwapVM completes the taker→maker tokenIn transfer. If the maker lacks tokenIn
-    ///   balance or allowance, the swap will revert.
+    /// @notice Protocol fee on amountIn — transfers fee from maker to recipient via transferFrom.
+    /// @dev The fee is charged during program execution (inside runLoop), which is before SwapVM completes
+    ///   the taker→maker tokenIn transfer, so it comes out of tokenIn the maker already holds. A maker
+    ///   short of tokenIn balance or allowance does not pay the fee and the swap proceeds without it,
+    ///   which is reported through ProtocolFeeSkipped.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the actual token transfer. Quote may succeed while swap reverts due to insufficient
-    ///   balance or missing approval. Makers MUST NOT use backward jumps to this instruction as it may
-    ///   break numerical consistency between quote() and swap().
+    ///   but skips the actual token transfer. Makers MUST NOT use backward jumps to this instruction as it
+    ///   may break numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _protocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
@@ -97,28 +103,26 @@ contract Fee {
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
         if (!ctx.vm.isStaticContext) {
-            IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+            _tryTransferFee(ctx, to, feeAmountIn);
         }
     }
 
     /// @notice Protocol fee on amountIn for Aqua — pulls fee from maker's Aqua balance to recipient.
-    /// @dev IMPORTANT: The maker MUST already hold sufficient tokenIn balance in Aqua BEFORE the swap
-    ///   is executed. The fee pull occurs during program execution (inside runLoop), which is before
-    ///   SwapVM completes the taker→maker tokenIn transfer. If the maker's Aqua tokenIn balance is
-    ///   insufficient, the swap will revert.
+    /// @dev The fee pull happens during program execution (inside runLoop), which is before SwapVM completes
+    ///   the taker→maker tokenIn transfer, so it comes out of the maker's existing Aqua tokenIn balance. A
+    ///   maker whose balance is short of the fee does not pay it and the swap proceeds without it, which is
+    ///   reported through ProtocolFeeSkipped.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the Aqua pull operation. Quote may succeed while swap reverts due to insufficient
-    ///   Aqua balance. Makers MUST NOT use backward jumps to this instruction as it may break numerical
-    ///   consistency between quote() and swap().
+    ///   but skips the Aqua pull operation. Makers MUST NOT use backward jumps to this instruction as it may
+    ///   break numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
-        ctx.swap.amountNetPulled += feeAmountIn;
 
         if (!ctx.vm.isStaticContext) {
-            _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            _tryPullFee(ctx, to, feeAmountIn);
         }
     }
 
@@ -166,7 +170,7 @@ contract Fee {
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
             if (!ctx.vm.isStaticContext && feeAmountIn > 0) {
-                IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.maker, to, feeAmountIn);
+                _tryTransferFee(ctx, to, feeAmountIn);
             }
         }
     }
@@ -213,15 +217,53 @@ contract Fee {
             require(to != address(0), FeeDynamicProtocolInvalidRecipient());
 
             uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
-            ctx.swap.amountNetPulled += feeAmountIn;
 
             if (!ctx.vm.isStaticContext && feeAmountIn > 0) {
-                _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+                _tryPullFee(ctx, to, feeAmountIn);
             }
         }
     }
 
     // Internal functions
+
+    /// @dev Pulls the fee from the maker's Aqua balance. amountNetPulled is only credited when the pull
+    ///      lands, so a skipped fee leaves the taker owing the full amountIn.
+    function _tryPullFee(Context memory ctx, address to, uint256 feeAmountIn) private {
+        try _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to) {
+            ctx.swap.amountNetPulled += feeAmountIn;
+        } catch {
+            emit ProtocolFeeSkipped(ctx.query.orderHash, ctx.query.tokenIn, to, feeAmountIn);
+        }
+    }
+
+    /// @dev Charges the fee against the maker's wallet, applying the same success rules as SafeERC20 but
+    ///      reporting failure through an event instead of reverting.
+    function _tryTransferFee(Context memory ctx, address to, uint256 feeAmountIn) private {
+        address token = ctx.query.tokenIn;
+        address from = ctx.query.maker;
+        bytes4 selector = IERC20.transferFrom.selector;
+        bool success;
+        assembly ("memory-safe") {
+            let data := mload(0x40)
+
+            mstore(data, selector)
+            mstore(add(data, 0x04), from)
+            mstore(add(data, 0x24), to)
+            mstore(add(data, 0x44), feeAmountIn)
+            success := call(gas(), token, 0, data, 0x64, 0x0, 0x20)
+            if success {
+                switch returndatasize()
+                case 0 {
+                    success := gt(extcodesize(token), 0)
+                }
+                default {
+                    success := and(gt(returndatasize(), 31), eq(mload(0), 1))
+                }
+            }
+        }
+
+        if (!success) emit ProtocolFeeSkipped(ctx.query.orderHash, token, to, feeAmountIn);
+    }
 
     function _feeAmountIn(Context memory ctx, uint256 feeBps) internal returns (uint256 feeAmountIn) {
         require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, FeeShouldBeAppliedBeforeSwapAmountsComputation());
