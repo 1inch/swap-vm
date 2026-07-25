@@ -122,8 +122,9 @@ contract Fee {
     ///   BEST-EFFORT COLLECTION: a maker who cannot cover the fee does not pay it and the swap proceeds,
     ///   reported through ProtocolFeeSkipped. See _tryPullFee for who ends up with an uncollected fee.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the Aqua pull operation. Makers MUST NOT use backward jumps to this instruction as it
-    ///   may break numerical consistency between quote() and swap().
+    ///   but skips the Aqua pull operation, so quote() cannot tell a taker whether the fee will actually be
+    ///   collected. Amounts are unaffected either way. Makers MUST NOT use backward jumps to this
+    ///   instruction as it may break numerical consistency between quote() and swap().
     /// @param args.feeBps | 4 bytes (fee in bps, 1e9 = 100%)
     /// @param args.to     | 20 bytes (address to send pulled tokens to)
     function _aquaProtocolFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
@@ -197,8 +198,9 @@ contract Fee {
     ///   BEST-EFFORT COLLECTION: a maker who cannot cover the fee does not pay it and the swap proceeds,
     ///   reported through ProtocolFeeSkipped. See _tryPullFee for who ends up with an uncollected fee.
     /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction computes the fee
-    ///   but skips the Aqua pull operation. Makers MUST NOT use backward jumps to this instruction as it
-    ///   may break numerical consistency between quote() and swap().
+    ///   but skips the Aqua pull operation, so quote() cannot tell a taker whether the fee will actually be
+    ///   collected. Amounts are unaffected either way. Makers MUST NOT use backward jumps to this
+    ///   instruction as it may break numerical consistency between quote() and swap().
     /// @dev REENTRANCY SAFETY:
     ///   - Uses staticcall preventing state changes by feeProvider
     ///   - Protected by TransientLock on orderHash level in SwapVM.swap()
@@ -250,6 +252,9 @@ contract Fee {
     ///   maker keeps it. Collection is therefore best-effort and the maker controls the trigger through their
     ///   own Aqua balance, wallet balance and allowance. Strategies must be validated before being
     ///   whitelisted, and ProtocolFeeSkipped must be monitored.
+    ///
+    ///   Both callers reject a zero recipient before reaching here, so the only failures this swallows are
+    ///   a maker who cannot cover the fee and a token that refuses the transfer.
     ///
     ///   amountNetPulled is credited only when the pull lands. It reports how much tokenIn the program
     ///   already took out of the maker's ledger, which is what keeps the pre-push check in
