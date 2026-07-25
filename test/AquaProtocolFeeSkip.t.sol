@@ -501,18 +501,43 @@ contract AquaProtocolFeeSkipTest is AquaSwapVMTest {
     ///         a maker who is temporarily short. It must fail loudly instead of disappearing into the skip
     ///         path on every swap forever.
     function test_ZeroRecipient_Reverts() public {
-        bytes memory program = _feeProgram(
-            Fee._aquaProtocolFeeAmountInXD,
-            FeeArgsBuilder.buildProtocolFee(PROTOCOL_FEE_BPS, address(0)),
-            false
-        );
-        (ISwapVM.Order memory order,) = _shipProgram(program, INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+        (ISwapVM.Order memory order,) = _shipProgram(_zeroRecipientProgram(PROTOCOL_FEE_BPS), INITIAL_BALANCE_A, INITIAL_BALANCE_B);
 
         SwapProgram memory swapProgram = _swapProgram(SWAP_AMOUNT, true);
         mintTokenInToTaker(swapProgram);
 
         vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
         swap(swapProgram, order);
+    }
+
+    /// @notice The recipient is checked against the program args, not the computed amount, so a trade small
+    ///         enough that the fee rounds to zero cannot slip past the check. Otherwise the taker would pick
+    ///         which swaps validate the maker's configuration.
+    function test_ZeroRecipient_RevertsEvenWhenTheFeeRoundsToZero() public {
+        (ISwapVM.Order memory order,) = _shipProgram(_zeroRecipientProgram(1), INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+
+        // 1 bps in the 1e9 scale, so anything below 1e9 wei of input rounds the fee down to zero
+        SwapProgram memory swapProgram = _swapProgram(1e9 - 1, true);
+        mintTokenInToTaker(swapProgram);
+
+        vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
+        swap(swapProgram, order);
+    }
+
+    /// @notice And it holds in quote mode too, so a taker finds out before spending gas on a swap.
+    function test_ZeroRecipient_QuoteRevertsToo() public {
+        (ISwapVM.Order memory order,) = _shipProgram(_zeroRecipientProgram(PROTOCOL_FEE_BPS), INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+
+        // asView() is resolved first so that expectRevert applies to quote() and not to it
+        ISwapVM viewVM = swapVM.asView();
+        bytes memory sigAndTakerData = takerData(address(taker), true);
+
+        vm.expectRevert(Fee.FeeDynamicProtocolInvalidRecipient.selector);
+        viewVM.quote(order, address(tokenA), address(tokenB), SWAP_AMOUNT, sigAndTakerData);
+    }
+
+    function _zeroRecipientProgram(uint32 feeBps) internal view returns (bytes memory) {
+        return _feeProgram(Fee._aquaProtocolFeeAmountInXD, FeeArgsBuilder.buildProtocolFee(feeBps, address(0)), false);
     }
 
     // ===== BLAST RADIUS: THE WALLET-CHARGING OPCODES ARE UNCHANGED =====

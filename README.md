@@ -576,8 +576,9 @@ skipped, the swap proceeds, and the router emits `ProtocolFeeSkipped(orderHash, 
 what keeps one-sided positions tradable. Pricing is not adjusted, so the taker still pays for the fee and an
 uncollected fee stays with the maker.
 
-Two configuration errors are not treated as a shortfall and still revert: a fee with no recipient
-(`to == address(0)`), and a fee whose amount is zero is simply not charged at all.
+A fee that names no recipient is a configuration error rather than a shortfall, so it is rejected instead of
+skipped. The check is on the program args, so it applies at any trade size and in `quote()` as well as
+`swap()`. A fee whose computed amount is zero is simply not charged, and reports nothing.
 
 The wallet-charging variants (`_protocolFeeAmountInXD`, `_dynamicProtocolFeeAmountInXD`) have no skip path
 and revert if the maker cannot pay, so they still require pre-funded tokenIn and an allowance to the router.
