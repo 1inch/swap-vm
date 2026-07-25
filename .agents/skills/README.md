@@ -20,6 +20,11 @@ every skill added here costs context on every request.
 | `solidity-auditor` | Pashov Audit Group | Runs a fan-out audit over `src/`. Its `math-precision`, `asymmetry`, `boundary` and `invariant` passes line up with the properties already listed in `.cursor/rules/security-review.mdc`, and its bit-mask checks apply to `MakerTraits` and `TakerTraits`. |
 | `property-based-testing` | Trail of Bits | `test/invariants/` already holds 20+ suites; this covers property design, generator strategies and reading shrunk counterexamples. |
 | `differential-review` | Trail of Bits | Security-focused review of a diff rather than a snapshot, including blast radius and test-coverage checks. Complements the generic prompt in `.github/workflows/claude-code-review.yml`. |
+| `hardhat` | Nomic Foundation | Carried for parity with `main`, which is Hardhat-first. This branch is Foundry-only — no `hardhat.config.ts`, and `package.json` runs `forge test` / `forge build` — so the skill has nothing to match on and stays dormant here. It becomes useful if this branch ever picks up the Hardhat 3 setup that landed in #138 and #161. |
+
+The two `hardhat-toolbox-*` companion skills are deliberately absent. They cover
+`@nomicfoundation/hardhat-toolbox-viem` and `@nomicfoundation/hardhat-toolbox-mocha-ethers`, neither
+of which this repo uses.
 
 ## Evaluated and skipped
 
@@ -33,8 +38,8 @@ every skill added here costs context on every request.
 
 ## Licensing
 
-The Trail of Bits skills are CC BY-SA 4.0 and the Pashov skill is MIT; both are recorded in
-`THIRD_PARTY_NOTICES`. Keep the vendored files verbatim. Editing them in place produces Adapted
+The Trail of Bits skills are CC BY-SA 4.0, the Pashov skill is MIT and the Hardhat skill is ISC; all
+three are recorded in `THIRD_PARTY_NOTICES`. Keep the vendored files verbatim. Editing them in place produces Adapted
 Material under ShareAlike — put repo-specific guidance in `.cursor/rules/` instead, which is where
 `security-review.mdc`, `foundry-tests.mdc` and `solidity-style.mdc` already live.
 

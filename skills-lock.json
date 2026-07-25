@@ -19,6 +19,12 @@
       "skillPath": "plugins/entry-point-analyzer/skills/entry-point-analyzer/SKILL.md",
       "computedHash": "78dd6cbfce13a600e890d1c8936d85eb9c6e4d8752327bb5954796f6e03f2bd9"
     },
+    "hardhat": {
+      "source": "nomicfoundation/hardhat-skills",
+      "sourceType": "github",
+      "skillPath": "skills/hardhat/SKILL.md",
+      "computedHash": "6a28b7ffc9e215a40b83b46b59fbb81f89e9a472218468df18ae0f042c52b608"
+    },
     "property-based-testing": {
       "source": "trailofbits/skills",
       "sourceType": "github",
