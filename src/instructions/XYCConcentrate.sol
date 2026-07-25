@@ -65,7 +65,16 @@ library XYCConcentrateSwap {
         if (ctx.query.isExactIn) {
             // Floor division for tokenOut favors maker
             ctx.swap.amountOut = ctx.swap.amountIn * virtualOut / (virtualIn + ctx.swap.amountIn);
+
+            // Partial fill support, recompute as exact out
+            if (ctx.swap.amountOut > ctx.swap.balanceOut) {
+                ctx.swap.amountOut = ctx.swap.balanceOut;
+                ctx.swap.amountIn = (ctx.swap.amountOut * virtualIn).ceilDiv(virtualOut - ctx.swap.amountOut);
+            }
         } else {
+            // Partial fill support
+            if (ctx.swap.amountOut > ctx.swap.balanceOut) ctx.swap.amountOut = ctx.swap.balanceOut;
+
             // Ceil division for tokenIn favors maker
             ctx.swap.amountIn = (ctx.swap.amountOut * virtualIn).ceilDiv(virtualOut - ctx.swap.amountOut);
         }

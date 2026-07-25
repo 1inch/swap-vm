@@ -232,4 +232,3 @@ Complex scenarios with conditional jumps/branching (and, especially, containing 
 - Authorization/gating correctness (restricted users fail, authorized users pass as intended).
 - Economic safety across all branches (no branch yields unintended favorable pricing or bypasses checks).
 - Termination/liveness: no hidden loops or dead-end paths that break execution.
-
