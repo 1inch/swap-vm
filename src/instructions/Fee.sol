@@ -62,11 +62,14 @@ contract Fee {
 
     /// @notice Emitted when a protocol fee transfer fails and the fee is skipped.
     /// @dev Fee charging is best-effort: a failed transfer never blocks the swap.
+    ///   Indexed fields allow off-chain monitors to filter skipped fees by order,
+    ///   token or recipient — monitoring this event is the compensating control
+    ///   for the best-effort charging model.
     /// @param orderHash Unique identifier for the order/strategy
     /// @param token Token in which the fee was to be charged (tokenIn)
     /// @param feeAmount Fee amount that failed to transfer
     /// @param to Intended fee recipient
-    event FeeChargeFailed(bytes32 orderHash, address token, uint256 feeAmount, address to);
+    event FeeChargeFailed(bytes32 indexed orderHash, address indexed token, uint256 feeAmount, address indexed to);
 
     IAqua internal immutable _AQUA;
 
@@ -108,7 +111,7 @@ contract Fee {
         (uint256 feeBps, address to) = FeeArgsBuilder.parseProtocolFee(args);
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
-        if (!ctx.vm.isStaticContext && !_tryPullFee(ctx.query.tokenIn, ctx.query.maker, to, feeAmountIn)) {
+        if (!ctx.vm.isStaticContext && feeAmountIn > 0 && !_tryPullFee(ctx.query.tokenIn, ctx.query.maker, to, feeAmountIn)) {
             emit FeeChargeFailed(ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
         }
     }
@@ -132,10 +135,12 @@ contract Fee {
         uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
 
         if (!ctx.vm.isStaticContext) {
-            try _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to) {
-                ctx.swap.amountNetPulled += feeAmountIn;
-            } catch {
-                emit FeeChargeFailed(ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            if (feeAmountIn > 0) {
+                try _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to) {
+                    ctx.swap.amountNetPulled += feeAmountIn;
+                } catch {
+                    emit FeeChargeFailed(ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+                }
             }
         } else {
             ctx.swap.amountNetPulled += feeAmountIn;

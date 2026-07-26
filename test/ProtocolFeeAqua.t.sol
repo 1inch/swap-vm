@@ -4,13 +4,24 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { BPS } from "../src/instructions/Fee.sol";
+import { Fee, FeeArgsBuilder, BPS } from "../src/instructions/Fee.sol";
+import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../src/instructions/XYCConcentrate.sol";
+import { XYCSwap } from "../src/instructions/XYCSwap.sol";
+import { Controls } from "../src/instructions/Controls.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 
+import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
+
+import { Program, ProgramBuilder } from "./utils/ProgramBuilder.sol";
+
 contract ProtocolFeeAquaTest is AquaSwapVMTest {
+    using ProgramBuilder for Program;
+
     function setUp() public virtual override {
         super.setUp();
     }
@@ -324,13 +335,122 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
 
         _drainTokenBToRangeBoundaryViaSwap(order, strategyHash);
 
+        // Recipient already collected fees in tokenA during the drain — snapshot here
+        (uint256 recipientBalanceABefore, uint256 recipientBalanceBBefore) = getProtocolRecipientBalances();
+
         // Swap back: tokenB (drained) -> tokenA, exactOut
         SwapProgram memory backSwap = _swapProgram(10e18, false, false);
         mintTokenInToTaker(backSwap, 1_000_000e18);
+
+        // exactOut: the fee amount depends on the AMM-quoted amountIn, so only the
+        // indexed fields (orderHash, token, recipient) and the emitter are asserted
+        vm.expectEmit(true, true, true, false, address(swapVM));
+        emit FeeChargeFailed(swapVM.hash(order), address(tokenB), 0, protocolFeeRecipient);
 
         (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
 
         assertEq(amountOut, backSwap.amount, "Swap back should produce the exact amountOut");
         assertGt(amountIn, 0, "Swap back should consume non-zero amountIn");
+
+        // Fee was skipped: recipient got nothing, the full amountIn stayed in the strategy
+        (uint256 recipientBalanceAAfter, uint256 recipientBalanceBAfter) = getProtocolRecipientBalances();
+        assertEq(recipientBalanceAAfter, recipientBalanceABefore, "Recipient balance A should not change");
+        assertEq(recipientBalanceBAfter, recipientBalanceBBefore, "Recipient should not receive the skipped fee");
+        (, uint256 aquaBalanceBAfter) = getAquaBalances(strategyHash);
+        assertEq(aquaBalanceBAfter, amountIn, "Full amountIn incl. fee share should stay in the strategy");
+    }
+
+    // ========== Aqua Dynamic Protocol Fee Tests ==========
+
+    /// @dev Program for `_aquaDynamicProtocolFeeAmountInXD`: plain XYC swap over Aqua
+    ///      balances with a dynamic (provider-driven) protocol fee on amountIn.
+    function _xycDynamicFeeProgram(address feeProvider) internal view returns (bytes memory) {
+        Program memory p = ProgramBuilder.init(_opcodes());
+        return bytes.concat(
+            p.build(Fee._aquaDynamicProtocolFeeAmountInXD, FeeArgsBuilder.buildDynamicProtocolFee(feeProvider)),
+            p.build(XYCSwap._xycSwapXD),
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    /// @dev Same as _xycDynamicFeeProgram but with concentrated liquidity, mirroring
+    ///      _concentrateMakerSetup: price range [0.25, 4] symmetric around spot 1.
+    function _concentrateDynamicFeeProgram(address feeProvider) internal view returns (bytes memory) {
+        Program memory p = ProgramBuilder.init(_opcodes());
+        uint256 sqrtPmin = Math.sqrt(0.25e18 * 1e18);
+        uint256 sqrtPmax = Math.sqrt(4e18 * 1e18);
+        return bytes.concat(
+            p.build(Fee._aquaDynamicProtocolFeeAmountInXD, FeeArgsBuilder.buildDynamicProtocolFee(feeProvider)),
+            p.build(XYCConcentrate._xycConcentrateGrowLiquidity2D, XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)),
+            p.build(XYCSwap._xycSwapXD),
+            p.build(Controls._salt, abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    /// @notice Success path: the dynamic Aqua protocol fee is pulled from the maker's
+    ///         strategy balance to the provider-defined recipient.
+    function test_Aqua_DynamicProtocolFee_ExactIn_ReceivedByRecipient() public {
+        ProtocolFeeProviderMock feeProvider = new ProtocolFeeProviderMock(0.10e9, protocolFeeRecipient, address(this));
+        ISwapVM.Order memory order = createStrategy(_xycDynamicFeeProgram(address(feeProvider)));
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, INITIAL_BALANCE_A, INITIAL_BALANCE_B);
+        SwapProgram memory swapProgram = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB
+
+        (uint256 makerBalanceABefore,) = getAquaBalances(strategyHash);
+
+        mintTokenInToTaker(swapProgram);
+        mintTokenInToMaker(swapProgram, 200e18);
+        mintTokenOutToMaker(swapProgram, 200e18);
+        (uint256 recipientBalanceABefore,) = getProtocolRecipientBalances();
+
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+
+        // exactIn: fee is computed on the taker-defined amountIn
+        uint256 expectedFee = amountIn * 0.10e9 / BPS;
+        (uint256 recipientBalanceAAfter,) = getProtocolRecipientBalances();
+        (uint256 makerBalanceAAfter,) = getAquaBalances(strategyHash);
+
+        assertGt(amountOut, 0, "Swap should produce non-zero amountOut");
+        assertEq(recipientBalanceAAfter - recipientBalanceABefore, expectedFee, "Recipient should receive the dynamic protocol fee in tokenIn");
+        assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn - expectedFee, "Maker balance A should increase by amountIn minus protocol fee");
+    }
+
+    /// @notice Catch path: at the range boundary the dynamic Aqua fee pull in drained
+    ///         tokenIn fails, the fee is skipped with FeeChargeFailed and the swap
+    ///         proceeds — mirroring the static-fee boundary test.
+    function test_Aqua_DynamicProtocolFee_Concentrate_SwapBackAtRangeBoundary_FeeSkipped() public {
+        uint32 feeBps = 0.01e9; // 1% protocol fee
+        ProtocolFeeProviderMock feeProvider = new ProtocolFeeProviderMock(feeBps, protocolFeeRecipient, address(this));
+        ISwapVM.Order memory order = createStrategy(_concentrateDynamicFeeProgram(address(feeProvider)));
+        bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, 1000e18, 1000e18);
+
+        _drainTokenBToRangeBoundary(order, strategyHash);
+
+        // Recipient already collected fees in tokenA during the drain — snapshot here
+        (uint256 recipientBalanceABefore, uint256 recipientBalanceBBefore) = getProtocolRecipientBalances();
+
+        // Swap back: tokenB (drained) -> tokenA
+        SwapProgram memory backSwap = _swapProgram(10e18, false, true);
+        mintTokenInToTaker(backSwap);
+
+        // Quote agrees the swap back is possible (static context skips the fee pull)
+        (, uint256 quotedAmountOut) = quote(backSwap, order);
+        assertGt(quotedAmountOut, 0, "Quote for swap back should succeed");
+
+        uint256 expectedFee = backSwap.amount * feeBps / BPS;
+        vm.expectEmit(address(swapVM));
+        emit FeeChargeFailed(swapVM.hash(order), address(tokenB), expectedFee, protocolFeeRecipient);
+
+        (uint256 amountIn, uint256 amountOut) = swap(backSwap, order);
+
+        assertEq(amountIn, backSwap.amount, "Swap back should consume the exact amountIn");
+        assertGt(amountOut, 0, "Swap back should produce non-zero amountOut");
+        assertEq(amountOut, quotedAmountOut, "Swap should match quote (quote/swap parity)");
+
+        // Fee was skipped: recipient got nothing, the full amountIn stayed in the strategy
+        (uint256 recipientBalanceAAfter, uint256 recipientBalanceBAfter) = getProtocolRecipientBalances();
+        assertEq(recipientBalanceAAfter, recipientBalanceABefore, "Recipient balance A should not change");
+        assertEq(recipientBalanceBAfter, recipientBalanceBBefore, "Recipient should not receive the skipped fee");
+        (, uint256 aquaBalanceBAfter) = getAquaBalances(strategyHash);
+        assertEq(aquaBalanceBAfter, amountIn, "Full amountIn incl. fee share should stay in the strategy");
     }
 }

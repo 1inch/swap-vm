@@ -447,9 +447,11 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         uint256 amountIn = 10e18;
 
-        // Only the event signature and emitter are asserted (checkData=false):
-        // the exact fee amount depends on the effective exactIn/exactOut mode
-        vm.expectEmit(false, false, false, false, address(swapVM));
+        // _swappingTakerData drops the isExactIn flag (pre-existing quirk), so the swap
+        // effectively runs in exactOut mode and the fee amount depends on the AMM-quoted
+        // amountIn. The indexed fields (orderHash, token, recipient) and the emitter are
+        // asserted; the recipient balance check below proves no fee was transferred.
+        vm.expectEmit(true, true, true, false, address(swapVM));
         emit FeeChargeFailed(orderHash, tokenA, 0, protocolFeeRecipient);
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, tokenA, tokenB, amountIn, exactInTakerDataSwap);
