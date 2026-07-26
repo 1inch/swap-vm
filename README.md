@@ -381,6 +381,7 @@ AMM strategies should remain live even when one reserve is temporarily depleted:
 - If one asset balance reaches zero (for example, in concentrated-liquidity configurations), swaps in that direction may stop
 - Reverse-direction swaps should still be possible
 - Reverse flow should be able to restore depleted reserves and return the strategy to a working state
+- A one-sided position must be tradable into, so the Aqua protocol-fee-on-amountIn instructions do not block a maker who cannot cover the fee. See [Protocol Fee on amountIn](#protocol-fee-on-amountin)
 
 
 These invariants are validated through comprehensive test suites and must be maintained by any new instruction implementations.
@@ -563,6 +564,34 @@ ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
 
 See [Aqua Protocol](https://github.com/1inch/aqua) for details
 
+### Protocol Fee on amountIn
+
+The protocol-fee-on-amountIn instructions charge the maker inside `runLoop()`, which runs before `SwapVM`
+settles the taker's tokenIn. The fee is therefore payable only out of tokenIn the maker already holds, not
+out of the amount the swap is about to deliver.
+
+For the Aqua variants (`_aquaProtocolFeeAmountInXD`, `_aquaDynamicProtocolFeeAmountInXD`) **collection is
+best-effort**. If the maker's Aqua balance, wallet balance or Aqua allowance cannot cover the fee, the fee is
+skipped, the swap proceeds, and the router emits `ProtocolFeeSkipped(orderHash, token, to, amount)`. This is
+what keeps one-sided positions tradable. Pricing is not adjusted, so the taker still pays for the fee and an
+uncollected fee stays with the maker.
+
+A fee that names no recipient is a configuration error rather than a shortfall, so it is rejected instead of
+skipped. The check is on the program args, so it applies at any trade size and in `quote()` as well as
+`swap()`. A fee whose computed amount is zero is simply not charged, and reports nothing.
+
+The wallet-charging variants (`_protocolFeeAmountInXD`, `_dynamicProtocolFeeAmountInXD`) have no skip path
+and revert if the maker cannot pay, so they still require pre-funded tokenIn and an allowance to the router.
+
+**Operational requirements:**
+- Monitor `ProtocolFeeSkipped`. It is the only signal that a fee went uncollected. Note that the trigger is
+  not only the maker: a token that blocks the fee recipient (a blacklist or freeze) silently stops collection
+  for every strategy trading that token.
+- Validate strategies before whitelisting them. Pin the fee recipient and the fee rate, and check that an
+  Aqua fee instruction is only used on an Aqua order (`useAquaInsteadOfSignature == true`). An Aqua fee
+  instruction on a signature-based order has no Aqua balance to draw on, so its fee is skipped on every swap
+  while the program bytes still read as fee-paying.
+
 ### Maker Security
 
 Your orders are protected by:
@@ -582,6 +611,7 @@ Your orders are protected by:
 - Add explicit rate protection (`_requireMinRate1D` or `_adjustMinRate1D`) when needed
 - Treat instruction ordering as security-critical, especially around fee instructions
 - Consider MEV protection (`_decayXD`) for AMM-style strategies
+- Match the fee instruction to your authorization mode: Aqua fee instructions draw on an Aqua balance and collect nothing on a signature-based order (see [Protocol Fee on amountIn](#protocol-fee-on-amountin))
 
 ---
 
@@ -675,6 +705,7 @@ Your swaps are protected by:
 - Set `deadline` to bound execution time
 - Use `isStrictThresholdAmount` only when exact threshold matching is required
 - Reuse the same `takerData` between quote and swap
+- Pre-push the full `amountIn` when settling an Aqua order without `useTransferFromAndAquaPush`. `quote()` cannot tell you whether a protocol fee will be collected, and the pre-push check requires the full `amountIn` either way (see [Protocol Fee on amountIn](#protocol-fee-on-amountin))
 - Verify order hasn't expired
 - Check for MEV opportunities
 - Consider gas costs vs profit
