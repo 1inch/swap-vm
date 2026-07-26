@@ -60,6 +60,7 @@ struct SwapRegisters {
 struct ProtocolFee {
     FeeMeta meta;
     FeeReceiver[] receivers;
+    uint256 feeTotal;
 }
 
 /// @title SwapVM context

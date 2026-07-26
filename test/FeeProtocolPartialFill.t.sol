@@ -33,7 +33,7 @@ contract FeeProtocolPartialFillTest is Test {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
-    function testFuzz_FeeProtocolIn_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
+    function testFuzz_FeeProtocolIn_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
 
@@ -79,7 +79,79 @@ contract FeeProtocolPartialFillTest is Test {
         if (isPartialFill) assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * (realAmount + 1), "One wei more realFee would be rapacious");
     }
 
-    function testFuzz_FeeProtocolOut_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
+    function testFuzz_FeeProtocolIn_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountIn, uint24 feeBps) public view {
+        amount = bound(amount, 1, 1e36);
+        feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
+
+        amountPartial = bound(amountPartial, 1, amount);
+        bool isPartialFill = amountPartial != amount;
+        amountIn = bound(amountIn, 0, 1e36);
+
+        bytes memory program = bytes.concat(
+            _feeProtocolProgram(true, feeBps),
+            // Simulates runLoop drifting amountOut down to a partial fill
+            PatchSwapRegisters.build(SwapRegisters({
+                balanceIn: 0,
+                balanceOut: 0,
+                amountIn: amountIn,
+                amountOut: amountPartial
+            }))
+        );
+
+        (uint256 realIn, uint256 realOut,) = swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(false));
+
+        uint256 realFee = realIn - amountIn;
+
+        uint256 feeDesired = amountIn * feeBps / (FeeProtocol.BPS - feeBps);
+        assertEq(realFee, feeDesired);
+
+        // No partial fill -> no drift
+        if (!isPartialFill) assertEq(realOut, amount);
+
+        // realFee / realIn <= feeBps
+        assertLe(realFee * FeeProtocol.BPS, feeBps * realIn, "Protocol fee should not be rapacious");
+
+        // Imagine realFee is 1 wei more -> realIn is 1 wei more as well -> feeBps breaks
+        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * (realIn + 1), "One wei more realFee would be rapacious");
+    }
+
+    function testFuzz_FeeProtocolOut_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountOut, uint24 feeBps) public view {
+        amount = bound(amount, 0, 1e36);
+        feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
+
+        amountPartial = bound(amountPartial, 0, amount);
+        bool isPartialFill = amountPartial != amount;
+        amountOut = bound(amountOut, 1, 1e36);
+
+        bytes memory program = bytes.concat(
+            _feeProtocolProgram(false, feeBps),
+            // Simulates runLoop drifting amountIn down to a partial fill
+            PatchSwapRegisters.build(SwapRegisters({
+                balanceIn: 0,
+                balanceOut: 0,
+                amountIn: amountPartial,
+                amountOut: amountOut
+            }))
+        );
+
+        (uint256 realIn, uint256 realOut,) = swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(true));
+
+        uint256 realFee = amountOut - realOut;
+
+        uint256 feeDesired = amountOut * feeBps / FeeProtocol.BPS;
+        assertEq(realFee, feeDesired);
+
+        // No partial fill -> no drift
+        if (!isPartialFill) assertEq(realIn, amount);
+
+        // realFee / amountOut <= feeBps
+        assertLe(realFee * FeeProtocol.BPS, feeBps * amountOut, "Protocol fee should not be rapacious");
+
+        // Imagine realFee is 1 wei more -> feeBps breaks
+        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * amountOut, "One wei more realFee would be rapacious");
+    }
+
+    function testFuzz_FeeProtocolOut_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
 

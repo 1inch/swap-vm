@@ -15,6 +15,7 @@ import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { StaticBalances } from "../src/instructions/Balances.sol";
 import { LimitSwap } from "../src/instructions/LimitSwap.sol";
 import { InvalidateTokenIn, InvalidateTokenOut } from "../src/instructions/Invalidators.sol";
+import { FeeProtocol } from "../src/instructions/FeeProtocol.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 contract ProtocolSurplusPartialFillTest is Test {
@@ -124,20 +125,17 @@ contract ProtocolSurplusPartialFillTest is Test {
         uint256 balanceIn,
         uint256 balanceOut,
         uint256 estimate,
+        uint24 feeBps,
         uint24 surplusBps,
         uint256[3] memory asks
     ) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
         estimate = bound(estimate, 0, 1e30);
+        feeBps = uint24(bound(feeBps, 0, BPS - 1));
         surplusBps = uint24(bound(surplusBps, 1, BPS - 1));
 
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(balanceIn, balanceOut),
-            FeeBuilders.protocolSurplusIn(surplusBps, feeRecipient, uint216(estimate)),
-            InvalidateTokenIn.build(),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        ));
+        ISwapVM.Order memory order = _flatSurplusOrder(true, balanceIn, balanceOut, feeBps, surplusBps, estimate);
         bytes memory exactInData = _makeTakerData(order, true);
 
         uint256 filled;
@@ -147,20 +145,23 @@ contract ProtocolSurplusPartialFillTest is Test {
             if (remaining == 0) break;
 
             uint256 ask = bound(asks[i], 1, balanceIn);
-            uint256 expectedIn = Math.min(ask, remaining);
-            uint256 expectedOut = expectedIn * (balanceOut * remaining / balanceIn) / remaining;
+            uint256 expectedNet = Math.min(ask - ask * feeBps / BPS, remaining);
+            uint256 expectedOut = expectedNet * (balanceOut * remaining / balanceIn) / remaining;
+            uint256 expectedFlat = expectedNet == ask - ask * feeBps / BPS
+                ? ask * feeBps / BPS
+                : expectedNet * feeBps / (BPS - feeBps);
 
             // Estimate share is pro-rata of the whole order by this fill's output
             uint256 share = (estimate * expectedOut).ceilDiv(balanceOut);
-            uint256 expectedFee = (expectedIn > share ? expectedIn - share : 0) * surplusBps / BPS;
+            uint256 expectedFee = expectedFlat + (expectedNet > share ? expectedNet - share : 0) * surplusBps / BPS;
 
             uint256 recipientBefore = tokenA.balanceOf(feeRecipient);
             try swapVM.swap(order, ask, exactInData) returns (uint256 amountIn, uint256 amountOut, bytes32) {
-                assertEq(amountIn, expectedIn);
+                assertEq(amountIn, expectedNet + expectedFlat);
                 assertEq(amountOut, expectedOut);
-                assertEq(tokenA.balanceOf(feeRecipient) - recipientBefore, expectedFee, "Surplus fee should match pro-rata estimate");
+                assertEq(tokenA.balanceOf(feeRecipient) - recipientBefore, expectedFee, "Flat and surplus fees should be counted against the real fill");
 
-                filled += amountIn;
+                filled += expectedNet;
                 totalShares += share;
             } catch (bytes memory reason) {
                 assertEq(bytes4(reason), TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector);
@@ -172,7 +173,77 @@ contract ProtocolSurplusPartialFillTest is Test {
         assertLe(totalShares, estimate + asks.length, "Cumulative estimate shares should be pro-rata of the order");
     }
 
-    // === Helpers ===
+    function testFuzz_SurplusOut_Multifill(
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 estimate,
+        uint24 feeBps,
+        uint24 surplusBps,
+        uint256[3] memory asks
+    ) public {
+        balanceIn = bound(balanceIn, 1, 1e30);
+        balanceOut = bound(balanceOut, 1, 1e30);
+        estimate = bound(estimate, 0, 1e30);
+        feeBps = uint24(bound(feeBps, 0, 0.5e7));
+        surplusBps = uint24(bound(surplusBps, 1, BPS - 1));
+
+        ISwapVM.Order memory order = _flatSurplusOrder(false, balanceIn, balanceOut, feeBps, surplusBps, estimate);
+        bytes memory exactOutData = _makeTakerData(order, false);
+
+        uint256 filled;
+        uint256 totalShares;
+        for (uint256 i = 0; i < asks.length; i++) {
+            if (balanceOut == filled) break;
+
+            (uint256 expectedIn, uint256 expectedOut, uint256 expectedGross, uint256 expectedFee) =
+                _expectedOutFill(balanceIn, balanceOut, estimate, feeBps, surplusBps, balanceOut - filled, bound(asks[i], 1, balanceOut));
+
+            uint256 recipientBefore = tokenB.balanceOf(feeRecipient);
+            (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, bound(asks[i], 1, balanceOut), exactOutData);
+
+            assertEq(amountIn, expectedIn);
+            assertEq(amountOut, expectedOut);
+            assertEq(tokenB.balanceOf(feeRecipient) - recipientBefore, expectedFee, "Flat and surplus fees should be counted against the real fill");
+
+            filled += expectedGross;
+            totalShares += estimate * expectedIn / balanceIn;
+        }
+
+        // Estimate shares across all fills never exceed the whole-order estimate beyond the input
+        // rounding excess of 2 wei per fill scaled by the estimate
+        assertLe(totalShares * balanceIn, estimate * (balanceIn + 2 * asks.length), "Cumulative estimate shares should be pro-rata of the order");
+    }
+
+    /// @dev Mirrors a single exact-out fill: gross output requested with the fee on top, capped by the
+    ///   remaining capacity, the flat fee deducted from the gross, the surplus counted as the estimate
+    ///   share shortfall against the really delivered gross
+    function _expectedOutFill(
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint256 estimate,
+        uint24 feeBps,
+        uint24 surplusBps,
+        uint256 remaining,
+        uint256 ask
+    ) internal pure returns (uint256 expectedIn, uint256 expectedOut, uint256 expectedGross, uint256 expectedFee) {
+        expectedGross = Math.min(ask + ask * feeBps / (BPS - feeBps), remaining);
+        expectedIn = (expectedGross * (balanceIn * remaining).ceilDiv(balanceOut)).ceilDiv(remaining);
+        expectedOut = expectedGross - expectedGross * feeBps / BPS;
+
+        uint256 share = estimate * expectedIn / balanceIn;
+        expectedFee = expectedGross * feeBps / BPS + (share > expectedGross ? share - expectedGross : 0) * surplusBps / BPS;
+    }
+
+    function _flatSurplusOrder(bool isTokenIn, uint256 balanceIn, uint256 balanceOut, uint24 feeBps, uint24 surplusBps, uint256 estimate) internal view returns (ISwapVM.Order memory) {
+        return _createOrder(bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            isTokenIn
+                ? FeeBuilders.protocolFlatSurplusIn(feeBps, surplusBps, feeRecipient, uint216(estimate))
+                : FeeBuilders.protocolFlatSurplusOut(feeBps, surplusBps, feeRecipient, uint216(estimate)),
+            isTokenIn ? InvalidateTokenIn.build() : InvalidateTokenOut.build(),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+    }
 
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({

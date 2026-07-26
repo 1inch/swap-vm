@@ -35,7 +35,7 @@ contract FeeFlatPartialFillTest is Test {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
-    function testFuzz_FeeFlatIn_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
+    function testFuzz_FeeFlatIn_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 0, FeeFlatIn.BPS - 1));
 
@@ -82,7 +82,86 @@ contract FeeFlatPartialFillTest is Test {
         if (realFee != 0 && isPartialFill) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * (realAmount - 1), "One wei less realFee would favor taker");
     }
 
-    function testFuzz_FeeFlatOut_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
+    function testFuzz_FeeFlatIn_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountIn, uint24 feeBps) public view {
+        amount = bound(amount, 1, 1e36);
+        feeBps = uint24(bound(feeBps, 0, FeeFlatIn.BPS - 1));
+
+        amountPartial = bound(amountPartial, 1, amount);
+        bool isPartialFill = amountPartial != amount;
+        amountIn = bound(amountIn, 0, 1e36);
+
+        bytes memory program = bytes.concat(
+            FeeFlatIn.build(feeBps),
+            // Simulates runLoop drifting amountOut down to a partial fill
+            PatchSwapRegisters.build(SwapRegisters({
+                balanceIn: 0,
+                balanceOut: 0,
+                amountIn: amountIn,
+                amountOut: amountPartial
+            }))
+        );
+
+        (uint256 realIn, uint256 realOut,) = swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(false));
+
+        uint256 realFee = realIn - amountIn;
+
+        uint256 feeDesired = (amountIn * feeBps).ceilDiv(FeeFlatIn.BPS - feeBps);
+        assertEq(realFee, feeDesired);
+
+        // No partial fill -> no drift
+        if (!isPartialFill) assertEq(realOut, amount);
+
+        // realFee / realIn >= feeBps
+        assertGe(realFee * FeeFlatIn.BPS, feeBps * realIn, "Effective fee should favor maker");
+
+        // Imagine realFee is 1 wei less -> realIn is 1 wei less as well -> feeBps breaks
+        if (realFee != 0) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * (realIn - 1), "One wei less realFee would favor taker");
+    }
+
+    function testFuzz_FeeFlatOut_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountOut, uint24 feeBps) public view {
+        amount = bound(amount, 0, 1e36);
+        feeBps = uint24(bound(feeBps, 0, FeeFlatOut.BPS - 1));
+
+        amountPartial = bound(amountPartial, 0, amount);
+        bool isPartialFill = amountPartial != amount;
+        amountOut = bound(amountOut, 1, 1e36);
+
+        bytes memory program = bytes.concat(
+            FeeFlatOut.build(feeBps),
+            // Simulates runLoop drifting amountIn down to a partial fill
+            PatchSwapRegisters.build(SwapRegisters({
+                balanceIn: 0,
+                balanceOut: 0,
+                amountIn: amountPartial,
+                amountOut: amountOut
+            }))
+        );
+
+        uint256 realIn;
+        uint256 realOut;
+        try swapVM.asView().quote(_createOrder(program), amount, _makeTakerData(true)) returns (uint256 quotedIn, uint256 quotedOut, bytes32) { (realIn, realOut) = (quotedIn, quotedOut); }
+        catch (bytes memory reason) {
+            require(bytes4(reason) == TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector);
+            assertEq(amountOut, (amountOut * feeBps).ceilDiv(FeeFlatOut.BPS));
+            return;
+        }
+
+        uint256 realFee = amountOut - realOut;
+
+        uint256 feeDesired = (amountOut * feeBps).ceilDiv(FeeFlatOut.BPS);
+        assertEq(realFee, feeDesired);
+
+        // No partial fill -> no drift
+        if (!isPartialFill) assertEq(realIn, amount);
+
+        // realFee / amountOut >= feeBps
+        assertGe(realFee * FeeFlatOut.BPS, feeBps * amountOut, "Effective fee should favor maker");
+
+        // Imagine realFee is 1 wei less -> feeBps breaks
+        if (realFee != 0) assertLt((realFee - 1) * FeeFlatOut.BPS, feeBps * amountOut, "One wei less realFee would favor taker");
+    }
+
+    function testFuzz_FeeFlatOut_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 0, FeeFlatOut.BPS - 1));
 

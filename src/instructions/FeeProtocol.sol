@@ -194,25 +194,26 @@ library FeeProtocol {
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
 
         uint256 surplusEstimate;
+        uint256 fee;
 
         // Using floor division, protocol fees should not be rapacious
         if (isTokenIn) {
             uint256 balanceOut = ctx.swap.balanceOut;
 
             if (ctx.query.isExactIn) {
-                uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
+                fee = ctx.swap.amountIn * totalFeeBps / BPS;
                 ctx.swap.amountIn -= fee;
 
                 uint256 reduction = ctx.swap.amountIn;
                 ctx.runLoop();
                 reduction -= ctx.swap.amountIn;
 
-                if (reduction == 0) ctx.swap.amountIn += fee;
-                else ctx.swap.amountIn += ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                if (reduction > 0) fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             } else {
                 ctx.runLoop();
-                ctx.swap.amountIn += ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             }
+            ctx.swap.amountIn += fee;
 
             if (totalSurplusBps > 0) {
                 // Using ceil division favors maker
@@ -224,7 +225,8 @@ library FeeProtocol {
 
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
-            ctx.swap.amountOut -= ctx.swap.amountOut * totalFeeBps / BPS;
+            fee = ctx.swap.amountOut * totalFeeBps / BPS;
+            ctx.swap.amountOut -= fee;
 
             if (totalSurplusBps > 0) {
                 // Using floor division favors maker
@@ -235,5 +237,6 @@ library FeeProtocol {
 
         ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), surplusEstimate.toUint216());
         ctx.fee.receivers = receivers;
+        ctx.fee.feeTotal = fee;
     }
 }
