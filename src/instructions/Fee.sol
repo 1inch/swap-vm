@@ -267,8 +267,8 @@ contract Fee {
     ///   - at least 32 bytes are returned and decode to boolean `true`.
     ///   Assembly is used to avoid copying unbounded return data to memory (returndata bomb
     ///   protection) and to keep gas parity with SafeERC20 on the success path.
-    ///   Note: `maker` and `to` originate from calldata parsing (query struct / bytes20 slice),
-    ///   so their higher bits are already clean and no masking is performed.
+    ///   This function NEVER reverts and never bubbles token errors — any failure maps to `false`.
+    ///   Addresses are defensively masked to 160 bits before being written into calldata.
     /// @param token ERC20 token to charge the fee in (tokenIn of the current swap)
     /// @param maker Address the fee is pulled from
     /// @param to Fee recipient
@@ -276,23 +276,25 @@ contract Fee {
     /// @return success True if the transfer succeeded, false if it failed for any reason
     function _tryPullFee(address token, address maker, address to, uint256 amount) private returns (bool success) {
         bytes4 selector = IERC20.transferFrom.selector;
-        assembly ("memory-safe") { // solhint-disable-line no-inline-assembly
-            let data := mload(0x40)
 
-            mstore(data, selector)
-            mstore(add(data, 0x04), maker)
-            mstore(add(data, 0x24), to)
-            mstore(add(data, 0x44), amount)
-            success := call(gas(), token, 0, data, 0x64, 0x0, 0x20)
-            if success {
-                switch returndatasize()
-                case 0 {
-                    success := gt(extcodesize(token), 0)
-                }
-                default {
-                    success := and(gt(returndatasize(), 31), eq(mload(0), 1))
-                }
+        assembly ("memory-safe") {
+            let fmp := mload(0x40)
+            mstore(0x00, selector)
+            mstore(0x04, and(maker, shr(96, not(0))))
+            mstore(0x24, and(to, shr(96, not(0))))
+            mstore(0x44, amount)
+            success := call(gas(), token, 0, 0x00, 0x64, 0x00, 0x20)
+            // if the call succeeded and returned true, all is good.
+            // otherwise the transfer counts as successful only if:
+            // - the call itself succeeded (no revert), AND
+            // - the returndata is empty (non-standard tokens like USDT), AND
+            // - the token address has code
+            if iszero(and(success, eq(mload(0x00), 1))) {
+                success := and(success, and(iszero(returndatasize()), gt(extcodesize(token), 0)))
             }
+            // restore the free memory pointer and zero slot clobbered by the calldata writes above
+            mstore(0x40, fmp)
+            mstore(0x60, 0)
         }
     }
 
