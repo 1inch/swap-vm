@@ -1,0 +1,220 @@
+================================================================================================
+1. SANITY CHECKS - the float model reproduces the XYCConcentrate / v3 algebra
+================================================================================================
+  L round trip:     1000.000000 -> 1000.000000   (rel err 1.11e-15)
+  price round trip: 2000.000000 -> 2000.000000   (rel err 0.00e+00)
+
+  A range symmetric around the current price forces y = P*x, i.e. exactly
+  50/50 by value. The only curve with a constant 50/50 split is x*y=const,
+  so the self-consistent 'always centred' AMM *is* Uniswap v2 - with the
+  whole amplification A showing up inside a single trade only:
+
+    range       y/(P*x)   value in x    A (=virtual/real reserves)
+    +/-  1.0%    1.0000      0.5000     201.50x  (measured   201.50x)
+    +/- 10.0%    1.0000      0.5000      21.49x  (measured    21.49x)
+    +/- 50.0%    1.0000      0.5000       5.45x  (measured     5.45x)
+    +/-100.0%    1.0000      0.5000       3.41x  (measured     3.41x)
+    +/-300.0%    1.0000      0.5000       2.00x  (measured     2.00x)
+
+  Recentering is a MOMENTUM term. After a buy, the balance ratio y/x moves
+  ~A times further than the curve price does, so 'recentre on the current
+  price' always pushes the quote further in the direction of the last trade:
+
+    range        A     trade      quote move on curve   extra move from recentring
+    +/- 10.0%   21.49   buy 1% of y       +9.31 bps            +8.87 bps
+    +/- 50.0%    5.45   buy 1% of y      +36.67 bps           +29.94 bps
+    +/-200.0%    2.37   buy 1% of y      +84.35 bps           +48.70 bps
+
+  One application of 'bounds := [spot/k, spot*k]' closes ~1/A of the gap to
+  the 50/50 price (theory: dP/P = (1/A) * gap):
+
+    +/- 10.0%  A= 21.49   gap=  0.21280  moved=  0.00987   moved/gap= 0.0464   1/A= 0.0465
+    +/- 50.0%  A=  5.45   gap=  0.18232  moved=  0.03339   moved/gap= 0.1831   1/A= 0.1835
+    +/-100.0%  A=  3.41   gap=  0.15795  moved=  0.04620   moved/gap= 0.2925   1/A= 0.2929
+
+  The self-consistent rule has NO bounded solution once one side is empty:
+  P = y/x -> infinity as x -> 0, so an 'always centred' pool must quote an
+  unbounded price when its inventory runs out.
+
+  Inventory-matched recentring: for ANY inventory there is an exact pair of
+  bounds of the chosen width whose implied price equals the market price, so
+  recentring never requires a swap and never has to jump the quote:
+
+    market drift   value in x   bounds after recentring        implied price error
+          +0%         50.0%   [  1818.2,   2200.0]  centre   2000.0      0.00e+00
+          +3%         34.8%   [  1818.2,   2200.0]  centre   2000.0      4.44e-16
+          -3%         65.6%   [  1818.2,   2200.0]  centre   2000.0      2.22e-16
+          +8%         10.0%   [  1818.2,   2200.0]  centre   2000.0      4.44e-16
+          -8%         93.5%   [  1818.2,   2200.0]  centre   2000.0      2.22e-16
+         +25%          0.0%   [  2066.1,   2500.0]  centre   2272.7      0.00e+00
+         -25%        100.0%   [  1500.0,   1815.0]  centre   1650.0      3.33e-16
+
+================================================================================================
+2. ATOMIC ROUND TRIP (money pump), market price == pool price, no price move at all
+================================================================================================
+  Best single-transaction 'trade in, trade straight back' profit, % of pool TVL.
+  Negative = the design is conservative, i.e. safe.
+
+  policy          range      A     fee= 0.00%   fee= 0.05%   fee= 0.30%   fee= 1.00%   fee= 5.00%
+  STATIC        +/-  1.0% 201.50      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  STATIC        +/- 10.0%  21.49      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  STATIC        +/- 50.0%   5.45      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  STATIC        +/-200.0%   2.37      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  FLOAT_SPOT    +/-  1.0% 201.50      +0.5000%     +0.4497%     +0.1977%     -0.0000%     -0.0000%
+  FLOAT_SPOT    +/- 10.0%  21.49      +4.9768%     +4.9241%     +4.6600%     +3.9167%     -0.0000%
+  FLOAT_SPOT    +/- 50.0%   5.45     +22.8990%    +22.8427%    +22.5607%    +21.7653%    +17.0463%
+  FLOAT_SPOT    +/-200.0%   2.37     +50.0000%    +50.0000%    +50.0000%    +50.0000%    +50.0000%
+  FLOAT_FIX     +/-  1.0% 201.50     +50.0000%    +50.0000%    +50.0000%    +50.0000%    +50.0000%
+  FLOAT_FIX     +/- 10.0%  21.49     +50.0000%    +50.0000%    +50.0000%    +50.0000%    +50.0000%
+  FLOAT_FIX     +/- 50.0%   5.45     +50.0000%    +50.0000%    +50.0000%    +50.0000%    +50.0000%
+  FLOAT_FIX     +/-200.0%   2.37     +50.0000%    +50.0000%    +50.0000%    +50.0000%    +50.0000%
+  FLOAT_BUDGET  +/-  1.0% 201.50      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  FLOAT_BUDGET  +/- 10.0%  21.49      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  FLOAT_BUDGET  +/- 50.0%   5.45      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+  FLOAT_BUDGET  +/-200.0%   2.37      +0.0000%     -0.0000%     -0.0000%     -0.0000%     -0.0000%
+
+  FLOAT_FIX loses exactly half its TVL in ONE transaction: the attacker buys
+  the whole x inventory at ~the marginal price, the quote runs away to
+  infinity (x=0 => P=y/x=inf), and selling it back drains the entire y side.
+
+  Drain test - repeat the optimal cycle up to 400 times, fee 30bps, range +/-10%:
+    STATIC           0 profitable cycles, LP value left  100.000% of start, extracted   0.000% of TVL
+    FLOAT_SPOT       9 profitable cycles, LP value left   50.000% of start, extracted  50.000% of TVL
+    FLOAT_FIX        1 profitable cycles, LP value left   50.000% of start, extracted  50.000% of TVL
+    FLOAT_BUDGET     0 profitable cycles, LP value left  100.000% of start, extracted   0.000% of TVL
+
+  Break-even round-trip size for the pump. Theory: profit ~ TVL*u^2*theta and
+  fee cost ~ TVL*u*fee, so the pump pays whenever u > fee/theta, theta ~ 1/A:
+
+    +/- 10.0%  A= 21.49  fee=0.050%   break-even size =   1.127% of the y reserve   (fee*A =  1.074%)
+    +/- 10.0%  A= 21.49  fee=0.300%   break-even size =   6.782% of the y reserve   (fee*A =  6.446%)
+    +/- 50.0%  A=  5.45  fee=0.050%   break-even size =   0.334% of the y reserve   (fee*A =  0.272%)
+    +/- 50.0%  A=  5.45  fee=0.300%   break-even size =   2.008% of the y reserve   (fee*A =  1.635%)
+    +/-200.0%  A=  2.37  fee=0.050%   break-even size =   0.205% of the y reserve   (fee*A =  0.118%)
+    +/-200.0%  A=  2.37  fee=0.300%   break-even size =   1.233% of the y reserve   (fee*A =  0.710%)
+
+  FLOAT_BUDGET caps the recentring step at (fee/2)*(size/reserve), which makes
+  the pump unprofitable at every size. The price of safety is the tracking
+  speed: the centre can only move (fee/2) per 100% of reserves traded, so
+  following a 1% price move needs a turnover of:
+    fee=0.050%  ->      40.0x the whole reserve per 1% of price move
+    fee=0.300%  ->       6.7x the whole reserve per 1% of price move
+
+================================================================================================
+3. THE PRICE OF NEVER LEAVING THE RANGE (analytic)
+================================================================================================
+  LVR rate per unit of capital while in range = A * sigma^2 / 8
+  (Milionis-Moallemi-Roughgarden-Zhang 2022; A = depth amplification).
+  A static range stops bleeding when the price leaves it. A floating range never does.
+
+  annualised LVR, % of TVL per year
+    range          A      sigma=  20%   sigma=  40%   sigma=  60%   sigma= 100%
+    +/-  1.0%     201.50           100.7%        403.0%        906.7%       2518.7%
+    +/-  5.0%      41.49            20.7%         83.0%        186.7%        518.7%
+    +/- 10.0%      21.49            10.7%         43.0%         96.7%        268.6%
+    +/- 50.0%       5.45             2.7%         10.9%         24.5%         68.1%
+    +/-100.0%       3.41             1.7%          6.8%         15.4%         42.7%
+    v2 (full)       1.00             0.5%          2.0%          4.5%         12.5%
+
+  Noise turnover needed to pay for it, A*sigma^2/(8*fee), as multiples of TVL/day:
+    fee = 0.05%
+    range          A      sigma=  20%   sigma=  40%   sigma=  60%   sigma= 100%
+    +/-  1.0%     201.50            5.52x        22.08x        49.68x       138.01x
+    +/- 10.0%      21.49            0.59x         2.35x         5.30x        14.72x
+    +/- 50.0%       5.45            0.15x         0.60x         1.34x         3.73x
+    v2 (full)       1.00            0.03x         0.11x         0.25x         0.69x
+    fee = 0.30%
+    range          A      sigma=  20%   sigma=  40%   sigma=  60%   sigma= 100%
+    +/-  1.0%     201.50            0.92x         3.68x         8.28x        23.00x
+    +/- 10.0%      21.49            0.10x         0.39x         0.88x         2.45x
+    +/- 50.0%       5.45            0.02x         0.10x         0.22x         0.62x
+    v2 (full)       1.00            0.00x         0.02x         0.04x         0.11x
+
+================================================================================================
+3b. FLOW CALIBRATION - taker price-insensitivity vs the empirical fees/LVR ratio
+================================================================================================
+  short run: 8760 steps, 3 paths, sigma=60%/yr, fee=5bps
+
+  tol  rounds/yr  pool                        fees      arb   fees/arb   hedged   volume
+  10bps    10,000  v2 full range                  1.3%      4.5%      0.29x     -3.0%      15x
+  10bps    10,000  ALM +/-10%                    18.7%     65.3%      0.29x    -47.2%     209x
+  10bps    20,000  v2 full range                  2.8%      5.8%      0.48x     -1.5%      43x
+  10bps    20,000  ALM +/-10%                    37.4%     79.4%      0.47x    -35.5%     554x
+  10bps    40,000  v2 full range                  7.8%     10.3%      0.76x     +3.4%     137x
+  10bps    40,000  ALM +/-10%                    85.7%    101.7%      0.84x     -4.1%    1466x
+  10bps    80,000  v2 full range                 27.2%     27.3%      1.00x    +22.2%     509x
+  10bps    80,000  ALM +/-10%                   201.0%    137.1%      1.47x    +70.1%    3673x
+  20bps    40,000  v2 full range                 23.6%     58.2%      0.41x    +18.8%     423x
+  20bps    40,000  ALM +/-10%                   141.5%    152.9%      0.93x    +31.6%    2493x
+
+  -> the market simulation below uses tolerance = 10bps, 40,000 rounds/year.
+
+================================================================================================
+3c. COST OF ONE MAKER-TRIGGERED RECENTRING (no swap), range +/-10%, fee 5bps
+================================================================================================
+  The market drifts, arbitrageurs drag the pool price to the market, the inventory
+  ends up skewed, and only then does the maker move the bounds. The 'gift' is what
+  arbitrageurs take immediately after the bounds move, % of TVL.
+
+    drift   value in x   symmetric bounds   inventory-matched   real swap to 50/50
+       +2%       40.1%         0.087%             0.000%               0.005%
+       +5%       25.1%         0.578%             0.000%               0.013%
+      +10%        0.3%         2.389%             0.000%               0.025%
+      +20%        0.0%         2.416%             0.000%               0.026%
+      +50%        0.0%         2.416%             0.000%               0.026%
+      -20%      100.0%         1.933%             0.000%               0.020%
+      -50%      100.0%         1.208%             0.000%               0.013%
+
+  'real swap to 50/50' includes a 5bps execution cost on the swapped amount.
+  Symmetric recentring leaves the implied price ~1/A of the inventory skew away
+  from the market, so its gift is ~TVL*skew^2/(8A) - small, but pure loss.
+  Inventory-matched recentring costs nothing at all and still needs no swap.
+
+================================================================================================
+4. MARKET SIMULATION - GBM + arbitrageurs + optimally routed noise flow
+================================================================================================
+  8760 hourly steps (1 year), sigma=60%/yr, fee=5bps, taker tolerance=10bps, TVL=$2.0M
+  flow: 40,000 buy/sell rounds per year (4.6/step), up to 5.0% of TVL per side per round, 8 price paths
+
+  (a) WITH the atomic-cycle bot running (what actually happens on-chain)
+  strategy                                   hedged    worst  vsHODL     fees      arb     pump  noise$  capt%  takerW  swaps  illiq%
+  v2 full range                               +3.4%    +2.3%    +3.7%     7.8%     10.4%      0.0%    139x   2.5%   0.04%      0    0.0%
+  static +/-10%                               -4.0%   -15.8%   -15.0%    23.6%     28.7%      0.0%    393x   7.1%  14.57%      0   76.7%
+  static +/-50%                               +8.7%    +1.6%    -2.1%    26.1%     30.1%      0.0%    462x   8.4%   7.46%      0   38.8%
+  ALM +/-10% (recentre+swap on exit)          -4.1%   -19.1%    -5.3%    85.1%    102.0%      0.0%   1475x  26.8%  48.71%     36    0.2%
+  FLOAT +/-10% per swap                      -82.4%  -106.1%   -95.6%     0.8%      7.9%     61.3%      2x   0.0%  13.33%      0   99.9%
+  FLOAT +/-10% self-consistent               -51.9%   -53.8%   -50.3%     0.0%      0.0%     51.9%      0x   0.0%   0.00%      0  100.0%
+  FLOAT +/-50% per swap                      -82.8%  -113.3%   -87.4%     0.3%      7.4%     61.7%      1x   0.0%  13.81%      0   99.9%
+  FLOAT +/-10% fee-budgeted                   -3.6%   -12.5%   -16.3%    32.8%     40.6%      0.0%    571x  10.4%  20.00%      0   64.8%
+  LAZY +/-10% band 5%, swap at 50% skew       -1.2%   -13.7%    -0.4%    86.0%     99.7%      0.0%   1496x  27.2%  49.68%    111    0.0%
+  LAZY +/-10% band 5%, swap at 20% skew       +0.0%   -13.6%    +2.4%    85.7%     95.9%      0.0%   1500x  27.3%  49.86%    699    0.0%
+  LAZY +/-50% band 10%, swap at 20% skew     +13.6%   +11.4%   +15.1%    38.3%     45.1%      0.0%    686x  12.5%   9.56%     50    0.0%
+
+  (b) WITHOUT the atomic-cycle bot (hypothetical: exploit magically fixed)
+  strategy                                   hedged    worst  vsHODL     fees      arb     pump  noise$  capt%  takerW  swaps  illiq%
+  v2 full range                               +3.4%    +2.3%    +3.7%     7.8%     10.4%      0.0%    139x   2.5%   0.04%      0    0.0%
+  static +/-10%                               -4.0%   -15.8%   -15.0%    23.6%     28.7%      0.0%    393x   7.1%  14.57%      0   76.7%
+  static +/-50%                               +8.7%    +1.6%    -2.1%    26.1%     30.1%      0.0%    462x   8.4%   7.46%      0   38.8%
+  ALM +/-10% (recentre+swap on exit)          -4.1%   -19.1%    -5.3%    85.1%    102.0%      0.0%   1475x  26.8%  48.71%     36    0.2%
+  FLOAT +/-10% per swap                      -83.9%  -109.7%  -100.0%     2.2%     32.6%      0.0%     33x   0.6%  54.66%      0   97.1%
+  FLOAT +/-10% self-consistent               -87.8%  -100.3%  -100.0%     0.0%      9.2%      0.0%      1x   0.0%  78.66%      0  100.0%
+  FLOAT +/-50% per swap                     -100.2%  -103.7%  -100.0%     1.2%     29.5%      0.0%     22x   0.4%  72.84%      0   98.5%
+  FLOAT +/-10% fee-budgeted                   -3.6%   -12.5%   -16.3%    32.8%     40.6%      0.0%    571x  10.4%  20.00%      0   64.8%
+  LAZY +/-10% band 5%, swap at 50% skew       -1.2%   -13.7%    -0.4%    86.0%     99.7%      0.0%   1496x  27.2%  49.68%    111    0.0%
+  LAZY +/-10% band 5%, swap at 20% skew       +0.0%   -13.6%    +2.4%    85.7%     95.9%      0.0%   1500x  27.3%  49.86%    699    0.0%
+  LAZY +/-50% band 10%, swap at 20% skew     +13.6%   +11.4%   +15.1%    38.3%     45.1%      0.0%    686x  12.5%   9.56%     50    0.0%
+
+  hedged / worst : delta-hedged LP PnL = fees minus everything the counterparties took,
+                   % of initial TVL per year (mean / worst path). This is the
+                   path-independent market-making result; 0% = break even.
+  vsHODL         : median LP value vs holding the initial 50/50 basket (path-dependent)
+  fees           : fees earned, % of initial TVL
+  arb            : value taken by price arbitrageurs, % of initial TVL
+  pump           : value taken by the atomic round-trip bot, % of initial TVL
+  noise$         : noise notional captured, in multiples of TVL per year
+  capt%          : share of the desired noise flow the pool won from the next-best venue
+  takerW         : taker surplus vs the next-best venue, % of TVL (the takers' gain)
+  swaps          : real rebalancing swaps executed
+  illiq%         : share of steps with one side of the inventory empty
+
+(generated by research/auto-amm/floating_range_sim.py in 192s)
