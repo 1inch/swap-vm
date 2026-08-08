@@ -8,17 +8,30 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
 /// @notice XYCSwap opcode, constant-product swap curve
 /// @dev Encoding: []
 library XYCSwap {
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Math for uint256;
 
     Opcode constant opcode = Opcode.XYCSwap;
 
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf();
+    }
+
     function build() internal pure returns (bytes memory) {
-        return InstructionBuilder.build(opcode);
+        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
+    }
+
+    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptrStart.patchLength(ptr);
     }
 
     function exec(Context memory ctx, bytes calldata) internal pure {

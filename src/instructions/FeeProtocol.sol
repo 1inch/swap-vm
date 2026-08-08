@@ -11,6 +11,7 @@ import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol";
@@ -31,6 +32,9 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 library FeeProtocol {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
+
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
     using Math for uint256;
@@ -57,16 +61,39 @@ library FeeProtocol {
         bool takeSurplusFee;
     }
 
+    function sizeOf(
+        bool,
+        ReceiverConfig[] memory receivers,
+        ProviderConfig[] memory providers,
+        uint216
+    ) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + receivers.length * (1 + 20 + 6) + providers.length * (1 + 20) + 27;
+    }
+
     function build(
         bool isTokenIn,
         ReceiverConfig[] memory receivers,
         ProviderConfig[] memory providers,
         uint216 surplusEstimate
-    ) internal pure returns (bytes memory) {
+    ) internal pure returns (bytes memory slice) {
+        (slice, ) = build(
+            MemoryPtrLib.alloc(sizeOf(isTokenIn, receivers, providers, surplusEstimate)),
+            isTokenIn, receivers, providers, surplusEstimate
+        ).resolveShrink();
+    }
+
+    function build(
+        MemoryPtr ptrStart,
+        bool isTokenIn,
+        ReceiverConfig[] memory receivers,
+        ProviderConfig[] memory providers,
+        uint216 surplusEstimate
+    ) internal pure returns (MemoryPtr ptr) {
         uint256 count = receivers.length + providers.length;
         require(count < 16, FeeProtocolExceedMaxCount());
 
-        bytes memory args = abi.encodePacked(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
         bool encodeSurplusEstimate;
 
         for (uint256 i; i < receivers.length; i++) {
@@ -76,16 +103,14 @@ library FeeProtocol {
             require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
             require(receivers[i].receiver != address(0), FeeProtocolBadTarget());
 
-            args = abi.encodePacked(
-                args,
+            ptr = ptr.push(
                 InstructionBuilder.encodeBool(false, 0) |
                 InstructionBuilder.encodeBool(takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(takeSurplusFee, 2),
-                receivers[i].receiver
-            );
+                InstructionBuilder.encodeBool(takeSurplusFee, 2)
+            ).push(receivers[i].receiver);
 
-            if (takeFlatFee) args = abi.encodePacked(args, receivers[i].feeBps);
-            if (takeSurplusFee) args = abi.encodePacked(args, receivers[i].surplusBps);
+            if (takeFlatFee) ptr = ptr.push(receivers[i].feeBps, 3);
+            if (takeSurplusFee) ptr = ptr.push(receivers[i].surplusBps, 3);
 
             encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
         }
@@ -97,20 +122,18 @@ library FeeProtocol {
             require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
             require(providers[i].provider != address(0), FeeProtocolBadTarget());
 
-            args = abi.encodePacked(
-                args,
+            ptr = ptr.push(
                 InstructionBuilder.encodeBool(true, 0) |
                 InstructionBuilder.encodeBool(takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(takeSurplusFee, 2),
-                providers[i].provider
-            );
+                InstructionBuilder.encodeBool(takeSurplusFee, 2)
+            ).push(providers[i].provider);
 
             encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
         }
 
-        if (encodeSurplusEstimate) args = abi.encodePacked(args, surplusEstimate);
+        if (encodeSurplusEstimate) ptr = ptr.push(surplusEstimate, 27);
 
-        return InstructionBuilder.build(opcode, args);
+        ptrStart.patchLength(ptr);
     }
 
     function parseHeader(bytes calldata args) internal pure returns (bool isTokenIn, uint8 count) {

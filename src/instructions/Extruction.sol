@@ -8,6 +8,7 @@ import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol
 
 import { Context, ContextLib, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -30,15 +31,27 @@ library Extruction {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);
 
     Opcode constant opcode = Opcode.Extruction;
 
+    function sizeOf(address, bytes memory extructionArgs) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + extructionArgs.length;
+    }
+
     function build(address target, bytes memory extructionArgs) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(target, extructionArgs);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(target, extructionArgs)), target, extructionArgs).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address target, bytes memory extructionArgs) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(target).pushMem(extructionArgs);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (address target, bytes calldata extructionArgs) {
