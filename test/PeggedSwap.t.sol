@@ -85,10 +85,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
+        return _createOrderWithRates(setup, 1, 1);
+    }
+
+    function _createOrderWithRates(PoolSetup memory setup, uint256 rateA, uint256 rateB) internal view returns (ISwapVM.Order memory) {
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(setup.balanceA, setup.balanceB),
             setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),
-            PeggedSwap.build(setup.x0, setup.y0, setup.linearWidth, 1, 1)
+            PeggedSwap.build(setup.x0, setup.y0, setup.linearWidth, rateA, rateB)
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -1274,5 +1278,139 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 assertGe(invFinal, invInit - 1, "Final invariant must not decrease");
             }
         }
+    }
+
+    // ========================================
+    // DIFFERENT RATES + ASYMMETRIC X0/Y0 TESTS
+    // ========================================
+    //
+    // exec() reassigns (x0, y0, rateIn, rateOut) by swap direction, so these tests
+    // pin the parameter wiring with x0 != y0 AND rateA != rateB simultaneously.
+    //
+    // tokenA is modeled as a 6-decimals asset (rateA = 1e12 scales it to 1e18),
+    // tokenB is a regular 18-decimals asset (rateB = 1).
+    // Pool: 3000 A-units vs 1000 B-units => x0 = 3000e18 != y0 = 1000e18.
+    // At the initial balances the pool is at equilibrium (u = v = 1), where the
+    // marginal price in normalized units is exactly y0/x0 = 1/3 for any linearWidth:
+    // 3 A-tokens buy ~1 B-token. An axis or rate mix-up in exec() skews the result
+    // by 3x, 9x or 1e12, so the tight bounds below catch any of them.
+
+    uint256 internal constant RATE_A = 1e12;              // tokenA: 6-decimals style
+    uint256 internal constant RATE_B = 1;                 // tokenB: 18 decimals
+    uint256 internal constant RATED_BALANCE_A = 3000e6;   // 3000 A-units (6-dec scale)
+    uint256 internal constant RATED_BALANCE_B = 1000e18;  // 1000 B-units
+    uint256 internal constant RATED_X0 = 3000e18;         // RATED_BALANCE_A * RATE_A
+    uint256 internal constant RATED_Y0 = 1000e18;         // RATED_BALANCE_B * RATE_B
+    uint256 internal constant RATED_WIDTH = 500e27;       // tight peg => near-zero slippage for 1% trades
+
+    function _createRatedOrder() internal view returns (ISwapVM.Order memory) {
+        return _createOrderWithRates(PoolSetup({
+            balanceA: RATED_BALANCE_A,
+            balanceB: RATED_BALANCE_B,
+            x0: RATED_X0,
+            y0: RATED_Y0,
+            linearWidth: RATED_WIDTH,
+            feeInBps: 0
+        }), RATE_A, RATE_B);
+    }
+
+    function _quoteAndSwap(
+        ISwapVM.Order memory order,
+        uint256 amount,
+        bool isExactIn,
+        bool isAToB
+    ) internal returns (uint256 swappedIn, uint256 swappedOut) {
+        bytes memory takerData = _makeTakerData(isExactIn, isAToB, false, _signOrder(order));
+
+        (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(order, amount, takerData);
+
+        vm.prank(taker);
+        (swappedIn, swappedOut,) = swapVM.swap(order, amount, takerData);
+
+        assertEq(swappedIn, quotedIn, "Quote/Swap amountIn mismatch");
+        assertEq(swappedOut, quotedOut, "Quote/Swap amountOut mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactIn_AToB() public {
+        uint256 amountIn = 30e6; // 30 A-units = 30e18 normalized = 1% of x0
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountIn, true, true);
+
+        assertEq(swappedIn, amountIn);
+
+        // Marginal price at equilibrium: 30e18 normalized in * y0/x0 => ~10e18 B out
+        uint256 idealOut = amountIn * RATE_A * RATED_Y0 / RATED_X0 / RATE_B;
+        assertLe(swappedOut, idealOut, "Output must not exceed marginal-price output (maker safety)");
+        assertGe(swappedOut, idealOut * 999 / 1000, "Output too far below 3:1 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactIn_BToA() public {
+        uint256 amountIn = 10e18; // 10 B-units = 10e18 normalized = 1% of y0
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountIn, true, false);
+
+        assertEq(swappedIn, amountIn);
+
+        // Marginal price at equilibrium: 10e18 normalized in * x0/y0 => ~30e18 normalized = 30e6 A out
+        uint256 idealOut = amountIn * RATE_B * RATED_X0 / RATED_Y0 / RATE_A;
+        assertLe(swappedOut, idealOut, "Output must not exceed marginal-price output (maker safety)");
+        assertGe(swappedOut, idealOut * 999 / 1000, "Output too far below 1:3 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactOut_AToB() public {
+        uint256 amountOut = 10e18; // request 10 B-units
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountOut, false, true);
+
+        assertEq(swappedOut, amountOut);
+
+        // ~30e6 A in; slippage + round-up must only increase the input
+        uint256 idealIn = amountOut * RATE_B * RATED_X0 / RATED_Y0 / RATE_A;
+        assertGe(swappedIn, idealIn, "Input must not be below marginal-price input (maker safety)");
+        assertLe(swappedIn, idealIn * 1001 / 1000, "Input too far above 3:1 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactOut_BToA() public {
+        uint256 amountOut = 30e6; // request 30 A-units
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountOut, false, false);
+
+        assertEq(swappedOut, amountOut);
+
+        // ~10e18 B in; slippage + round-up must only increase the input
+        uint256 idealIn = amountOut * RATE_A * RATED_Y0 / RATED_X0 / RATE_B;
+        assertGe(swappedIn, idealIn, "Input must not be below marginal-price input (maker safety)");
+        assertLe(swappedIn, idealIn * 1001 / 1000, "Input too far above 1:3 peg - axis/rate mismatch");
+    }
+
+    /// @notice Round trip A->B->A on the same order must not profit the taker,
+    ///         and the normalized invariant must never decrease.
+    function test_PeggedSwap_DifferentRates_RoundTrip_InvariantPreserved() public {
+        ISwapVM.Order memory order = _createRatedOrder();
+        uint256 amountInA = 30e6;
+
+        uint256 inv0 = PeggedSwapMath.invariantFromReserves(
+            RATED_BALANCE_A * RATE_A, RATED_BALANCE_B * RATE_B, RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+
+        (, uint256 outB) = _quoteAndSwap(order, amountInA, true, true);
+
+        uint256 inv1 = PeggedSwapMath.invariantFromReserves(
+            (RATED_BALANCE_A + amountInA) * RATE_A,
+            (RATED_BALANCE_B - outB) * RATE_B,
+            RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+        assertGe(inv1, inv0 - 1, "Invariant must not decrease after A->B swap");
+
+        // Swap the received B back to A on the same order (updated dynamic balances)
+        (, uint256 outA) = _quoteAndSwap(order, outB, true, false);
+        assertLe(outA, amountInA, "Round trip must not profit the taker");
+
+        uint256 inv2 = PeggedSwapMath.invariantFromReserves(
+            (RATED_BALANCE_A + amountInA - outA) * RATE_A,
+            RATED_BALANCE_B * RATE_B,
+            RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+        assertGe(inv2, inv0 - 1, "Invariant must not decrease after round trip");
     }
 }
