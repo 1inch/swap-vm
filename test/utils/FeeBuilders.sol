@@ -24,6 +24,14 @@ library FeeBuilders {
         return _single(false, receiver, 0, surplusBps, estimate);
     }
 
+    function protocolFlatSurplusIn(uint24 feeBps, uint24 surplusBps, address receiver, uint216 estimate) internal pure returns (bytes memory) {
+        return _single(true, receiver, feeBps, surplusBps, estimate);
+    }
+
+    function protocolFlatSurplusOut(uint24 feeBps, uint24 surplusBps, address receiver, uint216 estimate) internal pure returns (bytes memory) {
+        return _single(false, receiver, feeBps, surplusBps, estimate);
+    }
+
     function protocolProviderIn(address provider) internal pure returns (bytes memory) {
         return _provider(true, provider);
     }

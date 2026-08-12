@@ -74,8 +74,8 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
 
     function _createOrder(bytes memory feeInstruction) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         bytes memory programBytes = bytes.concat(
-            feeInstruction,
             DynamicBalances.build(BALANCE_A, BALANCE_B),
+            feeInstruction,
             XYCSwap.build()
         );
 
@@ -116,6 +116,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

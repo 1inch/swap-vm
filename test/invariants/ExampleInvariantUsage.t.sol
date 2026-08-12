@@ -105,6 +105,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
 
         // Test all invariants with proper taker data
         InvariantConfig memory config = _getDefaultConfig();
+        config.testAmounts = dynamic([uint256(1e18), uint256(10e18), uint256(33e18)]);
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 
@@ -306,6 +307,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

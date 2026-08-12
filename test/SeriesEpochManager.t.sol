@@ -416,6 +416,7 @@ contract SeriesEpochManagerTest is Test, LimitOpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(this),
             deadline: 0,

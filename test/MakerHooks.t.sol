@@ -138,6 +138,7 @@ contract MakerHooksTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: _cfg.isFirstTransferFromTaker,
             useTransferFromAndAquaPush: false,
             isAToB: false,
+            allowPartialFill: false,
             threshold: _cfg.threshold,
             to: address(0),
             deadline: 0,

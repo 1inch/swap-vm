@@ -94,7 +94,8 @@ contract BestRouteSelector is OpcodesDebug {
                 swap: swap,  // Reset to initial balances for each strategy!
                 fee: ProtocolFee({
                     meta: FeeMetaLib.init(),
-                    receivers: FeeReceiverLib.init()
+                    receivers: FeeReceiverLib.init(),
+                    feeTotal: 0
                 })
             });
 

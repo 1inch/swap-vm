@@ -159,7 +159,8 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Test both directions with small swap amounts
-        uint256 swapAmount = 1e18;  // 1 token (18 decimals)
+        uint256 swapAmount = 1e18;         // 1 token (18 decimals)
+        uint256 swapAmountReverse = 1e6;   // 1 token (6 decimals)
 
         // Forward swap: abundant -> scarce
         address tokenInForward = address(tokenA) < address(tokenB) ? address(tokenA) : address(tokenB);
@@ -220,7 +221,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
 
         // Test reverse direction as well
         try swapVM.asView().quote(
-            order, swapAmount, exactInDataReverse
+            order, swapAmountReverse, exactInDataReverse
         ) returns (uint256, uint256 outReverse, bytes32) {
             assertGt(outReverse, 0, "Reverse output should be non-zero");
 
@@ -232,9 +233,11 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
                 outReverseScaled = outReverse * 1e12;
             }
 
+            uint256 normalizedInReverse = swapAmountReverse * 1e12;  // scale 6-dec input to 18
+            uint256 capacityRate = abundantBalance / (scarceBalance * 1e12);  // 10_000
             assertLe(
                 outReverseScaled,
-                swapAmount * 20,
+                normalizedInReverse * capacityRate * 2,
                 "Reverse direction also should not have axis mismatch"
             );
         } catch {
@@ -251,6 +254,7 @@ contract VeryImbalancedDifferentDecimals is PeggedFeesInvariants {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: false,
             threshold: bytes(""),
             to: address(this),
             deadline: 0,

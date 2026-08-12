@@ -140,6 +140,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,
@@ -170,6 +171,7 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

@@ -118,11 +118,12 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
-            isAToB: isAToB,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

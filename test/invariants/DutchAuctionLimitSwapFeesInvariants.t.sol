@@ -330,6 +330,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
+            allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

@@ -4,6 +4,8 @@ pragma solidity 0.8.30;
 import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
+import { ProtocolFee } from "./VM.sol";
+
 /// @notice Encoded fee receiver and fee percentages
 type FeeReceiver is uint256;
 
@@ -26,16 +28,13 @@ library FeeReceiverLib {
         return uint24(FeeReceiver.unwrap(data));
     }
 
-    function resolveIn(FeeReceiver data, uint256 amount, uint256 surplus) internal pure returns (address receiver, uint256 fee) {
+    function resolve(FeeReceiver data, uint256 amount, uint24 totalBps, uint256 surplus) internal pure returns (address receiver, uint256 fee) {
         uint24 feeBps = decodeFeeBps(data);
         uint24 surplusBps = decodeSurplusBps(data);
-        return (decodeReceiver(data), amount * feeBps / BPS + surplus * surplusBps / BPS);
-    }
 
-    function resolveOut(FeeReceiver data, uint256 amount, uint24 totalBps, uint256 surplus) internal pure returns (address receiver, uint256 fee) {
-        uint24 feeBps = decodeFeeBps(data);
-        uint24 surplusBps = decodeSurplusBps(data);
-        return (decodeReceiver(data), amount * feeBps / (BPS - totalBps) + surplus * surplusBps / BPS);
+        receiver = decodeReceiver(data);
+        if (feeBps > 0) fee += amount * feeBps / totalBps;
+        fee += surplus * surplusBps / BPS;
     }
 
     function init() internal pure returns (FeeReceiver[] memory array) { }
@@ -76,25 +75,25 @@ library FeeMetaLib {
     }
 
     function resolveInSafeTransfer(
-        FeeMeta data,
-        FeeReceiver[] memory receivers,
+        ProtocolFee memory data,
         address tokenIn,
         uint256 amountIn
     ) internal returns (uint256 totalFee) {
-        uint8 count = decodeCount(data);
-        bool isTokenIn = decodeIsTokenIn(data);
+        FeeMeta meta = data.meta;
+        uint8 count = decodeCount(meta);
+        bool isTokenIn = decodeIsTokenIn(meta);
         if (!isTokenIn || count == 0) return 0;
 
-        uint24 totalBps = decodeTotalBps(data);
-        uint256 totalFeeMax = amountIn * totalBps / FeeReceiverLib.BPS;
+        uint24 totalBps = decodeTotalBps(meta);
+        uint256 totalFeeMax = data.feeTotal;
 
         uint256 surplusIn;
-        uint256 estimatedIn = decodeSurplusEstimate(data);
+        uint256 estimatedIn = decodeSurplusEstimate(meta);
         uint256 realIn = amountIn - totalFeeMax;
         if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolveIn(receivers[--count], amountIn, surplusIn);
+            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeMax, totalBps, surplusIn);
             totalFee += fee;
 
             IERC20(tokenIn).safeTransfer(receiver, fee);
@@ -102,28 +101,28 @@ library FeeMetaLib {
     }
 
     function resolveInAquaPullMaker(
-        FeeMeta data,
-        FeeReceiver[] memory receivers,
+        ProtocolFee memory data,
         address tokenIn,
         uint256 amountIn,
         IAqua aqua,
         address maker,
         bytes32 orderHash
     ) internal returns (uint256 totalFee) {
-        uint8 count = decodeCount(data);
-        bool isTokenIn = decodeIsTokenIn(data);
+        FeeMeta meta = data.meta;
+        uint8 count = decodeCount(meta);
+        bool isTokenIn = decodeIsTokenIn(meta);
         if (!isTokenIn || count == 0) return 0;
 
-        uint24 totalBps = decodeTotalBps(data);
-        uint256 totalFeeMax = amountIn * totalBps / FeeReceiverLib.BPS;
+        uint24 totalBps = decodeTotalBps(meta);
+        uint256 totalFeeMax = data.feeTotal;
 
         uint256 surplusIn;
-        uint256 estimatedIn = decodeSurplusEstimate(data);
+        uint256 estimatedIn = decodeSurplusEstimate(meta);
         uint256 realIn = amountIn - totalFeeMax;
         if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolveIn(receivers[--count], amountIn, surplusIn);
+            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeMax, totalBps, surplusIn);
             totalFee += fee;
 
             aqua.pull(maker, orderHash, tokenIn, fee, receiver);
@@ -131,26 +130,26 @@ library FeeMetaLib {
     }
 
     function resolveInSafeTransferFromTaker(
-        FeeMeta data,
-        FeeReceiver[] memory receivers,
+        ProtocolFee memory data,
         address tokenIn,
         uint256 amountIn,
         address taker
     ) internal returns (uint256 totalFee) {
-        uint8 count = decodeCount(data);
-        bool isTokenIn = decodeIsTokenIn(data);
+        FeeMeta meta = data.meta;
+        uint8 count = decodeCount(meta);
+        bool isTokenIn = decodeIsTokenIn(meta);
         if (!isTokenIn || count == 0) return 0;
 
-        uint24 totalBps = decodeTotalBps(data);
-        uint256 totalFeeMax = amountIn * totalBps / FeeReceiverLib.BPS;
+        uint24 totalBps = decodeTotalBps(meta);
+        uint256 totalFeeMax = data.feeTotal;
 
         uint256 surplusIn;
-        uint256 estimatedIn = decodeSurplusEstimate(data);
+        uint256 estimatedIn = decodeSurplusEstimate(meta);
         uint256 realIn = amountIn - totalFeeMax;
         if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolveIn(receivers[--count], amountIn, surplusIn);
+            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeMax, totalBps, surplusIn);
             totalFee += fee;
 
             IERC20(tokenIn).safeTransferFrom(taker, receiver, fee);
@@ -158,29 +157,29 @@ library FeeMetaLib {
     }
 
     function resolveOutAquaPullMaker(
-        FeeMeta data,
-        FeeReceiver[] memory receivers,
+        ProtocolFee memory data,
         address tokenOut,
         uint256 amountOut,
         IAqua aqua,
         address maker,
         bytes32 orderHash
     ) internal returns (uint256 totalFee) {
-        uint8 count = decodeCount(data);
-        bool isTokenOut = decodeIsTokenOut(data);
+        FeeMeta meta = data.meta;
+        uint8 count = decodeCount(meta);
+        bool isTokenOut = decodeIsTokenOut(meta);
         if (!isTokenOut || count == 0) return 0;
 
-        uint24 totalBps = decodeTotalBps(data);
-        uint256 totalFeeMax = amountOut * totalBps / (FeeReceiverLib.BPS - totalBps);
+        uint24 totalBps = decodeTotalBps(meta);
+        uint256 totalFeeMax = data.feeTotal;
 
         uint256 surplusOut;
-        uint256 estimatedOut = decodeSurplusEstimate(data);
+        uint256 estimatedOut = decodeSurplusEstimate(meta);
         uint256 realOut = amountOut + totalFeeMax;
         if (estimatedOut > realOut) surplusOut = estimatedOut - realOut;
         else surplusOut = 0;
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolveOut(receivers[--count], amountOut, totalBps, surplusOut);
+            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeMax, totalBps, surplusOut);
             totalFee += fee;
 
             aqua.pull(maker, orderHash, tokenOut, fee, receiver);
@@ -188,27 +187,27 @@ library FeeMetaLib {
     }
 
     function resolveOutSafeTransferFromMaker(
-        FeeMeta data,
-        FeeReceiver[] memory receivers,
+        ProtocolFee memory data,
         address tokenOut,
         uint256 amountOut,
         address maker
     ) internal returns (uint256 totalFee) {
-        uint8 count = decodeCount(data);
-        bool isTokenOut = decodeIsTokenOut(data);
+        FeeMeta meta = data.meta;
+        uint8 count = decodeCount(meta);
+        bool isTokenOut = decodeIsTokenOut(meta);
         if (!isTokenOut || count == 0) return 0;
 
-        uint24 totalBps = decodeTotalBps(data);
-        uint256 totalFeeMax = amountOut * totalBps / (FeeReceiverLib.BPS - totalBps);
+        uint24 totalBps = decodeTotalBps(meta);
+        uint256 totalFeeMax = data.feeTotal;
 
         uint256 surplusOut;
-        uint256 estimatedOut = decodeSurplusEstimate(data);
+        uint256 estimatedOut = decodeSurplusEstimate(meta);
         uint256 realOut = amountOut + totalFeeMax;
         if (estimatedOut > realOut) surplusOut = estimatedOut - realOut;
         else surplusOut = 0;
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolveOut(receivers[--count], amountOut, totalBps, surplusOut);
+            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeMax, totalBps, surplusOut);
             totalFee += fee;
 
             IERC20(tokenOut).safeTransferFrom(maker, receiver, fee);

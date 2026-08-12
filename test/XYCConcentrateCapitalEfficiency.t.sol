@@ -161,14 +161,27 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
 
     function _tdIn(bytes memory sig) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
-            taker: taker, isExactIn: true, shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false, isFirstTransferFromTaker: false,
-            useTransferFromAndAquaPush: false, isAToB: true, threshold: "", to: address(0),
-            deadline: 0, hasPreTransferInCallback: false, hasPreTransferOutCallback: false,
-            preTransferInHookData: "", postTransferInHookData: "",
-            preTransferOutHookData: "", postTransferOutHookData: "",
-            preTransferInCallbackData: "", preTransferOutCallbackData: "",
-            instructionsArgs: "", signature: sig
+            taker: taker,
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            isAToB: true,
+            allowPartialFill: false,
+            threshold: "",
+            to: address(0),
+            deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: sig
         }));
     }
 

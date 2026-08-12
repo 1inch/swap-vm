@@ -326,11 +326,12 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: true,
-            isAToB: false,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: false,
+            allowPartialFill: false,
             threshold: "",
             to: address(this),
             deadline: 0,

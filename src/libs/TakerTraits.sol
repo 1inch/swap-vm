@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 
@@ -12,6 +13,7 @@ type TakerTraits is uint256;
 
 library TakerTraitsLib {
     using SafeCast for uint256;
+    using Math for uint256;
     using Calldata for bytes;
     using TakerTraitsLib for TakerTraits;
 
@@ -27,6 +29,8 @@ library TakerTraitsLib {
     error TakerTraitsExceedingMaxInputAmount(uint256 amountIn, uint256 amountInMax);
     error TakerTraitsTakerAmountInMismatch(uint256 takerAmount, uint256 computedAmount);
     error TakerTraitsTakerAmountOutMismatch(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsTakerAmountInExceed(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsTakerAmountOutExceed(uint256 takerAmount, uint256 computedAmount);
     error TakerTraitsDeadlineExpired();
 
     /// @notice Arguments for building taker traits
@@ -37,6 +41,7 @@ library TakerTraitsLib {
     /// @param isFirstTransferFromTaker Transfer order: taker->maker first or maker->taker first
     /// @param useTransferFromAndAquaPush Use transferFrom + Aqua push pattern
     /// @param isAToB True for tokenA->tokenB swap, false for tokenB->tokenA swap
+    /// @param allowPartialFill Allow swaps for part of taker-specified amount
     /// @param threshold Min output (exactIn) or max input (exactOut), 32 bytes or empty
     /// @param to Recipient address (zero defaults to taker)
     /// @param deadline Expiration timestamp (0 = no deadline)
@@ -58,6 +63,7 @@ library TakerTraitsLib {
         bool isFirstTransferFromTaker;
         bool useTransferFromAndAquaPush;
         bool isAToB;
+        bool allowPartialFill;
         bytes threshold;
         address to;
         uint40 deadline;
@@ -100,6 +106,7 @@ library TakerTraitsLib {
     uint16 constant internal IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG = 0x0020;
     uint16 constant internal USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG = 0x0040;
     uint16 constant internal IS_A_TO_B_BIT_FLAG = 0x0080;
+    uint16 constant internal ALLOW_PARTIAL_FILL = 0x0100;
 
     /// @notice Build taker traits and data from arguments
     /// @dev Packs traits, hooks, callbacks, and signature into single bytes
@@ -147,7 +154,8 @@ library TakerTraitsLib {
             (args.useTransferFromAndAquaPush ? USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG : 0) |
             (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0) |
-            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0);
+            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0) | 
+            (args.allowPartialFill ? ALLOW_PARTIAL_FILL : 0);
 
         packed = abi.encodePacked(
             slicesIndexes,
@@ -183,22 +191,38 @@ library TakerTraitsLib {
         require(takerDeadline == 0 || block.timestamp <= takerDeadline, TakerTraitsDeadlineExpired());
 
         if (traits.isExactIn()) {
-            require(takerAmount == amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
+            if (traits.allowPartialFill()) {
+                require(takerAmount >= amountIn, TakerTraitsTakerAmountInExceed(takerAmount, amountIn));
+            } else {
+                require(takerAmount == amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
+            }
+
             (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
             if (hasThreshold) {
                 if (traits.isStrictThresholdAmount()) {
                     require(amountOut == thresholdAmount, TakerTraitsNonExactThresholdAmountOut(amountOut, thresholdAmount));
                 } else {
+                    if (traits.allowPartialFill() && takerAmount != 0) {
+                        thresholdAmount = thresholdAmount.mulDiv(amountIn, takerAmount, Math.Rounding.Ceil);
+                    }
                     require(amountOut >= thresholdAmount, TakerTraitsInsufficientMinOutputAmount(amountOut, thresholdAmount));
                 }
             }
         } else {
-            require(takerAmount == amountOut, TakerTraitsTakerAmountOutMismatch(takerAmount, amountOut));
+            if (traits.allowPartialFill()) {
+                require(takerAmount >= amountOut, TakerTraitsTakerAmountOutExceed(takerAmount, amountOut));
+            } else {
+                require(takerAmount == amountOut, TakerTraitsTakerAmountOutMismatch(takerAmount, amountOut));
+            }
+
             (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
             if (hasThreshold) {
                 if (traits.isStrictThresholdAmount()) {
                     require(amountIn == thresholdAmount, TakerTraitsNonExactThresholdAmountIn(amountIn, thresholdAmount));
                 } else {
+                    if (traits.allowPartialFill() && takerAmount != 0) {
+                        thresholdAmount = thresholdAmount.mulDiv(amountOut, takerAmount);
+                    }
                     require(amountIn <= thresholdAmount, TakerTraitsExceedingMaxInputAmount(amountIn, thresholdAmount));
                 }
             }
@@ -235,6 +259,10 @@ library TakerTraitsLib {
 
     function isAToB(TakerTraits traits) internal pure returns (bool) {
         return (TakerTraits.unwrap(traits) & IS_A_TO_B_BIT_FLAG) != 0;
+    }
+
+    function allowPartialFill(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & ALLOW_PARTIAL_FILL) != 0;
     }
 
     function threshold(TakerTraits traits, bytes calldata data) internal pure returns (bool hasThreshold, uint256 thresholdAmount) {

@@ -38,11 +38,23 @@ library LimitSwap {
         require(direction == swapDirection, LimitSwapDirectionMismatch());
 
         if (ctx.query.isExactIn) {
-            // Floor division for tokenOut favors maker
-            ctx.swap.amountOut = ctx.swap.amountIn * ctx.swap.balanceOut / ctx.swap.balanceIn;
+            // Partial fill support
+            if (ctx.swap.amountIn >= ctx.swap.balanceIn) {
+                ctx.swap.amountIn = ctx.swap.balanceIn;
+                ctx.swap.amountOut = ctx.swap.balanceOut;
+            } else {
+                // Floor division for tokenOut favors maker
+                ctx.swap.amountOut = ctx.swap.amountIn * ctx.swap.balanceOut / ctx.swap.balanceIn;
+            }
         } else {
-            // Ceil division for tokenIn favors maker
-            ctx.swap.amountIn = (ctx.swap.amountOut * ctx.swap.balanceIn).ceilDiv(ctx.swap.balanceOut);
+            // Partial fill support
+            if (ctx.swap.amountOut >= ctx.swap.balanceOut) {
+                ctx.swap.amountIn = ctx.swap.balanceIn;
+                ctx.swap.amountOut = ctx.swap.balanceOut;
+            } else {
+                // Ceil division for tokenIn favors maker
+                ctx.swap.amountIn = (ctx.swap.amountOut * ctx.swap.balanceIn).ceilDiv(ctx.swap.balanceOut);
+            }
         }
     }
 }
@@ -54,7 +66,7 @@ library LimitSwapFullAmount {
     using InstructionArgs for bytes32;
 
     error LimitSwapDirectionMismatch();
-    error LimitSwapAmountShouldMatchBalance(uint256 amount, uint256 balance);
+    error LimitSwapAmountShouldCoverBalance(uint256 amount, uint256 balance);
 
     Opcode constant opcode = Opcode.LimitSwapFullAmount;
 
@@ -73,11 +85,12 @@ library LimitSwapFullAmount {
         require(direction == swapDirection, LimitSwapDirectionMismatch());
 
         if (ctx.query.isExactIn) {
-            require(ctx.swap.amountIn == ctx.swap.balanceIn, LimitSwapAmountShouldMatchBalance(ctx.swap.amountIn, ctx.swap.balanceIn));
-            ctx.swap.amountOut = ctx.swap.balanceOut;
+            require(ctx.swap.amountIn >= ctx.swap.balanceIn, LimitSwapAmountShouldCoverBalance(ctx.swap.amountIn, ctx.swap.balanceIn));
         } else {
-            require(ctx.swap.amountOut == ctx.swap.balanceOut, LimitSwapAmountShouldMatchBalance(ctx.swap.amountOut, ctx.swap.balanceOut));
-            ctx.swap.amountIn = ctx.swap.balanceIn;
+            require(ctx.swap.amountOut >= ctx.swap.balanceOut, LimitSwapAmountShouldCoverBalance(ctx.swap.amountOut, ctx.swap.balanceOut));
         }
+
+        ctx.swap.amountIn = ctx.swap.balanceIn;
+        ctx.swap.amountOut = ctx.swap.balanceOut;
     }
 }

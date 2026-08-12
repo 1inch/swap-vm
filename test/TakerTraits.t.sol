@@ -475,6 +475,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
             isAToB: false,
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,
