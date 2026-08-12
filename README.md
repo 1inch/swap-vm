@@ -53,7 +53,7 @@ SwapVM is a **computation engine** that executes token swap strategies from byte
 
 SwapVM is deployed across multiple chains with a unified address for seamless cross-chain integration.
 
-**Contract Address:** `0x8fdd04dbf6111437b44bbca99c28882434e0958f`
+**Contract Address:** `0x111111338c5091E8440b67B168bAe16a668AC0De`
 
 **Supported Networks:**
 - Ethereum Mainnet
@@ -68,6 +68,9 @@ SwapVM is deployed across multiple chains with a unified address for seamless cr
 - Unichain
 - Gnosis
 - zkSync
+- Cronos
+- Monad
+- HyperEVM
 
 ---
 
