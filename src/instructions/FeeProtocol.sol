@@ -218,7 +218,8 @@ library FeeProtocol {
             if (totalSurplusBps > 0) {
                 // Using ceil division favors maker
                 uint256 estimatedIn = parseSurplusEstimated(args, shift);
-                surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(balanceOut);
+                if (balanceOut == 0) surplusEstimate = estimatedIn;
+                else surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(balanceOut);
             }
         } else {
             uint256 balanceIn = ctx.swap.balanceIn;
@@ -231,7 +232,8 @@ library FeeProtocol {
             if (totalSurplusBps > 0) {
                 // Using floor division favors maker
                 uint256 estimatedOut = parseSurplusEstimated(args, shift);
-                surplusEstimate = estimatedOut * ctx.swap.amountIn / balanceIn;
+                if (balanceIn == 0) surplusEstimate = estimatedOut;
+                else surplusEstimate = estimatedOut * ctx.swap.amountIn / balanceIn;
             }
         }
 
