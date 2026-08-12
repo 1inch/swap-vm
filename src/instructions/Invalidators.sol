@@ -89,6 +89,7 @@ contract InvalidateBitExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
 /// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
     using ContextLib for Context;
@@ -150,6 +151,7 @@ contract InvalidateTokenInExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
 /// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using ContextLib for Context;
