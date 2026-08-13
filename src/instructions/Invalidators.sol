@@ -11,6 +11,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { FeeMeta, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 /// @dev Encoding: [uint32 bitIndex]
@@ -93,6 +94,7 @@ contract InvalidateBitExternal {
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
     using ContextLib for Context;
+    using FeeMetaLib for FeeMeta;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
 
@@ -124,6 +126,7 @@ library InvalidateTokenIn {
 
         filled += amountIn;
         require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountIn, balanceIn);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
@@ -155,6 +158,7 @@ contract InvalidateTokenInExternal {
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using ContextLib for Context;
+    using FeeMetaLib for FeeMeta;
     using Math for uint256;
 
     error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
@@ -187,6 +191,7 @@ library InvalidateTokenOut {
 
         filled += amountOut;
         require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountOut, balanceOut);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;
