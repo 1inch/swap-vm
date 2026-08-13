@@ -24,8 +24,8 @@ contract TinyLiquidity is PeggedFeesInvariants {
         testAmounts[1] = 0.05e18;   // 5% of pool
         testAmounts[2] = 0.1e18;    // 10% of pool
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // Higher tolerance for tiny pools
         symmetryTolerance = 1010;

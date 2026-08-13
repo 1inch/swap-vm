@@ -6,94 +6,88 @@ pragma solidity 0.8.30;
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-library DecayArgsBuilder {
-    using Calldata for bytes;
+/// @notice Decay opcode, increase balance in and decrease balance out by offsets decaying over time since last trade
+///   Offsets are increased at each swap by amount in and amount out against the current swap direction,
+///   making immediate counter-swap have a worse price
+/// @dev Encoding: [uint16 period]
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library Decay {
+    using InstructionArgs for bytes;
+    using InstructionArgs for bytes32;
 
-    function build(uint16 decayPeriod) internal pure returns (bytes memory) {
-        return abi.encodePacked(decayPeriod);
+    using ContextLib for Context;
+
+    using SafeCast for uint256;
+
+    Opcode constant opcode = Opcode.Decay;
+
+    function build(uint16 period) internal pure returns (bytes memory) {
+        bytes memory args = abi.encodePacked(period);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint16 period) {
-        period = uint16(bytes2(args));
-    }
-}
-
-struct DecayingOffset {
-    uint216 offset;
-    uint40 timestamp;
-}
-
-library DecayingOffsetLib {
-    using SafeCast for uint256;
-
-    function addOffset(DecayingOffset storage self, uint256 offset, uint256 decayPeriod) internal {
-        _store(self, (getOffset(self, decayPeriod) + offset).toUint216(), uint40(block.timestamp));
+        period = args.at(0).asU16();
     }
 
-    function getOffset(DecayingOffset storage self, uint256 decayPeriod) internal view returns (uint256) {
-        (uint216 offset, uint40 time) = _load(self);
-        uint256 expiration = time + decayPeriod;
-        if (block.timestamp >= expiration) {
-            return 0;
-        }
-        uint256 timeLeft = expiration - block.timestamp;
-        return offset * timeLeft / decayPeriod;
+    struct Storage {
+        mapping(bytes32 orderHash => mapping(address token => mapping(bool direction => DecayOffset))) offset;
     }
 
-    /// @dev Assembly implementation to make sure exactly 1 SLOAD is being used
-    function _load(DecayingOffset storage balance) private view returns (uint216 offset, uint40 time) {
-        assembly ("memory-safe") {
-            let packed := sload(balance.slot)
-            offset := and(packed, 0x0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-            time := shr(216, packed)
-        }
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = StorageSlots.Decay;
+        assembly ("memory-safe") { $.slot := slot }
     }
 
-    /// @dev Assembly implementation to make sure exactly 1 SSTORE is being used
-    function _store(DecayingOffset storage balance, uint216 offset, uint40 time) private {
-        assembly ("memory-safe") {
-            let packed := or(offset, shl(216, time))
-            sstore(balance.slot, packed)
-        }
-    }
-}
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
+        uint16 period = parse(args);
 
-/// @dev You can to call _decayXD to readjust balanceIn/Out for swap
-contract Decay {
-    using ContextLib for Context;
-    using DecayingOffsetLib for DecayingOffset;
+        ctx.swap.balanceIn += calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][true], period);
+        ctx.swap.balanceOut -= calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][false], period);
 
-    error DecayShouldBeCalledBeforeSwapAmountsComputation(uint256 amountIn, uint256 amountOut);
+        uint216 offsetIn = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][false], period);
+        uint216 offsetOut = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][true], period);
 
-    /// @dev Offsets for balances in both directions: _offsets[orderHash][token][swapDirection]
-    /// Should work for multi-token systems, swapDirection would mean buy/sell
-    mapping(bytes32 orderHash =>
-        mapping(address token =>
-            mapping(bool buyOrSell => DecayingOffset))) internal _offsets;
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-    /// @notice Applies virtual balance adjustment based on time since last trade (Mooniswap-style MEV protection)
-    /// @dev Gradually restores reserves to actual values over decay period
-    /// @dev QUOTE/SWAP DIVERGENCE: In quote mode (isStaticContext=true), this instruction reads last update time
-    ///   but does NOT update it. Quote may succeed while swap reverts if decay state changed between calls.
-    ///   Makers MUST NOT use backward jumps to this instruction as it breaks numerical consistency between
-    ///   quote() and swap().
-    /// @param args.period | 2 bytes (uint16)
-    function _decayXD(Context memory ctx, bytes calldata args) internal {
-        require(ctx.swap.amountIn == 0 || ctx.swap.amountOut == 0, DecayShouldBeCalledBeforeSwapAmountsComputation(ctx.swap.amountIn, ctx.swap.amountOut));
-
-        // Adjust balances by decayed offsets
-        uint256 period = DecayArgsBuilder.parse(args);
-        ctx.swap.balanceIn += _offsets[ctx.query.orderHash][ctx.query.tokenIn][true].getOffset(period);
-        ctx.swap.balanceOut -= _offsets[ctx.query.orderHash][ctx.query.tokenOut][false].getOffset(period);
-
-        (uint256 swapAmountIn, uint256 swapAmountOut) = ctx.runLoop();
+        offsetIn += amountIn.toUint216();
+        offsetOut += amountOut.toUint216();
 
         if (!ctx.vm.isStaticContext) {
-            _offsets[ctx.query.orderHash][ctx.query.tokenIn][false].addOffset(swapAmountIn, period);
-            _offsets[ctx.query.orderHash][ctx.query.tokenOut][true].addOffset(swapAmountOut, period);
+            $.offset[ctx.query.orderHash][ctx.query.tokenIn][false] = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
+            $.offset[ctx.query.orderHash][ctx.query.tokenOut][true] = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
         }
+    }
+
+    function calcOffsetNow(DecayOffset data, uint16 period) internal view returns (uint216) {
+        unchecked {
+            (uint216 offset, uint40 ts) = DecayOffsetLib.decode(data);
+
+            uint256 expiration = uint256(ts) + period;
+            if (block.timestamp >= expiration) return 0;
+            uint256 timeLeft = expiration - block.timestamp;
+
+            // timeLeft < period
+            return uint216(offset * timeLeft / period);
+        }
+    }
+}
+
+type DecayOffset is uint256;
+
+library DecayOffsetLib {
+    function encode(uint216 offset, uint40 ts) internal pure returns (DecayOffset) {
+        return DecayOffset.wrap((uint256(offset) << 40) | ts);
+    }
+
+    function decode(DecayOffset data) internal pure returns (uint216 offset, uint40 ts) {
+        return (uint216(DecayOffset.unwrap(data) >> 40), uint40(DecayOffset.unwrap(data)));
     }
 }

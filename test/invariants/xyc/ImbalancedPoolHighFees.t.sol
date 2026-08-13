@@ -21,11 +21,11 @@ contract ImbalancedPoolHighFees is XYCFeesInvariants {
         balanceB = 100e18;
 
         // High fees
-        flatFeeInBps = 0.01e9;        // 1%
-        flatFeeOutBps = 0.01e9;       // 1%
-        progressiveFeeInBps = 0.2e9;  // 20%
-        progressiveFeeOutBps = 0.2e9; // 20%
-        protocolFeeOutBps = 0.05e9;   // 5%
+        flatFeeInBps = 0.01e7;        // 1%
+        flatFeeOutBps = 0.01e7;       // 1%
+        progressiveFeeInBps = 0.2e7;  // 20%
+        progressiveFeeOutBps = 0.2e7; // 20%
+        protocolFeeOutBps = 0.05e7;   // 5%
 
         // Smaller amounts due to imbalanced pool
         testAmounts = new uint256[](3);

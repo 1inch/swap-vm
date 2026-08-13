@@ -17,14 +17,14 @@ import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 
-import { XYCConcentrate, XYCConcentrateArgsBuilder } from "../../src/instructions/XYCConcentrate.sol";
+import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
-import { Fee, FeeArgsBuilder } from "../../src/instructions/Fee.sol";
-import { Controls } from "../../src/instructions/Controls.sol";
+import { Salt } from "../../src/instructions/Controls.sol";
+import { FeeFlatIn } from "../../src/instructions/FeeFlat.sol";
+import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { TestConstants } from "./TestConstants.sol";
@@ -35,8 +35,6 @@ import { TestConstants } from "./TestConstants.sol";
  * @dev Inherits from Test and AquaOpcodesDebug to have access to vm and the instruction set
  */
 abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     enum SwapType {
         XYC,
         CONCENTRATE_GROW_PRICE_RANGE,
@@ -48,8 +46,8 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
         uint256 balanceB;
         uint256 priceMin;
         uint256 priceMax;
-        uint32 protocolFeeBps;
-        uint32 feeInBps;
+        uint24 protocolFeeBps;
+        uint24 feeInBps;
         address protocolFeeRecipient;
         SwapType swapType;
     }
@@ -61,8 +59,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
 
     address public maker;
     uint256 public makerPrivateKey;
-
-    constructor(address _aqua) AquaOpcodesDebug(_aqua) {}
 
     function setUp() public virtual {
         // Setup maker with known private key for signing
@@ -76,8 +72,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     }
 
     function buildProgram(MakerSetup memory setup) internal view virtual returns (bytes memory) {
-        Program p;
-
         bytes memory concentrateProgram = "";
 
         if(setup.swapType == SwapType.CONCENTRATE_GROW_LIQUIDITY ||
@@ -86,21 +80,18 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             // priceMin/priceMax are in 1e18 format; sqrtP = sqrt(price * 1e18)
             uint256 sqrtPmin = Math.sqrt(setup.priceMin * 1e18);
             uint256 sqrtPmax = Math.sqrt(setup.priceMax * 1e18);
-            concentrateProgram = p.build(
-                Opcode.XYCConcentrateSwap,
-                XYCConcentrateArgsBuilder.build2D(sqrtPmin, sqrtPmax)
-            );
+            concentrateProgram = XYCConcentrateSwap.build(sqrtPmin, sqrtPmax);
         }
 
         bytes memory swapProgram = concentrateProgram.length > 0
             ? concentrateProgram
-            : p.build(Opcode.XYCSwap);
+            : XYCSwap.build();
 
         return bytes.concat(
-            setup.protocolFeeBps > 0 ? p.build(Opcode.AquaProtocolFeeAmountIn, FeeArgsBuilder.buildProtocolFee(setup.protocolFeeBps, setup.protocolFeeRecipient)) : bytes(""),
-            setup.feeInBps > 0 ? p.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(setup.feeInBps)) : bytes(""),
+            setup.protocolFeeBps > 0 ? FeeBuilders.protocolFeeIn(setup.protocolFeeBps, setup.protocolFeeRecipient) : bytes(""),
+            setup.feeInBps > 0 ? FeeFlatIn.build(setup.feeInBps) : bytes(""),
             swapProgram,
-            p.build(Opcode.Salt, abi.encodePacked(vm.randomUint()))
+            Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
 

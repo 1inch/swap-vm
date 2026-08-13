@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-
 /// @title ITakerCallbacks
 /// @notice Interface for taker-side callbacks executed during swap lifecycle
 /// @custom:security-contact security@1inch.io

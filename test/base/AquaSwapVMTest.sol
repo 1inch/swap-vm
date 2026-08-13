@@ -35,8 +35,6 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
 
     address public protocolFeeRecipient;
 
-    constructor() AquaStrategyBuilders(address(aqua)) {}
-
     function setUp() public override virtual {
         super.setUp();
 
@@ -125,13 +123,14 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddress,
             isExactIn: isExactIn,
-            isAToB: isAToB,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
             hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,

@@ -22,8 +22,8 @@ contract MostlyCurved is PeggedFeesInvariants {
         testAmounts[1] = 50e18;
         testAmounts[2] = 100e18;
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // MostlyCurved A=0.2 has lower rounding errors
         symmetryTolerance = 1010;

@@ -76,8 +76,10 @@ contract MockMakerHooks is IMakerHooks {
 
     uint256 public preTransferInCallCount;
     uint256 public postTransferInCallCount;
+    uint256 public lastPostTransferInFee;
     uint256 public preTransferOutCallCount;
     uint256 public postTransferOutCallCount;
+    uint256 public lastPostTransferOutFee;
 
     function preTransferIn(
         address maker,
@@ -124,6 +126,7 @@ contract MockMakerHooks is IMakerHooks {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeIn,
         bytes32 orderHash,
         bytes calldata makerData,
         bytes calldata takerData
@@ -140,6 +143,7 @@ contract MockMakerHooks is IMakerHooks {
             takerData: takerData
         });
 
+        lastPostTransferInFee = feeIn;
         postTransferInCallCount++;
 
         emit PostTransferInCalled(
@@ -200,6 +204,7 @@ contract MockMakerHooks is IMakerHooks {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeOut,
         bytes32 orderHash,
         bytes calldata makerData,
         bytes calldata takerData
@@ -216,6 +221,7 @@ contract MockMakerHooks is IMakerHooks {
             takerData: takerData
         });
 
+        lastPostTransferOutFee = feeOut;
         postTransferOutCallCount++;
 
         emit PostTransferOutCalled(

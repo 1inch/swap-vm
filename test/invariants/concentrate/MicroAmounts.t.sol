@@ -32,8 +32,8 @@ contract MicroAmounts is ConcentrateXYCFeesInvariants {
         _computeInitialBalances();
 
         // Standard fees
-        flatFeeInBps = 0.003e9;        // 0.3%
-        protocolFeeOutBps = 0.002e9;   // 0.2%
+        flatFeeInBps = 0.003e7;        // 0.3%
+        protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Test micro amounts (2000 wei to 1 billion wei)
         // Start at 2000 to avoid dust threshold (≤1000 wei)

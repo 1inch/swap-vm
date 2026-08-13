@@ -17,7 +17,7 @@ contract LimitSwapVMRouterDebug is Simulator, SwapVM, LimitOpcodesDebug {
     /// @param owner Address of the owner of the router. Only owner can rescue funds.
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) LimitOpcodesDebug(aqua) { }
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) SwapVM(aqua, weth, owner, name, version) { }
 
     /// @dev Dispatches an opcode to its handler for VM execution
     function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal override {

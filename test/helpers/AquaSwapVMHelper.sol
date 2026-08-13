@@ -6,22 +6,18 @@ pragma solidity 0.8.30;
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { Program, ProgramBuilder, Opcode } from "../utils/ProgramBuilder.sol";
-
 import { ISwapVM } from "../../src/SwapVM.sol";
 import { AquaSwapVMRouter } from "../../src/routers/AquaSwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { AquaOpcodesDebug } from "../../src/opcodes/AquaOpcodesDebug.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
-import { Controls, ControlsArgsBuilder } from "../../src/instructions/Controls.sol";
+import { Salt } from "../../src/instructions/Controls.sol";
 
 /// @title Helper contract for Aqua SwapVM with AquaOpcodesDebug
 contract AquaSwapVMHelper is AquaOpcodesDebug {
-    using ProgramBuilder for Program;
-
     AquaSwapVMRouter public router;
 
-    constructor(address aqua) AquaOpcodesDebug(aqua) {
+    constructor(address aqua) {
         router = new AquaSwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
     }
 
@@ -30,10 +26,9 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
         TokenMock tokenA,
         TokenMock tokenB
     ) external view returns (ISwapVM.Order memory) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.XYCSwap),
-            p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(uint256(keccak256(abi.encode(block.timestamp))))))
+            XYCSwap.build(),
+            Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({

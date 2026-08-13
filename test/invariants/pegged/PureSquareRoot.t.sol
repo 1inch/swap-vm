@@ -23,8 +23,8 @@ contract PureSquareRoot is PeggedFeesInvariants {
         testAmounts[1] = 50e18;
         testAmounts[2] = 100e18;
 
-        flatFeeInBps = 0.003e9;
-        flatFeeOutBps = 0.003e9;
+        flatFeeInBps = 0.003e7;
+        flatFeeOutBps = 0.003e7;
 
         // PureSquareRoot A=0 has minimal linear error
         symmetryTolerance = 1010;

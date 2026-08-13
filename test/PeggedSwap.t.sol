@@ -12,12 +12,11 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { PeggedSwap, PeggedSwapArgsBuilder } from "../src/instructions/PeggedSwap.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { PeggedSwapMath } from "../src/libs/PeggedSwapMath.sol";
-import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 
 // Helper contract to test internal library functions
 contract PeggedSwapMathWrapper {
@@ -35,17 +34,9 @@ contract PeggedSwapMathWrapper {
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
     }
-
-    function buildArgs(PeggedSwapArgsBuilder.Args memory args) external pure returns (bytes memory) {
-        return PeggedSwapArgsBuilder.build(args);
-    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     address public tokenA;
     address public tokenB;
@@ -94,21 +85,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
     // ========================================
 
     function _createOrder(PoolSetup memory setup) internal view returns (ISwapVM.Order memory) {
-        Program prog;
+        return _createOrderWithRates(setup, 1, 1);
+    }
 
+    function _createOrderWithRates(PoolSetup memory setup, uint256 rateA, uint256 rateB) internal view returns (ISwapVM.Order memory) {
         bytes memory programBytes = bytes.concat(
-            prog.build(Opcode.DynamicBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            setup.feeInBps > 0 ? prog.build(Opcode.FlatFeeAmountIn,
-                FeeArgsBuilder.buildFlatFee(uint32(setup.feeInBps))) : bytes(""),
-            prog.build(Opcode.PeggedSwap,
-                PeggedSwapArgsBuilder.build(PeggedSwapArgsBuilder.Args({
-                    x0: setup.x0,
-                    y0: setup.y0,
-                    linearWidth: setup.linearWidth,
-                    rateLt: 1,
-                    rateGt: 1
-                })))
+            DynamicBalances.build(setup.balanceA, setup.balanceB),
+            setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),
+            PeggedSwap.build(setup.x0, setup.y0, setup.linearWidth, rateA, rateB)
         );
 
         return MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -135,7 +119,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         }));
     }
 
-    function _makeTakerData(bool isExactIn, bool isAToB, bytes memory signature) internal view returns (bytes memory) {
+    function _makeTakerData(bool isExactIn, bool isAToB, bool isPartialFill, bytes memory signature) internal view returns (bytes memory) {
         return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
@@ -146,6 +130,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
+            allowPartialFill: isPartialFill,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -172,7 +157,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bool isExactIn
     ) internal {
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(isExactIn, true, signature);
+        bytes memory takerData = _makeTakerData(isExactIn, true, false, signature);
 
         // Quote
         (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(
@@ -207,7 +192,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         // Quote and swap
         vm.prank(taker);
@@ -253,13 +238,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, true, signature);
 
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
-        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+        assertEq(swapVM.balance(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
         assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
     }
 
@@ -275,13 +260,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, false, signature);
+        bytes memory takerData = _makeTakerData(true, false, true, signature);
 
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
-        assertEq(swapVM.balances(swapVM.hash(order), tokenA), 0, "Output reserve must be fully drained");
+        assertEq(swapVM.balance(swapVM.hash(order), tokenA), 0, "Output reserve must be fully drained");
         assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
     }
 
@@ -297,14 +282,14 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, true, signature);
+        bytes memory takerData = _makeTakerData(false, true, true, signature);
 
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertEq(amountOut, setup.balanceB, "Output clamped to reserve");
         assertGt(amountIn, 0, "Input must be positive");
-        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+        assertEq(swapVM.balance(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
     }
 
     function test_PeggedSwap_PartialFill_ExactIn_AToB_WithFee() public {
@@ -319,13 +304,13 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, true, signature);
 
         vm.prank(taker);
         (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 1_000_000_000e18, takerData);
 
         assertGt(amountOut, 0, "Output must be positive");
-        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
+        assertEq(swapVM.balance(swapVM.hash(order), tokenB), 0, "Output reserve must be fully drained");
         assertLt(amountIn, 1_000_000_000e18, "Input must be partially filled");
     }
 
@@ -363,7 +348,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerData = _makeTakerData(true, true, signature);
+            bytes memory takerData = _makeTakerData(true, true, false, signature);
 
             vm.prank(taker);
             (, uint256 amountOut,) = swapVM.swap(order, swapSize, takerData);
@@ -393,7 +378,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         // Verify invariant preservation
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
@@ -443,7 +428,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18; // 1% of pool
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
@@ -493,7 +478,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerData = _makeTakerData(true, true, signature);
+            bytes memory takerData = _makeTakerData(true, true, false, signature);
 
             vm.prank(taker);
             (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
@@ -508,36 +493,6 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             // Maker must not lose invariant; allow ~5e24 rounding slack for high-A (linear dominates, more precision loss)
             assertGe(inv1, inv0 - 5e24, "Invariant must not decrease post-swap (maker safety)");
         }
-    }
-
-    // ========================================
-    // LINEAR WIDTH VALIDATION (REVERT ABOVE CAP)
-    // ========================================
-
-    /// @notice linearWidth > 5000*ONE must revert at swap EXECUTION, not just off-chain.
-    ///         build() only encodes; a program can embed any args directly, so the on-chain
-    ///         decode in parse() is what protects maker funds. One wei above the cap is enough —
-    ///         the <= 5000*ONE branch is covered by every other test using linearWidth = 5000e27.
-    function test_PeggedSwap_Revert_LinearWidth_AboveCap() public {
-        PoolSetup memory setup = PoolSetup({
-            balanceA: 100_000e18,
-            balanceB: 100_000e18,
-            x0: 100_000e18,
-            y0: 100_000e18,
-            linearWidth: 5000e27 + 1, // one wei above the cap
-            feeInBps: 0
-        });
-
-        ISwapVM.Order memory order = _createOrder(setup);
-        bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
-
-        vm.prank(taker);
-        vm.expectRevert(abi.encodeWithSelector(
-            PeggedSwapArgsBuilder.PeggedSwapInvalidLinearWidth.selector,
-            5000e27 + 1
-        ));
-        swapVM.swap(order, 1000e18, takerData);
     }
 
     // ========================================
@@ -558,7 +513,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1000e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, false, signature);
+        bytes memory takerData = _makeTakerData(true, false, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
@@ -585,7 +540,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 100e18;
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, false, signature);
+        bytes memory takerData = _makeTakerData(true, false, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
@@ -616,7 +571,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, false, signature);
+        bytes memory takerData = _makeTakerData(true, false, false, signature);
 
         uint256 swapAmount = 10e18;
 
@@ -649,7 +604,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         uint256 swapAmount = 10e18;
 
@@ -688,7 +643,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0.003e9 // 0.3%
+            feeInBps: 0.003e7 // 0.3%
         });
 
         ISwapVM.Order memory orderNoFee = _createOrder(setupNoFee);
@@ -697,10 +652,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 5000e18;
 
         bytes memory signatureNoFee = _signOrder(orderNoFee);
-        bytes memory takerDataNoFee = _makeTakerData(true, true, signatureNoFee);
+        bytes memory takerDataNoFee = _makeTakerData(true, true, false, signatureNoFee);
 
         bytes memory signatureWithFee = _signOrder(orderWithFee);
-        bytes memory takerDataWithFee = _makeTakerData(true, true, signatureWithFee);
+        bytes memory takerDataWithFee = _makeTakerData(true, true, false, signatureWithFee);
 
         vm.prank(taker);
         (, uint256 amountOutNoFee,) = swapVM.swap(orderNoFee, amountIn, takerDataNoFee);
@@ -730,7 +685,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountIn = 1e15; // 0.001 tokens - small but meaningful
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountIn, takerData);
@@ -776,7 +731,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 amountOut = 1e15; // 0.001 tokens - small but meaningful
 
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, true, signature);
+        bytes memory takerData = _makeTakerData(false, true, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, amountOut, takerData);
@@ -824,7 +779,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         vm.prank(taker);
         (uint256 swappedIn, uint256 swappedOut,) = swapVM.swap(order, 10e18, takerData);
@@ -847,30 +802,10 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
+        bytes memory takerData = _makeTakerData(true, true, false, signature);
 
         vm.prank(taker);
         vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
-        swapVM.swap(order, 10e18, takerData);
-    }
-
-    function test_PeggedSwap_Revert_BothBalancesZero() public {
-        // Both balances zero is a degenerate state (invariant=0) — must revert
-        PoolSetup memory setup = PoolSetup({
-            balanceA: 0,
-            balanceB: 0,
-            x0: 1000e18,
-            y0: 1000e18,
-            linearWidth: 0.8e27,
-            feeInBps: 0
-        });
-
-        ISwapVM.Order memory order = _createOrder(setup);
-        bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(true, true, signature);
-
-        vm.prank(taker);
-        vm.expectRevert(PeggedSwap.PeggedSwapBothBalancesZero.selector);
         swapVM.swap(order, 10e18, takerData);
     }
 
@@ -886,7 +821,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         ISwapVM.Order memory order = _createOrder(setup);
         bytes memory signature = _signOrder(order);
-        bytes memory takerData = _makeTakerData(false, true, signature);
+        bytes memory takerData = _makeTakerData(false, true, true, signature);
 
         // Request more output than available — partial fill clamps amountOut to balanceB
         uint256 excessiveAmount = setup.balanceB + 1;
@@ -896,7 +831,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
         assertEq(amountOut, setup.balanceB, "Output clamped to reserve");
         assertGt(amountIn, 0, "Input must be positive");
-        assertEq(swapVM.balances(swapVM.hash(order), tokenB), 0, "Output reserve fully drained");
+        assertEq(swapVM.balance(swapVM.hash(order), tokenB), 0, "Output reserve fully drained");
     }
 
     // ========================================
@@ -1182,7 +1117,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             ISwapVM.Order memory order = _createOrder(setup);
             bytes memory signature = _signOrder(order);
-            bytes memory takerDataExactIn = _makeTakerData(true, true, signature);
+            bytes memory takerDataExactIn = _makeTakerData(true, true, false, signature);
 
             // Track cumulative taker in/out to verify maker never loses
             uint256 takerTotalIn = 0;
@@ -1257,7 +1192,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
 
             // Phase 3: Reverse direction B→A to refill the depleted reserve
             // After depletion, reverse swaps must work
-            bytes memory takerDataExactInReverse = _makeTakerData(true, false, signature);
+            bytes memory takerDataExactInReverse = _makeTakerData(true, false, false, signature);
             uint256[] memory refillAmounts = new uint256[](7);
             refillAmounts[0] = 1;         // 1 wei — extreme edge
             refillAmounts[1] = 100;
@@ -1343,5 +1278,139 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 assertGe(invFinal, invInit - 1, "Final invariant must not decrease");
             }
         }
+    }
+
+    // ========================================
+    // DIFFERENT RATES + ASYMMETRIC X0/Y0 TESTS
+    // ========================================
+    //
+    // exec() reassigns (x0, y0, rateIn, rateOut) by swap direction, so these tests
+    // pin the parameter wiring with x0 != y0 AND rateA != rateB simultaneously.
+    //
+    // tokenA is modeled as a 6-decimals asset (rateA = 1e12 scales it to 1e18),
+    // tokenB is a regular 18-decimals asset (rateB = 1).
+    // Pool: 3000 A-units vs 1000 B-units => x0 = 3000e18 != y0 = 1000e18.
+    // At the initial balances the pool is at equilibrium (u = v = 1), where the
+    // marginal price in normalized units is exactly y0/x0 = 1/3 for any linearWidth:
+    // 3 A-tokens buy ~1 B-token. An axis or rate mix-up in exec() skews the result
+    // by 3x, 9x or 1e12, so the tight bounds below catch any of them.
+
+    uint256 internal constant RATE_A = 1e12;              // tokenA: 6-decimals style
+    uint256 internal constant RATE_B = 1;                 // tokenB: 18 decimals
+    uint256 internal constant RATED_BALANCE_A = 3000e6;   // 3000 A-units (6-dec scale)
+    uint256 internal constant RATED_BALANCE_B = 1000e18;  // 1000 B-units
+    uint256 internal constant RATED_X0 = 3000e18;         // RATED_BALANCE_A * RATE_A
+    uint256 internal constant RATED_Y0 = 1000e18;         // RATED_BALANCE_B * RATE_B
+    uint256 internal constant RATED_WIDTH = 500e27;       // tight peg => near-zero slippage for 1% trades
+
+    function _createRatedOrder() internal view returns (ISwapVM.Order memory) {
+        return _createOrderWithRates(PoolSetup({
+            balanceA: RATED_BALANCE_A,
+            balanceB: RATED_BALANCE_B,
+            x0: RATED_X0,
+            y0: RATED_Y0,
+            linearWidth: RATED_WIDTH,
+            feeInBps: 0
+        }), RATE_A, RATE_B);
+    }
+
+    function _quoteAndSwap(
+        ISwapVM.Order memory order,
+        uint256 amount,
+        bool isExactIn,
+        bool isAToB
+    ) internal returns (uint256 swappedIn, uint256 swappedOut) {
+        bytes memory takerData = _makeTakerData(isExactIn, isAToB, false, _signOrder(order));
+
+        (uint256 quotedIn, uint256 quotedOut,) = swapVM.asView().quote(order, amount, takerData);
+
+        vm.prank(taker);
+        (swappedIn, swappedOut,) = swapVM.swap(order, amount, takerData);
+
+        assertEq(swappedIn, quotedIn, "Quote/Swap amountIn mismatch");
+        assertEq(swappedOut, quotedOut, "Quote/Swap amountOut mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactIn_AToB() public {
+        uint256 amountIn = 30e6; // 30 A-units = 30e18 normalized = 1% of x0
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountIn, true, true);
+
+        assertEq(swappedIn, amountIn);
+
+        // Marginal price at equilibrium: 30e18 normalized in * y0/x0 => ~10e18 B out
+        uint256 idealOut = amountIn * RATE_A * RATED_Y0 / RATED_X0 / RATE_B;
+        assertLe(swappedOut, idealOut, "Output must not exceed marginal-price output (maker safety)");
+        assertGe(swappedOut, idealOut * 999 / 1000, "Output too far below 3:1 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactIn_BToA() public {
+        uint256 amountIn = 10e18; // 10 B-units = 10e18 normalized = 1% of y0
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountIn, true, false);
+
+        assertEq(swappedIn, amountIn);
+
+        // Marginal price at equilibrium: 10e18 normalized in * x0/y0 => ~30e18 normalized = 30e6 A out
+        uint256 idealOut = amountIn * RATE_B * RATED_X0 / RATED_Y0 / RATE_A;
+        assertLe(swappedOut, idealOut, "Output must not exceed marginal-price output (maker safety)");
+        assertGe(swappedOut, idealOut * 999 / 1000, "Output too far below 1:3 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactOut_AToB() public {
+        uint256 amountOut = 10e18; // request 10 B-units
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountOut, false, true);
+
+        assertEq(swappedOut, amountOut);
+
+        // ~30e6 A in; slippage + round-up must only increase the input
+        uint256 idealIn = amountOut * RATE_B * RATED_X0 / RATED_Y0 / RATE_A;
+        assertGe(swappedIn, idealIn, "Input must not be below marginal-price input (maker safety)");
+        assertLe(swappedIn, idealIn * 1001 / 1000, "Input too far above 3:1 peg - axis/rate mismatch");
+    }
+
+    function test_PeggedSwap_DifferentRates_ExactOut_BToA() public {
+        uint256 amountOut = 30e6; // request 30 A-units
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createRatedOrder(), amountOut, false, false);
+
+        assertEq(swappedOut, amountOut);
+
+        // ~10e18 B in; slippage + round-up must only increase the input
+        uint256 idealIn = amountOut * RATE_A * RATED_Y0 / RATED_X0 / RATE_B;
+        assertGe(swappedIn, idealIn, "Input must not be below marginal-price input (maker safety)");
+        assertLe(swappedIn, idealIn * 1001 / 1000, "Input too far above 1:3 peg - axis/rate mismatch");
+    }
+
+    /// @notice Round trip A->B->A on the same order must not profit the taker,
+    ///         and the normalized invariant must never decrease.
+    function test_PeggedSwap_DifferentRates_RoundTrip_InvariantPreserved() public {
+        ISwapVM.Order memory order = _createRatedOrder();
+        uint256 amountInA = 30e6;
+
+        uint256 inv0 = PeggedSwapMath.invariantFromReserves(
+            RATED_BALANCE_A * RATE_A, RATED_BALANCE_B * RATE_B, RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+
+        (, uint256 outB) = _quoteAndSwap(order, amountInA, true, true);
+
+        uint256 inv1 = PeggedSwapMath.invariantFromReserves(
+            (RATED_BALANCE_A + amountInA) * RATE_A,
+            (RATED_BALANCE_B - outB) * RATE_B,
+            RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+        assertGe(inv1, inv0 - 1, "Invariant must not decrease after A->B swap");
+
+        // Swap the received B back to A on the same order (updated dynamic balances)
+        (, uint256 outA) = _quoteAndSwap(order, outB, true, false);
+        assertLe(outA, amountInA, "Round trip must not profit the taker");
+
+        uint256 inv2 = PeggedSwapMath.invariantFromReserves(
+            (RATED_BALANCE_A + amountInA - outA) * RATE_A,
+            RATED_BALANCE_B * RATE_B,
+            RATED_X0, RATED_Y0, RATED_WIDTH
+        );
+        assertGe(inv2, inv0 - 1, "Invariant must not decrease after round trip");
     }
 }

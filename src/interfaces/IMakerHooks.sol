@@ -38,6 +38,7 @@ interface IMakerHooks {
     /// @param tokenOut Output token address
     /// @param amountIn Input token amount
     /// @param amountOut Output token amount
+    /// @param feeIn Fee charged from maker in tokenIn deducted from the amount
     /// @param orderHash Unique identifier for this order/strategy
     /// @param makerData Hook data from maker's order configuration
     /// @param takerData Hook data provided by taker at execution time
@@ -48,6 +49,7 @@ interface IMakerHooks {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeIn,
         bytes32 orderHash,
         bytes calldata makerData,
         bytes calldata takerData
@@ -82,6 +84,7 @@ interface IMakerHooks {
     /// @param tokenOut Output token address
     /// @param amountIn Input token amount
     /// @param amountOut Output token amount
+    /// @param feeOut Fee charged from maker in tokenOut in addition to the amount
     /// @param orderHash Unique identifier for this order/strategy
     /// @param makerData Hook data from maker's order configuration
     /// @param takerData Hook data provided by taker at execution time
@@ -92,6 +95,7 @@ interface IMakerHooks {
         address tokenOut,
         uint256 amountIn,
         uint256 amountOut,
+        uint256 feeOut,
         bytes32 orderHash,
         bytes calldata makerData,
         bytes calldata takerData

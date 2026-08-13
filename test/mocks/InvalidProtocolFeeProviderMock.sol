@@ -10,14 +10,14 @@ contract InvalidProtocolFeeProviderMock is IProtocolFeeProvider {
     error FeeDynamicProtocolInvalidRecipient();
 
     /// @inheritdoc IProtocolFeeProvider
-    function getFeeBpsAndRecipient(
+    function getRecipientAndFees(
         bytes32 /* orderHash */,
         address /* maker */,
         address /* taker */,
         address /* tokenIn */,
         address /* tokenOut */,
         bool /* isExactIn */
-    ) external pure override returns (uint32, address) {
+    ) external pure override returns (address, uint24, uint24) {
         revert FeeDynamicProtocolInvalidRecipient();
     }
 }

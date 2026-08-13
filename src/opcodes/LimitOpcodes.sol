@@ -5,71 +5,57 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode } from "../libs/OpcodeList.sol";
+import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
 
-import { Controls } from "../instructions/Controls.sol";
-import { Balances } from "../instructions/Balances.sol";
-import { Invalidators } from "../instructions/Invalidators.sol";
-import { LimitSwap } from "../instructions/LimitSwap.sol";
-import { MinRate } from "../instructions/MinRate.sol";
-import { DutchAuction } from "../instructions/DutchAuction.sol";
+import { Stop, Revert, Deadline, Salt } from "../instructions/Controls.sol";
+import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../instructions/Jumps.sol";
+import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../instructions/TokenValidators.sol";
+import { StaticBalances } from "../instructions/Balances.sol";
+import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
-import { TWAPSwap } from "../instructions/TWAPSwap.sol";
-import { Fee } from "../instructions/Fee.sol";
-import { FeeExperimental } from "../instructions/FeeExperimental.sol";
+import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
-import { SeriesEpochManager } from "../instructions/SeriesEpochManager.sol";
-import { Whitelist } from "../instructions/Whitelist.sol";
-import { PiecewiseLinearScale } from "../instructions/PiecewiseLinearScale.sol";
+import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
+import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
+import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
 
 contract LimitOpcodes is
-    Controls,
-    Balances,
-    Invalidators,
-    LimitSwap,
-    BaseFeeAdjuster,
-    Fee,
-    FeeExperimental,
-    Extruction,
-    SeriesEpochManager,
-    Whitelist,
-    PiecewiseLinearScale
+    InvalidateBitExternal,
+    InvalidateTokenInExternal,
+    InvalidateTokenOutExternal,
+    ValidateSeriesEpochExternal
 {
-    error UnknownOpcode(uint256 opcode);
+    using OpcodeOps for Opcode;
 
-    constructor(address aqua) FeeExperimental(aqua) {}
+    error UnknownOpcode(uint256 opcode);
 
     /// @notice Opcode direct dispatcher
     function _runOpcode(Context memory ctx, uint256 opcode, bytes calldata args) internal virtual {
-             if (opcode == uint256(Opcode.Jump)) Controls._jump(ctx, args);
-        else if (opcode == uint256(Opcode.JumpIfTokenIn)) Controls._jumpIfTokenIn(ctx, args);
-        else if (opcode == uint256(Opcode.JumpIfTokenOut)) Controls._jumpIfTokenOut(ctx, args);
-        else if (opcode == uint256(Opcode.Deadline)) Controls._deadline(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceNonZero)) Controls._onlyTakerTokenBalanceNonZero(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenBalanceGte)) Controls._onlyTakerTokenBalanceGte(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTakerTokenSupplyShareGte)) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
-        else if (opcode == uint256(Opcode.StaticBalances)) Balances._staticBalancesXD(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateBit)) Invalidators._invalidateBit1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenIn)) Invalidators._invalidateTokenIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
-        else if (opcode == uint256(Opcode.LimitSwap)) LimitSwap._limitSwap1D(ctx, args);
-        else if (opcode == uint256(Opcode.LimitSwapFullAmount)) LimitSwap._limitSwapOnlyFull1D(ctx, args);
-        else if (opcode == uint256(Opcode.BaseFeeAdjuster)) BaseFeeAdjuster._baseFeeAdjuster1D(ctx, args);
-        else if (opcode == uint256(Opcode.Extruction)) Extruction._extruction(ctx, args);
-        else if (opcode == uint256(Opcode.Salt)) Controls._salt(ctx, args);
-        else if (opcode == uint256(Opcode.ProtocolFeeAmountOut)) FeeExperimental._protocolFeeAmountOutXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountOut)) FeeExperimental._aquaProtocolFeeAmountOutXD(ctx, args);
-        else if (opcode == uint256(Opcode.ProtocolFeeAmountIn)) Fee._protocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaProtocolFeeAmountIn)) Fee._aquaProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.DynamicProtocolFeeAmountIn)) Fee._dynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.AquaDynamicProtocolFeeAmountIn)) Fee._aquaDynamicProtocolFeeAmountInXD(ctx, args);
-        else if (opcode == uint256(Opcode.ValidateSeriesEpoch)) SeriesEpochManager._validateSeriesEpochXD(ctx, args);
-        else if (opcode == uint256(Opcode.PrivateOrder)) Whitelist._privateOrder(ctx, args);
-        else if (opcode == uint256(Opcode.WhitelistCoequal)) Whitelist._whitelistCoequal(ctx, args);
-        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceIn)) PiecewiseLinearScale._piecewiseLinearScaleBalanceIn1D(ctx, args);
-        else if (opcode == uint256(Opcode.PiecewiseLinearScaleBalanceOut)) PiecewiseLinearScale._piecewiseLinearScaleBalanceOut1D(ctx, args);
-        else if (opcode == uint256(Opcode.OnlyTxOriginTokenBalanceNonZero)) Controls._onlyTxOriginTokenBalanceNonZero(ctx, args);
-        else if (opcode == uint256(Opcode.WhitelistSequential)) Whitelist._whitelistSequential(ctx, args);
+             if (opcode == Jump.opcode.asU8()) Jump.exec(ctx, args);
+        else if (opcode == JumpIfTokenIn.opcode.asU8()) JumpIfTokenIn.exec(ctx, args);
+        else if (opcode == JumpIfTokenOut.opcode.asU8()) JumpIfTokenOut.exec(ctx, args);
+        else if (opcode == Deadline.opcode.asU8()) Deadline.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenBalanceNonZero.opcode.asU8()) OnlyTakerTokenBalanceNonZero.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenBalanceGte.opcode.asU8()) OnlyTakerTokenBalanceGte.exec(ctx, args);
+        else if (opcode == OnlyTakerTokenSupplyShareGte.opcode.asU8()) OnlyTakerTokenSupplyShareGte.exec(ctx, args);
+        else if (opcode == StaticBalances.opcode.asU8()) StaticBalances.exec(ctx, args);
+        else if (opcode == InvalidateBit.opcode.asU8()) InvalidateBit.exec(ctx, args);
+        else if (opcode == InvalidateTokenIn.opcode.asU8()) InvalidateTokenIn.exec(ctx, args);
+        else if (opcode == InvalidateTokenOut.opcode.asU8()) InvalidateTokenOut.exec(ctx, args);
+        else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
+        else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
+        else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
+        else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
+        else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
+        else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
+        else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);
+        else if (opcode == PrivateOrder.opcode.asU8()) PrivateOrder.exec(ctx, args);
+        else if (opcode == WhitelistCoequal.opcode.asU8()) WhitelistCoequal.exec(ctx, args);
+        else if (opcode == PiecewiseLinearScaleBalanceIn.opcode.asU8()) PiecewiseLinearScaleBalanceIn.exec(ctx, args);
+        else if (opcode == PiecewiseLinearScaleBalanceOut.opcode.asU8()) PiecewiseLinearScaleBalanceOut.exec(ctx, args);
+        else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
+        else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }

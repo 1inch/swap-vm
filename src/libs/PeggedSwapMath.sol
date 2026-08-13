@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-
 pragma solidity 0.8.30;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2026 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -102,5 +104,4 @@ library PeggedSwapMath {
         // w² / ONE - safe: w = √v ≤ 2·ONE (since v ≤ u* ≤ 4·ONE for any A ≥ 0; tighter at large A) → 4e54 < 1e77
         v = w * w / ONE;
     }
-
 }

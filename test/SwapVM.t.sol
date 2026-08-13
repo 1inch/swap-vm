@@ -15,17 +15,12 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib, TakerTraits } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
-import { LimitSwap, LimitSwapArgsBuilder } from "../src/instructions/LimitSwap.sol";
-import { Invalidators, InvalidatorsArgsBuilder } from "../src/instructions/Invalidators.sol";
-import { Controls, ControlsArgsBuilder } from "../src/instructions/Controls.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
+import { LimitSwap } from "../src/instructions/LimitSwap.sol";
+import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
+import { Salt } from "../src/instructions/Controls.sol";
 
 contract SwapVMTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
     TokenMock public tokenB;
@@ -86,14 +81,11 @@ contract SwapVMTest is Test, OpcodesDebug {
     }
 
     function _createOrder(MakerSetup memory setup) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
-        Program p;
         bytes memory programBytes = bytes.concat(
-            p.build(Opcode.StaticBalances,
-                BalancesArgsBuilder.build([uint256(setup.balanceA), setup.balanceB])),
-            p.build(Opcode.LimitSwap,
-                LimitSwapArgsBuilder.build(setup.tokenIn, setup.tokenOut)),
-            setup.useInvalidator ? p.build(Opcode.InvalidateTokenOut) : bytes(""),
-            setup.salt != 0 ? p.build(Opcode.Salt, ControlsArgsBuilder.buildSalt(uint64(setup.salt))) : bytes("")
+            StaticBalances.build(setup.balanceA, setup.balanceB),
+            LimitSwap.build(setup.tokenIn, setup.tokenOut),
+            setup.useInvalidator ? InvalidateTokenOut.build() : bytes(""),
+            setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({

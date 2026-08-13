@@ -11,17 +11,12 @@ import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
-import { Balances, BalancesArgsBuilder } from "../src/instructions/Balances.sol";
+import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 
 contract UnwrapWethTest is Test, OpcodesDebug {
-    using ProgramBuilder for Program;
-
-    constructor() OpcodesDebug(address(new Aqua())) {}
-
     SwapVMRouter public swapVM;
     WETHMock public weth;
     TokenMock public token;
@@ -63,12 +58,9 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         // MakerTraits requires tokenA < tokenB; balances are symmetric so ordering of values is irrelevant
         (address lowerToken, address higherToken) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
 
-        Program program;
         bytes memory programBytes = bytes.concat(
-            program.build(Opcode.DynamicBalances, BalancesArgsBuilder.build(
-                [uint256(ORDER_BALANCE), uint256(ORDER_BALANCE)]
-            )),
-            program.build(Opcode.XYCSwap)
+            DynamicBalances.build(ORDER_BALANCE, ORDER_BALANCE),
+            XYCSwap.build()
         );
 
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -109,11 +101,12 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
-            isAToB: isAToB,
             shouldUnwrapWeth: takerUnwrapWeth,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
             threshold: "",
             to: recipient,
             deadline: 0,
@@ -231,13 +224,13 @@ contract UnwrapWethTest is Test, OpcodesDebug {
     // ==================== FUZZ TESTS ====================
 
     function testFuzz_UnwrapWeth(
-        bool makerUnwrapWeth,
-        bool takerUnwrapWeth,
+        uint8 seedUnwrapWeth,
         bool isExactIn,
         uint128 rawAmount
     ) public {
         // Can't have same token for both in and out
-        vm.assume(!(makerUnwrapWeth && takerUnwrapWeth));
+        bool makerUnwrapWeth = seedUnwrapWeth % 3 == 0;
+        bool takerUnwrapWeth = seedUnwrapWeth % 3 == 1;
 
         uint256 amount = bound(uint256(rawAmount), 1e15, ORDER_BALANCE / 2);
 

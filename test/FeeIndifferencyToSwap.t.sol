@@ -9,8 +9,10 @@ import { Test } from "forge-std/Test.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
-import { Fee, BPS } from "../src/instructions/Fee.sol";
-import { FeeExperimental } from "../src/instructions/FeeExperimental.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
+import { Opcode } from "../src/libs/OpcodeList.sol";
 import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
 
 /**
@@ -18,7 +20,7 @@ import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/V
  * @notice Proves that Fee module works independently of swap formula
  * @dev Tests FeeIn/FeeOut with different swap formulas to show consistent behavior
  */
-contract FeeIndifferencyToSwap is Test, FeeExperimental {
+contract FeeIndifferencyToSwap is Test {
     using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
@@ -26,10 +28,11 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
 
     uint256 private _formulaPtr;
 
-    constructor() FeeExperimental(address(0)) {}
+    /// @dev Test-only dispatcher: runs fee opcodes or the formula stashed in {_formulaPtr}
+    function _runFormula(Context memory ctx, uint256 opcode, bytes calldata args) internal {
+        if (opcode == uint8(Opcode.FeeFlatIn)) return FeeFlatIn.exec(ctx, args);
+        if (opcode == uint8(Opcode.FeeFlatOut)) return FeeFlatOut.exec(ctx, args);
 
-    /// @dev Test-only dispatcher: runs the formula stashed in {_formulaPtr}
-    function _runFormula(Context memory ctx, uint256 /* opcode */, bytes calldata args) internal {
         function(Context memory, bytes calldata) internal formula;
         uint256 ptr = _formulaPtr;
         // memory-safe: only reloads a function pointer this contract stored earlier
@@ -40,18 +43,23 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
     }
 
     /**
-     * @notice Creates a mock Context with custom swap formula
+     * @notice Runs a program (fee instruction wrapping the stashed formula) on a fresh context
+     * @dev External so `program` is real calldata for the VM program pointer
      * @param balanceIn Initial balance of input token
      * @param balanceOut Initial balance of output token
      * @param amount Swap amount (input for exactIn, output for exactOut)
      * @param exactIn Whether this is exactIn or exactOut swap
+     * @param program Program bytes: fee instruction followed by opcode 0 (the formula)
      */
-    function createContextWithSpecificInstruction(
+    function applyFeeAndRun(
         uint256 balanceIn,
         uint256 balanceOut,
         uint256 amount,
-        bool exactIn
-    ) internal view returns (Context memory ctx) {
+        bool exactIn,
+        bytes calldata program
+    ) external returns (uint256 amountIn, uint256 amountOut) {
+        Context memory ctx;
+
         // Setup SwapRegisters
         ctx.swap.balanceIn = balanceIn;
         ctx.swap.balanceOut = balanceOut;
@@ -61,18 +69,13 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         // Setup SwapQuery
         ctx.query.isExactIn = exactIn;
 
-        // Dispatch opcode 0 to the formula stashed in _formulaPtr (set by checkExactInExactOutSymmetry)
+        // Dispatch fee opcodes directly, opcode 0 to the formula stashed in _formulaPtr
         ctx.vm.dispatch = _runFormula;
         ctx.vm.nextPC = 0;
         ctx.vm.isStaticContext = true;
+        ctx.vm.programPtr = CalldataPtrLib.from(program);
 
-        bytes memory programBytes = hex"0000"; // opcode 0, args length 0
-        ctx.vm.programPtr = this.getProgramPtr(programBytes);
-    }
-
-    // Helper to get calldata pointer
-    function getProgramPtr(bytes calldata programBytes) external pure returns (CalldataPtr ptr) {
-        return CalldataPtrLib.from(programBytes);
+        return ctx.runLoop();
     }
 
     /**
@@ -99,25 +102,23 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
         _formulaPtr = ptr;
 
         uint256 inputAmount = 10e18; // Use smaller amount to avoid overflow
+        // Fee instruction wraps the formula at opcode 0 (args length 0)
+        bytes memory program = bytes.concat(
+            isFeeIn ? FeeFlatIn.build(uint24(feeBps)) : FeeFlatOut.build(uint24(feeBps)),
+            hex"0000"
+        );
 
         // Step 1: ExactIn swap
-        Context memory ctxExactIn = createContextWithSpecificInstruction(
-            balanceIn, balanceOut, inputAmount, true
-        );
-
-        isFeeIn ? _feeAmountIn(ctxExactIn, feeBps) : _feeAmountOut(ctxExactIn, feeBps);
+        (, uint256 exactInAmountOut) = this.applyFeeAndRun(balanceIn, balanceOut, inputAmount, true, program);
 
         // Step 2: ExactOut swap requesting the same outputAmount
-        Context memory ctxExactOut = createContextWithSpecificInstruction(
-            balanceIn, balanceOut, ctxExactIn.swap.amountOut, false
-        );
-
-        isFeeIn ? _feeAmountIn(ctxExactOut, feeBps) : _feeAmountOut(ctxExactOut, feeBps);
+        (uint256 exactOutAmountIn,) = this.applyFeeAndRun(balanceIn, balanceOut, exactInAmountOut, false, program);
 
         // Step 3: Verify symmetry of ExactIn and ExactOut
         // For inverse formula, we need higher tolerance due to division operations
-        uint256 tolerance = (swapInstruction == inverseFormula) ? 12000 : 2;
-        assertApproxEqAbs(ctxExactOut.swap.amountIn, inputAmount, tolerance, "Exchange rate inconsistent between exactIn and exactOut");
+        // Circular formula sqrt rounding adds a couple wei on top of the fee ceil rounding
+        uint256 tolerance = (swapInstruction == inverseFormula) ? 12000 : (swapInstruction == circularFormula ? 4 : 2);
+        assertApproxEqAbs(exactOutAmountIn, inputAmount, tolerance, "Exchange rate inconsistent between exactIn and exactOut");
     }
 
     function test_FeeIn_WithXYCFormula() public {
@@ -125,7 +126,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             xycFormula,
             100e18, // balanceIn
             200e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -135,7 +136,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             linearFormula,
             100e18, // balanceIn
             200e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -145,7 +146,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             circularFormula,
             100e18, // balanceIn
             500e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -155,7 +156,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             constantSumFormula,
             100e18, // balanceIn
             500e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -166,7 +167,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             smoothTransitionFormula,
             100e18, // balanceIn
             500e18, // balanceOut (use larger pool for smooth transition)
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -176,7 +177,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             xycFormula,
             100e18, // balanceIn
             200e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeIn
         );
     }
@@ -186,7 +187,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             linearFormula,
             100e18, // balanceIn
             200e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeIn
         );
     }
@@ -196,7 +197,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             circularFormula,
             100e18, // balanceIn
             500e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeIn
         );
     }
@@ -206,7 +207,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             constantSumFormula,
             100e18, // balanceIn
             500e18, // balanceOut (use larger pool for constant sum)
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeIn
         );
     }
@@ -217,7 +218,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             smoothTransitionFormula,
             100e18, // balanceIn
             700e18, // balanceOut (use larger pool for smooth transition)
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeIn
         );
     }
@@ -227,7 +228,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             inverseFormula,
             100e18, // balanceIn
             100e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -237,7 +238,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             inverseFormula,
             100e18, // balanceIn
             300e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeOut
         );
     }
@@ -247,7 +248,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             hyperbolicFormula,
             100e18, // balanceIn
             100e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             true // isFeeIn
         );
     }
@@ -257,7 +258,7 @@ contract FeeIndifferencyToSwap is Test, FeeExperimental {
             hyperbolicFormula,
             100e18, // balanceIn
             100e18, // balanceOut
-            0.03e9, // 3% fee
+            0.03e7, // 3% fee
             false // isFeeOut
         );
     }

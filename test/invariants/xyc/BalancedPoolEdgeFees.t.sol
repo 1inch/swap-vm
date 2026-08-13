@@ -21,11 +21,11 @@ contract BalancedPoolEdgeFees is XYCFeesInvariants {
         balanceB = 1000e18;
 
         // Edge case fees - near maximum allowed
-        flatFeeInBps = 0.999e9;        // 99.9% (near max)
-        flatFeeOutBps = 0.001e9;       // 0.1% (near min meaningful)
-        progressiveFeeInBps = 0.5e9;   // 50%
-        progressiveFeeOutBps = 0.5e9;  // 50%
-        protocolFeeOutBps = 0.1e9;     // 10%
+        flatFeeInBps = 0.999e7;        // 99.9% (near max)
+        flatFeeOutBps = 0.001e7;       // 0.1% (near min meaningful)
+        progressiveFeeInBps = 0.5e7;   // 50%
+        progressiveFeeOutBps = 0.5e7;  // 50%
+        protocolFeeOutBps = 0.1e7;     // 10%
 
         // Standard test amounts for exactIn
         testAmounts = new uint256[](3);

@@ -9,13 +9,10 @@ import { ISwapVM } from "../src/SwapVM.sol";
 
 
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
-import { Program, ProgramBuilder, Opcode } from "./utils/ProgramBuilder.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { MockTakerFirstTransfer } from "./mocks/MockTakerFirstTransfer.sol";
 
 contract SwapVMAquaTest is AquaSwapVMTest {
-    using ProgramBuilder for Program;
-
     function setUp() public override {
         super.setUp();
     }
@@ -92,13 +89,14 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         bytes memory customTakerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(swapProgram.taker),
             isExactIn: swapProgram.isExactIn,
-            isAToB: false, // zeroForOne=false: swap tokenB->tokenA, and tokenB > tokenA after sort
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
             hasPreTransferOutCallback: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: true,  // This flag ensures tokens are first sent from taker
             useTransferFromAndAquaPush: false,
+            isAToB: false, // zeroForOne=false: swap tokenB->tokenA, and tokenB > tokenA after sort
+            allowPartialFill: false,
             threshold: "",
             to: address(0),
             deadline: 0,

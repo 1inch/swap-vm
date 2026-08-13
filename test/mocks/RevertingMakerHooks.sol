@@ -25,7 +25,7 @@ contract RevertingMakerHooks {
         if (revertOn == HookType.PreTransferIn) revert PreTransferInReverted();
     }
 
-    function postTransferIn(address, address, address, address, uint256, uint256, bytes32, bytes calldata, bytes calldata) external view {
+    function postTransferIn(address, address, address, address, uint256, uint256, uint256, bytes32, bytes calldata, bytes calldata) external view {
         if (revertOn == HookType.PostTransferIn) revert PostTransferInReverted();
     }
 
@@ -33,7 +33,7 @@ contract RevertingMakerHooks {
         if (revertOn == HookType.PreTransferOut) revert PreTransferOutReverted();
     }
 
-    function postTransferOut(address, address, address, address, uint256, uint256, bytes32, bytes calldata, bytes calldata) external view {
+    function postTransferOut(address, address, address, address, uint256, uint256, uint256, bytes32, bytes calldata, bytes calldata) external view {
         if (revertOn == HookType.PostTransferOut) revert PostTransferOutReverted();
     }
 }

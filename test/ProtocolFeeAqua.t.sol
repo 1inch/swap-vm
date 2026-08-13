@@ -7,17 +7,18 @@ pragma solidity 0.8.30;
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { BPS } from "../src/instructions/Fee.sol";
 import { ContextLib } from "../src/libs/VM.sol";
 
 contract ProtocolFeeAquaTest is AquaSwapVMTest {
+    uint256 constant BPS = 1e7;
+
     function setUp() public virtual override {
         super.setUp();
     }
 
     function _makerSetup(
-        uint32 feeInBps,
-        uint32 protocolFeeBps
+        uint24 feeInBps,
+        uint24 protocolFeeBps
     ) internal view returns (MakerSetup memory) {
         return MakerSetup({
             balanceA: INITIAL_BALANCE_A,
@@ -47,7 +48,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_ProtocolFee_ExactIn_ReceivedByRecipient() public {
-        MakerSetup memory setup = _makerSetup(0, 0.10e9); // 0% fee in, 10% protocol fee
+        MakerSetup memory setup = _makerSetup(0, 0.10e7); // 0% fee in, 10% protocol fee
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB
@@ -79,7 +80,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_ProtocolFee_ExactOut_ReceivedByRecipient() public {
-        MakerSetup memory setup = _makerSetup(0, 0.10e9); // 0% fee in, 10% protocol fee
+        MakerSetup memory setup = _makerSetup(0, 0.10e7); // 0% fee in, 10% protocol fee
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, false); // Swap for 100 tokenB from tokenA
@@ -111,7 +112,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_ProtocolFee_ExactIn_WithFlatFeeIn() public {
-        MakerSetup memory setup = _makerSetup(0.20e9, 0.05e9); // 20% fee in, 5% protocol fee
+        MakerSetup memory setup = _makerSetup(0.20e7, 0.05e7); // 20% fee in, 5% protocol fee
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB
@@ -145,7 +146,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_ProtocolFee_ExactOut_WithFlatFeeIn() public {
-        MakerSetup memory setup = _makerSetup(0.20e9, 0.05e9); // 20% fee in, 5% protocol fee
+        MakerSetup memory setup = _makerSetup(0.20e7, 0.05e7); // 20% fee in, 5% protocol fee
         ISwapVM.Order memory order = createStrategy(setup);
         bytes32 strategyHash = shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgram = _swapProgram(100e18, true, false); // Swap for 100 tokenB from tokenA
@@ -173,7 +174,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
     }
 
     function test_Aqua_ProtocolFee_WithFlatFeeIn_Consistency() public {
-        MakerSetup memory setup = _makerSetup(0.10e9, 0.05e9); // 10% fee in, 5% protocol fee
+        MakerSetup memory setup = _makerSetup(0.10e7, 0.05e7); // 10% fee in, 5% protocol fee
         ISwapVM.Order memory order = createStrategy(setup);
         shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
         SwapProgram memory swapProgramIn = _swapProgram(100e18, true, true); // Swap 100 tokenA for tokenB

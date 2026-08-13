@@ -27,8 +27,8 @@ contract LargeAmounts is ConcentrateXYCFeesInvariants {
         _computeInitialBalances();
 
         // Standard fees
-        flatFeeInBps = 0.003e9;        // 0.3%
-        protocolFeeOutBps = 0.002e9;   // 0.2%
+        flatFeeInBps = 0.003e7;        // 0.3%
+        protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Large test amounts (5-20% of available liquidity - safe range)
         testAmounts = new uint256[](5);
