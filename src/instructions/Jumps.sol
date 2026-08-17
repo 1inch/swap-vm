@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -17,13 +18,29 @@ library Jump {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     Opcode constant opcode = Opcode.Jump;
 
+    function sizeOf(uint16) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 2;
+    }
+
     function build(uint16 nextPC) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(nextPC);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(nextPC)), nextPC).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(nextPC, 2);
+        ptrStart.patchLength(ptr);
+    }
+
+    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
+        ptrStart.skip(InstructionBuilder.sizeOf()).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (uint16 nextPC) {
@@ -44,13 +61,34 @@ library JumpIfDirection {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfDirection;
 
+    function sizeOf(bool, uint16) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + 2;
+    }
+
     function build(address tokenIn, address tokenOut, uint16 nextPC) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(InstructionBuilder.encodeBool(tokenIn < tokenOut, 0), nextPC);
-        return InstructionBuilder.build(opcode, args);
+        bool direction = tokenIn < tokenOut;
+        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+    }
+
+    function build(bool direction, uint16 nextPC) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, bool direction, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0)).push(nextPC, 2);
+        ptrStart.patchLength(ptr);
+    }
+
+    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
+        ptrStart.skip(InstructionBuilder.sizeOf() + 1).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (bool direction, uint16 nextPC) {
@@ -75,13 +113,29 @@ library JumpIfTokenIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfTokenIn;
 
+    function sizeOf(address, uint16) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 2;
+    }
+
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token, nextPC);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token).push(nextPC, 2);
+        ptrStart.patchLength(ptr);
+    }
+
+    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
+        ptrStart.skip(InstructionBuilder.sizeOf() + 20).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint16 nextPC) {
@@ -105,13 +159,29 @@ library JumpIfTokenOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfTokenOut;
 
+    function sizeOf(address, uint16) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 2;
+    }
+
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token, nextPC);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token).push(nextPC, 2);
+        ptrStart.patchLength(ptr);
+    }
+
+    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
+        ptrStart.skip(InstructionBuilder.sizeOf() + 20).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint16 nextPC) {

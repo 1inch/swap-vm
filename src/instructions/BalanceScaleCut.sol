@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -19,17 +20,29 @@ library BalanceScaleCutIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Math for uint256;
 
     error BalanceScaleCutRateZero();
 
     Opcode constant opcode = Opcode.BalanceScaleCutIn;
 
+    function sizeOf(uint64, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 8;
+    }
+
     function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(rateA, rateB)), rateA, rateB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
         require(rateA > 0 && rateB > 0, BalanceScaleCutRateZero());
 
-        bytes memory args = abi.encodePacked(rateA, rateB);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(rateA, 8).push(rateB, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {
@@ -59,15 +72,27 @@ library BalanceScaleCutOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error BalanceScaleCutRateZero();
 
     Opcode constant opcode = Opcode.BalanceScaleCutOut;
 
+    function sizeOf(uint64, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 8;
+    }
+
     function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(rateA, rateB)), rateA, rateB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
         require(rateA > 0 && rateB > 0, BalanceScaleCutRateZero());
 
-        bytes memory args = abi.encodePacked(rateA, rateB);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(rateA, 8).push(rateB, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {

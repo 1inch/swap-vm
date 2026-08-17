@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -17,17 +18,29 @@ library FulfillBonusBalanceIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error FulfillBonusIncentiveOutOfRange(uint24 incentiveBps);
 
     Opcode constant opcode = Opcode.FulfillBonusBalanceIn;
 
     uint256 constant BPS = 1e7;
 
+    function sizeOf(uint24) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 3;
+    }
+
     function build(uint24 incentiveBps) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(incentiveBps)), incentiveBps).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint24 incentiveBps) internal pure returns (MemoryPtr ptr) {
         require(incentiveBps < BPS, FulfillBonusIncentiveOutOfRange(incentiveBps));
 
-        bytes memory args = abi.encodePacked(incentiveBps);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(incentiveBps, 3);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint24 incentiveBps) {
@@ -55,17 +68,29 @@ library FulfillBonusBalanceOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error FulfillBonusIncentiveOutOfRange(uint24 incentiveBps);
 
     Opcode constant opcode = Opcode.FulfillBonusBalanceOut;
 
     uint256 constant BPS = 1e7;
 
+    function sizeOf(uint24) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 3;
+    }
+
     function build(uint24 incentiveBps) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(incentiveBps)), incentiveBps).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint24 incentiveBps) internal pure returns (MemoryPtr ptr) {
         require(incentiveBps < BPS, FulfillBonusIncentiveOutOfRange(incentiveBps));
 
-        bytes memory args = abi.encodePacked(incentiveBps);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(incentiveBps, 3);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint24 incentiveBps) {

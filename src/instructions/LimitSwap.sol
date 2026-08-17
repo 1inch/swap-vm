@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -17,15 +18,32 @@ library LimitSwap {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Math for uint256;
 
     error LimitSwapDirectionMismatch();
 
     Opcode constant opcode = Opcode.LimitSwap;
 
+    function sizeOf(bool) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1;
+    }
+
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(InstructionBuilder.encodeBool(tokenIn < tokenOut, 0));
-        return InstructionBuilder.build(opcode, args);
+        bool direction = tokenIn < tokenOut;
+        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+    }
+
+    function build(bool direction) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0));
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (bool direction) {
@@ -65,14 +83,31 @@ library LimitSwapFullAmount {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error LimitSwapDirectionMismatch();
     error LimitSwapAmountShouldCoverBalance(uint256 amount, uint256 balance);
 
     Opcode constant opcode = Opcode.LimitSwapFullAmount;
 
+    function sizeOf(bool) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1;
+    }
+
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(InstructionBuilder.encodeBool(tokenIn < tokenOut, 0));
-        return InstructionBuilder.build(opcode, args);
+        bool direction = tokenIn < tokenOut;
+        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+    }
+
+    function build(bool direction) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0));
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (bool direction) {

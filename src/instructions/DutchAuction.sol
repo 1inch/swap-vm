@@ -6,6 +6,7 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { Power } from "../libs/Power.sol";
@@ -18,6 +19,9 @@ library DutchAuctionBalanceIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Power for uint256;
 
     error DutchAuctionWrongDecayFactor(uint64 decay);
@@ -27,11 +31,20 @@ library DutchAuctionBalanceIn {
 
     uint256 constant ONE = 1e18;
 
+    function sizeOf(uint40, uint16, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 5 + 2 + 8;
+    }
+
     function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(start, duration, decay)), start, duration, decay).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint40 start, uint16 duration, uint64 decay) internal pure returns (MemoryPtr ptr) {
         require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
 
-        bytes memory args = abi.encodePacked(start, duration, decay);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(start, 5).push(duration, 2).push(decay, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint40 start, uint16 duration, uint64 decay) {
@@ -59,6 +72,9 @@ library DutchAuctionBalanceOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Power for uint256;
 
     error DutchAuctionWrongDecayFactor(uint64 decay);
@@ -68,11 +84,20 @@ library DutchAuctionBalanceOut {
 
     uint256 constant ONE = 1e18;
 
+    function sizeOf(uint40, uint16, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 5 + 2 + 8;
+    }
+
     function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(start, duration, decay)), start, duration, decay).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint40 start, uint16 duration, uint64 decay) internal pure returns (MemoryPtr ptr) {
         require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
 
-        bytes memory args = abi.encodePacked(start, duration, decay);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(start, 5).push(duration, 2).push(decay, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint40 start, uint16 duration, uint64 decay) {
