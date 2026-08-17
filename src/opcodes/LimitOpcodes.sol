@@ -15,6 +15,7 @@ import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExte
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
 import { FulfillBonusBalanceIn, FulfillBonusBalanceOut } from "../instructions/FulfillBonus.sol";
+import { BalanceScaleCutIn, BalanceScaleCutOut } from "../instructions/BalanceScaleCut.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
@@ -60,6 +61,8 @@ contract LimitOpcodes is
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
         else if (opcode == FulfillBonusBalanceIn.opcode.asU8()) FulfillBonusBalanceIn.exec(ctx, args);
         else if (opcode == FulfillBonusBalanceOut.opcode.asU8()) FulfillBonusBalanceOut.exec(ctx, args);
+        else if (opcode == BalanceScaleCutIn.opcode.asU8()) BalanceScaleCutIn.exec(ctx, args);
+        else if (opcode == BalanceScaleCutOut.opcode.asU8()) BalanceScaleCutOut.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }

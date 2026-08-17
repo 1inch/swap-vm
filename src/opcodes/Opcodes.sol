@@ -20,6 +20,7 @@ import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
 import { FulfillBonusBalanceIn, FulfillBonusBalanceOut } from "../instructions/FulfillBonus.sol";
+import { BalanceScaleCutIn, BalanceScaleCutOut } from "../instructions/BalanceScaleCut.sol";
 import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../instructions/FeeProgressive.sol";
@@ -90,6 +91,8 @@ contract Opcodes is
         else if (opcode == OraclePriceAdjuster.opcode.asU8()) OraclePriceAdjuster.exec(ctx, args);
         else if (opcode == FulfillBonusBalanceIn.opcode.asU8()) FulfillBonusBalanceIn.exec(ctx, args);
         else if (opcode == FulfillBonusBalanceOut.opcode.asU8()) FulfillBonusBalanceOut.exec(ctx, args);
+        else if (opcode == BalanceScaleCutIn.opcode.asU8()) BalanceScaleCutIn.exec(ctx, args);
+        else if (opcode == BalanceScaleCutOut.opcode.asU8()) BalanceScaleCutOut.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }
