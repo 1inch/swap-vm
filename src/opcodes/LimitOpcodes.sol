@@ -13,7 +13,8 @@ import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenS
 import { StaticBalances } from "../instructions/Balances.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
-import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
+import { FulfillBonusBalanceIn, FulfillBonusBalanceOut } from "../instructions/FulfillBonus.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
@@ -45,7 +46,8 @@ contract LimitOpcodes is
         else if (opcode == InvalidateTokenOut.opcode.asU8()) InvalidateTokenOut.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
-        else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceIn.opcode.asU8()) BaseFeeAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceOut.opcode.asU8()) BaseFeeAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
@@ -56,6 +58,8 @@ contract LimitOpcodes is
         else if (opcode == PiecewiseLinearScaleBalanceOut.opcode.asU8()) PiecewiseLinearScaleBalanceOut.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
+        else if (opcode == FulfillBonusBalanceIn.opcode.asU8()) FulfillBonusBalanceIn.exec(ctx, args);
+        else if (opcode == FulfillBonusBalanceOut.opcode.asU8()) FulfillBonusBalanceOut.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }
