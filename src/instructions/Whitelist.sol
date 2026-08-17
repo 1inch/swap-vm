@@ -53,6 +53,7 @@ library PrivateOrder {
 /// @notice WhitelistCoequal opcode, jumps to the specified program counter if the taker is whitelisted,
 ///   continues execution normally otherwise
 /// @dev Encoding: [uint16 nextPC, uint80 allowedTakers[N]]
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Address packing trade-off: only the last 10 bytes of each address are compared
 ///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
@@ -121,6 +122,7 @@ library WhitelistCoequal {
 ///   the taker is whitelisted and unlocked, continues execution normally once whitelist-exclusive period has passed, reverts otherwise
 /// @dev Encoding: [uint40 start, uint16 nextPC, (uint16 duration, uint80 allowedTaker)[N]]
 ///   The whitelist is empty before `start`, the k-th taker unlocks at `start + sum(durations[0:k])`
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Address packing trade-off: only the last 10 bytes of each address are compared
 ///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass

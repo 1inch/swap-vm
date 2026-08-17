@@ -12,6 +12,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Jump opcode, jump to specified program location
 /// @dev Encoding: [uint16 nextPC]
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Next PC is limited to 2 bytes
 library Jump {
     using InstructionArgs for bytes;
@@ -54,6 +55,7 @@ library Jump {
 
 /// @notice JumpIfDirection opcode, jump if swap direction matches the expected one
 /// @dev Encoding: [bool swapDirection, uint16 nextPC]
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Next PC is limited to 2 bytes
 library JumpIfDirection {
     using InstructionArgs for bytes;
@@ -105,6 +107,7 @@ library JumpIfDirection {
 
 /// @notice JumpIfTokenIn opcode, jump if token in matches the expected one
 /// @dev Encoding: [address token, uint16 nextPC]
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenIn {
     using InstructionArgs for bytes;
@@ -150,6 +153,7 @@ library JumpIfTokenIn {
 
 /// @notice JumpIfTokenOut opcode, jump if token out matches the expected one
 /// @dev Encoding: [address token, uint16 nextPC]
+///   `nextPC` is expected to be a valid, instruction-aligned offset in `program`
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenOut {
     using InstructionArgs for bytes;

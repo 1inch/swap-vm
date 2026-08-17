@@ -12,6 +12,7 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { FeeMeta, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 /// @dev Encoding: [uint32 bitIndex]
@@ -102,12 +103,14 @@ contract InvalidateBitExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
 /// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
+    using FeeMetaLib for FeeMeta;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
 
@@ -148,6 +151,7 @@ library InvalidateTokenIn {
 
         filled += amountIn;
         require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountIn, balanceIn);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
@@ -175,12 +179,14 @@ contract InvalidateTokenInExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
 /// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
+    using FeeMetaLib for FeeMeta;
     using Math for uint256;
 
     error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
@@ -222,6 +228,7 @@ library InvalidateTokenOut {
 
         filled += amountOut;
         require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountOut, balanceOut);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;

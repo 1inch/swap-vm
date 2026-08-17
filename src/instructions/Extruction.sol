@@ -83,7 +83,7 @@ library Extruction {
             );
         }
 
-        bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength);
+        bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength); // Consumed taker arguments
         require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped, choppedLength));
     }
 }

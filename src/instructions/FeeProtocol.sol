@@ -20,7 +20,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev Flat percent fee is payed by taker
 ///   Fee in token in is added to amount in, fee in token out is charged from amount out
 /// @dev Surplus fee is payed by maker
-///   Estimated amount in / out is linearly scaled to the swap amount (include FeeProtocol before InvalidateTokenIn / InvalidateTokenOut)
+///   Estimated amount in / out is scaled according to the amount-to-balance proportion by InvalidateTokenOut / InvalidateTokenIn opcodes
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
 /// @dev Encoding: [uint8 header, [uint8 flags, address target, uint24 feeBps?, uint24 surplusBps?] * count, uint216 surplusEstimate?]
 ///   header: [bit isTokenIn, bit3 _, uint4 count]
@@ -216,13 +216,16 @@ library FeeProtocol {
 
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
 
-        uint256 surplusEstimate;
+        uint216 surplusEstimate;
+        if (totalSurplusBps > 0) surplusEstimate = parseSurplusEstimated(args, shift);
+
+        ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), surplusEstimate);
+        ctx.fee.receivers = receivers;
+
         uint256 fee;
 
         // Using floor division, protocol fees should not be rapacious
         if (isTokenIn) {
-            uint256 balanceOut = ctx.swap.balanceOut;
-
             if (ctx.query.isExactIn) {
                 fee = ctx.swap.amountIn * totalFeeBps / BPS;
                 ctx.swap.amountIn -= fee;
@@ -237,29 +240,13 @@ library FeeProtocol {
                 fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             }
             ctx.swap.amountIn += fee;
-
-            if (totalSurplusBps > 0) {
-                // Using ceil division favors maker
-                uint256 estimatedIn = parseSurplusEstimated(args, shift);
-                surplusEstimate = (estimatedIn * ctx.swap.amountOut).ceilDiv(balanceOut);
-            }
         } else {
-            uint256 balanceIn = ctx.swap.balanceIn;
-
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
             fee = ctx.swap.amountOut * totalFeeBps / BPS;
             ctx.swap.amountOut -= fee;
-
-            if (totalSurplusBps > 0) {
-                // Using floor division favors maker
-                uint256 estimatedOut = parseSurplusEstimated(args, shift);
-                surplusEstimate = estimatedOut * ctx.swap.amountIn / balanceIn;
-            }
         }
 
-        ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), surplusEstimate.toUint216());
-        ctx.fee.receivers = receivers;
         ctx.fee.feeTotal = fee;
     }
 }

@@ -265,11 +265,12 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     // ========== Flat + surplus ==========
 
     /// @notice Flat and surplus parts accrue to the same receiver: flat on the gross input,
-    ///         surplus on the excess of the real input over the scaled estimate
+    ///         surplus on the excess of the real input over the estimate.
+    ///         Without a token invalidator the estimate applies to the fill in full.
     function test_FlatPlusSurplus_FeeIn_ExactIn() public {
         uint24 flatBps = 0.01e7;    // 1%
         uint24 surplusBps = 0.1e7;  // 10% of the surplus
-        uint216 estimatedIn = 50e18; // estimate: 50 tokenA to consume the whole balanceOut
+        uint216 estimatedIn = 5e18;  // estimate below the real input so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             FeeProtocol.build(true, _receivers1(flatBps, surplusBps), _noProviders(), estimatedIn)
@@ -281,12 +282,11 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
 
-        // Mirror the contract's surplus math
+        // Mirror the contract's surplus math: no invalidator scales the estimate, it applies in full
         uint256 flatFee = amountIn * flatBps / BPS;
         uint256 realIn = amountIn - flatFee;
-        uint256 scaledEstimate = (uint256(estimatedIn) * amountOut).ceilDiv(BALANCE_B);
-        assertGt(realIn, scaledEstimate, "Sanity: maker received more than estimated");
-        uint256 surplus = realIn - scaledEstimate;
+        assertGt(realIn, estimatedIn, "Sanity: maker received more than estimated");
+        uint256 surplus = realIn - estimatedIn;
         uint256 surplusFee = surplus * surplusBps / BPS;
 
         assertEq(TokenMock(tokenA).balanceOf(receiver1), flatFee + surplusFee, "Receiver gets flat + surplus");
@@ -315,7 +315,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     function test_FlatPlusSurplus_FeeOut_ExactIn() public {
         uint24 flatBps = 0.01e7;    // 1%
         uint24 surplusBps = 0.2e7;  // 20% of the surplus
-        uint216 estimatedOut = 400e18; // estimate: 400 tokenB out for the whole balanceIn
+        uint216 estimatedOut = 20e18; // estimate above the real output so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             FeeProtocol.build(false, _receivers1(flatBps, surplusBps), _noProviders(), estimatedOut)
@@ -331,12 +331,11 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         uint256 netOut = grossOut - grossOut * flatBps / BPS;
         assertEq(amountOut, netOut, "Taker receives net output");
 
-        // Mirror the contract's surplus math
+        // Mirror the contract's surplus math: no invalidator scales the estimate, it applies in full
         uint256 totalFeeMax = netOut * flatBps / (BPS - flatBps);
         uint256 realOut = netOut + totalFeeMax;
-        uint256 scaledEstimate = uint256(estimatedOut) * amountIn / BALANCE_A;
-        assertGt(scaledEstimate, realOut, "Sanity: maker delivered less than estimated");
-        uint256 surplus = scaledEstimate - realOut;
+        assertGt(estimatedOut, realOut, "Sanity: maker delivered less than estimated");
+        uint256 surplus = estimatedOut - realOut;
 
         uint256 expectedFee = netOut * flatBps / (BPS - flatBps) + surplus * surplusBps / BPS;
         assertEq(TokenMock(tokenB).balanceOf(receiver1), expectedFee, "Receiver gets flat + surplus in tokenOut");
@@ -347,7 +346,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     function test_SplitRoles_FlatReceiverPlusSurplusReceiver_FeeIn() public {
         uint24 flatBps = 0.01e7;
         uint24 surplusBps = 0.1e7;
-        uint216 estimatedIn = 50e18;
+        uint216 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             FeeProtocol.build(true, _receivers2(flatBps, 0, 0, surplusBps), _noProviders(), estimatedIn)
@@ -356,12 +355,11 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         uint256 amountIn = 10e18;
 
         vm.prank(taker);
-        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+        swapVM.swap(order, amountIn, _takerData(true, signature));
 
         uint256 flatFee = amountIn * flatBps / BPS;
         uint256 realIn = amountIn - flatFee;
-        uint256 scaledEstimate = (uint256(estimatedIn) * amountOut).ceilDiv(BALANCE_B);
-        uint256 surplusFee = (realIn - scaledEstimate) * surplusBps / BPS;
+        uint256 surplusFee = (realIn - estimatedIn) * surplusBps / BPS;
 
         assertEq(TokenMock(tokenA).balanceOf(receiver1), flatFee, "Flat-only receiver gets only the flat part");
         assertEq(TokenMock(tokenA).balanceOf(receiver2), surplusFee, "Surplus-only receiver gets only the surplus part");
@@ -469,7 +467,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     /// @notice Surplus-only flag keeps the provider's surplus part and drops its flat part
     function test_ProviderMask_SurplusFlagOnly_KeepsSurplusDropsFlat() public {
         uint24 surplusBps = 0.1e7;
-        uint216 estimatedIn = 50e18;
+        uint216 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
         feeProvider.setRecipientAndFees(providerReceiver, 0.01e7, surplusBps); // flat must be masked
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
@@ -485,9 +483,9 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         // No flat deduction: curve is priced on the full input
         assertEq(amountOut, _xycOut(amountIn), "Curve priced with no flat deduction");
 
-        // Mirror the contract's surplus math: realIn is the full amountIn since totalFeeBps == 0
-        uint256 scaledEstimate = (uint256(estimatedIn) * amountOut).ceilDiv(BALANCE_B);
-        uint256 surplusFee = (amountIn - scaledEstimate) * surplusBps / BPS;
+        // Mirror the contract's surplus math: realIn is the full amountIn since totalFeeBps == 0,
+        // and no invalidator scales the estimate, so it applies in full
+        uint256 surplusFee = (amountIn - estimatedIn) * surplusBps / BPS;
 
         assertEq(TokenMock(tokenA).balanceOf(providerReceiver), surplusFee, "Only the surplus part is charged");
         assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn - surplusFee, "Maker pays only the surplus fee");

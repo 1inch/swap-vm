@@ -6,6 +6,8 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { ProtocolFee } from "./VM.sol";
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 /// @notice Encoded fee receiver and fee percentages
 type FeeReceiver is uint256;
 
@@ -45,6 +47,9 @@ type FeeMeta is uint256;
 
 library FeeMetaLib {
     using SafeERC20 for IERC20;
+    using Math for uint256;
+
+    error FeeMetaSurplusScaleUp();
 
     function init() internal pure returns (FeeMeta) {
         return FeeMeta.wrap(0);
@@ -72,6 +77,19 @@ library FeeMetaLib {
 
     function decodeSurplusEstimate(FeeMeta data) internal pure returns (uint216) {
         return uint216(FeeMeta.unwrap(data) >> 40);
+    }
+
+    function scaleSurplusEstimate(FeeMeta data, uint256 num, uint256 denom) internal pure returns (FeeMeta) {
+        require(num <= denom, FeeMetaSurplusScaleUp()); // Allow decrease-only scaling
+
+        bool isTokenIn = decodeIsTokenIn(data);
+        uint256 estimated = decodeSurplusEstimate(data);
+
+        // Round favor maker
+        if (isTokenIn) estimated = (estimated * num).ceilDiv(denom);
+        else estimated = estimated * num / denom;
+
+        return FeeMeta.wrap((uint256(estimated) << 40) | (FeeMeta.unwrap(data) & type(uint40).max));
     }
 
     function resolveInSafeTransfer(
