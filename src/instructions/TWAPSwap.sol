@@ -9,7 +9,6 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Power } from "../libs/Power.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
@@ -20,9 +19,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 library TWAPSwap {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
     using Power for uint256;
@@ -55,10 +51,6 @@ library TWAPSwap {
         assembly ("memory-safe") { $.slot := slot }
     }
 
-    function sizeOf(uint256, uint256, uint256, uint256, uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32 + 32;
-    }
-
     /// @param balanceIn Expected amount of token1 (for initial price)
     /// @param balanceOut Total amount of token0 for TWAP
     /// @param startTime TWAP start time
@@ -73,29 +65,12 @@ library TWAPSwap {
         uint256 priceBumpAfterIlliquidity,
         uint256 minTradeAmountOut
     ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut)),
-            balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut
-        ).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint256 balanceIn,
-        uint256 balanceOut,
-        uint256 startTime,
-        uint256 duration,
-        uint256 priceBumpAfterIlliquidity,
-        uint256 minTradeAmountOut
-    ) internal pure returns (MemoryPtr ptr) {
         require(balanceIn > 0 && balanceOut > 0, TWAPSwapInvalidBalances(balanceIn, balanceOut));
         require(duration > 0, TWAPSwapInvalidDuration(duration));
         require(priceBumpAfterIlliquidity >= ONE, TWAPSwapInvalidPriceBump(priceBumpAfterIlliquidity));
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(balanceIn, 32).push(balanceOut, 32).push(startTime, 32).push(duration, 32);
-        ptr = ptr.push(priceBumpAfterIlliquidity, 32).push(minTradeAmountOut, 32);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(balanceIn, balanceOut, startTime, duration, priceBumpAfterIlliquidity, minTradeAmountOut);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (

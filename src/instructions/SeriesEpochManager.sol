@@ -6,7 +6,6 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
@@ -19,25 +18,13 @@ library ValidateSeriesEpoch {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
 
     Opcode constant opcode = Opcode.ValidateSeriesEpoch;
 
-    function sizeOf(uint32, uint32) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 4 + 4;
-    }
-
     function build(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(seriesId, epoch)), seriesId, epoch).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint32 seriesId, uint32 epoch) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(seriesId, 4).push(epoch, 4);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(seriesId, epoch);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint32 seriesId, uint32 epoch) {

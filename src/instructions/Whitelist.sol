@@ -6,7 +6,6 @@ pragma solidity 0.8.30;
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -19,25 +18,13 @@ library PrivateOrder {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     error PrivateOrderInvalidTaker();
 
     Opcode constant opcode = Opcode.PrivateOrder;
 
-    function sizeOf(address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 10;
-    }
-
     function build(address allowedTaker) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(allowedTaker)), allowedTaker).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, address allowedTaker) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(uint80(uint160(allowedTaker)), 10);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(uint80(uint160(allowedTaker)));
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint80 allowedTaker) {
@@ -60,36 +47,21 @@ library WhitelistCoequal {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using ContextLib for Context;
 
     error WhitelistCoequalEmptyList();
 
     Opcode constant opcode = Opcode.WhitelistCoequal;
 
-    function sizeOf(uint16, address[] memory allowedTakers) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2 + allowedTakers.length * 10;
-    }
-
     function build(uint16 nextPC, address[] memory allowedTakers) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(nextPC, allowedTakers)), nextPC, allowedTakers).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint16 nextPC, address[] memory allowedTakers) internal pure returns (MemoryPtr ptr) {
         require(allowedTakers.length > 0, WhitelistCoequalEmptyList());
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(nextPC, 2);
+        bytes memory args = abi.encodePacked(nextPC);
         for (uint256 i; i < allowedTakers.length; i++) {
-            ptr = ptr.push(uint80(uint160(allowedTakers[i])), 10);
+            args = abi.encodePacked(args, uint80(uint160(allowedTakers[i])));
         }
-        ptrStart.patchLength(ptr);
-    }
 
-    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf()).patch(nextPC, 2);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parseNextPC(bytes calldata args) internal pure returns (uint16 nextPC) {
@@ -128,9 +100,6 @@ library WhitelistSequential {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using ContextLib for Context;
 
     error WhitelistSequentialEmptyList();
@@ -139,42 +108,16 @@ library WhitelistSequential {
 
     Opcode constant opcode = Opcode.WhitelistSequential;
 
-    function sizeOf(uint40, uint16, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5 + 2 + durations.length * 2 + allowedTakers.length * 10;
-    }
-
-    function build(
-        uint40 start,
-        uint16 nextPC,
-        address[] memory allowedTakers,
-        uint16[] memory durations
-    ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(start, nextPC, allowedTakers, durations)),
-            start, nextPC, allowedTakers, durations
-        ).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint40 start,
-        uint16 nextPC,
-        address[] memory allowedTakers,
-        uint16[] memory durations
-    ) internal pure returns (MemoryPtr ptr) {
+    function build(uint40 start, uint16 nextPC, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (bytes memory) {
         require(allowedTakers.length > 0, WhitelistSequentialEmptyList());
         require(allowedTakers.length == durations.length, WhitelistSequentialLengthMismatch());
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(start, 5).push(nextPC, 2);
+        bytes memory args = abi.encodePacked(start, nextPC);
         for (uint256 i; i < allowedTakers.length; i++) {
-            ptr = ptr.push(durations[i], 2).push(uint80(uint160(allowedTakers[i])), 10);
+            args = abi.encodePacked(args, durations[i], uint80(uint160(allowedTakers[i])));
         }
-        ptrStart.patchLength(ptr);
-    }
 
-    function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf() + 5).patch(nextPC, 2);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parseStart(bytes calldata args) internal pure returns (uint40 start) {

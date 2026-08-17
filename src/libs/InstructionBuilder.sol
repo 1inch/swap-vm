@@ -5,27 +5,20 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { Opcode, OpcodeOps } from "./OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "./MemoryPtr.sol";
 
 library InstructionBuilder {
     using OpcodeOps for Opcode;
-    using MemoryPtrLib for MemoryPtr;
 
     error InstructionBuilderArgsLengthExceeded(uint256 length);
     error InstructionBuilderBitExceedsByte(uint256 bit);
 
-    function sizeOf() internal pure returns (uint256) {
-        return 2;
+    function build(Opcode opcode, bytes memory args) internal pure returns (bytes memory) {
+        require(args.length < 256, InstructionBuilderArgsLengthExceeded(args.length));
+        return abi.encodePacked(opcode.asU8(), uint8(args.length), args);
     }
 
-    function pushHeader(MemoryPtr ptr, Opcode opcode) internal pure returns (MemoryPtr) {
-        return ptr.push(opcode.asU8()).skip(1);
-    }
-
-    function patchLength(MemoryPtr ptr, MemoryPtr end) internal pure {
-        uint256 length = end.sub(ptr) - sizeOf();
-        require(length < 256, InstructionBuilderArgsLengthExceeded(length));
-        ptr.skip(1).patch(uint8(length));
+    function build(Opcode opcode) internal pure returns (bytes memory) {
+        return build(opcode, "");
     }
 
     function encodeBool(bool value, uint8 bit) internal pure returns (uint8 res) {

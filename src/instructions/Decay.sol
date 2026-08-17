@@ -8,7 +8,6 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
@@ -22,27 +21,15 @@ library Decay {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using ContextLib for Context;
 
     using SafeCast for uint256;
 
     Opcode constant opcode = Opcode.Decay;
 
-    function sizeOf(uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2;
-    }
-
     function build(uint16 period) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(period)), period).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(period, 2);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(period);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint16 period) {

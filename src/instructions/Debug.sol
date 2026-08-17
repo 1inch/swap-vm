@@ -10,30 +10,16 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { Context, ContextLib, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../libs/ProtocolFee.sol";
 
 /// @notice PrintSwapRegisters opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapRegisters {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PrintSwapRegisters;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory ctx, bytes calldata) internal pure {
@@ -49,22 +35,10 @@ library PrintSwapRegisters {
 /// @notice PrintSwapQuery opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapQuery {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PrintSwapQuery;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory ctx, bytes calldata) internal pure {
@@ -84,22 +58,10 @@ library PrintSwapQuery {
 library PrintVM {
     using CalldataPtrLib for CalldataPtr;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PrintVM;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory ctx, bytes calldata) internal pure {
@@ -117,24 +79,12 @@ library PrintVM {
 /// @dev FeeProtocol opcode updates registries after strategy execution
 ///   The PrintFee opcode should be included before FeeProtocol to trigger delayed registries print
 library PrintFee {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using ContextLib for Context;
 
     Opcode constant opcode = Opcode.PrintFee;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory ctx, bytes calldata) internal {
@@ -159,22 +109,10 @@ library PrintFee {
 /// @notice PrintFreeMemoryPointer opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintFreeMemoryPointer {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PrintFreeMemoryPointer;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory, bytes calldata) internal pure {
@@ -187,22 +125,10 @@ library PrintFreeMemoryPointer {
 /// @notice PrintGasLeft opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintGasLeft {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PrintGasLeft;
 
-    function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
-    }
-
     function build() internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
-    }
-
-    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptrStart.patchLength(ptr);
+        return InstructionBuilder.build(opcode);
     }
 
     function exec(Context memory, bytes calldata) internal view {
@@ -211,41 +137,17 @@ library PrintGasLeft {
 }
 
 /// @notice PatchSwapRegisters opcode, modify internal vm state for debugging
-/// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut]
+/// @dev Encoding: [SwapRegisters swap]
 library PatchSwapRegisters {
-    using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PatchSwapRegisters;
 
-    function sizeOf(SwapRegisters memory) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32;
-    }
-
     function build(SwapRegisters memory swap) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(swap)), swap).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, SwapRegisters memory swap) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(swap.balanceIn, 32).push(swap.balanceOut, 32).push(swap.amountIn, 32).push(swap.amountOut, 32);
-        ptrStart.patchLength(ptr);
-    }
-
-    function parse(bytes calldata args) internal pure returns (SwapRegisters memory) {
-        return SwapRegisters({
-            balanceIn: args.at(0).asU256(),
-            balanceOut: args.at(32).asU256(),
-            amountIn: args.at(64).asU256(),
-            amountOut: args.at(96).asU256()
-        });
+        bytes memory args = abi.encode(swap);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        ctx.swap = parse(args);
+        ctx.swap = abi.decode(args, (SwapRegisters));
     }
 }
 

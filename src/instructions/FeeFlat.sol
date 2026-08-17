@@ -8,7 +8,6 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -17,9 +16,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 library FeeFlatIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
     using Math for uint256;
@@ -30,20 +26,11 @@ library FeeFlatIn {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 3;
-    }
-
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {
         require(feeBps < BPS, FeeBpsOutOfRange(feeBps));
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(feeBps, 3);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(feeBps);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint24 feeBps) {
@@ -78,9 +65,6 @@ library FeeFlatOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using ContextLib for Context;
     using Math for uint256;
 
@@ -90,20 +74,11 @@ library FeeFlatOut {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 3;
-    }
-
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {
         require(feeBps < BPS, FeeBpsOutOfRange(feeBps));
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(feeBps, 3);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(feeBps);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint24 feeBps) {

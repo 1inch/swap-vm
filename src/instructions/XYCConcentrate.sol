@@ -8,7 +8,6 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -19,9 +18,6 @@ library XYCConcentrateSwap {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     using Math for uint256;
 
     error ConcentrateInvalidPriceBounds(uint256 sqrtPriceMin, uint256 sqrtPriceMax);
@@ -31,20 +27,11 @@ library XYCConcentrateSwap {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32;
-    }
-
     function build(uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(sqrtPriceMin, sqrtPriceMax)), sqrtPriceMin, sqrtPriceMax).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (MemoryPtr ptr) {
         require(0 < sqrtPriceMin && sqrtPriceMin < sqrtPriceMax, ConcentrateInvalidPriceBounds(sqrtPriceMin, sqrtPriceMax));
 
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(sqrtPriceMin, 32).push(sqrtPriceMax, 32);
-        ptrStart.patchLength(ptr);
+        bytes memory args = abi.encodePacked(sqrtPriceMin, sqrtPriceMax);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function parse(bytes calldata args) internal pure returns (uint256 sqrtPriceMin, uint256 sqrtPriceMax) {

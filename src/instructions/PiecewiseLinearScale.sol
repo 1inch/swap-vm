@@ -6,7 +6,6 @@ pragma solidity 0.8.30;
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -19,28 +18,11 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library PiecewiseLinearScaleBalanceIn {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceIn;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearScale.sizeOf(timestamp, durations, scales);
-    }
-
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint40 timestamp,
-        uint16[] memory durations,
-        uint24[] memory scales
-    ) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearScale.build(ptr, timestamp, durations, scales);
-        ptrStart.patchLength(ptr);
+        bytes memory args = PiecewiseLinearScale.build(timestamp, durations, scales);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
@@ -57,28 +39,11 @@ library PiecewiseLinearScaleBalanceIn {
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library PiecewiseLinearScaleBalanceOut {
-    using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
-
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceOut;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearScale.sizeOf(timestamp, durations, scales);
-    }
-
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint40 timestamp,
-        uint16[] memory durations,
-        uint24[] memory scales
-    ) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearScale.build(ptr, timestamp, durations, scales);
-        ptrStart.patchLength(ptr);
+        bytes memory args = PiecewiseLinearScale.build(timestamp, durations, scales);
+        return InstructionBuilder.build(opcode, args);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
@@ -90,27 +55,21 @@ library PiecewiseLinearScale {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
-    using MemoryPtrLib for MemoryPtr;
-
     using PiecewiseLinearScale for bytes;
 
     error PiecewiseLinearScaleMismatchInputLengths();
     error PiecewiseLinearScaleNotEnoughPointsToBuildPiece();
 
-    function sizeOf(uint40, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return 5 + durations.length * 2 + scales.length * 3;
-    }
-
-    function build(MemoryPtr ptr, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (MemoryPtr) {
+    function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
         require(scales.length >= 2, PiecewiseLinearScaleNotEnoughPointsToBuildPiece());
         require(durations.length + 1 == scales.length, PiecewiseLinearScaleMismatchInputLengths());
 
-        ptr = ptr.push(timestamp, 5).push(scales[0], 3);
+        bytes memory code = abi.encodePacked(timestamp, scales[0]);
         for (uint256 i; i < durations.length; i++) {
-            ptr = ptr.push(durations[i], 2).push(scales[i + 1], 3);
+            code = abi.encodePacked(code, durations[i], scales[i + 1]);
         }
 
-        return ptr;
+        return code;
     }
 
     function parseStartTimestamp(bytes calldata args) internal pure returns (uint40 ts) {
