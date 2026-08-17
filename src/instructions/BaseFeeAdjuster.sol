@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -18,6 +19,9 @@ library BaseFeeAdjuster {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Math for uint256;
 
     error BaseFeeAdjusterInvalidMaxDecay(uint256 linearWidth);
@@ -26,11 +30,29 @@ library BaseFeeAdjuster {
 
     uint256 constant ONE = 1e18;
 
+    function sizeOf(uint64, uint96, uint24, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 12 + 3 + 8;
+    }
+
     function build(uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount, uint64 maxDecay) internal pure returns (bytes memory) {
+        return build(
+            MemoryPtrLib.alloc(sizeOf(baseGasPrice, ethPrice, gasAmount, maxDecay)),
+            baseGasPrice, ethPrice, gasAmount, maxDecay
+        ).resolve();
+    }
+
+    function build(
+        MemoryPtr ptrStart,
+        uint64 baseGasPrice,
+        uint96 ethPrice,
+        uint24 gasAmount,
+        uint64 maxDecay
+    ) internal pure returns (MemoryPtr ptr) {
         require(maxDecay < ONE, BaseFeeAdjusterInvalidMaxDecay(maxDecay));
 
-        bytes memory args = abi.encodePacked(baseGasPrice, ethPrice, gasAmount, maxDecay);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(baseGasPrice, 8).push(ethPrice, 12).push(gasAmount, 3).push(maxDecay, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount, uint64 maxDecay) {
