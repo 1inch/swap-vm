@@ -8,15 +8,20 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice RequireMinRate opcode, maker-favor rate guard, fails if rate is worse than specified
 ///   Validates final amounts after rest of strategy executed
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
+/// @dev Supports only single direction swaps
 library RequireMinRate {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
+
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
 
@@ -24,9 +29,18 @@ library RequireMinRate {
 
     Opcode constant opcode = Opcode.RequireMinRate;
 
+    function sizeOf(uint64, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 8;
+    }
+
     function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(rateA, rateB);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(rateA, rateB)), rateA, rateB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(rateA, 8).push(rateB, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {
@@ -51,18 +65,31 @@ library RequireMinRate {
 ///   Validates and patches final amounts after rest of strategy executed
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
 /// @dev Later opcodes in the execution sequence should consider the amounts are not final and might change
+/// @dev Supports only single direction swaps
 library AdjustMinRate {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
+
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
 
     using ContextLib for Context;
     using Math for uint256;
 
     Opcode constant opcode = Opcode.AdjustMinRate;
 
+    function sizeOf(uint64, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 8;
+    }
+
     function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(rateA, rateB);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(rateA, rateB)), rateA, rateB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(rateA, 8).push(rateB, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 rateA, uint64 rateB) {

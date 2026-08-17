@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { PeggedSwapMath } from "../libs/PeggedSwapMath.sol";
@@ -18,11 +19,18 @@ library PeggedSwap {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error PeggedSwapInvalidLinearWidth(uint256 linearWidth);
     error PeggedSwapInvalidInitialBalances(uint256 x0, uint256 y0);
     error PeggedSwapInvalidRates(uint256 rateA, uint256 rateB);
 
     Opcode constant opcode = Opcode.PeggedSwap;
+
+    function sizeOf(uint256, uint256, uint256, uint256, uint256) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
+    }
 
     /// @param x0 Initial X reserve (normalization factor) = initial_balance_X * rateA (or rateB)
     /// @param y0 Initial Y reserve (normalization factor) = initial_balance_Y * rateB (or rateA)
@@ -45,12 +53,24 @@ library PeggedSwap {
         uint256 rateA,
         uint256 rateB
     ) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(x0, y0, linearWidth, rateA, rateB)), x0, y0, linearWidth, rateA, rateB).resolve();
+    }
+
+    function build(
+        MemoryPtr ptrStart,
+        uint256 x0,
+        uint256 y0,
+        uint256 linearWidth,
+        uint256 rateA,
+        uint256 rateB
+    ) internal pure returns (MemoryPtr ptr) {
         require(x0 > 0 && y0 > 0, PeggedSwapInvalidInitialBalances(x0, y0));
         require(linearWidth <= PeggedSwapMath.MAX_LINEAR_WIDTH, PeggedSwapInvalidLinearWidth(linearWidth));
         require(rateA > 0 && rateB > 0, PeggedSwapInvalidRates(rateA, rateB));
 
-        bytes memory args = abi.encodePacked(x0, y0, linearWidth, rateA, rateB);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(x0, 32).push(y0, 32).push(linearWidth, 32).push(rateA, 32).push(rateB, 32);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB) {

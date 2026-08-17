@@ -8,6 +8,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Context, ContextLib } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
@@ -19,15 +20,27 @@ library InvalidateBit {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
 
     error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
 
     Opcode constant opcode = Opcode.InvalidateBit;
 
+    function sizeOf(uint32) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 4;
+    }
+
     function build(uint32 bitIndex) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(bitIndex);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(bitIndex)), bitIndex).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint32 bitIndex) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(bitIndex, 4);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint32 bitIndex) {
@@ -93,6 +106,9 @@ contract InvalidateBitExternal {
 /// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
     using FeeMetaLib for FeeMeta;
 
@@ -100,8 +116,17 @@ library InvalidateTokenIn {
 
     Opcode constant opcode = Opcode.InvalidateTokenIn;
 
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf();
+    }
+
     function build() internal pure returns (bytes memory) {
-        return InstructionBuilder.build(opcode);
+        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
+    }
+
+    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptrStart.patchLength(ptr);
     }
 
     struct Storage {
@@ -157,6 +182,9 @@ contract InvalidateTokenInExternal {
 /// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using ContextLib for Context;
     using FeeMetaLib for FeeMeta;
     using Math for uint256;
@@ -165,8 +193,17 @@ library InvalidateTokenOut {
 
     Opcode constant opcode = Opcode.InvalidateTokenOut;
 
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf();
+    }
+
     function build() internal pure returns (bytes memory) {
-        return InstructionBuilder.build(opcode);
+        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
+    }
+
+    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptrStart.patchLength(ptr);
     }
 
     struct Storage {

@@ -9,6 +9,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
@@ -21,6 +22,9 @@ library OraclePriceAdjuster {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     using Math for uint256;
     using SafeCast for int256;
 
@@ -32,11 +36,28 @@ library OraclePriceAdjuster {
     uint256 constant ONE = 1e18;
     uint8 constant DECIMALS = 18;
 
-    function build(uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) internal pure returns (bytes memory) {
+    function sizeOf(uint64, uint16, uint8, address) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 2 + 1 + 20;
+    }
+
+    function build(
+        uint64 maxPriceDecay,
+        uint16 maxStaleness,
+        uint8 oracleDecimals,
+        address oracleAddress
+    ) internal pure returns (bytes memory) {
+        return build(
+            MemoryPtrLib.alloc(sizeOf(maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress)),
+            maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress
+        ).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) internal pure returns (MemoryPtr ptr) {
         require(maxPriceDecay < ONE, OraclePriceAdjusterWrongMaxPriceDecay(maxPriceDecay));
 
-        bytes memory args = abi.encodePacked(maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(maxPriceDecay, 8).push(maxStaleness, 2).push(oracleDecimals).push(oracleAddress);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) {

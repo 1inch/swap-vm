@@ -8,6 +8,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
@@ -19,13 +20,25 @@ library OnlyTakerTokenBalanceNonZero {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error TakerTokenBalanceIsZero(address taker, address token);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceNonZero;
 
+    function sizeOf(address) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20;
+    }
+
     function build(address token) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (address token) {
@@ -48,13 +61,25 @@ library OnlyTxOriginTokenBalanceNonZero {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error TxOriginTokenBalanceIsZero(address txOrigin, address token);
 
     Opcode constant opcode = Opcode.OnlyTxOriginTokenBalanceNonZero;
 
+    function sizeOf(address) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20;
+    }
+
     function build(address token) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (address token) {
@@ -74,13 +99,25 @@ library OnlyTakerTokenBalanceGte {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 amount);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceGte;
 
+    function sizeOf(address, uint256) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 32;
+    }
+
     function build(address token, uint256 amount) internal pure returns (bytes memory) {
-        bytes memory args = abi.encodePacked(token, amount);
-        return InstructionBuilder.build(opcode, args);
+        return build(MemoryPtrLib.alloc(sizeOf(token, amount)), token, amount).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token, uint256 amount) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token).push(amount, 32);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint256 amount) {
@@ -101,6 +138,9 @@ library OnlyTakerTokenSupplyShareGte {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
+    using MemoryPtrLib for MemoryPtr;
+    using InstructionBuilder for MemoryPtr;
+
     error TakerTokenBalanceSupplyShareWrongShare(uint64 share);
     error TakerTokenBalanceSupplyShareIsLessThanRequired(
         address taker, address token, uint256 balance, uint256 totalSupply, uint64 share
@@ -110,11 +150,20 @@ library OnlyTakerTokenSupplyShareGte {
 
     uint256 constant ONE = 1e18;
 
+    function sizeOf(address, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 8;
+    }
+
     function build(address token, uint64 share) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(token, share)), token, share).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, address token, uint64 share) internal pure returns (MemoryPtr ptr) {
         require(share <= ONE, TakerTokenBalanceSupplyShareWrongShare(share));
 
-        bytes memory args = abi.encodePacked(token, share);
-        return InstructionBuilder.build(opcode, args);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(token).push(share, 8);
+        ptrStart.patchLength(ptr);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint64 share) {
