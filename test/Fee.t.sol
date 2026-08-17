@@ -20,7 +20,6 @@ import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
 
 uint256 constant ONE = 1e18;

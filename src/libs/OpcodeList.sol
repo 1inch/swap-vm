@@ -139,8 +139,8 @@ enum Opcode {
     // 0x70-0x8f | Fees
     /* 70 */ FeeFlatIn,
     /* 71 */ FeeFlatOut,
-    /* 72 */ FeeProgressiveIn,
-    /* 73 */ FeeProgressiveOut,
+    /* 72 */ _72,
+    /* 73 */ _73,
     /* 74 */ _74,
     /* 75 */ _75,
     /* 76 */ _76,

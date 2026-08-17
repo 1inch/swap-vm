@@ -23,8 +23,6 @@ contract HugeLiquidity is XYCFeesInvariants {
         // Standard fees
         flatFeeInBps = 0.003e7;        // 0.3%
         flatFeeOutBps = 0.003e7;       // 0.3%
-        progressiveFeeInBps = 0.05e7;  // 5%
-        progressiveFeeOutBps = 0.05e7; // 5%
         protocolFeeOutBps = 0.002e7;   // 0.2%
 
         // Large amounts matching huge liquidity

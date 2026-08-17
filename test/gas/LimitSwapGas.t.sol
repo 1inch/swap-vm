@@ -21,7 +21,6 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instruc
 import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { Salt, Deadline } from "../../src/instructions/Controls.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
 
@@ -243,7 +242,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
     // ==================== LimitSwap + FlatFeeIn ====================
 
     function test_gas_LimitSwap_FlatFeeIn_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeIn_quote_exactIn");
         swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
@@ -251,7 +250,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
     }
 
     function test_gas_LimitSwap_FlatFeeIn_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeIn_swap_exactIn");
         swapVM.swap(order, SWAP_AMOUNT, takerData);
@@ -261,7 +260,7 @@ contract LimitSwapGas is Test, OpcodesDebug {
     // ==================== LimitSwap + FlatFeeOut ====================
 
     function test_gas_LimitSwap_FlatFeeOut_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeOut_quote_exactIn");
         swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
@@ -269,27 +268,9 @@ contract LimitSwapGas is Test, OpcodesDebug {
     }
 
     function test_gas_LimitSwap_FlatFeeOut_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(false, true);
 
         vm.startSnapshotGas("LimitSwap_FlatFeeOut_swap_exactIn");
-        swapVM.swap(order, SWAP_AMOUNT, takerData);
-        vm.stopSnapshotGas();
-    }
-
-    // ==================== LimitSwap + ProgressiveFee ====================
-
-    function test_gas_LimitSwap_ProgressiveFee_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, true);
-
-        vm.startSnapshotGas("LimitSwap_ProgressiveFee_quote_exactIn");
-        swapVM.asView().quote(order, SWAP_AMOUNT, takerData);
-        vm.stopSnapshotGas();
-    }
-
-    function test_gas_LimitSwap_ProgressiveFee_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _createLimitSwapWithFeeOrder(true, true, true);
-
-        vm.startSnapshotGas("LimitSwap_ProgressiveFee_swap_exactIn");
         swapVM.swap(order, SWAP_AMOUNT, takerData);
         vm.stopSnapshotGas();
     }
@@ -451,13 +432,11 @@ contract LimitSwapGas is Test, OpcodesDebug {
         return (order, takerData);
     }
 
-    function _createLimitSwapWithFeeOrder(bool isFeeIn, bool isExactIn, bool isProgressive) private view returns (ISwapVM.Order memory, bytes memory) {
+    function _createLimitSwapWithFeeOrder(bool isFeeIn, bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {
         uint24 feeBps = 100; // 1%
 
         bytes memory feeInstruction;
-        if (isProgressive) {
-            feeInstruction = FeeProgressiveIn.build(feeBps);
-        } else if (isFeeIn) {
+        if (isFeeIn) {
             feeInstruction = FeeFlatIn.build(feeBps);
         } else {
             feeInstruction = FeeFlatOut.build(feeBps);

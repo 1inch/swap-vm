@@ -42,11 +42,9 @@ contract DustAmounts is XYCFeesInvariants {
         // Standard fees
         flatFeeInBps = 0.003e7;        // 0.3%
         flatFeeOutBps = 0.003e7;       // 0.3%
-        progressiveFeeInBps = 0.05e7;  // 5%
-        progressiveFeeOutBps = 0.05e7; // 5%
         protocolFeeOutBps = 0.002e7;   // 0.2%
 
-        // Test absolute minimum for exactIn (1-2 wei gives output=0 for progressive fees)
+        // Test absolute minimum for exactIn
         testAmounts = new uint256[](9);
         testAmounts[0] = 5;       // 5 wei - minimum for stacked ceil-rounded fees
         testAmounts[1] = 7;       // 7 wei
@@ -71,8 +69,8 @@ contract DustAmounts is XYCFeesInvariants {
         symmetryTolerance = 1;      // 1 wei
         additivityTolerance = 0;    // 0 wei
 
-        // Monotonicity: 81% for progressive fees (3 wei→0.33, 5 wei→0.6, deviation=80%+rounding)
-        monotonicityToleranceBps = 8100;  // 81% = 8100 bps
+        // Monotonicity: 50% for fees in out token (deviation=50%+rounding)
+        monotonicityToleranceBps = 5000;  // 50% = 5000 bps
 
         // Rounding: 1% deviation from spot price (due to minimal price impact)
         roundingToleranceBps = 100;  // 1% = 100 bps

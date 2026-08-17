@@ -19,7 +19,6 @@ import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 
 import { ProtocolFeeProviderMock } from "../../mocks/ProtocolFeeProviderMock.sol";
 
@@ -33,8 +32,6 @@ import { CoreInvariants } from "./CoreInvariants.t.sol";
 struct FeeConfig {
     uint24 flatFeeInBps;
     uint24 flatFeeOutBps;
-    uint24 progressiveFeeInBps;
-    uint24 progressiveFeeOutBps;
     uint24 protocolFeeOutBps;
     uint24 protocolFeeInBps;
     address dynamicFeeProvider;
@@ -66,10 +63,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     // Flat fees
     uint24 internal flatFeeInBps = 0.003e7;    // 0.3%
     uint24 internal flatFeeOutBps = 0.005e7;   // 0.5%
-
-    // Progressive fees
-    uint24 internal progressiveFeeInBps = 0.1e7;   // 10%
-    uint24 internal progressiveFeeOutBps = 0.1e7;  // 10%
 
     // Protocol fee
     uint24 internal protocolFeeOutBps = 0.002e7;   // 0.2%
@@ -192,8 +185,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             // Regular fees AFTER balances (0 = disabled)
             (fees.flatFeeInBps > 0) ? FeeFlatIn.build(fees.flatFeeInBps) : bytes(""),
             (fees.flatFeeOutBps > 0) ? FeeFlatOut.build(fees.flatFeeOutBps) : bytes(""),
-            (fees.progressiveFeeInBps > 0) ? FeeProgressiveIn.build(fees.progressiveFeeInBps) : bytes(""),
-            (fees.progressiveFeeOutBps > 0) ? FeeProgressiveOut.build(fees.progressiveFeeOutBps) : bytes(""),
 
             // Swap instruction
             XYCSwap.build()
@@ -219,8 +210,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         return FeeConfig({
             flatFeeInBps: 0,
             flatFeeOutBps: 0,
-            progressiveFeeInBps: 0,
-            progressiveFeeOutBps: 0,
             protocolFeeOutBps: 0,
             protocolFeeInBps: 0,
             dynamicFeeProvider: address(0),
@@ -276,54 +265,6 @@ contract XYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         // FlatFeeOut violates additivity by design (non-linear fee calculation)
         config.skipAdditivity = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test XYC with progressive fee on input
-     */
-    function test_XYCProgressiveFeeIn() public {
-        FeeConfig memory fees = _feeConfig();
-        fees.progressiveFeeInBps = progressiveFeeInBps;
-        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        InvariantConfig memory config = _config(order);
-
-        // TODO: Progressive fees violate additivity by design
-        config.skipAdditivity = true;
-        // TODO: need to research behavior
-        config.skipSymmetry = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test  + XYC with progressive fee on output
-     */
-    function test_XYCProgressiveFeeOut() public {
-        FeeConfig memory fees = _feeConfig();
-        fees.progressiveFeeOutBps = progressiveFeeOutBps;
-        bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        InvariantConfig memory config = _config(order);
-
-        // TODO: Progressive fees violate additivity by design
-        config.skipAdditivity = true;
-        // TODO: need to research behavior
-        config.skipSymmetry = true;
 
         assertAllInvariantsWithConfig(
             swapVM,
