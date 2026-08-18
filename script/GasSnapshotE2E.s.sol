@@ -21,7 +21,7 @@ import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../src/inst
 import { ValidateSeriesEpoch } from "../src/instructions/SeriesEpochManager.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut, PiecewiseLinearScale } from "../src/instructions/PiecewiseLinearScale.sol";
-import { BaseFeeAdjuster } from "../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn } from "../src/instructions/BaseFeeAdjuster.sol";
 import { Stop, Revert, Deadline, Salt } from "../src/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../src/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../src/instructions/TokenValidators.sol";
@@ -194,7 +194,7 @@ contract GasSnapshotE2E is Script {
     function _vmProgramJustBaseFeeAdjuster() internal pure returns (bytes memory) {
         return bytes.concat(
             PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
-            BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18)
+            BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000, 0.01e7)
         );
     }
 

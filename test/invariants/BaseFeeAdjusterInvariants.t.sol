@@ -18,14 +18,14 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
-import { BaseFeeAdjuster } from "../../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn } from "../../src/instructions/BaseFeeAdjuster.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
 /**
  * @title BaseFeeAdjusterInvariants
- * @notice Tests invariants for BaseFeeAdjuster instruction with LimitSwap
- * @dev Tests gas-based price adjustments applied to limit orders
+ * @notice Tests invariants for BaseFeeAdjusterBalanceIn instruction with LimitSwap
+ * @dev Tests gas-based balance adjustments applied to limit orders
  */
 contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
     Aqua public immutable aqua;
@@ -93,12 +93,12 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 baseGasPrice = 20 gwei;
         uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
+        uint24 capBps = 0.01e7; // 1% cap on the input balance
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethToTokenPrice, gasAmount, capBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         _testInvariants(bytecode, 20 gwei, false, false); // Base gas price
@@ -111,16 +111,15 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 baseGasPrice = 20 gwei;
         uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
+        uint24 capBps = 0.02e7; // 2% cap on the input balance
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethToTokenPrice, gasAmount, capBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        // TODO: research invariant behavior at moderate gas prices
-        _testInvariants(bytecode, 100 gwei, true, true); // 5x base gas
+        _testInvariants(bytecode, 100 gwei, false, false); // 5x base gas
     }
 
     /**
@@ -130,16 +129,15 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 baseGasPrice = 30 gwei;
         uint96 ethToTokenPrice = 2500e18;
         uint24 gasAmount = 200_000;
-        uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment
+        uint24 capBps = 0.05e7; // 5% cap on the input balance
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethToTokenPrice, gasAmount, capBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        // TODO: research invariant behavior at high gas prices
-        _testInvariants(bytecode, 300 gwei, true, true); // 10x base gas
+        _testInvariants(bytecode, 300 gwei, false, false); // 10x base gas
     }
 
     /**
@@ -148,7 +146,7 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
     function test_BaseFeeAdjuster_DifferentEthPrices() public {
         uint64 baseGasPrice = 25 gwei;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
+        uint24 capBps = 0.02e7; // 2% cap on the input balance
 
         uint96[] memory ethPrices = new uint96[](3);
         ethPrices[0] = 1500e18;  // Low ETH price
@@ -158,12 +156,11 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         for (uint256 i = 0; i < ethPrices.length; i++) {
             bytes memory bytecode = bytes.concat(
                 StaticBalances.build(1e30, 2e30),
-                LimitSwap.build(address(tokenA), address(tokenB)),
-                BaseFeeAdjuster.build(baseGasPrice, ethPrices[i], gasAmount, 1e18 - maxPriceDecay)
+                BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethPrices[i], gasAmount, capBps),
+                LimitSwap.build(address(tokenA), address(tokenB))
             );
 
-            // TODO: Analyze invariant behavior across different ETH prices
-            _testInvariants(bytecode, 150 gwei, true, true);
+            _testInvariants(bytecode, 150 gwei, false, false);
         }
     }
 
@@ -178,19 +175,18 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 baseGasPrice = 25 gwei;
         uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16;
+        uint24 capBps = 0.01e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethToTokenPrice, gasAmount, capBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // Test at mid-auction with high gas
         vm.warp(startTime + 150);
-        // TODO: Analyze invariant behavior with DutchAuction and gas adjustment
-        _testInvariants(bytecode, 200 gwei, true, true);
+        _testInvariants(bytecode, 200 gwei, false, false);
     }
 
     /**
@@ -204,35 +200,26 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         uint64 baseGasPrice = 25 gwei;
         uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16;
+        uint24 capBps = 0.01e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethToTokenPrice, gasAmount, capBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         // Test at mid-auction with high gas
         vm.warp(startTime + 150);
-        // TODO: Analyze invariant behavior with DutchAuction output and gas adjustment
-        _testInvariants(bytecode, 200 gwei, true, true);
+        _testInvariants(bytecode, 200 gwei, false, false);
     }
 
     /**
      * Helper to test invariants for a given bytecode and gas price
      *
-     * @notice BaseFeeAdjuster breaks symmetry and additivity invariants due to its asymmetric
-     * application of gas cost adjustments:
-     * - In exactIn mode: it increases amountOut based on (extraCostInToken1 / amountOut)
-     * - In exactOut mode: it decreases amountIn based on (extraCostInToken1 / amountIn)
-     *
-     * This asymmetry means that:
-     * 1. exactIn(X) -> Y, then exactOut(Y) -> X' where X' ≠ X (breaks symmetry)
-     * 2. The sum of partial swaps differs from a full swap (breaks additivity)
-     *
-     * The percentage adjustments are calculated against different bases (amountOut vs amountIn),
-     * causing the invariant violations.
+     * @notice BaseFeeAdjusterBalanceIn shifts the input balance before the swap, so the order
+     * behaves as a plain limit rate for the given gas price: symmetry and additivity hold
+     * up to the usual limit-swap rounding.
      */
     function _testInvariants(bytes memory bytecode, uint256 gasPrice, bool skipAdditivity, bool skipSymmetry) private {
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -250,11 +237,7 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
 
-        // Skip invariants based on parameters
-        // TODO: Research if additivity can be preserved for gas-adjusted orders
         config.skipAdditivity = skipAdditivity;
-
-        // TODO: Research if symmetry can be restored despite asymmetric gas adjustments
         config.skipSymmetry = skipSymmetry;
 
         assertAllInvariantsWithConfig(

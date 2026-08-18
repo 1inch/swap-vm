@@ -18,7 +18,9 @@ import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
-import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
+import { FulfillBonusBalanceIn, FulfillBonusBalanceOut } from "../instructions/FulfillBonus.sol";
+import { BalanceScaleCutIn, BalanceScaleCutOut } from "../instructions/BalanceScaleCut.sol";
 import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
 import { FeeProgressiveIn, FeeProgressiveOut } from "../instructions/FeeProgressive.sol";
@@ -68,7 +70,8 @@ contract Opcodes is
         else if (opcode == AdjustMinRate.opcode.asU8()) AdjustMinRate.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
-        else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceIn.opcode.asU8()) BaseFeeAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceOut.opcode.asU8()) BaseFeeAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == TWAPSwap.opcode.asU8()) TWAPSwap.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
@@ -86,6 +89,10 @@ contract Opcodes is
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
         else if (opcode == OraclePriceAdjuster.opcode.asU8()) OraclePriceAdjuster.exec(ctx, args);
+        else if (opcode == FulfillBonusBalanceIn.opcode.asU8()) FulfillBonusBalanceIn.exec(ctx, args);
+        else if (opcode == FulfillBonusBalanceOut.opcode.asU8()) FulfillBonusBalanceOut.exec(ctx, args);
+        else if (opcode == BalanceScaleCutIn.opcode.asU8()) BalanceScaleCutIn.exec(ctx, args);
+        else if (opcode == BalanceScaleCutOut.opcode.asU8()) BalanceScaleCutOut.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }
