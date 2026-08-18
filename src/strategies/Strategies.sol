@@ -7,9 +7,15 @@ pragma solidity 0.8.30;
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { StaticBalances } from "../instructions/Balances.sol";
-import { LimitSwap } from "../instructions/LimitSwap.sol";
+import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { FeeFlatIn } from "../instructions/FeeFlat.sol";
+import { FeeProtocol } from "../instructions/FeeProtocol.sol";
+import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../instructions/Invalidators.sol";
+import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
+import { FulfillBonusBalanceIn, FulfillBonusBalanceOut } from "../instructions/FulfillBonus.sol";
+import { BalanceScaleCutIn, BalanceScaleCutOut } from "../instructions/BalanceScaleCut.sol";
 import {
     OnlyTakerTokenBalanceNonZero,
     OnlyTakerTokenBalanceGte,
@@ -19,7 +25,7 @@ import {
 import { Deadline, Salt } from "../instructions/Controls.sol";
 import { ValidateSeriesEpoch } from "../instructions/SeriesEpochManager.sol";
 
-/// @dev Library for on-chain orders validation
+/// @notice Library for on-chain orders validation
 ///   Prefixes does not impact amounts calculation, so arbitrary allowed
 ///   Proposed strategies holds some invariants such as maker min/max swap rate
 library Strategies {
@@ -41,6 +47,69 @@ library Strategies {
         uint256 sqrtPriceMin;
         uint256 sqrtPriceMax;
         uint24 feeBps;
+    }
+
+    struct ProtocolFlatFee {
+        FeeProtocol.ReceiverConfig[] receivers;
+        FeeProtocol.ProviderConfig[] providers;
+    }
+
+    struct ProtocolFee {
+        FeeProtocol.ReceiverConfig[] receivers;
+        FeeProtocol.ProviderConfig[] providers;
+        uint216 surplusEstimate;
+    }
+
+    struct LinearScale {
+        uint40 timestamp;
+        uint16[] durations;
+        uint24[] scales;
+    }
+
+    struct BaseFeeAdjustment {
+        uint64 baseGasPrice;
+        uint96 ethPrice;
+        uint24 gasAmount;
+        uint24 capBps;
+    }
+
+    struct RateCut {
+        uint64 rateA;
+        uint64 rateB;
+    }
+
+    struct LimitOrderFullAmountFeeIn {
+        uint256 balanceA;
+        uint256 balanceB;
+        bool direction;
+        uint32 bitIndex;
+        ProtocolFlatFee fee;
+    }
+
+    struct LimitOrderFeeIn {
+        uint256 balanceA;
+        uint256 balanceB;
+        bool direction;
+        ProtocolFlatFee fee;
+    }
+
+    struct ScaledLimitOrder {
+        uint256 balanceA;
+        uint256 balanceB;
+        bool direction;
+        ProtocolFee fee;
+        LinearScale scale;
+    }
+
+    struct AdjustedLimitOrder {
+        uint256 balanceA;
+        uint256 balanceB;
+        bool direction;
+        ProtocolFee fee;
+        LinearScale scale;
+        BaseFeeAdjustment gasAdjustment;
+        uint24 fulfillBonusBps;
+        RateCut rateCut;
     }
 
     uint256 private constant _prefixBitmap =
@@ -100,5 +169,159 @@ library Strategies {
         ptr = XYCConcentrateSwap.build(ptr, args.sqrtPriceMin, args.sqrtPriceMax);
 
         return ptr.resolve();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (in, flat only) - InvalidateBit - LimitSwapFullAmount
+    function buildLimitOrderFullAmountFeeIn(
+        bytes[] calldata prefix,
+        LimitOrderFullAmountFeeIn calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(true, args.fee.receivers, args.fee.providers, 0) +
+            InvalidateBit.sizeOf(args.bitIndex) +
+            LimitSwapFullAmount.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, true, args.fee.receivers, args.fee.providers, 0);
+        ptr = InvalidateBit.build(ptr, args.bitIndex);
+        ptr = LimitSwapFullAmount.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (in, flat only) - InvalidateTokenOut - LimitSwap
+    function buildLimitOrderFeeIn(
+        bytes[] calldata prefix,
+        LimitOrderFeeIn calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(true, args.fee.receivers, args.fee.providers, 0) +
+            InvalidateTokenOut.sizeOf() +
+            LimitSwap.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, true, args.fee.receivers, args.fee.providers, 0);
+        ptr = InvalidateTokenOut.build(ptr);
+        ptr = LimitSwap.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (in) - PiecewiseLinearScaleBalanceIn - InvalidateTokenOut - LimitSwap
+    function buildScaledLimitOrderFeeIn(
+        bytes[] calldata prefix,
+        ScaledLimitOrder calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(true, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate) +
+            PiecewiseLinearScaleBalanceIn.sizeOf(args.scale.timestamp, args.scale.durations, args.scale.scales) +
+            InvalidateTokenOut.sizeOf() +
+            LimitSwap.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, true, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate);
+        ptr = PiecewiseLinearScaleBalanceIn.build(ptr, args.scale.timestamp, args.scale.durations, args.scale.scales);
+        ptr = InvalidateTokenOut.build(ptr);
+        ptr = LimitSwap.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (out) - PiecewiseLinearScaleBalanceOut - InvalidateTokenIn - LimitSwap
+    function buildScaledLimitOrderFeeOut(
+        bytes[] calldata prefix,
+        ScaledLimitOrder calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(false, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate) +
+            PiecewiseLinearScaleBalanceOut.sizeOf(args.scale.timestamp, args.scale.durations, args.scale.scales) +
+            InvalidateTokenIn.sizeOf() +
+            LimitSwap.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, false, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate);
+        ptr = PiecewiseLinearScaleBalanceOut.build(ptr, args.scale.timestamp, args.scale.durations, args.scale.scales);
+        ptr = InvalidateTokenIn.build(ptr);
+        ptr = LimitSwap.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (in) - PiecewiseLinearScaleBalanceIn - BaseFeeAdjusterBalanceIn
+    ///   - FulfillBonusBalanceIn - BalanceScaleCutIn - InvalidateTokenOut - LimitSwap
+    function buildAdjustedLimitOrderFeeIn(
+        bytes[] calldata prefix,
+        AdjustedLimitOrder calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(true, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate) +
+            PiecewiseLinearScaleBalanceIn.sizeOf(args.scale.timestamp, args.scale.durations, args.scale.scales) +
+            BaseFeeAdjusterBalanceIn.sizeOf(args.gasAdjustment.baseGasPrice, args.gasAdjustment.ethPrice, args.gasAdjustment.gasAmount, args.gasAdjustment.capBps) +
+            FulfillBonusBalanceIn.sizeOf(args.fulfillBonusBps) +
+            BalanceScaleCutIn.sizeOf(args.rateCut.rateA, args.rateCut.rateB) +
+            InvalidateTokenOut.sizeOf() +
+            LimitSwap.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, true, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate);
+        ptr = PiecewiseLinearScaleBalanceIn.build(ptr, args.scale.timestamp, args.scale.durations, args.scale.scales);
+        ptr = BaseFeeAdjusterBalanceIn.build(ptr, args.gasAdjustment.baseGasPrice, args.gasAdjustment.ethPrice, args.gasAdjustment.gasAmount, args.gasAdjustment.capBps);
+        ptr = FulfillBonusBalanceIn.build(ptr, args.fulfillBonusBps);
+        ptr = BalanceScaleCutIn.build(ptr, args.rateCut.rateA, args.rateCut.rateB);
+        ptr = InvalidateTokenOut.build(ptr);
+        ptr = LimitSwap.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
+    }
+
+    /// @notice StaticBalances - FeeProtocol (out) - PiecewiseLinearScaleBalanceOut - BaseFeeAdjusterBalanceOut
+    ///   - FulfillBonusBalanceOut - BalanceScaleCutOut - InvalidateTokenIn - LimitSwap
+    function buildAdjustedLimitOrderFeeOut(
+        bytes[] calldata prefix,
+        AdjustedLimitOrder calldata args
+    ) internal pure returns (bytes memory slice) {
+        MemoryPtr ptr = MemoryPtrLib.alloc(
+            _checkPrefix(prefix) +
+            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            FeeProtocol.sizeOf(false, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate) +
+            PiecewiseLinearScaleBalanceOut.sizeOf(args.scale.timestamp, args.scale.durations, args.scale.scales) +
+            BaseFeeAdjusterBalanceOut.sizeOf(args.gasAdjustment.baseGasPrice, args.gasAdjustment.ethPrice, args.gasAdjustment.gasAmount, args.gasAdjustment.capBps) +
+            FulfillBonusBalanceOut.sizeOf(args.fulfillBonusBps) +
+            BalanceScaleCutOut.sizeOf(args.rateCut.rateA, args.rateCut.rateB) +
+            InvalidateTokenIn.sizeOf() +
+            LimitSwap.sizeOf(args.direction)
+        );
+
+        for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
+        ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
+        ptr = FeeProtocol.build(ptr, false, args.fee.receivers, args.fee.providers, args.fee.surplusEstimate);
+        ptr = PiecewiseLinearScaleBalanceOut.build(ptr, args.scale.timestamp, args.scale.durations, args.scale.scales);
+        ptr = BaseFeeAdjusterBalanceOut.build(ptr, args.gasAdjustment.baseGasPrice, args.gasAdjustment.ethPrice, args.gasAdjustment.gasAmount, args.gasAdjustment.capBps);
+        ptr = FulfillBonusBalanceOut.build(ptr, args.fulfillBonusBps);
+        ptr = BalanceScaleCutOut.build(ptr, args.rateCut.rateA, args.rateCut.rateB);
+        ptr = InvalidateTokenIn.build(ptr);
+        ptr = LimitSwap.build(ptr, args.direction);
+
+        (slice, ) = ptr.resolveShrink();
     }
 }

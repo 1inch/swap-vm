@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { TakerTraitsLib } from "src/libs/TakerTraits.sol";
+import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 
 library TakerBuilder {
     enum Hook {

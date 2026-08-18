@@ -6,8 +6,8 @@ pragma solidity 0.8.30;
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Vm } from "forge-std/Vm.sol";
-import { MakerTraitsLib } from "src/libs/MakerTraits.sol";
-import { ISwapVM } from "src/interfaces/ISwapVM.sol";
+import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
+import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 
 library OrderBuilder {
     error SigningAquaOrder();
