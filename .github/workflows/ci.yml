@@ -41,16 +41,16 @@ jobs:
       - name: Install node modules
         run: yarn install --frozen-lockfile
 
-      - name: Compile
-        id: build
-        run: yarn build
-
       - name: Run tests
-        run: npx hardhat test solidity --snapshot-check --no-compile
+        id: test
+        run: yarn test
+
+      - name: Run snapshot check
+        run: yarn snapshot:check
 
       # After tests so cache/test-artifacts/ is warm for the next SHA.
       - name: Save Hardhat cache
-        if: always() && steps.build.outcome == 'success' && steps.hh-cache.outputs.cache-hit != 'true'
+        if: always() && steps.test.outcome == 'success' && steps.hh-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |

@@ -7,14 +7,11 @@ pragma solidity 0.8.30;
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
-
 import { ISwapVM } from "../../src/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../../src/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
@@ -30,7 +27,7 @@ import { InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalid
 
 /// @title Gas
 /// @notice Combined AMM + LimitSwap gas benchmarks. Writes AMMGas.json / LimitSwapGas.json.
-contract Gas is Test, OpcodesDebug {
+contract Gas is Test {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -69,299 +66,299 @@ contract Gas is Test, OpcodesDebug {
 
     function test_gas_XYCSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYC(true);
-        _snapQuote("AMMGas", "XYCSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "XYCSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYC(false);
-        _snapQuote("AMMGas", "XYCSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("AMMGas", "XYCSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_XYCSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYC(true);
-        _snapSwap("AMMGas", "XYCSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "XYCSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYC(false);
-        _snapSwap("AMMGas", "XYCSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("AMMGas", "XYCSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_ConcentrateGrowLiquidity_XYCSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowLiquidity(true);
-        _snapQuote("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_ConcentrateGrowLiquidity_XYCSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowLiquidity(false);
-        _snapQuote("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_ConcentrateGrowLiquidity_XYCSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowLiquidity(true);
-        _snapSwap("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_ConcentrateGrowLiquidity_XYCSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowLiquidity(false);
-        _snapSwap("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("AMMGas", "ConcentrateGrowLiquidity_XYCSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_ConcentrateGrowPriceRange_XYCSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowPriceRange(true);
-        _snapQuote("AMMGas", "ConcentrateGrowPriceRange_XYCSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "ConcentrateGrowPriceRange_XYCSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_ConcentrateGrowPriceRange_XYCSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateGrowPriceRange(true);
-        _snapSwap("AMMGas", "ConcentrateGrowPriceRange_XYCSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "ConcentrateGrowPriceRange_XYCSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_Decay_XYCSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammDecay(true);
-        _snapQuote("AMMGas", "Decay_XYCSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "Decay_XYCSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_Decay_XYCSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammDecay(false);
-        _snapQuote("AMMGas", "Decay_XYCSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("AMMGas", "Decay_XYCSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_Decay_XYCSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammDecay(true);
-        _snapSwap("AMMGas", "Decay_XYCSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "Decay_XYCSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_Decay_XYCSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammDecay(false);
-        _snapSwap("AMMGas", "Decay_XYCSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("AMMGas", "Decay_XYCSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_Concentrate_Decay_XYCSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateDecay(true);
-        _snapQuote("AMMGas", "Concentrate_Decay_XYCSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "Concentrate_Decay_XYCSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_Concentrate_Decay_XYCSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammConcentrateDecay(true);
-        _snapSwap("AMMGas", "Concentrate_Decay_XYCSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "Concentrate_Decay_XYCSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_FlatFeeIn_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYCFee(true, true);
-        _snapQuote("AMMGas", "XYCSwap_FlatFeeIn_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "XYCSwap_FlatFeeIn_quote_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_FlatFeeIn_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYCFee(true, true);
-        _snapSwap("AMMGas", "XYCSwap_FlatFeeIn_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "XYCSwap_FlatFeeIn_swap_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_FlatFeeOut_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYCFee(false, true);
-        _snapQuote("AMMGas", "XYCSwap_FlatFeeOut_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "XYCSwap_FlatFeeOut_quote_exactIn", order, takerData);
     }
 
     function test_gas_XYCSwap_FlatFeeOut_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammXYCFee(false, true);
-        _snapSwap("AMMGas", "XYCSwap_FlatFeeOut_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "XYCSwap_FlatFeeOut_swap_exactIn", order, takerData);
     }
 
     function test_gas_FullAMM_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammFull(true);
-        _snapQuote("AMMGas", "FullAMM_quote_exactIn", order, takerData);
+        _snapshotQuote("AMMGas", "FullAMM_quote_exactIn", order, takerData);
     }
 
     function test_gas_FullAMM_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _ammFull(true);
-        _snapSwap("AMMGas", "FullAMM_swap_exactIn", order, takerData);
+        _snapshotSwap("AMMGas", "FullAMM_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limit(true);
-        _snapQuote("LimitSwapGas", "LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limit(false);
-        _snapQuote("LimitSwapGas", "LimitSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limit(true);
-        _snapSwap("LimitSwapGas", "LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limit(false);
-        _snapSwap("LimitSwapGas", "LimitSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_DutchAuctionIn_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(true, true);
-        _snapQuote("LimitSwapGas", "DutchAuctionIn_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "DutchAuctionIn_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_DutchAuctionIn_LimitSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(true, false);
-        _snapQuote("LimitSwapGas", "DutchAuctionIn_LimitSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("LimitSwapGas", "DutchAuctionIn_LimitSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_DutchAuctionIn_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(true, true);
-        _snapSwap("LimitSwapGas", "DutchAuctionIn_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "DutchAuctionIn_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_DutchAuctionIn_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(true, false);
-        _snapSwap("LimitSwapGas", "DutchAuctionIn_LimitSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("LimitSwapGas", "DutchAuctionIn_LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_DutchAuctionOut_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(false, true);
-        _snapQuote("LimitSwapGas", "DutchAuctionOut_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "DutchAuctionOut_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_DutchAuctionOut_LimitSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(false, false);
-        _snapQuote("LimitSwapGas", "DutchAuctionOut_LimitSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("LimitSwapGas", "DutchAuctionOut_LimitSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_DutchAuctionOut_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(false, true);
-        _snapSwap("LimitSwapGas", "DutchAuctionOut_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "DutchAuctionOut_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_DutchAuctionOut_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(false, false);
-        _snapSwap("LimitSwapGas", "DutchAuctionOut_LimitSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("LimitSwapGas", "DutchAuctionOut_LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_TWAP_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(true);
         vm.warp(startTime + 1800);
-        _snapQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_TWAP_LimitSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(false);
         vm.warp(startTime + 1800);
-        _snapQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_TWAP_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(true);
         vm.warp(startTime + 1800);
-        _snapSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_TWAP_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(false);
         vm.warp(startTime + 1800);
-        _snapSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_MinRate_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitMinRate(true);
-        _snapQuote("LimitSwapGas", "MinRate_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "MinRate_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_MinRate_LimitSwap_quote_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitMinRate(false);
-        _snapQuote("LimitSwapGas", "MinRate_LimitSwap_quote_exactOut", order, takerData);
+        _snapshotQuote("LimitSwapGas", "MinRate_LimitSwap_quote_exactOut", order, takerData);
     }
 
     function test_gas_MinRate_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitMinRate(true);
-        _snapSwap("LimitSwapGas", "MinRate_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "MinRate_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_MinRate_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitMinRate(false);
-        _snapSwap("LimitSwapGas", "MinRate_LimitSwap_swap_exactOut", order, takerData);
+        _snapshotSwap("LimitSwapGas", "MinRate_LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeIn_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, false);
-        _snapQuote("LimitSwapGas", "LimitSwap_FlatFeeIn_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_FlatFeeIn_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeIn_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, false);
-        _snapSwap("LimitSwapGas", "LimitSwap_FlatFeeIn_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_FlatFeeIn_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeOut_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true, false);
-        _snapQuote("LimitSwapGas", "LimitSwap_FlatFeeOut_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_FlatFeeOut_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeOut_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true, false);
-        _snapSwap("LimitSwapGas", "LimitSwap_FlatFeeOut_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_FlatFeeOut_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_ProgressiveFee_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, true);
-        _snapQuote("LimitSwapGas", "LimitSwap_ProgressiveFee_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_ProgressiveFee_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_ProgressiveFee_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, true);
-        _snapSwap("LimitSwapGas", "LimitSwap_ProgressiveFee_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_ProgressiveFee_swap_exactIn", order, takerData);
     }
 
     function test_gas_Deadline_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDeadline(true);
-        _snapQuote("LimitSwapGas", "Deadline_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "Deadline_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_Deadline_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDeadline(true);
-        _snapSwap("LimitSwapGas", "Deadline_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "Deadline_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_Salt_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitSalt(true);
-        _snapQuote("LimitSwapGas", "Salt_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "Salt_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_Salt_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitSalt(true);
-        _snapSwap("LimitSwapGas", "Salt_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "Salt_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_InvalidateBit_LimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitInvalidateBit(true);
-        _snapQuote("LimitSwapGas", "InvalidateBit_LimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "InvalidateBit_LimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_InvalidateBit_LimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitInvalidateBit(true);
-        _snapSwap("LimitSwapGas", "InvalidateBit_LimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "InvalidateBit_LimitSwap_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_InvalidateTokenIn_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitInvalidateTokenIn(true);
-        _snapQuote("LimitSwapGas", "LimitSwap_InvalidateTokenIn_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "LimitSwap_InvalidateTokenIn_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_InvalidateTokenIn_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitInvalidateTokenIn(true);
-        _snapSwap("LimitSwapGas", "LimitSwap_InvalidateTokenIn_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "LimitSwap_InvalidateTokenIn_swap_exactIn", order, takerData);
     }
 
     function test_gas_FullLimitSwap_quote_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFull(true);
-        _snapQuote("LimitSwapGas", "FullLimitSwap_quote_exactIn", order, takerData);
+        _snapshotQuote("LimitSwapGas", "FullLimitSwap_quote_exactIn", order, takerData);
     }
 
     function test_gas_FullLimitSwap_swap_exactIn() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitFull(true);
-        _snapSwap("LimitSwapGas", "FullLimitSwap_swap_exactIn", order, takerData);
+        _snapshotSwap("LimitSwapGas", "FullLimitSwap_swap_exactIn", order, takerData);
     }
 
-    function _snapQuote(
+    function _snapshotQuote(
         string memory group,
         string memory name,
         ISwapVM.Order memory order,
@@ -371,7 +368,7 @@ contract Gas is Test, OpcodesDebug {
         vm.snapshotGasLastCall(group, name);
     }
 
-    function _snapSwap(
+    function _snapshotSwap(
         string memory group,
         string memory name,
         ISwapVM.Order memory order,
