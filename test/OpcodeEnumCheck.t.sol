@@ -35,7 +35,12 @@ contract OpcodeEnumCheckTest is Test {
         assertEq(uint8(Opcode.TWAPSwap), 0x9d);
         // Rates tuning bank (0xb0-0xcf)
         assertEq(uint8(Opcode.RequireMinRate), 0xb0);
-        assertEq(uint8(Opcode.BaseFeeAdjuster), 0xb4);
+        assertEq(uint8(Opcode.BaseFeeAdjusterBalanceIn), 0xb4);
+        assertEq(uint8(Opcode.BaseFeeAdjusterBalanceOut), 0xb5);
+        assertEq(uint8(Opcode.FulfillBonusBalanceIn), 0xb6);
+        assertEq(uint8(Opcode.FulfillBonusBalanceOut), 0xb7);
+        assertEq(uint8(Opcode.BalanceScaleCutIn), 0xb8);
+        assertEq(uint8(Opcode.BalanceScaleCutOut), 0xb9);
         // Reserved bank tail (0xf0-0xff)
         assertEq(uint8(Opcode._fe), 0xfe);
         assertEq(uint8(Opcode._ff), 0xff);
