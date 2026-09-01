@@ -2,41 +2,58 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   run-ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          submodules: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: yarn
 
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v3
-        id: app-token
+      - name: Restore Hardhat cache
+        uses: actions/cache/restore@v4
+        id: hh-cache
         with:
-          app-id: ${{ secrets.CI_ROBOT_APP_ID }}
-          private-key: ${{ secrets.CI_ROBOT_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-      - name: Setup git credentials for GitHub App
-        run: |
-          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "git@github.com:"
-          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "ssh://git@github.com/"
+          path: |
+            cache
+            artifacts
+          key: hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-${{ github.sha }}
+          restore-keys: |
+            hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-
 
       - name: Install node modules
         run: yarn install --frozen-lockfile
 
-      - name: Check gas snapshots
+      - name: Run tests
+        id: test
+        run: yarn test
+
+      - name: Run snapshot check
         run: yarn snapshot:check
 
-      - name: Run tests
-        run: yarn test
+      # After tests so cache/test-artifacts/ is warm for the next SHA.
+      - name: Save Hardhat cache
+        if: always() && steps.test.outcome == 'success' && steps.hh-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache
+            artifacts
+          key: hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-${{ github.sha }}

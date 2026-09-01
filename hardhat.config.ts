@@ -14,6 +14,7 @@ const swapVmCompiler = {
     },
     viaIR: true,
   },
+  isolated: true
 };
 
 export default defineConfig({
