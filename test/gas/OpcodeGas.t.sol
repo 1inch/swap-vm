@@ -15,7 +15,7 @@ import { LimitSwap, LimitSwapFullAmount } from "../../src/instructions/LimitSwap
 import { InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
 import { PrivateOrder } from "../../src/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../src/instructions/SeriesEpochManager.sol";
-import { BaseFeeAdjuster } from "../../src/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../src/instructions/BaseFeeAdjuster.sol";
 import { Deadline, Salt } from "../../src/instructions/Controls.sol";
 import { Jump, JumpIfTokenIn } from "../../src/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte } from "../../src/instructions/TokenValidators.sol";
@@ -93,7 +93,8 @@ contract OpcodeGas is Test {
         _snapshot("LimitSwapFullAmount", LimitSwapFullAmount.build(address(tokenA), address(tokenB)));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
-        _snapshot("BaseFeeAdjuster", BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18));
+        _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000, 0.01e7));
+        _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000, 0.01e7));
         _snapshot("Salt", Salt.build(uint64(42)));
         _snapshot("FeeFlatIn", FeeFlatIn.build(0.10e7));
         _snapshot("FeeProgressiveIn", FeeProgressiveIn.build(0.10e7));

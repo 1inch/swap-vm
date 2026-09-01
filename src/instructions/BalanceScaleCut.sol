@@ -2,32 +2,32 @@
 pragma solidity 0.8.30;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
-/// @custom:copyright © 2025 Degensoft Ltd
+/// @custom:copyright © 2026 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice RequireMinRate opcode, maker-favor rate guard, fails if rate is worse than specified
-///   Validates final amounts after rest of strategy executed
+/// @notice BalanceScaleCutIn opcode, maker-favor balances rate guard
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
 /// @dev Supports only single direction swaps
-library RequireMinRate {
+/// @dev Should be placed after balance in adjustment opcodes and before the swap opcode
+library BalanceScaleCutIn {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
+    using Math for uint256;
 
-    error RequireMinRateFailed(uint256 amountIn, uint256 amountOut, uint256 rateIn, uint256 rateOut);
+    error BalanceScaleCutRateZero();
 
-    Opcode constant opcode = Opcode.RequireMinRate;
+    Opcode constant opcode = Opcode.BalanceScaleCutIn;
 
     function sizeOf(uint64, uint64) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 8 + 8;
@@ -38,6 +38,8 @@ library RequireMinRate {
     }
 
     function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
+        require(rateA > 0 && rateB > 0, BalanceScaleCutRateZero());
+
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(rateA, 8).push(rateB, 8);
         ptrStart.patchLength(ptr);
@@ -48,37 +50,34 @@ library RequireMinRate {
         rateB = args.at(8).asU64();
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
         uint64 rateIn;
         uint64 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
         else (rateOut, rateIn) = parse(args);
 
-        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
-
-        // Cross-multiplication for: amountIn / amountOut >= rateIn / rateOut
-        require(amountIn * rateOut >= rateIn * amountOut, RequireMinRateFailed(amountIn, amountOut, rateIn, rateOut));
+        // Ceil division for the balance-in floor favors maker
+        uint256 minBalanceIn = (ctx.swap.balanceOut * rateIn).ceilDiv(rateOut);
+        if (ctx.swap.balanceIn < minBalanceIn) {
+            ctx.swap.balanceIn = minBalanceIn;
+        }
     }
 }
 
-/// @notice AdjustMinRate opcode, maker-favor rate guard, patches amounts if rate is worse than specified
-///   Validates and patches final amounts after rest of strategy executed
+/// @notice BalanceScaleCutOut opcode, maker-favor balances rate guard
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
-/// @dev Later opcodes in the execution sequence should consider the amounts are not final and might change
 /// @dev Supports only single direction swaps
-library AdjustMinRate {
+/// @dev Should be placed after balance out adjustment opcodes and before the swap opcode
+library BalanceScaleCutOut {
     using InstructionArgs for bytes;
     using InstructionArgs for bytes32;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
-    using Math for uint256;
+    error BalanceScaleCutRateZero();
 
-    error AdjustMinRateRateZero();
-
-    Opcode constant opcode = Opcode.AdjustMinRate;
+    Opcode constant opcode = Opcode.BalanceScaleCutOut;
 
     function sizeOf(uint64, uint64) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 8 + 8;
@@ -89,7 +88,7 @@ library AdjustMinRate {
     }
 
     function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {
-        require(rateA > 0 && rateB > 0, AdjustMinRateRateZero());
+        require(rateA > 0 && rateB > 0, BalanceScaleCutRateZero());
 
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(rateA, 8).push(rateB, 8);
@@ -101,23 +100,16 @@ library AdjustMinRate {
         rateB = args.at(8).asU64();
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
         uint64 rateIn;
         uint64 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);
         else (rateOut, rateIn) = parse(args);
 
-        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
-
-        // Cross-multiplication for: amountIn / amountOut < rateIn / rateOut
-        if (amountIn * rateOut < rateIn * amountOut) {
-            if (ctx.query.isExactIn) {
-                // Floor division for tokenOut favors maker
-                ctx.swap.amountOut = amountIn * rateOut / rateIn;
-            } else {
-                // Ceil division for tokenIn favors maker
-                ctx.swap.amountIn = (amountOut * rateIn).ceilDiv(rateOut);
-            }
+        // Floor division for the balance-out cap favors maker
+        uint256 maxBalanceOut = ctx.swap.balanceIn * rateOut / rateIn;
+        if (ctx.swap.balanceOut > maxBalanceOut) {
+            ctx.swap.balanceOut = maxBalanceOut;
         }
     }
 }
