@@ -39,6 +39,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     error BadSignature(address maker, bytes32 orderHash, bytes signature);
     /// @dev Aqua balance insufficient after taker pushed tokens
     error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount, uint256 amountNetPulled);
+    /// @dev Aqua strategy token was not shipped in a batch of exactly 2 tokens
+    error AquaStrategyMustHaveExactly2Tokens(address token, uint256 tokensCount);
     /// @dev Cannot use shouldUnwrapWeth with Aqua orders
     error MakerTraitsUnwrapIsIncompatibleWithAqua();
     /// @dev Cannot use custom receiver with Aqua orders
@@ -160,7 +162,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         });
 
         if (order.traits.useAquaInsteadOfSignature()) {
-            (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
+            _loadAquaBalances(ctx);
         }
 
         (amountIn, amountOut) = ctx.runLoop();
@@ -210,7 +212,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
         });
 
         if (order.traits.useAquaInsteadOfSignature()) {
-            (ctx.swap.balanceIn, ctx.swap.balanceOut) = AQUA.safeBalances(order.maker, address(this), orderHash, tokenIn, tokenOut);
+            _loadAquaBalances(ctx);
         } else {
             bytes calldata signature = takerTraits.signature(takerData);
             require(order.maker.recoverOrIsValidSignature(orderHash, signature), BadSignature(order.maker, orderHash, signature));
@@ -231,6 +233,20 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
 
         _reentrancyGuards[orderHash].unlock();
         emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
+    }
+
+    /// @dev Loads Aqua balances for the swap pair while denying strategies whose traded tokens
+    ///      were not shipped in a batch of exactly 2 tokens. Aqua stamps each token slot with
+    ///      the ship-time batch size, so `tokensCount == 2` also subsumes the activity checks
+    ///      of `safeBalances`: unshipped slots read 0 and docked slots read 0xff
+    function _loadAquaBalances(Context memory ctx) private view {
+        (uint248 balanceIn, uint8 tokensCountIn) = AQUA.rawBalances(ctx.query.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
+        require(tokensCountIn == 2, AquaStrategyMustHaveExactly2Tokens(ctx.query.tokenIn, tokensCountIn));
+
+        (uint248 balanceOut, uint8 tokensCountOut) = AQUA.rawBalances(ctx.query.maker, address(this), ctx.query.orderHash, ctx.query.tokenOut);
+        require(tokensCountOut == 2, AquaStrategyMustHaveExactly2Tokens(ctx.query.tokenOut, tokensCountOut));
+
+        (ctx.swap.balanceIn, ctx.swap.balanceOut) = (balanceIn, balanceOut);
     }
 
     function _transferIn(Context memory ctx, ISwapVM.Order calldata order, TakerTraits takerTraits, bytes calldata takerData, uint256 originalAquaBalanceIn) private {

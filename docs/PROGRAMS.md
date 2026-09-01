@@ -148,6 +148,26 @@ bytes memory bytecode = bytes.concat(
 );
 ```
 
+**Example B2 - Drifting concentrated liquidity (self-recentering range):**
+
+Use case: concentrated range that follows the market price over time without maker rebalancing.
+Analog: Maverick-style moving liquidity, driven by inventory instead of an oracle or TWAP.
+Difference note: the range center drifts toward the inventory-implied center `sqrt(balanceGt/balanceLt)`; within one block the curve is frozen (same math as `XYCConcentrateSwap`). Repricing is fee-funded: each swap grants budget `budgetRatePerSwap * amountOut / balanceOut`, and drift beyond the free base rate spends the budget at `cost = 2 * move` (linear in displacement, so cranking many small updates buys nothing extra). Sizing rules: `budgetRatePerSwap <= fee`; `baseDriftRatePerSecond * expected quiet gap <= fee - budgetRatePerSwap / 2` (the free floor exists for one-sided recovery — set 0 for pairs with reliable flow); `driftRatePerSecond` to the pair's persistent drift speed, not its noise amplitude (an oversized rate chases oscillations and pays the whipsaw).
+
+```solidity
+Program program;
+bytes memory bytecode = bytes.concat(
+    program.build(Opcode.FlatFeeAmountIn, FeeArgsBuilder.buildFlatFee(0.003e9)), // Fee must back budgetRatePerSwap
+    program.build(Opcode.XYCDriftingConcentrateSwap, XYCDriftingConcentrateArgsBuilder.build(
+        sqrtPriceMin,        // initial lower bound; width sqrtPriceMax/sqrtPriceMin is preserved forever
+        sqrtPriceMax,        // initial upper bound (must fit uint96)
+        0.0000008e18,        // driftRatePerSecond: ~0.3%/hour total drift speed limit
+        0.000000017e18,      // baseDriftRatePerSecond: ~0.15%/day free recovery floor (= fee - budgetRate/2 per 1-day gap)
+        0.003e18             // budgetRatePerSwap: 30 bps, = the fee above (never more)
+    )) // Swap on the current range, then drift the range toward inventory balance
+);
+```
+
 **Example C - PeggedSwap AMM (pegged assets):**
 
 Use case: low-slippage swapping for correlated/pegged assets.  

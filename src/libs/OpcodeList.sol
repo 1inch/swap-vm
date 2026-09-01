@@ -99,7 +99,7 @@ enum Opcode {
     // 0x50-0x6f | Swap curves: instructions computing swap amounts from balances
     /* 50 */ XYCSwap,
     /* 51 */ XYCConcentrateSwap,
-    /* 52 */ _52,
+    /* 52 */ XYCDriftingConcentrateSwap,
     /* 53 */ LimitSwap,
     /* 54 */ LimitSwapFullAmount,
     /* 55 */ _55,

@@ -12,6 +12,7 @@ import { Balances } from "../instructions/Balances.sol";
 import { Invalidators } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCDriftingConcentrate } from "../instructions/XYCDriftingConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { MinRate } from "../instructions/MinRate.sol";
@@ -32,6 +33,7 @@ contract Opcodes is
     Invalidators,
     XYCSwap,
     XYCConcentrate,
+    XYCDriftingConcentrate,
     Decay,
     LimitSwap,
     MinRate,
@@ -69,6 +71,7 @@ contract Opcodes is
         else if (opcode == uint256(Opcode.InvalidateTokenOut)) Invalidators._invalidateTokenOut1D(ctx, args);
         else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == uint256(Opcode.XYCDriftingConcentrateSwap)) XYCDriftingConcentrate._xycDriftingConcentrate2D(ctx, args);
         else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
         else if (opcode == uint256(Opcode.LimitSwap)) LimitSwap._limitSwap1D(ctx, args);
         else if (opcode == uint256(Opcode.LimitSwapFullAmount)) LimitSwap._limitSwapOnlyFull1D(ctx, args);

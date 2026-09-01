@@ -10,6 +10,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { Controls } from "../instructions/Controls.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrate } from "../instructions/XYCConcentrate.sol";
+import { XYCDriftingConcentrate } from "../instructions/XYCDriftingConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { Fee } from "../instructions/Fee.sol";
 import { Extruction } from "../instructions/Extruction.sol";
@@ -19,6 +20,7 @@ contract AquaOpcodes is
     Controls,
     XYCSwap,
     XYCConcentrate,
+    XYCDriftingConcentrate,
     Decay,
     Fee,
     PeggedSwap,
@@ -39,6 +41,7 @@ contract AquaOpcodes is
         else if (opcode == uint256(Opcode.OnlyTakerTokenSupplyShareGte)) Controls._onlyTakerTokenSupplyShareGte(ctx, args);
         else if (opcode == uint256(Opcode.XYCSwap)) XYCSwap._xycSwapXD(ctx, args);
         else if (opcode == uint256(Opcode.XYCConcentrateSwap)) XYCConcentrate._xycConcentrateGrowLiquidity2D(ctx, args);
+        else if (opcode == uint256(Opcode.XYCDriftingConcentrateSwap)) XYCDriftingConcentrate._xycDriftingConcentrate2D(ctx, args);
         else if (opcode == uint256(Opcode.Decay)) Decay._decayXD(ctx, args);
         else if (opcode == uint256(Opcode.Salt)) Controls._salt(ctx, args);
         else if (opcode == uint256(Opcode.FlatFeeAmountIn)) Fee._flatFeeAmountInXD(ctx, args);
