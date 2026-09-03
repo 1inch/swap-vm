@@ -5,6 +5,7 @@ cache
 node_modules
 coverage
 coverage.json
+broadcast
 build
 .coverage_contracts
 .coverage_artifacts
@@ -13,3 +14,5 @@ build
 !.env.example
 venv/
 .yarn
+.vscode
+.claude
