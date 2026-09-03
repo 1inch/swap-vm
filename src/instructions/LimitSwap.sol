@@ -16,9 +16,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [bool direction]
 library LimitSwap {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;
@@ -81,9 +78,6 @@ library LimitSwap {
 /// @dev Encoding: [bool direction]
 library LimitSwapFullAmount {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error LimitSwapDirectionMismatch();

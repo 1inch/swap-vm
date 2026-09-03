@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -18,12 +18,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Supports only single direction swaps
 library RequireMinRate {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     error RequireMinRateFailed(uint256 amountIn, uint256 amountOut, uint256 rateIn, uint256 rateOut);
 
@@ -68,12 +63,8 @@ library RequireMinRate {
 /// @dev Supports only single direction swaps
 library AdjustMinRate {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
     using Math for uint256;
 
     Opcode constant opcode = Opcode.AdjustMinRate;

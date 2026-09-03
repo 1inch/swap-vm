@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context, SwapQuery, SwapRegisters, VM, ContextLib, ProtocolFee } from "../../src/libs/VM.sol";
+import { Context, SwapQuery, SwapRegisters, VM, ProtocolFee } from "../../src/libs/VM.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../../src/libs/ProtocolFee.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
@@ -35,8 +35,6 @@ import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
  *      - Each strategy operates on same pool balances but different curve logic
  */
 contract BestRouteSelector is OpcodesDebug {
-    using ContextLib for Context;
-
     error BestRouteSelectorInvalidArgs();
     error BestRouteSelectorNoBranches();
 

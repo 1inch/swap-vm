@@ -11,7 +11,6 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../src/routers/SwapVMRouter.sol";
-import { ContextLib } from "../src/libs/VM.sol";
 import { MakerTraitsLib } from "../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../src/opcodes/OpcodesDebug.sol";

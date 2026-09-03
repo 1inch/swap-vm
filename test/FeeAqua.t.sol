@@ -9,7 +9,6 @@ import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
 import { FeeFlatIn } from "../src/instructions/FeeFlat.sol";
-import { ContextLib } from "../src/libs/VM.sol";
 import { TakerTraitsLib } from "../src/libs/TakerTraits.sol";
 
 contract FeeAquaTest is AquaSwapVMTest {

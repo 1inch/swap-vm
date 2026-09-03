@@ -17,9 +17,6 @@ import { PeggedSwapMath } from "../libs/PeggedSwapMath.sol";
 /// @dev Encoding: [uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB]
 library PeggedSwap {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error PeggedSwapInvalidLinearWidth(uint256 linearWidth);

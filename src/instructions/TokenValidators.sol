@@ -18,9 +18,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   authorization given even by soulbound NFT with other users
 library OnlyTakerTokenBalanceNonZero {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceIsZero(address taker, address token);
@@ -59,9 +56,6 @@ library OnlyTakerTokenBalanceNonZero {
 ///   interception: any contract executing tx originated from tx.origin can pass the validation
 library OnlyTxOriginTokenBalanceNonZero {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error TxOriginTokenBalanceIsZero(address txOrigin, address token);
@@ -97,9 +91,6 @@ library OnlyTxOriginTokenBalanceNonZero {
 /// @dev Encoding: [address token, uint256 amount]
 library OnlyTakerTokenBalanceGte {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 amount);
@@ -136,9 +127,6 @@ library OnlyTakerTokenBalanceGte {
 /// @dev Encoding: [address token, uint64 share]
 library OnlyTakerTokenSupplyShareGte {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceSupplyShareWrongShare(uint64 share);

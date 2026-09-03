@@ -15,7 +15,9 @@ pragma solidity 0.8.30;
 /// @dev Any pointer reflecting allocated space fit uint64 due to 2 ** 64 bytes allocation costs 1e32 Gas
 ///   Consecutive additions of uint24 to uint64 would not exceed uint80 due to this requires 7e16 operations
 ///   It is safe to increase `current` unchecked for uint24 values or while this reflects real memory write length
+
 type MemoryPtr is uint256;
+using MemoryPtrLib for MemoryPtr global;
 
 library MemoryPtrLib {
     error MemoryPtrWriteOutOfBounds(uint256 end, uint256 current);
@@ -119,7 +121,7 @@ library MemoryPtrLib {
         return _move(ptr, length);
     }
 
-    /// @dev Prefer allocating space once and build everything there
+    /// @dev Prefer allocating space once and build everything there instead of composing bytes memory parts
     function pushMem(MemoryPtr ptr, bytes memory data) internal pure returns (MemoryPtr) {
         uint256 length = data.length;
         assembly ("memory-safe") { mcopy(shr(128, ptr), add(data, 32), length) } // memory[current:+length) = data

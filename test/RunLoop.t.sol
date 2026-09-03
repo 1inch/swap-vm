@@ -26,7 +26,7 @@ import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { Extruction } from "../src/instructions/Extruction.sol";
-import { Context, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
+import { ContextLib } from "../src/libs/VM.sol";
 import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
 
 /**

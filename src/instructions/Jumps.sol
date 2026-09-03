@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -16,12 +16,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Next PC is limited to 2 bytes
 library Jump {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.Jump;
 
@@ -59,12 +54,7 @@ library Jump {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfDirection {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfDirection;
 
@@ -111,12 +101,7 @@ library JumpIfDirection {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenIn {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfTokenIn;
 
@@ -157,12 +142,7 @@ library JumpIfTokenIn {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenOut {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.JumpIfTokenOut;
 

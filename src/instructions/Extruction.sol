@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 
-import { Context, ContextLib, SwapQuery, SwapRegisters } from "../libs/VM.sol";
+import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -29,12 +29,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 library Extruction {
     using Calldata for bytes;
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);
 
