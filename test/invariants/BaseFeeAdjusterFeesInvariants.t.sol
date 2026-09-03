@@ -357,7 +357,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         // TODO: Research if symmetry can be restored despite asymmetric gas adjustments and fees
         config.skipSymmetry = skipSymmetry;
 
-        // TODO: Research monotonicity behavior with progressive fees and gas adjustment
+        // TODO: Research monotonicity behavior with gas adjustment
         config.skipMonotonicity = skipMonotonicity;
 
         assertAllInvariantsWithConfig(

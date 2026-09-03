@@ -17,7 +17,6 @@ import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../src/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
@@ -152,40 +151,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Example 3: Test progressive fees with custom configuration
-     */
-    function test_ProgressiveFeeInvariants() public {
-        bytes memory bytecode = bytes.concat(
-            DynamicBalances.build(1000e18, 1000e18),
-            FeeProgressiveIn.build(0.1e7), // 10% progressive
-            XYCSwap.build()
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Progressive fees need higher tolerance due to rounding
-        InvariantConfig memory config = createInvariantConfig(
-            dynamic([uint256(1e18), uint256(10e18), uint256(50e18)]),
-            1e10  // Higher tolerance for progressive fees
-        );
-
-        // Add custom taker data - exactOut needs high threshold to allow trades
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // Skip additivity test - progressive fees violate additivity by design
-        config.skipAdditivity = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Example 4: Test specific invariants individually
+     * Example 3: Test specific invariants individually
      */
     function test_SpecificInvariants() public view {
         bytes memory bytecode = bytes.concat(
@@ -234,7 +200,7 @@ contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Example 5: Skip certain invariants for special cases
+     * Example 4: Skip certain invariants for special cases
      */
     function test_SkipCertainInvariants() public {
         // Create a flat-rate order (no price impact)

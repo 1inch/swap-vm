@@ -19,7 +19,6 @@ import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances
 import { Decay } from "../../src/instructions/Decay.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -172,86 +171,6 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     /**
-     * Test Decay + XYC with progressive fee on input
-     */
-    function test_DecayXYCProgressiveFeeIn() public {
-        uint256 balanceA = 2000e18;
-        uint256 balanceB = 2000e18;
-        uint16 decayPeriod = 900; // 15 minutes
-        uint24 feeBps = 0.1e7; // 10% progressive fee
-
-        bytes memory bytecode = bytes.concat(
-            DynamicBalances.build(balanceA, balanceB),
-            Decay.build(decayPeriod),
-            FeeProgressiveIn.build(feeBps),
-            XYCSwap.build()
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        InvariantConfig memory config = _getDefaultConfig();
-        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: Progressive fees violate additivity by design
-        config.skipAdditivity = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
-     * Test Decay + XYC with progressive fee on output
-     */
-    function test_DecayXYCProgressiveFeeOut() public {
-        uint256 balanceA = 1800e18;
-        uint256 balanceB = 1800e18;
-        uint16 decayPeriod = 1200; // 20 minutes
-        uint24 feeBps = 0.05e7; // 5% progressive fee
-
-        bytes memory bytecode = bytes.concat(
-            DynamicBalances.build(balanceA, balanceB),
-            Decay.build(decayPeriod),
-            FeeProgressiveOut.build(feeBps),
-            XYCSwap.build()
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Execute trades and test behavior
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-
-        // First trade
-        _executeSwap(swapVM, order, address(tokenA), address(tokenB), 50e18, exactInData);
-
-        // Second trade after partial decay
-        vm.warp(block.timestamp + 300);
-        _executeSwap(swapVM, order, address(tokenA), address(tokenB), 30e18, exactInData);
-
-        // Test invariants with complex state
-        InvariantConfig memory config = createInvariantConfig(
-            dynamic([uint256(5e18), uint256(10e18), uint256(20e18)]),
-            1
-        );
-        config.exactInTakerData = exactInData;
-        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: Progressive fees violate additivity by design
-        config.skipAdditivity = true;
-
-        assertAllInvariantsWithConfig(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            config
-        );
-    }
-
-    /**
      * Test Decay + XYC with protocol fee on amountIn
      */
     function test_DecayXYCProtocolFeeIn() public {
@@ -345,13 +264,14 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         uint256 balanceB = 3000e18;
         uint16 decayPeriod = 600;
         uint24 flatFeeBps = 0.001e7;      // 0.1% flat fee
-        uint24 progressiveFeeBps = 0.02e7; // 2% progressive fee
+        uint24 protocolFeeBps = 0.02e7; // 2% protocol fee
+        address protocolFeeCollector = address(0x1234567890123456789012345678901234567890);
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
             Decay.build(decayPeriod),
             FeeFlatIn.build(flatFeeBps),
-            FeeProgressiveOut.build(progressiveFeeBps),
+            FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeCollector),
             XYCSwap.build()
         );
 
@@ -363,8 +283,6 @@ contract DecayXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         );
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-        // TODO: due to progressive fees
-        config.skipAdditivity = true;
 
         assertAllInvariantsWithConfig(
             swapVM,

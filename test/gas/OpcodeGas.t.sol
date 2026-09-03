@@ -21,7 +21,6 @@ import { Jump, JumpIfTokenIn } from "../../src/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte } from "../../src/instructions/TokenValidators.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeFlatIn } from "../../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn } from "../../src/instructions/FeeProgressive.sol";
 import { PiecewiseLinearScaleBalanceIn } from "../../src/instructions/PiecewiseLinearScale.sol";
 import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
@@ -96,7 +95,6 @@ contract OpcodeGas is Test {
         _snapshot("BaseFeeAdjuster", BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18));
         _snapshot("Salt", Salt.build(uint64(42)));
         _snapshot("FeeFlatIn", FeeFlatIn.build(0.10e7));
-        _snapshot("FeeProgressiveIn", FeeProgressiveIn.build(0.10e7));
         _snapshot("PeggedSwap", PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
         _snapshot("PrivateOrder", PrivateOrder.build(taker));

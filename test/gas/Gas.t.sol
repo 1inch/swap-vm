@@ -21,7 +21,6 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instruc
 import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
 import { AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn } from "../../src/instructions/FeeProgressive.sol";
 import { Salt, Deadline } from "../../src/instructions/Controls.sol";
 import { InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
 
@@ -279,33 +278,23 @@ contract Gas is Test {
     }
 
     function test_gas_LimitSwap_FlatFeeIn_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true);
         _snapshotQuote("LimitSwapGas", "LimitSwap_FlatFeeIn_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeIn_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true);
         _snapshotSwap("LimitSwapGas", "LimitSwap_FlatFeeIn_swap_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeOut_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true);
         _snapshotQuote("LimitSwapGas", "LimitSwap_FlatFeeOut_quote_exactIn", order, takerData);
     }
 
     function test_gas_LimitSwap_FlatFeeOut_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true, false);
+        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(false, true);
         _snapshotSwap("LimitSwapGas", "LimitSwap_FlatFeeOut_swap_exactIn", order, takerData);
-    }
-
-    function test_gas_LimitSwap_ProgressiveFee_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, true);
-        _snapshotQuote("LimitSwapGas", "LimitSwap_ProgressiveFee_quote_exactIn", order, takerData);
-    }
-
-    function test_gas_LimitSwap_ProgressiveFee_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = _limitFee(true, true, true);
-        _snapshotSwap("LimitSwapGas", "LimitSwap_ProgressiveFee_swap_exactIn", order, takerData);
     }
 
     function test_gas_Deadline_LimitSwap_quote_exactIn() public {
@@ -450,16 +439,15 @@ contract Gas is Test {
         );
     }
 
-    function _limitFee(bool isFeeIn, bool isExactIn, bool isProgressive)
+    function _limitFee(bool isFeeIn, bool isExactIn)
         private
         view
         returns (ISwapVM.Order memory, bytes memory)
     {
-        bytes memory fee = isProgressive ? FeeProgressiveIn.build(100) : isFeeIn ? FeeFlatIn.build(100) : FeeFlatOut.build(100);
         return _order(
             bytes.concat(
                 StaticBalances.build(LIMIT_BALANCE_A, LIMIT_BALANCE_B),
-                fee,
+                isFeeIn ? FeeFlatIn.build(100) : FeeFlatOut.build(100),
                 LimitSwap.build(address(tokenA), address(tokenB))
             ),
             isExactIn

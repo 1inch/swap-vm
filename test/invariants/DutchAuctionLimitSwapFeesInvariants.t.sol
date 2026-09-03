@@ -20,7 +20,6 @@ import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../../src/instructions/FeeProgressive.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -129,46 +128,6 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
     }
 
     /**
-     * Test Dutch auction with progressive fee on input
-     */
-    function test_DutchAuctionIn_ProgressiveFeeIn() public {
-        uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
-        uint64 decayFactor = 0.95e18;
-        uint24 feeBps = 0.005e7; // 0.5% base fee
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
-            FeeProgressiveIn.build(feeBps),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        // TODO: Fix additivity and monotonicity for progressive fees with dutch auction
-        _testInvariantsWithConfig(bytecode, true, true);
-    }
-
-    /**
-     * Test Dutch auction with progressive fee on output
-     */
-    function test_DutchAuctionOut_ProgressiveFeeOut() public {
-        uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
-        uint64 decayFactor = 0.99e18; // Use milder decay to avoid overflow
-        uint24 feeBps = 0.0025e7; // 0.25% base fee (reduced to avoid overflow)
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
-            FeeProgressiveOut.build(feeBps),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        // TODO: Fix additivity for progressive fees with dutch auction
-        _testInvariantsWithConfig(bytecode, false, true);
-    }
-
-    /**
      * Test Dutch auction with protocol fee
      */
     function test_DutchAuctionIn_ProtocolFee() public {
@@ -196,19 +155,18 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, OpcodesDebug, CoreInvarian
         uint16 duration = 300;
         uint64 decayFactor = 0.96e18;
         uint24 flatFeeBps = 0.005e7; // 0.5% flat fee
-        uint24 progressiveFeeBps = 0.0025e7; // 0.25% progressive fee
+        uint24 protocolFeeBps = 0.0025e7; // 0.25% protocol fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
             // Multiple fees
             FeeFlatIn.build(flatFeeBps),
-            FeeProgressiveOut.build(progressiveFeeBps),
+            FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        // TODO: Fix additivity for progressive fees with dutch auction
-        _testInvariantsWithConfig(bytecode, false, true);
+        _testInvariantsWithConfig(bytecode, false, false);
     }
 
     /**
