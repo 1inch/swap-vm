@@ -12,15 +12,13 @@ import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
 type MakerTraits is uint256;
+using MakerTraitsLib for MakerTraits global;
 
 library MakerTraitsLib {
-    using MakerTraitsLib for MakerTraits;
     using SafeCast for uint256;
 
     using Calldata for bytes;
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();

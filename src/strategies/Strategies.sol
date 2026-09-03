@@ -24,9 +24,6 @@ import { ValidateSeriesEpoch } from "../instructions/SeriesEpochManager.sol";
 ///   Proposed strategies holds some invariants such as maker min/max swap rate
 library Strategies {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
 
     error PrefixInvalidLength(uint256 length, uint256 expected);
     error PrefixUnregistered(uint8 opcode);

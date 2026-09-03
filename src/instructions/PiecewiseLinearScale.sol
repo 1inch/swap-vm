@@ -19,7 +19,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library PiecewiseLinearScaleBalanceIn {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceIn;
@@ -57,7 +56,6 @@ library PiecewiseLinearScaleBalanceIn {
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library PiecewiseLinearScaleBalanceOut {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceOut;
@@ -88,9 +86,6 @@ library PiecewiseLinearScaleBalanceOut {
 
 library PiecewiseLinearScale {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
 
     using PiecewiseLinearScale for bytes;
 

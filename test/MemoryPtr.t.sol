@@ -13,8 +13,6 @@ import { MemoryPtr, MemoryPtrLib } from "../src/libs/MemoryPtr.sol";
  * @notice Tests for MemoryPtrLib allocation, push, patch, skip and resolve primitives
  */
 contract MemoryPtrTest is Test {
-    using MemoryPtrLib for MemoryPtr;
-
     address constant PUSH_ADDR = address(uint160(0x1122334455667788990011223344556677889900));
     address constant PATCH_ADDR = address(uint160(0xAAbbCCDdeEFf00112233445566778899aABBcCDd));
 

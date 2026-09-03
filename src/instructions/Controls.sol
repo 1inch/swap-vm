@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -13,7 +13,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @notice Salt opcode, produce different hashes for duplicated strategies
 /// @dev Encoding: [uint64 salt] or [bytes salt]
 library Salt {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.Salt;
@@ -52,7 +51,6 @@ library Salt {
 /// @notice Revert opcode, fail with hardcoded exception if reached
 /// @dev Encoding: [bytes4 exception] or [bytes exception]
 library Revert {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error InstructionRevert(bytes exception);
@@ -95,10 +93,7 @@ library Revert {
 /// @notice Stop opcode, successfully ends program execution
 /// @dev Encoding: []
 library Stop {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.Stop;
 
@@ -125,9 +120,6 @@ library Stop {
 /// @dev Encoding: [uint40 deadline]
 library Deadline {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error DeadlineReached(uint256 deadline);

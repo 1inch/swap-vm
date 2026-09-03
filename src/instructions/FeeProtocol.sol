@@ -9,7 +9,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -31,12 +31,8 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
 library FeeProtocol {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
     using Math for uint256;
     using SafeCast for uint256;
 

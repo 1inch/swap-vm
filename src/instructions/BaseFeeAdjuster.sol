@@ -17,9 +17,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Supports only single direction swaps, eth price specified in token in
 library BaseFeeAdjuster {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

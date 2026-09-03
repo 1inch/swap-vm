@@ -4,13 +4,10 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Opcode, OpcodeOps } from "./OpcodeList.sol";
-import { MemoryPtr, MemoryPtrLib } from "./MemoryPtr.sol";
+import { Opcode } from "./OpcodeList.sol";
+import { MemoryPtr } from "./MemoryPtr.sol";
 
 library InstructionBuilder {
-    using OpcodeOps for Opcode;
-    using MemoryPtrLib for MemoryPtr;
-
     error InstructionBuilderArgsLengthExceeded(uint256 length);
     error InstructionBuilderBitExceedsByte(uint256 bit);
 

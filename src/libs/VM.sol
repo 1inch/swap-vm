@@ -74,12 +74,12 @@ struct Context {
     SwapRegisters swap;
     ProtocolFee fee;
 }
+using ContextLib for Context global;
 
 /// @title ContextLib
 /// @notice Library for managing VM execution context and program execution
 library ContextLib {
     using Calldata for bytes;
-    using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
     /// @dev Program counter overflows program length

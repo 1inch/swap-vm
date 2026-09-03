@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -17,9 +17,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library PrivateOrder {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error PrivateOrderInvalidTaker();
@@ -59,12 +56,7 @@ library PrivateOrder {
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistCoequal {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     error WhitelistCoequalEmptyList();
 
@@ -128,12 +120,7 @@ library WhitelistCoequal {
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistSequential {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     error WhitelistSequentialEmptyList();
     error WhitelistSequentialLengthMismatch();

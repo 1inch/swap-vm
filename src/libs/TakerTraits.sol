@@ -10,12 +10,12 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 
 type TakerTraits is uint256;
+using TakerTraitsLib for TakerTraits global;
 
 library TakerTraitsLib {
     using SafeCast for uint256;
     using Math for uint256;
     using Calldata for bytes;
-    using TakerTraitsLib for TakerTraits;
 
     error TakerTraitsMissingTraits();
     error TakerTraitsMissingHookData();

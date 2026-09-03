@@ -18,8 +18,7 @@ import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol"
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
 import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
-import { Context, ContextLib, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
-import { MakerTraits, MakerTraitsLib } from "./libs/MakerTraits.sol";
+import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 import { FeeMetaLib, FeeReceiverLib } from "./libs/ProtocolFee.sol";
 
@@ -32,9 +31,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
     using TransientLockUnsafeLib for TransientLock;
-    using ContextLib for Context;
-    using MakerTraitsLib for MakerTraits;
-    using TakerTraitsLib for TakerTraits;
 
     /// @dev Signature verification failed for the order
     error BadSignature(address maker, bytes32 orderHash, bytes signature);

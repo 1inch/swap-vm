@@ -6,7 +6,7 @@ pragma solidity 0.8.30;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
@@ -18,12 +18,7 @@ import { FeeMeta, FeeMetaLib } from "../libs/ProtocolFee.sol";
 /// @dev Encoding: [uint32 bitIndex]
 library InvalidateBit {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
 
@@ -106,10 +101,7 @@ contract InvalidateBitExternal {
 /// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
     using FeeMetaLib for FeeMeta;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
@@ -182,10 +174,8 @@ contract InvalidateTokenInExternal {
 /// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
     using FeeMetaLib for FeeMeta;
     using Math for uint256;
 

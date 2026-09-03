@@ -5,7 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
 
 import { Stop, Revert, Deadline, Salt } from "../instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../instructions/Jumps.sol";
@@ -38,8 +38,6 @@ contract Opcodes is
     TWAPSwapExternal,
     ValidateSeriesEpochExternal
 {
-    using OpcodeOps for Opcode;
-
     error UnknownOpcode(uint256 opcode);
 
     /// @notice Opcode direct dispatcher

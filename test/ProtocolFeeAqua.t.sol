@@ -7,7 +7,6 @@ pragma solidity 0.8.30;
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { ContextLib } from "../src/libs/VM.sol";
 
 contract ProtocolFeeAquaTest is AquaSwapVMTest {
     uint256 constant BPS = 1e7;

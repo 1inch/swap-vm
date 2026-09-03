@@ -20,9 +20,6 @@ import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 /// @dev Supports only single direction swaps, adjustment is applied only if favorable for the taker
 library OraclePriceAdjuster {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;
