@@ -9,9 +9,7 @@ import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { InstructionArgs } from "./InstructionArgs.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
-import { ISwapVM } from "../interfaces/ISwapVM.sol";
-
-type MakerTraits is uint256;
+import { ISwapVM, MakerTraits } from "../interfaces/ISwapVM.sol";
 
 library MakerTraitsLib {
     using MakerTraitsLib for MakerTraits;
