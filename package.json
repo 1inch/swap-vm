@@ -3,11 +3,7 @@
   "version": "0.0.6",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "type": "module",
-  "main": "index.js",
-  "directories": {
-    "lib": "lib",
-    "test": "test"
-  },
+  "packageManager": "yarn@1.22.22",
   "dependencies": {
     "@1inch/aqua": "github:1inch/aqua#v1.0.0",
     "@1inch/solidity-utils": "6.9.10",
@@ -43,5 +39,5 @@
   "bugs": {
     "url": "https://github.com/1inch/swap-vm/issues"
   },
-  "homepage": "https://github.com/1inch/swap-vm#readme"
+  "homepage": "https://github.com/1inch/swap-vm"
 }
