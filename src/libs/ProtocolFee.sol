@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
 pragma solidity ^0.8.27;
 
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2026 Degensoft Ltd
+
 import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
