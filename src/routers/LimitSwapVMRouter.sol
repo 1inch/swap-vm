@@ -11,7 +11,7 @@ import { SwapVM } from "../SwapVM.sol";
 import { LimitOpcodes } from "../opcodes/LimitOpcodes.sol";
 
 /// @title LimitSwapVMRouter
-/// @notice Router with time-based order execution (limit orders, TWAP, Dutch auctions)
+/// @notice Router with single-direction swap instructions
 /// @dev Extends SwapVMRouter with LimitOpcodes for time-dependent swap strategies
 contract LimitSwapVMRouter is Simulator, SwapVM, LimitOpcodes {
     /// @notice Deploy router with Aqua and WETH addresses
