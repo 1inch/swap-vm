@@ -14,6 +14,7 @@ const swapVmCompiler = {
     },
     viaIR: true,
   },
+  isolated: true
 };
 
 export default defineConfig({
@@ -36,6 +37,9 @@ export default defineConfig({
   },
   test: {
     solidity: {
+      fuzz: {
+        runs: 1024,
+      },
       fsPermissions: {
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },

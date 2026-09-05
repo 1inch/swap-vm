@@ -27,7 +27,6 @@ import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../src/ins
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../src/instructions/TokenValidators.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 import { PatchSwapRegisters } from "../src/instructions/Debug.sol";
 import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
@@ -105,9 +104,6 @@ contract GasSnapshotE2E is Script {
 
         _label("_vmProgramJustFlatFeeAmountIn");
         _fill(_vmProgramJustFlatFeeAmountIn());
-
-        _label("_vmProgramJustProgressiveFeeIn");
-        _fill(_vmProgramJustProgressiveFeeIn());
 
         _label("_vmProgramJustPiecewiseLinearScaleBalanceIn");
         _fill(_vmProgramJustPiecewiseLinearScaleBalanceIn());
@@ -258,13 +254,6 @@ contract GasSnapshotE2E is Script {
         return bytes.concat(
             PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
             FeeFlatIn.build(0.10e7)
-        );
-    }
-
-    function _vmProgramJustProgressiveFeeIn() internal pure returns (bytes memory) {
-        return bytes.concat(
-            PatchSwapRegisters.build(SwapRegisters({balanceIn: AMOUNT, balanceOut: AMOUNT, amountIn: AMOUNT, amountOut: AMOUNT})),
-            FeeProgressiveIn.build(0.10e7)
         );
     }
 
