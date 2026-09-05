@@ -1,0 +1,12 @@
+---
+description: Use when creating a Solidity source file or explicitly choosing or reviewing its pragma
+alwaysApply: false
+---
+
+# Solidity Pragma
+
+Use the first matching rule:
+
+1. Use fixed pragma matching the version specified in `hardhat.config.ts` and `foundry.toml` config for deployed endpoint contracts and shared core base contracts. In this repository, those are `src/routers/*.sol` and `src/SwapVM.sol`.
+2. Use `pragma solidity ^0.8.4;` for interface-only files. If an imported Solidity file requires a higher minimum, use that minimum as a compatible range; for example, `ISwapVM.sol` uses `^0.8.27` because it imports `MakerTraits.sol`.
+3. Use `pragma solidity ^0.8.27;` for all other contracts and libraries, including instructions, opcode mixins, and strategy helpers.
