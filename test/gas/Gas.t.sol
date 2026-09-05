@@ -18,7 +18,6 @@ import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { Decay } from "../../src/instructions/Decay.sol";
 import { LimitSwap } from "../../src/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
-import { TWAPSwap } from "../../src/instructions/TWAPSwap.sol";
 import { AdjustMinRate } from "../../src/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
 import { Salt, Deadline } from "../../src/instructions/Controls.sol";
@@ -231,30 +230,6 @@ contract Gas is Test {
     function test_gas_DutchAuctionOut_LimitSwap_swap_exactOut() public {
         (ISwapVM.Order memory order, bytes memory takerData) = _limitDutch(false, false);
         _snapshotSwap("LimitSwapGas", "DutchAuctionOut_LimitSwap_swap_exactOut", order, takerData);
-    }
-
-    function test_gas_TWAP_LimitSwap_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(true);
-        vm.warp(startTime + 1800);
-        _snapshotQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactIn", order, takerData);
-    }
-
-    function test_gas_TWAP_LimitSwap_quote_exactOut() public {
-        (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(false);
-        vm.warp(startTime + 1800);
-        _snapshotQuote("LimitSwapGas", "TWAP_LimitSwap_quote_exactOut", order, takerData);
-    }
-
-    function test_gas_TWAP_LimitSwap_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(true);
-        vm.warp(startTime + 1800);
-        _snapshotSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactIn", order, takerData);
-    }
-
-    function test_gas_TWAP_LimitSwap_swap_exactOut() public {
-        (ISwapVM.Order memory order, bytes memory takerData, uint256 startTime) = _limitTWAP(false);
-        vm.warp(startTime + 1800);
-        _snapshotSwap("LimitSwapGas", "TWAP_LimitSwap_swap_exactOut", order, takerData);
     }
 
     function test_gas_MinRate_LimitSwap_quote_exactIn() public {
@@ -510,19 +485,6 @@ contract Gas is Test {
             ),
             isExactIn
         );
-    }
-
-    function _limitTWAP(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory, uint256) {
-        uint256 startTime = block.timestamp;
-        (ISwapVM.Order memory order, bytes memory takerData) = _order(
-            bytes.concat(
-                StaticBalances.build(LIMIT_BALANCE_A, LIMIT_BALANCE_B),
-                TWAPSwap.build(LIMIT_BALANCE_A, LIMIT_BALANCE_B, startTime, 3600, 1.2e18, 0.1e18),
-                LimitSwap.build(address(tokenA), address(tokenB))
-            ),
-            isExactIn
-        );
-        return (order, takerData, startTime);
     }
 
     function _limitMinRate(bool isExactIn) private view returns (ISwapVM.Order memory, bytes memory) {

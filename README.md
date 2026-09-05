@@ -37,7 +37,7 @@ For a catalog of strategy types and composition examples, see `docs/PROGRAMS.md`
 SwapVM is a **computation engine** that executes token swap strategies from bytecode programs. Instead of deploying smart contracts, you compose instructions into programs that are signed off-chain and executed on-demand.
 
 **Key Features:**
-- **Static Balances** - Fixed exchange rates for single-direction trades (limit orders, auctions, TWAP, DCA, RFQ)
+- **Static Balances** - Fixed exchange rates for single-direction trades (limit orders, auctions, DCA, RFQ)
 - **Dynamic Balances** - Persistent, isolated AMM-style orders (each maker's liquidity is separate)
 - **Composable Instructions** - Mix and match building blocks for complex strategies (combining pricing, fees, MEV protection)
 
@@ -139,7 +139,6 @@ The execution flow shows all available instructions and strategies for each bala
 │ 6. Advanced Strategies (Optional)                        │
 │    ├─ _requireMinRate1D → Enforce minimum exchange rate  │
 │    ├─ _adjustMinRate1D → Adjust amounts to meet min rate │
-│    ├─ _twap → Time-weighted average price execution      │
 │    └─ _extruction → Extract and execute custom logic     │
 │                                                          │
 │ 7. Control Flow (Optional)                               │
@@ -200,7 +199,6 @@ The execution flow shows all available instructions and strategies for each bala
 │    └─ _decayXD → Virtual reserves (Mooniswap-style)        │
 │                                                            │
 │ 5. Advanced Features (Optional)                            │
-│    ├─ _twap → Time-weighted average price trading          │
 │    └─ _extruction → Extract and execute custom logic       │
 │                                                            │
 │ 6. Control Flow (Optional)                                 │
@@ -283,7 +281,7 @@ SwapVM offers two primary balance management approaches:
 #### Static Balances (Single-Direction Trading)
 Static balances are provided as fixed inputs for the swap computation and are not updated or persisted as mutable order state during execution.
 
-**Use Case:** Limit orders, Dutch auctions, TWAP, DCA, RFQ, range orders, stop-loss
+**Use Case:** Limit orders, Dutch auctions, DCA, RFQ, range orders, stop-loss
 - **Fixed Rate:** Exchange rate remains constant
 - **Partial Fills:** Supports partial execution with amount invalidators  
 - **No Storage:** Pure function, no state persistence
@@ -519,7 +517,7 @@ p.build(Balances._staticBalancesXD, ...)
 - Supports partial fills with amount invalidators
 - No state storage (pure function)
 - Single-direction trades only
-- Ideal for: Limit orders, Dutch auctions, TWAP, DCA, RFQ, range orders, stop-loss
+- Ideal for: Limit orders, Dutch auctions, DCA, RFQ, range orders, stop-loss
 
 #### Option 2: AMM Strategies (2D/XD Bidirectional) - Two Storage Choices
 
