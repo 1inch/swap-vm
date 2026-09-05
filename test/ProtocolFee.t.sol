@@ -19,7 +19,6 @@ import { StaticBalances, DynamicBalances } from "../src/instructions/Balances.so
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../src/instructions/FeeProgressive.sol";
 
 
 uint256 constant ONE = 1e18;

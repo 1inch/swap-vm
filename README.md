@@ -131,8 +131,6 @@ The execution flow shows all available instructions and strategies for each bala
 │ 5. Fee Mechanisms (Optional, Combinable)                 │
 │    ├─ _flatFeeAmountInXD → Fee from input amount         │
 │    ├─ _flatFeeAmountOutXD → Fee from output amount       │
-│    ├─ _progressiveFeeInXD → Size-based dynamic fee (input)│
-│    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
 │    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20) │
 │    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
 │    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│
@@ -193,8 +191,6 @@ The execution flow shows all available instructions and strategies for each bala
 │ 3. Fee Mechanisms (Optional, Combinable)                   │
 │    ├─ _flatFeeAmountInXD → Fee from input amount           │
 │    ├─ _flatFeeAmountOutXD → Fee from output amount         │
-│    ├─ _progressiveFeeInXD → Size-based dynamic fee (input) │
-│    ├─ _progressiveFeeOutXD → Size-based dynamic fee (output)│
 │    ├─ _protocolFeeAmountOutXD → Protocol revenue (ERC20)   │
 │    ├─ _aquaProtocolFeeAmountOutXD → Protocol revenue (Aqua)│
 │    ├─ _dynamicProtocolFeeAmountInXD → Dynamic fee via provider│

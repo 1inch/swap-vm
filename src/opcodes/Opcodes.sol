@@ -21,7 +21,6 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/D
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../instructions/FeeProgressive.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
@@ -74,8 +73,6 @@ contract Opcodes is
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);
         else if (opcode == FeeFlatOut.opcode.asU8()) FeeFlatOut.exec(ctx, args);
-        else if (opcode == FeeProgressiveIn.opcode.asU8()) FeeProgressiveIn.exec(ctx, args);
-        else if (opcode == FeeProgressiveOut.opcode.asU8()) FeeProgressiveOut.exec(ctx, args);
         else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
         else if (opcode == PeggedSwap.opcode.asU8()) PeggedSwap.exec(ctx, args);
         else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);

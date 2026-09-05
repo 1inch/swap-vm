@@ -28,8 +28,6 @@ contract OpcodeEnumCheckTest is Test {
         // Fees bank (0x70-0x8f)
         assertEq(uint8(Opcode.FeeFlatIn), 0x70);
         assertEq(uint8(Opcode.FeeFlatOut), 0x71);
-        assertEq(uint8(Opcode.FeeProgressiveIn), 0x72);
-        assertEq(uint8(Opcode.FeeProgressiveOut), 0x73);
         assertEq(uint8(Opcode.FeeProtocol), 0x80);
         // Balances tuning bank (0x90-0xaf)
         assertEq(uint8(Opcode.StaticBalances), 0x90);

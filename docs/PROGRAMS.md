@@ -105,7 +105,7 @@ bytes memory bytecode = bytes.concat(
     - `XYCConcentrateSwap`
     - `PeggedSwap`
 - **Common Add-ons:**
-  - Fee instructions (`FeeFlatIn` / `FeeFlatOut`, `FeeProgressiveIn` / `FeeProgressiveOut`, `FeeProtocol` for third-party fees with static receivers and/or dynamic providers)
+  - Fee instructions (`FeeFlatIn` / `FeeFlatOut`, `FeeProtocol` for third-party fees with static receivers and/or dynamic providers)
   - `Decay`
   - `TWAPSwap`
   - Control flow instructions (`Jump`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `Deadline`, `Salt`, ...)
