@@ -8,7 +8,7 @@ import { Decay } from "../src/instructions/Decay.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../src/instructions/Invalidators.sol";
 import { ValidateSeriesEpoch } from "../src/instructions/SeriesEpochManager.sol";
 import { TWAPSwap } from "../src/instructions/TWAPSwap.sol";
-import { OrderRegistrator } from "../src/extensions/OrderRegistrator.sol";
+import { OrderRegistratorLib } from "../src/extensions/OrderRegistrator.sol";
 
 contract StorageSlotsTest is Test {
     function test_StorageSlots() public pure {
@@ -73,7 +73,7 @@ contract StorageSlotsTest is Test {
         assertEq(StorageSlots.ValidateSeriesEpoch, slotValidateSeriesEpoch);
 
         bytes32 slotOrderRegistrator;
-        OrderRegistrator.Storage storage OrderRegistratorStorage = OrderRegistrator.store();
+        OrderRegistratorLib.Storage storage OrderRegistratorStorage = OrderRegistratorLib.store();
         assembly ("memory-safe") {
             slotOrderRegistrator := OrderRegistratorStorage.slot
         }

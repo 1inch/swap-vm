@@ -91,7 +91,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
     /// @param owner Address of the owner of the contract, used for rescuing funds only
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) {
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) OrderRegistrator(aqua) {
         AQUA = IAqua(aqua);
         WETH = IWETH(weth);
     }
