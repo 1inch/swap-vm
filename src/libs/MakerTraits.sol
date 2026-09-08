@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -12,15 +12,13 @@ import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
 type MakerTraits is uint256;
+using MakerTraitsLib for MakerTraits global;
 
 library MakerTraitsLib {
-    using MakerTraitsLib for MakerTraits;
     using SafeCast for uint256;
 
     using Calldata for bytes;
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();

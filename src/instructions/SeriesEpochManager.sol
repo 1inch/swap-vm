@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
@@ -17,9 +17,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [uint32 seriesId, uint32 epoch]
 library ValidateSeriesEpoch {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);

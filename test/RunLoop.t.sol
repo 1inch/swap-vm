@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -26,7 +26,7 @@ import { PeggedSwap } from "../src/instructions/PeggedSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../src/instructions/MinRate.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../src/instructions/Invalidators.sol";
 import { Extruction } from "../src/instructions/Extruction.sol";
-import { Context, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
+import { ContextLib } from "../src/libs/VM.sol";
 import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
 
 /**

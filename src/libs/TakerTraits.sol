@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -10,12 +10,12 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 
 type TakerTraits is uint256;
+using TakerTraitsLib for TakerTraits global;
 
 library TakerTraitsLib {
     using SafeCast for uint256;
     using Math for uint256;
     using Calldata for bytes;
-    using TakerTraitsLib for TakerTraits;
 
     error TakerTraitsMissingTraits();
     error TakerTraitsMissingHookData();

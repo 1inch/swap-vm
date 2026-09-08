@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
@@ -24,9 +24,6 @@ import { ValidateSeriesEpoch } from "../instructions/SeriesEpochManager.sol";
 ///   Proposed strategies holds some invariants such as maker min/max swap rate
 library Strategies {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
 
     error PrefixInvalidLength(uint256 length, uint256 expected);
     error PrefixUnregistered(uint8 opcode);

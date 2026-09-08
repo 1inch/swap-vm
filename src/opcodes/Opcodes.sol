@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Context } from "../libs/VM.sol";
-import { Opcode, OpcodeOps } from "../libs/OpcodeList.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
 
 import { Stop, Revert, Deadline, Salt } from "../instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../instructions/Jumps.sol";
@@ -19,7 +19,6 @@ import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
-import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
@@ -34,11 +33,8 @@ contract Opcodes is
     InvalidateBitExternal,
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
-    TWAPSwapExternal,
     ValidateSeriesEpochExternal
 {
-    using OpcodeOps for Opcode;
-
     error UnknownOpcode(uint256 opcode);
 
     /// @notice Opcode direct dispatcher
@@ -68,7 +64,6 @@ contract Opcodes is
         else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
         else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
-        else if (opcode == TWAPSwap.opcode.asU8()) TWAPSwap.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);
