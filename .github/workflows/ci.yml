@@ -25,33 +25,12 @@ jobs:
           node-version: 24
           cache: yarn
 
-      - name: Restore Hardhat cache
-        uses: actions/cache/restore@v4
-        id: hh-cache
-        with:
-          path: |
-            cache
-            artifacts
-          key: hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-${{ github.sha }}
-          restore-keys: |
-            hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-
-
       - name: Install node modules
         run: yarn install --frozen-lockfile
-
-      - name: Run tests
-        id: test
-        run: yarn test
 
       - name: Run snapshot check
         run: yarn snapshot:check
 
-      # After tests so cache/test-artifacts/ is warm for the next SHA.
-      - name: Save Hardhat cache
-        if: always() && steps.test.outcome == 'success' && steps.hh-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            cache
-            artifacts
-          key: hh-${{ runner.os }}-${{ hashFiles('yarn.lock', 'hardhat.config.ts') }}-${{ github.sha }}
+      - name: Run tests
+        id: test
+        run: yarn test
