@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -17,9 +17,6 @@ import { Power } from "../libs/Power.sol";
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library DutchAuctionBalanceIn {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Power for uint256;
@@ -70,9 +67,6 @@ library DutchAuctionBalanceIn {
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library DutchAuctionBalanceOut {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Power for uint256;

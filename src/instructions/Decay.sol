@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
@@ -20,12 +20,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library Decay {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     using SafeCast for uint256;
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Context, ContextLib } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -16,12 +16,8 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [uint24 feeBps]
 library FeeFlatIn {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
     using Math for uint256;
 
     error FeeBpsOutOfRange(uint24 feeBps);
@@ -76,12 +72,8 @@ library FeeFlatIn {
 ///   Fees are deposited against swap direction causing a price rollback effect `swap(a) + swap(b) > swap(c)`
 library FeeFlatOut {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    using ContextLib for Context;
     using Math for uint256;
 
     error FeeBpsOutOfRange(uint24 feeBps);

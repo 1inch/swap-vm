@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -17,9 +17,6 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Encoding: [uint256 sqrtPriceMin, uint256 sqrtPriceMax]
 library XYCConcentrateSwap {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

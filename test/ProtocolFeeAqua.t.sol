@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -7,7 +7,6 @@ pragma solidity 0.8.30;
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
-import { ContextLib } from "../src/libs/VM.sol";
 
 contract ProtocolFeeAquaTest is AquaSwapVMTest {
     uint256 constant BPS = 1e7;
