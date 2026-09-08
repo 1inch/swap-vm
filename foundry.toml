@@ -4,20 +4,11 @@ optimizer      = true
 optimizer_runs = 700
 via_ir         = true
 fs_permissions = [
-    { access = "read-write", path = "./deployments" },
-    { access = "read-write", path = "./config" }
+    { access = "read", path = "./config" }
 ]
-
-[fmt]
-single_line_statement_blocks = "multi"
-multiline_func_header        = "all"
-override_spacing             = false
-bracket_spacing              = true
-int_types                    = "long"
-number_underscore            = "thousands"
-
-[profile.ci]
-solc_version   = "0.8.30"
-optimizer      = true
-optimizer_runs = 700
-via_ir         = true
+remappings = [
+    "forge-std/=node_modules/forge-std/src/",
+    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+    "@1inch/solidity-utils/=node_modules/@1inch/solidity-utils/",
+    "@1inch/aqua/=node_modules/@1inch/aqua/",
+]
