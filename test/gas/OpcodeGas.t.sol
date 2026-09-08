@@ -12,19 +12,21 @@ import { MakerTraitsLib } from "../../src/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../src/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../../src/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../src/instructions/LimitSwap.sol";
-import { InvalidateTokenIn, InvalidateBit } from "../../src/instructions/Invalidators.sol";
-import { PrivateOrder } from "../../src/instructions/Whitelist.sol";
+import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../src/instructions/Invalidators.sol";
+import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../src/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../src/instructions/SeriesEpochManager.sol";
 import { BaseFeeAdjuster } from "../../src/instructions/BaseFeeAdjuster.sol";
-import { Deadline, Salt } from "../../src/instructions/Controls.sol";
-import { Jump, JumpIfTokenIn } from "../../src/instructions/Jumps.sol";
-import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte } from "../../src/instructions/TokenValidators.sol";
+import { Stop, Deadline, Salt } from "../../src/instructions/Controls.sol";
+import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../src/instructions/Jumps.sol";
+import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../src/instructions/TokenValidators.sol";
 import { RequireMinRate, AdjustMinRate } from "../../src/instructions/MinRate.sol";
-import { FeeFlatIn } from "../../src/instructions/FeeFlat.sol";
-import { PiecewiseLinearScaleBalanceIn } from "../../src/instructions/PiecewiseLinearScale.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../src/instructions/FeeFlat.sol";
+import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../src/instructions/PiecewiseLinearScale.sol";
 import { PeggedSwap } from "../../src/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../../src/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../src/instructions/XYCConcentrate.sol";
+import { Decay } from "../../src/instructions/Decay.sol";
+import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../src/instructions/DutchAuction.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 /// @title OpcodeGas
@@ -61,6 +63,7 @@ contract OpcodeGas is Test {
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
+        tokenA.mint(tx.origin, 1e30);
         tokenA.mint(taker, 1e30);
         tokenB.mint(taker, 1e30);
         tokenA.approve(address(swapVM), type(uint256).max);
@@ -76,36 +79,41 @@ contract OpcodeGas is Test {
         _measure(just);
         justExec = _measure(just);
 
-        _snapshot("Jump", Jump.build(uint16(just.length + Jump.sizeOf(0))));
-        _snapshot("JumpIfTokenIn", JumpIfTokenIn.build(address(tokenA), uint16(just.length + JumpIfTokenIn.sizeOf(address(0), 0))));
+        _snapshot("Stop", Stop.build());
+        _snapshot("Salt", Salt.build(uint64(42)));
+        _snapshot("Jump", Jump.build(type(uint16).max));
         _snapshot("Deadline", Deadline.build(type(uint32).max));
         _snapshot("OnlyTakerTokenBalanceNonZero", OnlyTakerTokenBalanceNonZero.build(address(tokenA)));
         _snapshot("OnlyTakerTokenBalanceGte", OnlyTakerTokenBalanceGte.build(address(tokenA), 1));
         _snapshot("OnlyTakerTokenSupplyShareGte", OnlyTakerTokenSupplyShareGte.build(address(tokenA), 0));
-        _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
-        _snapshot("DynamicBalances", DynamicBalances.build(AMOUNT, AMOUNT));
+        _snapshot("OnlyTxOriginTokenBalanceNonZero", OnlyTxOriginTokenBalanceNonZero.build(address(tokenA)));
+        _snapshot("PrivateOrder", PrivateOrder.build(taker));
+        _snapshot("WhitelistCoequal", WhitelistCoequal.build(type(uint16).max, dynamic([taker])));
+        _snapshot("WhitelistSequential", WhitelistSequential.build(uint40(block.timestamp), type(uint16).max, dynamic([taker]), dynamic([uint16(0)])));
+        _snapshot("JumpIfDirection", JumpIfDirection.build(true, type(uint16).max));
+        _snapshot("JumpIfTokenIn", JumpIfTokenIn.build(address(tokenA), type(uint16).max));
+        _snapshot("JumpIfTokenOut", JumpIfTokenOut.build(address(tokenB), type(uint16).max));
         _snapshot("InvalidateBit", InvalidateBit.build(15));
         _snapshot("InvalidateTokenIn", InvalidateTokenIn.build());
+        _snapshot("InvalidateTokenOut", InvalidateTokenOut.build());
         _snapshot("XYCSwap", XYCSwap.build());
         _snapshot("XYCConcentrateSwap", XYCConcentrateSwap.build(0.1e18, 5e18));
         _snapshot("LimitSwap", LimitSwap.build(address(tokenA), address(tokenB)));
         _snapshot("LimitSwapFullAmount", LimitSwapFullAmount.build(address(tokenA), address(tokenB)));
+        _snapshot("PeggedSwap", PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1));
+        _snapshot("FeeFlatIn", FeeFlatIn.build(0.10e7));
+        _snapshot("FeeFlatOut", FeeFlatOut.build(0.10e7));
+        _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
+        _snapshot("DynamicBalances", DynamicBalances.build(AMOUNT, AMOUNT));
+        _snapshot("DutchAuctionBalanceIn", DutchAuctionBalanceIn.build(uint40(block.timestamp), 300, 0.5e18));
+        _snapshot("DutchAuctionBalanceOut", DutchAuctionBalanceOut.build(uint40(block.timestamp), 300, 0.5e18));
+        _snapshot("PiecewiseLinearScaleBalanceIn", PiecewiseLinearScaleBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("PiecewiseLinearScaleBalanceOut", PiecewiseLinearScaleBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjuster", BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18));
-        _snapshot("Salt", Salt.build(uint64(42)));
-        _snapshot("FeeFlatIn", FeeFlatIn.build(0.10e7));
-        _snapshot("PeggedSwap", PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
-        _snapshot("PrivateOrder", PrivateOrder.build(taker));
-        _snapshot(
-            "PiecewiseLinearScaleBalanceIn",
-            PiecewiseLinearScaleBalanceIn.build(
-                uint40(1700000000),
-                dynamic([uint16(3600)]),
-                dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])
-            )
-        );
     }
 
     function _snapshot(string memory name, bytes memory opcode) private {
