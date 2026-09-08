@@ -1,8 +1,5 @@
 name: CI
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 concurrency:
@@ -19,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Setup Node.js
