@@ -44,7 +44,7 @@ Risk order (highest first):
 - Unsafe ERC20: bare `transfer`/`transferFrom`/`approve` instead of `SafeERC20` from `@1inch/solidity-utils`.
 - Importing `IERC20` from OpenZeppelin when `@1inch/solidity-utils` already exports it.
 - Using OZ `ReentrancyGuard` / OZ ECDSA instead of `TransientLockUnsafe` / `@1inch/solidity-utils` ECDSA.
-- State writes during quote / static paths when `ctx.vm.isStaticContext` is true (invalidators, balances, TWAP, decay, etc. must no-op or skip writes).
+- State writes during quote / static paths when `ctx.vm.isStaticContext` is true (invalidators, balances, decay, etc. must no-op or skip writes).
 - Quote path returning different amounts than the corresponding swap for the same inputs.
 
 ### Swap instructions & math

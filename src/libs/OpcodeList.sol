@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
@@ -184,7 +184,7 @@ enum Opcode {
     /* 9a */ _9a,
     /* 9b */ _9b,
     /* 9c */ Decay,
-    /* 9d */ TWAPSwap,
+    /* 9d */ _9d,
     /* 9e */ _9e,
     /* 9f */ _9f,
     /* a0 */ _a0,

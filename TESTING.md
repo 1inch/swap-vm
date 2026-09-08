@@ -67,39 +67,7 @@
 - TODO: "due to progressive fees"
 - Skips: additivity test
 
-### 3. **TWAPLimitSwapInvariants.t.sol**
-
-#### Test: `test_TWAPLimitSwapSymmetry`
-- Instructions used: `Balances`, `TWAP`, `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: symmetry test
-
-#### Test: `test_TWAPLimitSwapAdditivity`
-- Instructions used: `Balances`, `TWAP`, `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: additivity test
-
-#### Test: `test_TWAPLimitSwapMonotonicity`
-- Instructions used: `Balances`, `TWAP`, `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: symmetry test
-
-#### Test: `test_TWAPLimitSwapFlatFeeAdditivity`
-- Instructions used: `Balances`, `TWAP`, `Fee` (flat), `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: additivity test
-
-#### Test: `test_TWAPLimitSwapProgressiveFeeAdditivity`
-- Instructions used: `Balances`, `TWAP`, `Fee` (progressive), `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: additivity test
-
-#### Test: `test_TWAPLimitSwapProtocolFeeAdditivity`
-- Instructions used: `Balances`, `TWAP`, `Fee` (protocol), `LimitSwap`
-- TODO: "TWAP violates standard invariants due to time and state dependencies"
-- Skips: additivity test
-
-### 4. **DutchAuctionLimitSwapFeesInvariants.t.sol**
+### 3. **DutchAuctionLimitSwapFeesInvariants.t.sol**
 
 #### Test: `test_DutchAuctionLimitSwapProgressiveFee`
 - Instructions used: `Balances`, `DutchAuction`, `Fee` (progressive), `LimitSwap`
@@ -121,7 +89,7 @@
 - TODO: "Fix additivity for progressive fees with dutch auction"
 - Skips: additivity test
 
-### 5. **BaseFeeAdjusterFeesInvariants.t.sol**
+### 4. **BaseFeeAdjusterFeesInvariants.t.sol**
 
 #### Test: `test_BaseFeeAdjuster_ModerateGas_FlatFee`
 - Instructions used: `Balances`, `BaseFeeAdjuster`, `Fee` (flat), `LimitSwap`
@@ -173,7 +141,7 @@
 - TODO: "Research if symmetry can be restored despite asymmetric gas adjustments and fees"
 - TODO: "Research monotonicity behavior with progressive fees and gas adjustment"
 
-### 6. **ConcentrateXYCFeesInvariants.t.sol**
+### 5. **ConcentrateXYCFeesInvariants.t.sol**
 
 #### Test: `test_GrowLiquidity_2D_FlatFeeIn`
 - Instructions used: `Balances`, `Fee` (flat input), `Concentrate` (GrowLiquidity), `XYC`
@@ -245,7 +213,7 @@
 - TODO: "need to research behavior - state-dependent due to scale"
 - Skips: additivity test
 
-### 7. **BaseFeeAdjusterInvariants.t.sol**
+### 6. **BaseFeeAdjusterInvariants.t.sol**
 
 #### Test: `test_BaseFeeAdjuster_ModerateGasPrice`
 - Instructions used: `Balances`, `BaseFeeAdjuster`, `LimitSwap`
