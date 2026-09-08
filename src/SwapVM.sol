@@ -21,19 +21,18 @@ import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
 import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 import { FeeMetaLib, FeeReceiverLib } from "./libs/ProtocolFee.sol";
+import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
 
 /// @title SwapVM
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
 /// @dev This contract is Ownable via Rescuable mixin
-abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
+abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrator {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
     using TransientLockUnsafeLib for TransientLock;
 
-    /// @dev Signature verification failed for the order
-    error BadSignature(address maker, bytes32 orderHash, bytes signature);
     /// @dev Aqua balance insufficient after taker pushed tokens
     error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
     /// @dev Cannot use shouldUnwrapWeth with Aqua orders
@@ -88,7 +87,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @param owner Address of the owner of the contract, used for rescuing funds only
     /// @param name EIP-712 domain name
     /// @param version EIP-712 domain version
-    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) {
+    constructor(address aqua, address weth, address owner, string memory name, string memory version) EIP712(name, version) OnlyWethReceiver(weth) Rescuable(owner) OrderRegistrator(aqua) {
         AQUA = IAqua(aqua);
         WETH = IWETH(weth);
     }
@@ -102,7 +101,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable {
     /// @notice Compute unique hash for an order
     /// @param order The maker's order structure
     /// @return Unique identifier for this order/strategy
-    function hash(ISwapVM.Order calldata order) public view returns (bytes32) {
+    function hash(ISwapVM.Order calldata order) public override view returns (bytes32) {
         if (order.traits.useAquaInsteadOfSignature()) {
             return keccak256(abi.encode(order));
         }

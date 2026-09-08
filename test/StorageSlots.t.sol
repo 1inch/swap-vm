@@ -10,6 +10,7 @@ import { DynamicBalances } from "../src/instructions/Balances.sol";
 import { Decay } from "../src/instructions/Decay.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../src/instructions/Invalidators.sol";
 import { ValidateSeriesEpoch } from "../src/instructions/SeriesEpochManager.sol";
+import { OrderRegistratorLib } from "../src/extensions/OrderRegistrator.sol";
 
 contract StorageSlotsTest is Test {
     function test_StorageSlots() public pure {
@@ -19,6 +20,7 @@ contract StorageSlotsTest is Test {
         assertEq(StorageSlots.InvalidateTokenIn,       _erc7201("1inch.storage.InvalidateTokenIn"));
         assertEq(StorageSlots.InvalidateTokenOut,      _erc7201("1inch.storage.InvalidateTokenOut"));
         assertEq(StorageSlots.ValidateSeriesEpoch,     _erc7201("1inch.storage.ValidateSeriesEpoch"));
+        assertEq(StorageSlots.OrderRegistrator,        _erc7201("1inch.storage.OrderRegistrator"));
     }
 
     function test_StorageSlotsOpcodes() public pure {
@@ -63,6 +65,13 @@ contract StorageSlotsTest is Test {
             slotValidateSeriesEpoch := ValidateSeriesEpochStorage.slot
         }
         assertEq(StorageSlots.ValidateSeriesEpoch, slotValidateSeriesEpoch);
+
+        bytes32 slotOrderRegistrator;
+        OrderRegistratorLib.Storage storage OrderRegistratorStorage = OrderRegistratorLib.store();
+        assembly ("memory-safe") {
+            slotOrderRegistrator := OrderRegistratorStorage.slot
+        }
+        assertEq(StorageSlots.OrderRegistrator, slotOrderRegistrator);
     }
 
     function _erc7201(string memory id) private pure returns (bytes32) {

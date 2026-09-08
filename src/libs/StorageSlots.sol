@@ -23,4 +23,7 @@ library StorageSlots {
 
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.ValidateSeriesEpoch")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant ValidateSeriesEpoch = 0xf6109436226f9396495ee71ea3d10edae6e620df596c3feca8428935dd6b1400;
+
+    // keccak256(abi.encode(uint256(keccak256("1inch.storage.OrderRegistrator")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant OrderRegistrator = 0xcd310f011fbe8494e2da7b8d46edf2a916879067826771fce3db46ac5f392b00;
 }
