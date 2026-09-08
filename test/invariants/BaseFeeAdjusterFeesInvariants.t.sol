@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -357,7 +357,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, OpcodesDebug, CoreInvariants {
         // TODO: Research if symmetry can be restored despite asymmetric gas adjustments and fees
         config.skipSymmetry = skipSymmetry;
 
-        // TODO: Research monotonicity behavior with progressive fees and gas adjustment
+        // TODO: Research monotonicity behavior with gas adjustment
         config.skipMonotonicity = skipMonotonicity;
 
         assertAllInvariantsWithConfig(

@@ -59,7 +59,6 @@ You can use these invariant suites as references for testing your programs:
   - `DutchAuctionBalanceIn` / `DutchAuctionBalanceOut`
   - `BaseFeeAdjuster`
   - `RequireMinRate` / `AdjustMinRate`
-  - `TWAPSwap`
 
 **Example A - One-time limit order (bitmap invalidator):**
 
@@ -105,9 +104,8 @@ bytes memory bytecode = bytes.concat(
     - `XYCConcentrateSwap`
     - `PeggedSwap`
 - **Common Add-ons:**
-  - Fee instructions (`FeeFlatIn` / `FeeFlatOut`, `FeeProgressiveIn` / `FeeProgressiveOut`, `FeeProtocol` for third-party fees with static receivers and/or dynamic providers)
+  - Fee instructions (`FeeFlatIn` / `FeeFlatOut`, `FeeProtocol` for third-party fees with static receivers and/or dynamic providers)
   - `Decay`
-  - `TWAPSwap`
   - Control flow instructions (`Jump`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `Deadline`, `Salt`, ...)
 - **Ordering Note:** Fee instruction placement is security-critical and changes pricing/settlement behavior.
 

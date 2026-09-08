@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -23,8 +23,6 @@ contract ImbalancedPoolHighFees is XYCFeesInvariants {
         // High fees
         flatFeeInBps = 0.01e7;        // 1%
         flatFeeOutBps = 0.01e7;       // 1%
-        progressiveFeeInBps = 0.2e7;  // 20%
-        progressiveFeeOutBps = 0.2e7; // 20%
         protocolFeeOutBps = 0.05e7;   // 5%
 
         // Smaller amounts due to imbalanced pool

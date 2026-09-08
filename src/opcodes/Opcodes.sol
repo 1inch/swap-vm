@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -19,9 +19,7 @@ import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
-import { TWAPSwap, TWAPSwapExternal } from "../instructions/TWAPSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
-import { FeeProgressiveIn, FeeProgressiveOut } from "../instructions/FeeProgressive.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
@@ -35,7 +33,6 @@ contract Opcodes is
     InvalidateBitExternal,
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
-    TWAPSwapExternal,
     ValidateSeriesEpochExternal
 {
     error UnknownOpcode(uint256 opcode);
@@ -67,13 +64,10 @@ contract Opcodes is
         else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
         else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
-        else if (opcode == TWAPSwap.opcode.asU8()) TWAPSwap.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);
         else if (opcode == FeeFlatOut.opcode.asU8()) FeeFlatOut.exec(ctx, args);
-        else if (opcode == FeeProgressiveIn.opcode.asU8()) FeeProgressiveIn.exec(ctx, args);
-        else if (opcode == FeeProgressiveOut.opcode.asU8()) FeeProgressiveOut.exec(ctx, args);
         else if (opcode == FeeProtocol.opcode.asU8()) FeeProtocol.exec(ctx, args);
         else if (opcode == PeggedSwap.opcode.asU8()) PeggedSwap.exec(ctx, args);
         else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);

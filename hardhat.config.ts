@@ -37,6 +37,9 @@ export default defineConfig({
   },
   test: {
     solidity: {
+      fuzz: {
+        runs: 1024,
+      },
       fsPermissions: {
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -23,8 +23,6 @@ contract BalancedPoolEdgeFees is XYCFeesInvariants {
         // Edge case fees - near maximum allowed
         flatFeeInBps = 0.999e7;        // 99.9% (near max)
         flatFeeOutBps = 0.001e7;       // 0.1% (near min meaningful)
-        progressiveFeeInBps = 0.5e7;   // 50%
-        progressiveFeeOutBps = 0.5e7;  // 50%
         protocolFeeOutBps = 0.1e7;     // 10%
 
         // Standard test amounts for exactIn

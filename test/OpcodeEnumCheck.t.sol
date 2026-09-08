@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2026 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
@@ -25,14 +28,11 @@ contract OpcodeEnumCheckTest is Test {
         // Fees bank (0x70-0x8f)
         assertEq(uint8(Opcode.FeeFlatIn), 0x70);
         assertEq(uint8(Opcode.FeeFlatOut), 0x71);
-        assertEq(uint8(Opcode.FeeProgressiveIn), 0x72);
-        assertEq(uint8(Opcode.FeeProgressiveOut), 0x73);
         assertEq(uint8(Opcode.FeeProtocol), 0x80);
         // Balances tuning bank (0x90-0xaf)
         assertEq(uint8(Opcode.StaticBalances), 0x90);
         assertEq(uint8(Opcode.PiecewiseLinearScaleBalanceIn), 0x98);
         assertEq(uint8(Opcode.Decay), 0x9c);
-        assertEq(uint8(Opcode.TWAPSwap), 0x9d);
         // Rates tuning bank (0xb0-0xcf)
         assertEq(uint8(Opcode.RequireMinRate), 0xb0);
         assertEq(uint8(Opcode.BaseFeeAdjuster), 0xb4);
