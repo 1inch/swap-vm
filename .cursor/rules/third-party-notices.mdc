@@ -1,0 +1,41 @@
+---
+description: Update third-party notices and vendored license texts without changing their established format
+globs: "{THIRD_PARTY_NOTICES,package.json,yarn.lock,LICENSES/**}"
+alwaysApply: false
+---
+
+# Third-Party Notices
+
+When dependencies change, keep `THIRD_PARTY_NOTICES` and `LICENSES/` synchronized.
+
+## Notice format
+
+Preserve this exact field order and naming for every component:
+
+```
+Component: <package>
+Repo: <repository>
+Version: <version>
+License: <SPDX identifier>
+Copyright: © <holder and years>
+License: /LICENSES/<file>
+```
+
+- Make minimal factual edits; do not reformat or rename fields.
+- For a Git dependency, use the exact ref pinned in `package.json`.
+- For a registry dependency, use the resolved version and retain the existing `v` prefix convention.
+- Derive the copyright holder and years from the dependency's license; retain the notice's `©` style.
+
+## License texts
+
+- Copy license files byte-for-byte from the installed dependency, checking `LICENSE`, `LICENSE.md`, and `LICENSES/`.
+- If an installed package omits its license, fetch it from its repository at the exact pinned tag or commit.
+- Never use `main`, another release, or a generic replacement license.
+- Preserve upstream whitespace, wording, and typos.
+- If the exact pinned license cannot be found, report that to the user and ask for source of truth for the license text.
+
+## Verification
+
+- Compare each copied file with its source using `git diff --no-index`.
+- Confirm every `/LICENSES/...` path named in `THIRD_PARTY_NOTICES` exists.
+- Run `git diff --check` and review the final diff for unrelated changes.
