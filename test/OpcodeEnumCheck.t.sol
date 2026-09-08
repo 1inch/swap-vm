@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
