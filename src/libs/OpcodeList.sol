@@ -184,7 +184,7 @@ enum Opcode {
     /* 9a */ _9a,
     /* 9b */ _9b,
     /* 9c */ Decay,
-    /* 9d */ TWAPSwap,
+    /* 9d */ _9d,
     /* 9e */ _9e,
     /* 9f */ _9f,
     /* a0 */ _a0,
