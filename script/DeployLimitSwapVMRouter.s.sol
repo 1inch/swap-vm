@@ -8,7 +8,7 @@ import { Script } from "forge-std/Script.sol";
 
 import { Config } from "./utils/Config.sol";
 
-import { LimitSwapVMRouter } from "../src/routers/LimitSwapVMRouter.sol";
+import { LimitSwapVMRouter } from "../contracts/routers/LimitSwapVMRouter.sol";
 
 // solhint-disable no-console
 import { console2 } from "forge-std/console2.sol";

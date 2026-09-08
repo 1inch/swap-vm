@@ -8,7 +8,7 @@ import { Script } from "forge-std/Script.sol";
 
 import { Config } from "./utils/Config.sol";
 
-import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+import { AquaSwapVMRouter } from "../contracts/routers/AquaSwapVMRouter.sol";
 
 // solhint-disable no-console
 import { console2 } from "forge-std/console2.sol";

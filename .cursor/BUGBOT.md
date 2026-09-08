@@ -12,12 +12,12 @@ Core flow: `router.swap` → extract program from `order.traits.program(order.da
 
 Key paths:
 
-- Core VM: `src/SwapVM.sol`
-- Instructions: `src/instructions/`
-- Opcodes: `src/opcodes/`
-- Libraries: `src/libs/` (`VM.sol`, `MakerTraits.sol`, `TakerTraits.sol`, …)
-- Routers: `src/routers/`
-- Interfaces: `src/interfaces/`
+- Core VM: `contracts/SwapVM.sol`
+- Instructions: `contracts/instructions/`
+- Opcodes: `contracts/opcodes/`
+- Libraries: `contracts/libs/` (`VM.sol`, `MakerTraits.sol`, `TakerTraits.sol`, …)
+- Routers: `contracts/routers/`
+- Interfaces: `contracts/interfaces/`
 
 Stack: Solidity 0.8.30, Hardhat-first tests (`yarn test` / `npx hardhat test`). Prefer `@1inch/solidity-utils` over OpenZeppelin equivalents for ERC20, ECDSA, reentrancy, calldata, WETH receive, Simulator.
 
@@ -71,7 +71,7 @@ Risk order (highest first):
 
 ### Tests (when `test/` changes)
 
-- New mocks defined inline inside a test file (must live in `test/mocks/`).
+- New mocks defined inline inside a test file (must live in `test/solidity/mocks/`).
 - `vm.expectRevert()` without a specific error selector.
 - Removed or gutted security property tests (round-trip, drain, sandwich, split, overflow, quote/swap consistency, rounding favors maker) without replacement.
 - Snapshot / gas files changed in ways that hide real regressions (e.g. deleting checks rather than updating expected values intentionally).

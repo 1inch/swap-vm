@@ -1,0 +1,536 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { Test } from "forge-std/Test.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
+import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+
+import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
+import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
+import { Salt } from "../../contracts/instructions/Controls.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
+import { FeeBuilders } from "./utils/FeeBuilders.sol";
+import { Decay } from "../../contracts/instructions/Decay.sol";
+import { PeggedSwap } from "../../contracts/instructions/PeggedSwap.sol";
+import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../../contracts/instructions/Balances.sol";
+
+
+/**
+ * @title SwapVmAccounting
+ * @notice SwapVM (non-Aqua) accounting correctness with fees — mirrors AquaAccounting tests
+ */
+contract SwapVmAccounting is Test, OpcodesDebug {
+    // Constants
+    uint256 constant ONE = 1e18;
+    uint256 constant INITIAL_BALANCE_A = 1000e18;
+    uint256 constant INITIAL_BALANCE_B = 2000e18; // Asymmetric pool: ratio matters for CorrectVsWrong ordering tests
+    uint256 constant SWAP_AMOUNT = 100e18;
+
+    uint16 constant DECAY_PERIOD = 300; // 5 minutes
+
+    // Contracts
+    SwapVMRouterDebug public swapVM;
+    TokenMock public tokenA;
+    TokenMock public tokenB;
+    DynamicBalancesExternal public balancesContract;
+
+    // Addresses
+    address public maker;
+    uint256 public makerPrivateKey;
+    address public taker;
+    address public protocolFeeRecipient;
+
+    function setUp() public {
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
+
+        swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        balancesContract = DynamicBalancesExternal(address(swapVM));
+
+        makerPrivateKey = 0x1234;
+        maker = vm.addr(makerPrivateKey);
+        taker = makeAddr("taker");
+        protocolFeeRecipient = vm.addr(0x8888);
+
+        // Mint and approve for maker
+        tokenA.mint(maker, INITIAL_BALANCE_A);
+        tokenB.mint(maker, INITIAL_BALANCE_B);
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        // Mint and approve for taker
+        tokenA.mint(taker, 10000e18);
+        tokenB.mint(taker, 10000e18);
+        vm.prank(taker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(taker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+    }
+
+    // ===== STRUCTS =====
+
+    struct SwapResult {
+        bytes32 orderHash;
+        uint256 amountIn;
+        uint256 amountOut;
+    }
+
+    struct DoubleSwapResult {
+        bytes32 orderHash;
+        uint256 amountIn1;
+        uint256 amountOut1;
+        uint256 amountIn2;
+        uint256 amountOut2;
+        uint256 protocolFee1;
+        uint256 protocolFee2;
+    }
+
+    // ===== CORE HELPERS =====
+
+    function defaultConcentrateArgs() internal pure returns (bytes memory) {
+        return XYCConcentrateSwap.build(
+            Math.sqrt(0.5e36),
+            Math.sqrt(2.0e36)
+        );
+    }
+
+    function signOrder(ISwapVM.Order memory order) internal view returns (bytes memory) {
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function buildTakerData(bool isExactIn, bool isAToB, bytes memory signature) internal view returns (bytes memory) {
+        return TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: taker,
+            isExactIn: isExactIn,
+            shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
+            threshold: "",
+            to: address(0),
+            deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: signature
+        }));
+    }
+
+    function deployAndSwap(bytes memory program, bool isExactIn) internal returns (SwapResult memory r) {
+        ISwapVM.Order memory order = createOrder(program);
+        bytes memory sig = signOrder(order);
+        r.orderHash = swapVM.hash(order);
+
+        bytes memory takerData = buildTakerData(isExactIn, true, sig);
+        vm.prank(taker);
+        (r.amountIn, r.amountOut,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
+    }
+
+    function deployAndDoubleSwap(bytes memory program, bool isExactIn) internal returns (DoubleSwapResult memory r) {
+        ISwapVM.Order memory order = createOrder(program);
+        bytes memory sig = signOrder(order);
+        r.orderHash = swapVM.hash(order);
+
+        bytes memory takerData = buildTakerData(isExactIn, true, sig);
+
+        vm.prank(taker);
+        (r.amountIn1, r.amountOut1,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
+        r.protocolFee1 = getProtocolFee();
+
+        vm.warp(block.timestamp + 150);
+
+        vm.prank(taker);
+        (r.amountIn2, r.amountOut2,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
+        r.protocolFee2 = getProtocolFee();
+    }
+
+    function getBalances(bytes32 orderHash) internal view returns (uint256 balA, uint256 balB) {
+        balA = balancesContract.balance(orderHash, address(tokenA));
+        balB = balancesContract.balance(orderHash, address(tokenB));
+    }
+
+    function getProtocolFee() internal view returns (uint256) {
+        return tokenA.balanceOf(protocolFeeRecipient);
+    }
+
+    function assertConservation(bytes32 orderHash, uint256 totalAmountIn, uint256 totalAmountOut) internal view {
+        (uint256 balA, uint256 balB) = getBalances(orderHash);
+        uint256 protocolFee = getProtocolFee();
+
+        assertGt(protocolFee, 0, "Protocol fee paid");
+        assertEq(balA + protocolFee, INITIAL_BALANCE_A + totalAmountIn, "Token A conservation");
+        assertEq(balB + totalAmountOut, INITIAL_BALANCE_B, "Token B conservation");
+    }
+
+    function assertTokenAConservation(bytes32 orderHash, uint256 totalAmountIn) internal view {
+        (uint256 balA,) = getBalances(orderHash);
+        uint256 protocolFee = getProtocolFee();
+
+        assertGt(protocolFee, 0, "Protocol fee paid");
+        assertEq(balA + protocolFee, INITIAL_BALANCE_A + totalAmountIn, "Token A conservation");
+    }
+
+    // ===== PROGRAM BUILDERS =====
+    // Order: protocolFee -> dynamicBalances -> [decay?] -> [concentrate?] -> flatFee -> swap / peggedSwap -> salt
+
+    function buildProgram(
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps,
+        bool includeConcentrate
+    ) internal view returns (bytes memory) {
+        bytes memory protocolFeeCode = protocolFeeBps > 0
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
+            : bytes("");
+
+        bytes memory concentrateCode = includeConcentrate
+            ? defaultConcentrateArgs()
+            : bytes("");
+
+        bytes memory flatFeeCode = flatFeeInBps > 0
+            ? FeeFlatIn.build(flatFeeInBps)
+            : bytes("");
+
+        bytes memory swapCode = includeConcentrate
+            ? concentrateCode
+            : XYCSwap.build();
+
+        return bytes.concat(
+            protocolFeeCode,
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
+            flatFeeCode,
+            swapCode,
+            Salt.build(abi.encodePacked(vm.randomUint()))
+        ); 
+    }
+
+    function buildWrongProgram(
+        uint24 protocolFeeBps,
+        uint24 flatFeeInBps
+    ) internal view returns (bytes memory) {
+        bytes memory protocolFeeCode = protocolFeeBps > 0
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
+            : bytes("");
+
+        bytes memory flatFeeCode = flatFeeInBps > 0
+            ? FeeFlatIn.build(flatFeeInBps)
+            : bytes("");
+
+        return bytes.concat(
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
+            protocolFeeCode, // WRONG: protocolFee after balances
+            flatFeeCode,
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    function buildProgramWithDecayConcentrate(
+        uint24 protocolFeeBps,
+        uint16 decayPeriod,
+        uint24 flatFeeInBps
+    ) internal view returns (bytes memory) {
+        bytes memory protocolFeeCode = protocolFeeBps > 0
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
+            : bytes("");
+
+        bytes memory flatFeeCode = flatFeeInBps > 0
+            ? FeeFlatIn.build(flatFeeInBps)
+            : bytes("");
+
+        return bytes.concat(
+            protocolFeeCode,
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
+            Decay.build(decayPeriod),
+            flatFeeCode,
+            defaultConcentrateArgs(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    function buildProgramWithDecayXYCSwap(
+        uint24 protocolFeeBps,
+        uint16 decayPeriod,
+        uint24 flatFeeInBps
+    ) internal view returns (bytes memory) {
+        bytes memory protocolFeeCode = protocolFeeBps > 0
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
+            : bytes("");
+
+        bytes memory flatFeeCode = flatFeeInBps > 0
+            ? FeeFlatIn.build(flatFeeInBps)
+            : bytes("");
+
+        return bytes.concat(
+            protocolFeeCode,
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
+            Decay.build(decayPeriod),
+            flatFeeCode,
+            XYCSwap.build(),
+            Salt.build(abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    function buildProgramWithDecayPegged(
+        uint24 protocolFeeBps,
+        uint16 decayPeriod,
+        uint24 flatFeeInBps
+    ) internal view returns (bytes memory) {
+        bytes memory protocolFeeCode = protocolFeeBps > 0
+            ? FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient)
+            : bytes("");
+
+        bytes memory flatFeeCode = flatFeeInBps > 0
+            ? FeeFlatIn.build(flatFeeInBps)
+            : bytes("");
+
+        return bytes.concat(
+            protocolFeeCode,
+            DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
+            Decay.build(decayPeriod),
+            flatFeeCode,
+            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
+            Salt.build(abi.encodePacked(vm.randomUint()))
+        );
+    }
+
+    function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: programBytes
+        }));
+    }
+
+    // ===== TEST GROUP 1: XYCSwap Tests =====
+
+    function test_XYCSwap_ProtocolFee_ExactIn() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), true);
+
+        assertEq(r.amountIn, SWAP_AMOUNT, "AmountIn should match swap amount");
+        assertConservation(r.orderHash, r.amountIn, r.amountOut);
+    }
+
+    function test_XYCSwap_ProtocolFee_ExactOut() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, false), false);
+
+        assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
+        assertConservation(r.orderHash, r.amountIn, r.amountOut);
+    }
+
+    function test_XYCSwap_ProtocolFee_With_FlatFee_ExactIn() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), true);
+        assertConservation(r.orderHash, r.amountIn, r.amountOut);
+    }
+
+    function test_XYCSwap_ProtocolFee_With_FlatFee_ExactOut() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, false), false);
+
+        assertEq(r.amountOut, SWAP_AMOUNT, "AmountOut should match requested");
+        assertConservation(r.orderHash, r.amountIn, r.amountOut);
+    }
+
+    // ===== TEST GROUP 2: XYCConcentrate Tests =====
+
+    function test_XYCConcentrate_ProtocolFee_ExactIn() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), true);
+
+        assertTokenAConservation(r.orderHash, r.amountIn);
+
+        (uint256 actualLiq,) = getBalances(r.orderHash);
+        uint256 protocolFee = getProtocolFee();
+        assertGt(actualLiq, 0, "Liquidity positive");
+        assertGt(actualLiq, 0, "Liquidity positive after swap");
+    }
+
+    function test_XYCConcentrate_ProtocolFee_ExactOut() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0, true), false);
+
+        assertEq(r.amountOut, SWAP_AMOUNT, "Exact out amount");
+        assertTokenAConservation(r.orderHash, r.amountIn);
+
+        (uint256 actualLiq,) = getBalances(r.orderHash);
+        uint256 protocolFee = getProtocolFee();
+        assertGt(actualLiq, 0, "Liquidity positive");
+        assertGt(actualLiq, 0, "Liquidity positive after swap");
+    }
+
+    function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactIn() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
+
+        assertTokenAConservation(r.orderHash, r.amountIn);
+
+        (uint256 actualLiq,) = getBalances(r.orderHash);
+        uint256 protocolFee = getProtocolFee();
+        assertGt(actualLiq, 0, "Liquidity positive");
+        assertGt(actualLiq, 0, "Liquidity positive (fees retained)");
+    }
+
+    function test_XYCConcentrate_ProtocolFee_With_FlatFee_ExactOut() public {
+        SwapResult memory r = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
+
+        assertTokenAConservation(r.orderHash, r.amountIn);
+
+        (uint256 actualLiq,) = getBalances(r.orderHash);
+        uint256 protocolFee = getProtocolFee();
+        assertGt(actualLiq, 0, "Liquidity positive");
+        assertGt(actualLiq, 0, "Liquidity positive (fees retained)");
+    }
+
+    // ===== COMPARATIVE TESTS: Wrong vs Correct Instruction Order =====
+
+    function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactIn() public {
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), true);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), true);
+
+        {
+            (uint256 correctBal,) = getBalances(correct.orderHash);
+            (uint256 wrongBal,) = getBalances(wrong.orderHash);
+            // "Correct" order: protocolFee runs BEFORE dynamicBalances → fee properly deducted
+            // before pool credit → pool gets (amountIn - fee), so correctBal < wrongBal.
+            // "Wrong" order: dynamicBalances FIRST credits full amountIn to pool, then protocolFee
+            // has nothing left to deduct → pool gets full amountIn = wrongBal > correctBal.
+            // The key invariant: correct order ensures fees are actually charged.
+            assertLt(correctBal, wrongBal, "CORRECT order properly deducts fees before pool credit");
+        }
+    }
+
+    function test_XYCConcentrate_CompareCorrectVsWrongOrder_ExactOut() public {
+        SwapResult memory correct = deployAndSwap(buildProgram(0.05e7, 0.10e7, true), false);
+        SwapResult memory wrong = deployAndSwap(buildWrongProgram(0.05e7, 0.10e7), false);
+
+        {
+            (uint256 correctBal,) = getBalances(correct.orderHash);
+            (uint256 wrongBal,) = getBalances(wrong.orderHash);
+            // "Correct" order: protocolFee deducted BEFORE pool credit → correctBal < wrongBal
+            assertLt(correctBal, wrongBal, "CORRECT order properly deducts fees before pool credit");
+        }
+    }
+
+    // ===== TEST GROUP 3: Decay + XYCConcentrate Tests =====
+
+    function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactIn() public {
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
+
+        assertGt(r.protocolFee1, 0, "Protocol fee after first swap");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased after second swap");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+
+        {
+            (uint256 finalBal,) = getBalances(r.orderHash);
+            assertGt(finalBal, 0, "Liquidity positive after both swaps");
+        }
+    }
+
+    function test_DecayXYCConcentrate_ProtocolFee_FlatFee_ExactOut() public {
+        bytes memory program = buildProgramWithDecayConcentrate(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
+
+        assertEq(r.amountOut1, SWAP_AMOUNT, "First swap: exact out");
+        assertEq(r.amountOut2, SWAP_AMOUNT, "Second swap: exact out");
+        assertGt(r.protocolFee1, 0, "Protocol fee after first swap");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+
+        {
+            (uint256 finalBal,) = getBalances(r.orderHash);
+            assertGt(finalBal, 0, "Liquidity positive");
+        }
+    }
+
+    // ===== TEST GROUP 4: Decay + PeggedSwap Tests =====
+
+    function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactIn() public {
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
+
+        assertGt(r.protocolFee1, 0, "Protocol fee after first swap");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased");
+        assertGt(r.amountOut1, 0, "First swap produced output");
+        assertGt(r.amountOut2, 0, "Second swap produced output");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+    }
+
+    function test_DecayPeggedSwap_ProtocolFee_FlatFee_ExactOut() public {
+        bytes memory program = buildProgramWithDecayPegged(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
+
+        assertEq(r.amountOut1, SWAP_AMOUNT, "First swap: exact out");
+        assertEq(r.amountOut2, SWAP_AMOUNT, "Second swap: exact out");
+        assertGt(r.protocolFee1, 0, "Protocol fee paid");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+    }
+
+    // ===== TEST GROUP 4b: Decay + Regular Tokens (XYCSwap instead of PeggedSwap) =====
+
+    function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactIn() public {
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, true);
+
+        assertGt(r.protocolFee1, 0, "Protocol fee after first swap");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased");
+        assertGt(r.amountOut1, 0, "First swap produced output");
+        assertGt(r.amountOut2, 0, "Second swap produced output");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+    }
+
+    function test_DecayRegularSwap_ProtocolFee_FlatFee_ExactOut() public {
+        bytes memory program = buildProgramWithDecayXYCSwap(0.05e7, DECAY_PERIOD, 0.10e7);
+
+        DoubleSwapResult memory r = deployAndDoubleSwap(program, false);
+
+        assertEq(r.amountOut1, SWAP_AMOUNT, "First swap: exact out");
+        assertEq(r.amountOut2, SWAP_AMOUNT, "Second swap: exact out");
+        assertGt(r.protocolFee1, 0, "Protocol fee paid");
+        assertGt(r.protocolFee2, r.protocolFee1, "Protocol fee increased");
+        assertConservation(r.orderHash, r.amountIn1 + r.amountIn2, r.amountOut1 + r.amountOut2);
+    }
+
+}
