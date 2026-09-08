@@ -14,7 +14,6 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @notice XYCSwap opcode, constant-product swap curve
 /// @dev Encoding: []
 library XYCSwap {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

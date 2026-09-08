@@ -13,7 +13,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { FeeFlatIn, FeeFlatOut } from "../src/instructions/FeeFlat.sol";
 import { Opcode } from "../src/libs/OpcodeList.sol";
-import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/VM.sol";
+import { Context, VM, SwapQuery, SwapRegisters } from "../src/libs/VM.sol";
 
 /**
  * @title UniversalFeeTest
@@ -21,7 +21,6 @@ import { Context, VM, SwapQuery, SwapRegisters, ContextLib } from "../src/libs/V
  * @dev Tests FeeIn/FeeOut with different swap formulas to show consistent behavior
  */
 contract FeeIndifferencyToSwap is Test {
-    using ContextLib for Context;
     using CalldataPtrLib for CalldataPtr;
 
     uint256 constant ONE = 1e18;

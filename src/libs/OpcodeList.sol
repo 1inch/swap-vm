@@ -10,6 +10,8 @@ library OpcodeOps {
     }
 }
 
+using OpcodeOps for Opcode global;
+
 /// @notice Opcode space layout, banked by instruction family
 /// @dev For new instructions take the next free `_Ix` slots of their family bank
 /// @dev The reserved bank (0xf0-0xff) is never allocated

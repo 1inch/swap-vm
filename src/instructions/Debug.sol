@@ -8,7 +8,7 @@ import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
-import { Context, ContextLib, SwapRegisters } from "../libs/VM.sol";
+import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -18,7 +18,6 @@ import { FeeMetaLib, FeeReceiverLib } from "../libs/ProtocolFee.sol";
 /// @notice PrintSwapRegisters opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapRegisters {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintSwapRegisters;
@@ -49,7 +48,6 @@ library PrintSwapRegisters {
 /// @notice PrintSwapQuery opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapQuery {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintSwapQuery;
@@ -83,8 +81,6 @@ library PrintSwapQuery {
 /// @dev Encoding: []
 library PrintVM {
     using CalldataPtrLib for CalldataPtr;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintVM;
@@ -117,10 +113,7 @@ library PrintVM {
 /// @dev FeeProtocol opcode updates registries after strategy execution
 ///   The PrintFee opcode should be included before FeeProtocol to trigger delayed registries print
 library PrintFee {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
-
-    using ContextLib for Context;
 
     Opcode constant opcode = Opcode.PrintFee;
 
@@ -159,7 +152,6 @@ library PrintFee {
 /// @notice PrintFreeMemoryPointer opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintFreeMemoryPointer {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintFreeMemoryPointer;
@@ -187,7 +179,6 @@ library PrintFreeMemoryPointer {
 /// @notice PrintGasLeft opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintGasLeft {
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintGasLeft;
@@ -214,9 +205,6 @@ library PrintGasLeft {
 /// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut]
 library PatchSwapRegisters {
     using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
-
-    using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PatchSwapRegisters;
