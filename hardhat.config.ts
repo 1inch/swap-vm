@@ -32,9 +32,6 @@ export default defineConfig({
       production: { compilers: [swapVmCompiler] },
     },
   },
-  paths: {
-    sources: "./src",
-  },
   test: {
     solidity: {
       fuzz: {
@@ -58,10 +55,10 @@ export default defineConfig({
     },
   },
   warnings: {
-    "test/**/*": {
+    "test/solidity/**/*": {
       "initcode-size": "off",
     },
-    "src/routers/*Debug.sol": {
+    "contracts/routers/*Debug.sol": {
       "code-size": "off",
     },
     "npm/@1inch/solidity-utils@*/**/*": {

@@ -388,7 +388,7 @@ These invariants are validated through comprehensive test suites and must be mai
 SwapVM provides a reusable `CoreInvariants` base contract for testing:
 
 ```solidity
-import { CoreInvariants } from "test/invariants/CoreInvariants.t.sol";
+import { CoreInvariants } from "test/solidity/invariants/CoreInvariants.t.sol";
 
 contract MyInstructionTest is Test, OpcodesDebug, CoreInvariants {
     function test_MyInstruction_MaintainsInvariants() public {
@@ -423,7 +423,7 @@ config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max
 assertAllInvariantsWithConfig(swapVM, order, tokenIn, tokenOut, config);
 ```
 
-See `test/invariants/ExampleInvariantUsage.t.sol` for complete examples.
+See `test/solidity/invariants/ExampleInvariantUsage.t.sol` for complete examples.
 
 ---
 
@@ -950,7 +950,7 @@ function test_MyProgram_QuoteMatchesSwap() public {
 }
 ```
 
-See `test/invariants/ExampleInvariantUsage.t.sol` for complete, up-to-date examples.
+See `test/solidity/invariants/ExampleInvariantUsage.t.sol` for complete, up-to-date examples.
 
 ---
 
@@ -1009,7 +1009,7 @@ yarn add @1inch/swap-vm
 ### Quick Example
 
 ```solidity
-import { SwapVMRouter } from "src/routers/SwapVMRouter.sol";
+import { SwapVMRouter } from "contracts/routers/SwapVMRouter.sol";
 
 // Deploy router
 SwapVMRouter router = new SwapVMRouter(
@@ -1028,7 +1028,7 @@ SwapVMRouter router = new SwapVMRouter(
 - **Documentation**: See `README.md`
 - **Deployment Guide**: See `DEPLOY.md`
 - **Testing Guide**: See `TESTING.md`
-- **Tests**: Comprehensive examples in `/test`
+- **Tests**: Comprehensive examples in `/test/solidity`
 
 ---
 

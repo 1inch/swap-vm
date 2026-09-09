@@ -23,12 +23,13 @@
     "@1inch/solidity-utils": "6.9.10"
   },
   "scripts": {
+    "clean": "npx hardhat clean",
     "test": "npx hardhat test",
     "test:solidity": "npx hardhat test solidity",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
-    "snapshot": "npx hardhat test solidity --snapshot ./test/gas/*",
-    "snapshot:check": "npx hardhat test solidity --snapshot-check ./test/gas/*"
+    "snapshot": "npx hardhat test solidity --snapshot ./test/solidity/gas/*",
+    "snapshot:check": "npx hardhat test solidity --snapshot-check ./test/solidity/gas/*"
   },
   "repository": {
     "type": "git",

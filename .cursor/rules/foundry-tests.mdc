@@ -1,5 +1,5 @@
 ---
-globs: test/**/*
+globs: test/solidity/**/*
 alwaysApply: false
 ---
 
@@ -9,8 +9,8 @@ alwaysApply: false
 
 **NEVER define mock contracts inline.** Use:
 - `TokenMock` (see solidity-style.mdc for import)
-- Existing mocks in `test/mocks/`
-- New mocks go in `test/mocks/<Name>.sol`
+- Existing mocks in `test/solidity/mocks/`
+- New mocks go in `test/solidity/mocks/<Name>.sol`
 
 ## Inheritance
 

@@ -1,0 +1,294 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { Test } from "forge-std/Test.sol";
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+
+import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { SwapVM } from "../../../contracts/SwapVM.sol";
+import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
+import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
+import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
+import { OpcodesDebug } from "../../../contracts/opcodes/OpcodesDebug.sol";
+import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
+import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
+import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
+import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
+import { dynamic } from "../utils/Dynamic.sol";
+
+import { CoreInvariants } from "./CoreInvariants.t.sol";
+
+
+/**
+ * @title ExampleInvariantUsage
+ * @notice Example demonstrating how to use CoreInvariants in your tests
+ * @dev Shows various patterns for testing different instruction types
+ */
+contract ExampleInvariantUsage is Test, OpcodesDebug, CoreInvariants {
+    Aqua public immutable aqua;
+    SwapVMRouter public swapVM;
+    TokenMock public tokenA;
+    TokenMock public tokenB;
+
+    address public maker;
+    uint256 public makerPK = 0x1234;
+    address public taker;
+
+    function setUp() public {
+        maker = vm.addr(makerPK);
+        taker = address(this);
+        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
+
+        // Setup tokens and approvals for maker
+        tokenA.mint(maker, 1000e18);
+        tokenB.mint(maker, 1000e18);
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        // Setup approvals for taker (test contract)
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.approve(address(swapVM), type(uint256).max);
+    }
+
+    /**
+     * @notice Implementation of _executeSwap for real swap execution
+     * @dev This handles token minting and actual swap execution
+     * @dev For assertAdditivityInvariant, this always uses exactIn mode where amount is the input amount
+     */
+    function _executeSwap(
+        SwapVM _swapVM,
+        ISwapVM.Order memory order,
+        address tokenIn,
+        address tokenOut,
+        uint256 amount,
+        bytes memory takerData
+    ) internal override returns (uint256 amountIn, uint256 amountOut) {
+        // Note: assertAdditivityInvariant always passes input amounts for exactIn swaps
+        // The takerData should already be configured for exactIn
+
+        // Mint the input tokens
+        TokenMock(tokenIn).mint(taker, amount * 10);
+
+        // Execute the swap
+        (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
+            order,
+            amount,
+            takerData
+        );
+
+        return (actualIn, actualOut);
+    }
+
+    /**
+     * Example 1: Test a simple limit order maintains all invariants
+     */
+    function test_LimitOrderInvariants() public {
+        // Build limit order program
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),  // 1:2 rate
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test all invariants with proper taker data
+        InvariantConfig memory config = _getDefaultConfig();
+        config.testAmounts = dynamic([uint256(1e18), uint256(10e18), uint256(33e18)]);
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Example 2: Test an AMM with fees maintains invariants
+     */
+    function test_AMMWithFeesInvariants() public {
+        bytes memory bytecode = bytes.concat(
+            DynamicBalances.build(1000e18, 1000e18),
+            FeeFlatIn.build(0.003e7), // 0.3% fee
+            XYCSwap.build()
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Test with custom amounts
+        uint256[] memory testAmounts = new uint256[](4);
+        testAmounts[0] = 0.1e18;
+        testAmounts[1] = 1e18;
+        testAmounts[2] = 10e18;
+        testAmounts[3] = 100e18;
+
+        // Create config with proper taker data
+        InvariantConfig memory config = createInvariantConfig(testAmounts, 2);
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    /**
+     * Example 3: Test specific invariants individually
+     */
+    function test_SpecificInvariants() public view {
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        // Test individual invariants
+        assertSymmetryInvariant(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            10e18,    // amount
+            2,        // tolerance
+            exactInData,
+            exactOutData
+        );
+
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 1e18;
+        amounts[1] = 10e18;
+        amounts[2] = 50e18;
+
+        assertMonotonicityInvariant(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            amounts,
+            exactInData,
+            0  // strict monotonicity
+        );
+
+        assertBalanceSufficiencyInvariant(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            exactInData
+        );
+    }
+
+    /**
+     * Example 4: Skip certain invariants for special cases
+     */
+    function test_SkipCertainInvariants() public {
+        // Create a flat-rate order (no price impact)
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(1000e18, 2000e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // For limit orders, skip additivity and monotonicity checks
+        InvariantConfig memory config = _getDefaultConfig();
+        config.skipAdditivity = true;    // Limit orders don't have state
+        config.skipMonotonicity = true;  // Fixed rate, no price impact
+        config.exactInTakerData = _signAndPackTakerData(order, true, 0);
+        config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
+
+        assertAllInvariantsWithConfig(
+            swapVM,
+            order,
+            address(tokenA),
+            address(tokenB),
+            config
+        );
+    }
+
+    // Helper functions
+    function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: program
+        }));
+    }
+
+    function _signAndPackTakerData(
+        ISwapVM.Order memory order,
+        bool isExactIn,
+        uint256 threshold
+    ) private view returns (bytes memory) {
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // TakerTraitsLib expects threshold to be exactly 32 bytes or empty
+        bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
+
+        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+            taker: address(0),
+            isExactIn: isExactIn,
+            shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            isAToB: true,
+            allowPartialFill: false,
+            threshold: thresholdData,
+            to: address(this),
+            deadline: 0,
+            hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
+            signature: signature
+        }));
+
+        return abi.encodePacked(takerTraits);
+    }
+}

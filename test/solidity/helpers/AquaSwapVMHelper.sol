@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+
+import { ISwapVM } from "../../../contracts/SwapVM.sol";
+import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";
+import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
+import { AquaOpcodesDebug } from "../../../contracts/opcodes/AquaOpcodesDebug.sol";
+import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
+import { Salt } from "../../../contracts/instructions/Controls.sol";
+
+/// @title Helper contract for Aqua SwapVM with AquaOpcodesDebug
+contract AquaSwapVMHelper is AquaOpcodesDebug {
+    AquaSwapVMRouter public router;
+
+    constructor(address aqua) {
+        router = new AquaSwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
+    }
+
+    function createOrder(
+        address maker,
+        TokenMock tokenA,
+        TokenMock tokenB
+    ) external view returns (ISwapVM.Order memory) {
+        bytes memory programBytes = bytes.concat(
+            XYCSwap.build(),
+            Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
+        );
+
+        return MakerTraitsLib.build(MakerTraitsLib.Args({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: true,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
+            program: programBytes
+        }));
+    }
+}

@@ -40,8 +40,8 @@ When designing a SwapVM program, we focus on these security-critical technical p
 
 You can use these invariant suites as references for testing your programs:
 
-- **1D strategy reference tests:** [`test/invariants/DutchAuctionLimitSwapInvariants.t.sol`](../test/invariants/DutchAuctionLimitSwapInvariants.t.sol)
-- **2D strategy reference tests:** [`test/invariants/ConcentrateXYCInvariants.t.sol`](../test/invariants/ConcentrateXYCInvariants.t.sol)
+- **1D strategy reference tests:** [`test/solidity/invariants/DutchAuctionLimitSwapInvariants.t.sol`](../test/solidity/invariants/DutchAuctionLimitSwapInvariants.t.sol)
+- **2D strategy reference tests:** [`test/solidity/invariants/ConcentrateXYCInvariants.t.sol`](../test/solidity/invariants/ConcentrateXYCInvariants.t.sol)
 
 ---
 
@@ -204,7 +204,7 @@ bytes memory bytecode = bytes.concat(
 **Example B - Best strategy selection (XYC vs Pegged):**
 
 Use case: evaluate multiple AMM strategy branches and execute the one that gives better output for current conditions.  
-Reference: `test/RunLoop.t.sol` (`test_BestRouteSelector_XYC_vs_Pegged`).
+Reference: `test/solidity/RunLoop.t.sol` (`test_BestRouteSelector_XYC_vs_Pegged`).
 
 ```solidity
 bytes memory strategy1 = XYCSwap.build(); // Branch A: x*y=k swap
