@@ -8,13 +8,34 @@ import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 const swapVmCompiler = {
   version: "0.8.30",
   settings: {
-    optimizer: {
-      enabled: true,
-      runs: 700,
-    },
+    optimizer: { enabled: true, runs: 700 },
     viaIR: true,
   },
-  isolated: true
+  isolated: true,
+  preferWasm: false,
+};
+
+const fastTestCompiler = {
+  version: "0.8.30",
+  settings: {
+    viaIR: true,
+    optimizer: {
+      enabled: true,
+      runs: 1,
+      details: {
+        yul: true,
+        cse: false,
+        constantOptimizer: false,
+        inliner: false,
+        peephole: false,
+        jumpdestRemover: false,
+        orderLiterals: false,
+        deduplicate: false,
+      },
+    },
+  },
+  isolated: false,
+  preferWasm: false,
 };
 
 export default defineConfig({
@@ -28,7 +49,7 @@ export default defineConfig({
   solidity: {
     splitTestsCompilation: true,
     profiles: {
-      default: { compilers: [swapVmCompiler] },
+      default: { compilers: [fastTestCompiler] },
       production: { compilers: [swapVmCompiler] },
     },
   },
