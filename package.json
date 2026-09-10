@@ -28,6 +28,7 @@
     "test:solidity": "npx hardhat test solidity",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
+    "build:production": "npx hardhat compile --build-profile production",
     "snapshot": "npx hardhat test solidity --build-profile production --snapshot ./test/solidity/gas/*",
     "snapshot:check": "npx hardhat test solidity --build-profile production --snapshot-check ./test/solidity/gas/*"
   },

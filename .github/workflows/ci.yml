@@ -31,7 +31,7 @@ jobs:
           path: |
             artifacts
             cache
-          key: hh-${{ runner.os }}-default-${{ hashFiles('hardhat.config.ts', 'yarn.lock', 'contracts/**/*.sol', 'test/solidity/**/*.sol') }}
+          key: hh-${{ runner.os }}-default-${{ hashFiles('hardhat.config.ts', 'yarn.lock', 'contracts/**/*.sol') }}
           restore-keys: |
             hh-${{ runner.os }}-default-
 
