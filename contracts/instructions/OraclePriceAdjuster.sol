@@ -15,9 +15,13 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 
 /// @notice OraclePriceAdjuster opcode, price adjustment towards a Chainlink oracle price with price percent cap
-/// @dev Encoding: [uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress]
+/// @dev Encoding: [uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, uint8 tokenInDecimals, uint8 tokenOutDecimals, address oracleAddress]
 ///   maxStaleness = 0 skips the staleness check, oracleDecimals = 0 fetches decimals from the oracle
 /// @dev Supports only single direction swaps, adjustment is applied only if favorable for the taker
+/// @dev tokenInDecimals and tokenOutDecimals describe the swap direction the instruction runs on.
+///   The swap price is computed from raw token amounts, so the oracle answer is scaled to
+///   10 ** (18 + tokenOutDecimals - tokenInDecimals) rather than to 1e18. On a pair where both
+///   tokens have 18 decimals that exponent is 18 and the two are the same thing.
 library OraclePriceAdjuster {
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -33,39 +37,80 @@ library OraclePriceAdjuster {
     uint256 constant ONE = 1e18;
     uint8 constant DECIMALS = 18;
 
-    function sizeOf(uint64, uint16, uint8, address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8 + 2 + 1 + 20;
+    function sizeOf(uint64, uint16, uint8, uint8, uint8, address) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 8 + 2 + 1 + 1 + 1 + 20;
     }
 
     function build(
         uint64 maxPriceDecay,
         uint16 maxStaleness,
         uint8 oracleDecimals,
+        uint8 tokenInDecimals,
+        uint8 tokenOutDecimals,
         address oracleAddress
     ) internal pure returns (bytes memory) {
         return build(
-            MemoryPtrLib.alloc(sizeOf(maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress)),
-            maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress
+            MemoryPtrLib.alloc(sizeOf(maxPriceDecay, maxStaleness, oracleDecimals, tokenInDecimals, tokenOutDecimals, oracleAddress)),
+            maxPriceDecay, maxStaleness, oracleDecimals, tokenInDecimals, tokenOutDecimals, oracleAddress
         ).resolve();
     }
 
-    function build(MemoryPtr ptrStart, uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) internal pure returns (MemoryPtr ptr) {
+    function build(
+        MemoryPtr ptrStart,
+        uint64 maxPriceDecay,
+        uint16 maxStaleness,
+        uint8 oracleDecimals,
+        uint8 tokenInDecimals,
+        uint8 tokenOutDecimals,
+        address oracleAddress
+    ) internal pure returns (MemoryPtr ptr) {
         require(maxPriceDecay < ONE, OraclePriceAdjusterWrongMaxPriceDecay(maxPriceDecay));
 
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(maxPriceDecay, 8).push(maxStaleness, 2).push(oracleDecimals).push(oracleAddress);
+        ptr = ptr.push(maxPriceDecay, 8).push(maxStaleness, 2).push(oracleDecimals).push(tokenInDecimals).push(tokenOutDecimals).push(oracleAddress);
         ptrStart.patchLength(ptr);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) {
+    function parse(bytes calldata args) internal pure returns (
+        uint64 maxPriceDecay,
+        uint16 maxStaleness,
+        uint8 oracleDecimals,
+        uint8 tokenInDecimals,
+        uint8 tokenOutDecimals,
+        address oracleAddress
+    ) {
         maxPriceDecay = args.at(0).asU64();
         maxStaleness = args.at(8).asU16();
         oracleDecimals = args.at(10).asU8();
-        oracleAddress = args.at(11).asAddress();
+        tokenInDecimals = args.at(11).asU8();
+        tokenOutDecimals = args.at(12).asU8();
+        oracleAddress = args.at(13).asAddress();
+    }
+
+    /// @notice Scales an oracle answer to the units the swap price is computed in
+    /// @dev A single net exponent, so the answer's low digits survive a scale-down
+    function scaleAnswer(
+        uint256 answer,
+        uint8 oracleDecimals,
+        uint8 tokenInDecimals,
+        uint8 tokenOutDecimals
+    ) internal pure returns (uint256) {
+        uint256 numerator = uint256(DECIMALS) + tokenOutDecimals;
+        uint256 denominator = uint256(oracleDecimals) + tokenInDecimals;
+
+        if (numerator >= denominator) return answer * 10 ** (numerator - denominator);
+        return answer / 10 ** (denominator - numerator);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
-        (uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) = parse(args);
+        (
+            uint64 maxPriceDecay,
+            uint16 maxStaleness,
+            uint8 oracleDecimals,
+            uint8 tokenInDecimals,
+            uint8 tokenOutDecimals,
+            address oracleAddress
+        ) = parse(args);
 
         // Get latest price data from Chainlink
         IPriceOracle oracle = IPriceOracle(oracleAddress);
@@ -80,13 +125,9 @@ library OraclePriceAdjuster {
             oracleDecimals = oracle.decimals();
         }
 
-        // Convert oracle price to 1e18 scale using provided decimals
-        uint256 oraclePrice = answer.toUint256();
-        if (oracleDecimals < DECIMALS) {
-            oraclePrice = oraclePrice * 10 ** (DECIMALS - oracleDecimals);
-        } else if (oracleDecimals > DECIMALS) {
-            oraclePrice = oraclePrice / 10 ** (oracleDecimals - DECIMALS);
-        }
+        // Convert oracle price to the scale currentPrice below is computed in, which is 1e18 only
+        // when both tokens have 18 decimals
+        uint256 oraclePrice = scaleAnswer(answer.toUint256(), oracleDecimals, tokenInDecimals, tokenOutDecimals);
 
         // Calculate current swap price (tokenOut per tokenIn)
         // Price = amountOut / amountIn
