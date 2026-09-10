@@ -176,12 +176,45 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
         // Fourth fill should fail - would exceed balance
         TokenMock(address(tokenA)).mint(taker, 1e18);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(
+            Invalidators.InvalidatorsTokenInExceeded.selector, 10e18, 1e18, 10e18
+        ));
         swapVM.swap(
             order,
             1e18,
             exactInData
         );
+    }
+
+    /**
+     * Test token input invalidation - partial fills.
+     * In this test `_invalidateTokenIn1D` instruction placed before limit swap to trigger inner
+     * `ctx.runLoop()` call in `Invalidators._invalidateTokenIn1D`.
+     */
+    function test_InvalidateTokenInPartialFillsBeforeSwap() public {
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build([uint256(10e18), 200e18])),
+            program.build(_invalidateTokenIn1D),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            (uint256 amountIn1,,) = swapVM.asView().quote(order, 20e18, exactOutData);
+            TokenMock(address(tokenA)).mint(taker, amountIn1);
+            swapVM.swap(order, 20e18, exactOutData);
+        }
+
+        TokenMock(address(tokenA)).mint(taker, 20e18);
+        vm.expectRevert(abi.encodeWithSelector(
+            Invalidators.InvalidatorsTokenInExceeded.selector, 10e18, 1e18, 10e18
+        ));
+        swapVM.swap(order, 20e18, exactOutData);
     }
 
     /**
@@ -233,6 +266,53 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         // Fourth fill should fail - would exceed output balance
         exactOutData = _signAndPackTakerData(order, false, 1e18);
         vm.expectRevert();
+        swapVM.swap(order, 1e18, exactOutData);
+    }
+
+    /** 
+     * Test token output invalidation.
+     * In this test `_invalidateTokenOut1D` instruction located before limit swap to trigger inner
+     * `ctx.runLoop()` call in `Invalidators._invalidateTokenOut1D`.
+    */
+    function test_InvalidateTokenOutPartialFillsBeforeSwap() public {
+        // Order with 20 tokenB available for output
+        Program memory program = ProgramBuilder.init(_opcodes());
+        bytes memory bytecode = bytes.concat(
+            program.build(_staticBalancesXD,
+                BalancesArgsBuilder.build([uint256(100e18), 20e18])),
+            program.build(_invalidateTokenOut1D),
+            program.build(_limitSwap1D,
+                LimitSwapArgsBuilder.build(address(tokenA), address(tokenB)))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Use exactOut to control output amounts precisely
+        bytes memory exactOutData;
+
+        // First fill - want 8 tokenB out
+        exactOutData = _signAndPackTakerData(order, false, 40e18);
+        (uint256 amountIn1,,) = swapVM.asView().quote(order, 8e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn1);
+        swapVM.swap(order, 8e18, exactOutData);
+
+        // Second fill - want 7 tokenB out
+        exactOutData = _signAndPackTakerData(order, false, 35e18);
+        (uint256 amountIn2,,) = swapVM.asView().quote(order, 7e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn2);
+        swapVM.swap(order, 7e18, exactOutData);
+
+        // Third fill - want 5 tokenB out (total 20)
+        exactOutData = _signAndPackTakerData(order, false, 25e18);
+        (uint256 amountIn3,,) = swapVM.asView().quote(order, 5e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn3);
+        swapVM.swap(order, 5e18, exactOutData);
+
+        // Fourth fill should fail - would exceed output balance
+        exactOutData = _signAndPackTakerData(order, false, 1e18);
+        vm.expectRevert(abi.encodeWithSelector(
+            Invalidators.InvalidatorsTokenOutExceeded.selector, 20e18, 1e18, 20e18
+        ));
         swapVM.swap(order, 1e18, exactOutData);
     }
 
