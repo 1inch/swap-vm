@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Vm } from "forge-std/Vm.sol";
 import { console } from "forge-std/console.sol";
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../../contracts/SwapVM.sol";
+import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 
 /**
  * @title RoundingInvariants
@@ -24,14 +24,14 @@ library RoundingInvariants {
      */
     function assertNoAccumulationExploit(
         Vm vm_,
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
         uint256 atomicAmount,
         uint256 iterations,
         bytes memory takerData,
-        function(SwapVM, ISwapVM.Order memory, address, address, uint256, bytes memory)
+        function(SwapVMRouter, ISwapVM.Order memory, address, address, uint256, bytes memory)
             internal returns (uint256) executeSwap
     ) internal {
         assertNoAccumulationExploitWithTolerance(
@@ -46,14 +46,14 @@ library RoundingInvariants {
      */
     function assertNoAccumulationExploitWithTolerance(
         Vm vm_,
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
         uint256 atomicAmount,
         uint256 iterations,
         bytes memory takerData,
-        function(SwapVM, ISwapVM.Order memory, address, address, uint256, bytes memory)
+        function(SwapVMRouter, ISwapVM.Order memory, address, address, uint256, bytes memory)
             internal returns (uint256) executeSwap,
         uint256 toleranceBps
     ) internal {
@@ -90,14 +90,14 @@ library RoundingInvariants {
      */
     function assertNoRoundTripProfit(
         Vm vm_,
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenA,
         address tokenB,
         uint256 initialAmount,
         uint256 iterations,
         bytes memory takerData,
-        function(SwapVM, ISwapVM.Order memory, address, address, uint256, bytes memory)
+        function(SwapVMRouter, ISwapVM.Order memory, address, address, uint256, bytes memory)
             internal returns (uint256) executeSwap
     ) internal {
         uint256 snapshot = vm_.snapshot();
@@ -130,12 +130,12 @@ library RoundingInvariants {
      */
     function assertRoundingInvariants(
         Vm vm_,
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenA,
         address tokenB,
         bytes memory takerData,
-        function(SwapVM, ISwapVM.Order memory, address, address, uint256, bytes memory)
+        function(SwapVMRouter, ISwapVM.Order memory, address, address, uint256, bytes memory)
             internal returns (uint256) executeSwap
     ) internal {
         console.log("\n=== Rounding Invariant Tests ===");

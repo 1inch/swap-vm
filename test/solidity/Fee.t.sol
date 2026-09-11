@@ -12,11 +12,7 @@ import { dynamic } from "./utils/Dynamic.sol";
 import { ExactInOutSymmetry } from "./invariants/ExactInOutSymmetry.t.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
@@ -24,8 +20,9 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
 
 uint256 constant ONE = 1e18;
 
-contract FeeTest is Test, OpcodesDebug {
+contract FeeTest is Test {
     SwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     address public tokenA;
     address public tokenB;
 
@@ -40,7 +37,8 @@ contract FeeTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy SwapVM router
-        swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = address(new TokenMock("Token I", "TKI"));
@@ -87,7 +85,7 @@ contract FeeTest is Test, OpcodesDebug {
         );
 
         // === Create Order ===
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenA,
             tokenB: tokenB,
@@ -95,18 +93,6 @@ contract FeeTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -120,27 +106,17 @@ contract FeeTest is Test, OpcodesDebug {
     }
 
     function _makeTakerData(TakerSetup memory setup, bytes memory signature) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: setup.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
-            threshold: "", // no minimum output
+            threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }

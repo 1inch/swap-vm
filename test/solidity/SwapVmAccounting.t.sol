@@ -11,10 +11,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+import { SwapVMRouterDebug, SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
@@ -28,9 +25,9 @@ import { StaticBalances, DynamicBalances, DynamicBalancesExternal } from "../../
 
 /**
  * @title SwapVmAccounting
- * @notice SwapVM (non-Aqua) accounting correctness with fees — mirrors AquaAccounting tests
+ * @notice SwapVMRouter (non-Aqua) accounting correctness with fees — mirrors AquaAccounting tests
  */
-contract SwapVmAccounting is Test, OpcodesDebug {
+contract SwapVmAccounting is Test {
     // Constants
     uint256 constant ONE = 1e18;
     uint256 constant INITIAL_BALANCE_A = 1000e18;
@@ -41,6 +38,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
 
     // Contracts
     SwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
     DynamicBalancesExternal public balancesContract;
@@ -56,7 +54,8 @@ contract SwapVmAccounting is Test, OpcodesDebug {
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
-        swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
         balancesContract = DynamicBalancesExternal(address(swapVM));
 
         makerPrivateKey = 0x1234;
@@ -115,27 +114,17 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function buildTakerData(bool isExactIn, bool isAToB, bytes memory signature) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }
@@ -318,7 +307,7 @@ contract SwapVmAccounting is Test, OpcodesDebug {
     }
 
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -326,18 +315,6 @@ contract SwapVmAccounting is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
     }

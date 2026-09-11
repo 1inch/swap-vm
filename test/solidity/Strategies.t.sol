@@ -10,9 +10,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { Strategies } from "../../contracts/strategies/Strategies.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -27,6 +25,7 @@ import { Deadline, Salt, Stop } from "../../contracts/instructions/Controls.sol"
 contract StrategiesTest is Test {
     Aqua public aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     address public tokenA;
     address public tokenB;
 
@@ -35,7 +34,8 @@ contract StrategiesTest is Test {
 
     function setUp() public {
         aqua = new Aqua();
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         (tokenA, tokenB) = (makeAddr("token1"), makeAddr("token2"));
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
@@ -198,7 +198,7 @@ contract StrategiesTest is Test {
     }
 
     function _order(bytes memory program, bool useAqua) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenA,
             tokenB: tokenB,
@@ -206,44 +206,22 @@ contract StrategiesTest is Test {
             useAquaInsteadOfSignature: useAqua,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
 
-    function _takerData(bytes memory signature, bool isAToB) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    function _takerData(bytes memory signature, bool isAToB) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: true,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: true,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }

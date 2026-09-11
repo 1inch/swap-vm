@@ -12,10 +12,9 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { SwapVM } from "../../../contracts/SwapVM.sol";
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 
-import { AquaOpcodesDebug } from "../../../contracts/opcodes/AquaOpcodesDebug.sol";
+import { SwapVMRouter, TraitsHelper, DeployCode } from "../helpers/SwapVMTestSetup.sol";
 
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
@@ -23,7 +22,6 @@ import { Salt } from "../../../contracts/instructions/Controls.sol";
 import { FeeFlatIn } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
-import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 
 import { dynamic } from "../utils/Dynamic.sol";
 
@@ -32,9 +30,9 @@ import { TestConstants } from "./TestConstants.sol";
 /**
  * @title StrategyBuilders
  * @notice Abstract contract that provides helper methods for building various swap strategies
- * @dev Inherits from Test and AquaOpcodesDebug to have access to vm and the instruction set
+ * @dev Inherits from Test to have access to vm
  */
-abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug {
+abstract contract AquaStrategyBuilders is TestConstants, Test {
     enum SwapType {
         XYC,
         CONCENTRATE_GROW_PRICE_RANGE,
@@ -59,8 +57,10 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
 
     address public maker;
     uint256 public makerPrivateKey;
+    TraitsHelper internal orders;
 
     function setUp() public virtual {
+        orders = DeployCode.TraitsHelper();
         // Setup maker with known private key for signing
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -98,7 +98,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     function createStrategy(
         bytes memory programBytes
     ) public view returns (ISwapVM.Order memory order) {
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -106,18 +106,6 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
     }
@@ -129,7 +117,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
     }
 
     function shipStrategy(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         TokenMock tokenIn,
         TokenMock tokenOut,

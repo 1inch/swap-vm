@@ -109,8 +109,9 @@ contract FeeAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
         mintTokenOutToMaker(swapProgram, 200e18);
 
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 
     function test_Aqua_FeeIn_ExactOut_100Percent_ShouldRevert() public {
@@ -123,7 +124,8 @@ contract FeeAquaTest is AquaSwapVMTest {
         mintTokenOutToMaker(swapProgram, 200e18);
 
         // impossible to pay 100% feeIn on exactOut swap
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert();
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 }

@@ -11,11 +11,8 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
@@ -30,10 +27,12 @@ contract MockToken is ERC20 {
     }
 }
 
-contract XYCSwapTest is Test, OpcodesDebug {
+contract XYCSwapTest is Test {
     constructor() {}
 
     SwapVMRouter public swapVM;
+
+    TraitsHelper internal orders;
     MockToken public tokenA;
     MockToken public tokenB;
 
@@ -45,7 +44,8 @@ contract XYCSwapTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new MockToken("Token I", "TKI");
         tokenB = new MockToken("Token J", "TKJ");
@@ -86,7 +86,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
             );
         }
 
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -94,18 +94,6 @@ contract XYCSwapTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: bytecode
         }));
     }
@@ -121,27 +109,17 @@ contract XYCSwapTest is Test, OpcodesDebug {
 
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        return abi.encodePacked(TakerTraitsLib.build(TakerTraitsLib.Args({
+        return abi.encodePacked(orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: thresholdData,
             to: taker,
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         })));
     }
@@ -267,7 +245,7 @@ contract XYCSwapTest is Test, OpcodesDebug {
     // invariants can swap both ways; the passed takerData is ignored in favor of
     // a freshly packed one carrying the correct direction.
     function _executeSwap(
-        SwapVM _swapVM,
+        SwapVMRouter _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,

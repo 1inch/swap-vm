@@ -12,10 +12,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { MockTaker } from "./mocks/MockTaker.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouter } from "../../contracts/routers/AquaSwapVMRouter.sol";
-import { AquaOpcodesDebug } from "../../contracts/opcodes/AquaOpcodesDebug.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+import { AquaSwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
@@ -31,7 +28,7 @@ import { dynamic } from "./utils/Dynamic.sol";
  * @title AquaAccounting
  * @notice Minimalistic POC to prove Aqua accounting correctness with fees
  */
-contract AquaAccounting is Test, AquaOpcodesDebug {
+contract AquaAccounting is Test {
     // Constants
     uint256 constant BPS = 1e7;
     uint256 constant ONE = 1e18;
@@ -46,6 +43,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     // Contracts
     Aqua public immutable aqua = new Aqua();
     AquaSwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -60,7 +58,8 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
-        swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -280,7 +279,7 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
     }
 
     function createOrder(bytes memory programBytes) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -288,18 +287,6 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
     }
@@ -337,27 +324,17 @@ contract AquaAccounting is Test, AquaOpcodesDebug {
             ? (address(tokenA), address(tokenB))
             : (address(tokenB), address(tokenA));
 
-        bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
+        bytes memory takerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(taker),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: zeroForOne,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: true,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
 

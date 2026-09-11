@@ -10,8 +10,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouter } from "../../contracts/routers/LimitSwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+import { LimitSwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { OrderRegistrator } from "../../contracts/extensions/OrderRegistrator.sol";
 import { ERC1271MakerMock } from "./mocks/ERC1271MakerMock.sol";
 
@@ -21,13 +20,15 @@ contract OrderRegistratorTest is Test {
 
     Aqua public aqua;
     LimitSwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
     address public maker;
 
     function setUp() public {
         aqua = new Aqua();
-        swapVM = new LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token A", "TKA");
         tokenB = new TokenMock("Token B", "TKB");
@@ -123,7 +124,7 @@ contract OrderRegistratorTest is Test {
     }
 
     function _buildOrder(address orderMaker, bool useAqua) private view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: orderMaker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -131,18 +132,6 @@ contract OrderRegistratorTest is Test {
             useAquaInsteadOfSignature: useAqua,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: ""
         }));
     }

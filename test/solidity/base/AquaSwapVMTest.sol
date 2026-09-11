@@ -11,10 +11,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { MockTaker } from "../mocks/MockTaker.sol";
 
-import { SwapVM } from "../../../contracts/SwapVM.sol";
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";
-import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
+import { AquaSwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 
 import { AquaStrategyBuilders } from "./AquaStrategyBuilders.sol";
 
@@ -28,7 +26,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         bool isExactIn;
     }
 
-    SwapVM public swapVM;
+    AquaSwapVMRouter public swapVM;
 
     MockTaker public taker;
     MockTaker public taker2;
@@ -46,8 +44,8 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         protocolFeeRecipient = vm.addr(0x8888);
     }
 
-    function _deployRouter() internal virtual returns (SwapVM) {
-        return new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+    function _deployRouter() internal virtual returns (AquaSwapVMRouter) {
+        return DeployCode.AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
     }
 
     // ===== HELPER FUNCTIONS =====
@@ -119,28 +117,22 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         tokenOut.mint(maker, amountOut);
     }
 
-    function takerData(address takerAddress, bool isExactIn, bool isAToB) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    function takerData(SwapProgram memory swapProgram) internal view returns (bytes memory) {
+        return takerData(address(swapProgram.taker), swapProgram.isExactIn, swapProgram.zeroForOne);
+    }
+
+    function takerData(address takerAddress, bool isExactIn, bool isAToB) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddress,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
-            threshold: "", // no minimum output
+            threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }
@@ -166,25 +158,25 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
         SwapProgram memory swapProgram,
         ISwapVM.Order memory order
     ) public returns (uint256, uint256) {
-        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn, swapProgram.zeroForOne));
+        return swap(swapProgram, order, takerData(swapProgram));
+    }
 
-        return swapProgram.taker.swap(
-            order,
-            swapProgram.amount,
-            sigAndTakerData
-        );
+    function swap(
+        SwapProgram memory swapProgram,
+        ISwapVM.Order memory order,
+        bytes memory data
+    ) public returns (uint256, uint256) {
+        return swapProgram.taker.swap(order, swapProgram.amount, data);
     }
 
     function quote(
         SwapProgram memory swapProgram,
         ISwapVM.Order memory order
     ) public view returns (uint256, uint256) {
-        bytes memory sigAndTakerData = abi.encodePacked(takerData(address(swapProgram.taker), swapProgram.isExactIn, swapProgram.zeroForOne));
-
         (uint256 amountIn, uint256 amountOut,) = swapVM.asView().quote(
             order,
             swapProgram.amount,
-            sigAndTakerData
+            takerData(swapProgram)
         );
 
         return (amountIn, amountOut);

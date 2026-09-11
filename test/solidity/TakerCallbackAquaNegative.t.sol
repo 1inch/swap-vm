@@ -6,10 +6,10 @@ pragma solidity ^0.8.27;
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
-import { ISwapVM, SwapVM } from "../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
 
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { MockTakerBrokenCallback } from "./mocks/MockTakerBrokenCallback.sol";
 
 /// @title Negative tests for taker transfers in callback through Aqua
@@ -54,28 +54,18 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
         _takerDataBytes = _buildTakerData(address(brokenTaker), true);
     }
 
-    function _buildTakerData(address takerAddress, bool isExactIn) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    function _buildTakerData(address takerAddress, bool isExactIn) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddress,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
-            useTransferFromAndAquaPush: false, // Taker should push via callback
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            useTransferFromAndAquaPush: false,
+            isAToB: false,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }
@@ -91,7 +81,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
 
         // Expect revert: balance stays at 200e18, but we need 200e18 + 50e18 = 250e18
         vm.expectRevert(abi.encodeWithSelector(
-            SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
+            SwapVMRouter.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB,  // balance unchanged
             _setup.balanceB,  // original balance
             SWAP_AMOUNT,
@@ -110,7 +100,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
 
         // Expect revert: balance is 200e18 + 25e18 = 225e18, but we need 250e18
         vm.expectRevert(abi.encodeWithSelector(
-            SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
+            SwapVMRouter.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB + insufficientAmount,
             _setup.balanceB,
             SWAP_AMOUNT,
@@ -150,7 +140,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
 
         // Expect revert: balance is 200e18 + (50e18 - 1), but we need 250e18
         vm.expectRevert(abi.encodeWithSelector(
-            SwapVM.AquaBalanceInsufficientAfterTakerPush.selector,
+            SwapVMRouter.AquaBalanceInsufficientAfterTakerPush.selector,
             _setup.balanceB + SWAP_AMOUNT - 1,
             _setup.balanceB,
             SWAP_AMOUNT,

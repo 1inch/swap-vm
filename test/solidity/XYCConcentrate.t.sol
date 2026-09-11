@@ -13,11 +13,8 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraits, TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
@@ -26,10 +23,11 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
 
-contract ConcentrateTest is Test, OpcodesDebug {
+contract ConcentrateTest is Test {
     using SafeCast for uint256;
     using FormatLib for Vm;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     address public tokenA;
     address public tokenB;
 
@@ -61,7 +59,8 @@ contract ConcentrateTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy custom SwapVM router
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens — sort so tokenA is always Gt (higher address)
         // Required for correct price-range test invariants (priceBoundA = P_min, priceBoundB = P_max)
@@ -112,7 +111,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 actualBalanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 actualBalanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenB),
             tokenB: address(tokenA),
@@ -120,18 +119,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(actualBalanceB, actualBalanceA),
                 FeeFlatIn.build(setup.flatFee.toUint24()),
@@ -151,53 +138,33 @@ contract ConcentrateTest is Test, OpcodesDebug {
     }
 
     function _quotingTakerData(TakerSetup memory takerSetup) internal view returns (bytes memory takerData) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
             allowPartialFill: takerSetup.isPartialFill,
-            threshold: "", // no minimum output
+            threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }
 
     function _swappingTakerData(TakerSetup memory takerSetup, bytes memory signature) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: takerSetup.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
             allowPartialFill: takerSetup.isPartialFill,
-            threshold: "", // no minimum output
+            threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }
@@ -535,7 +502,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
     // invariants can swap both ways; the passed takerData is ignored in favor of
     // a freshly packed one carrying the correct direction.
     function _executeSwap(
-        SwapVM _swapVM,
+        SwapVMRouter _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -580,7 +547,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? bGt : bLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? bLt : bGt;
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenB),
             tokenB: address(tokenA),
@@ -588,18 +555,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(balanceB, balanceA),
                 FeeFlatIn.build(0.003e7), // 0.3% fee
@@ -622,7 +577,7 @@ contract ConcentrateTest is Test, OpcodesDebug {
         uint256 balanceA = address(tokenA) > address(tokenB) ? balanceGt : balanceLt;
         uint256 balanceB = address(tokenA) > address(tokenB) ? balanceLt : balanceGt;
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenB),
             tokenB: address(tokenA),
@@ -630,18 +585,6 @@ contract ConcentrateTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(balanceB, balanceA),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)

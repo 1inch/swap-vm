@@ -9,11 +9,8 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
@@ -52,7 +49,7 @@ import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Ba
 ///
 ///         TEST 4 — Slippage comparison:
 ///           concentrate achieves the same output amount for a SMALLER input
-contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
+contract XYCConcentrateCapitalEfficiencyTest is Test {
     uint256 constant ONE = 1e18;
 
     // Center-symmetric range [0.25, 4] — sqrtPmin=0.5, sqrtPmax=2
@@ -67,6 +64,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     // For sqrtPmin=0.9: R = 1/(1-0.9) = 10
 
     SwapVMRouter public swapVM;
+
+    TraitsHelper internal orders;
     address public tokenLt;
     address public tokenGt;
     address public maker;
@@ -76,7 +75,8 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     function setUp() public {
         makerPK = 0x1234;
         maker   = vm.addr(makerPK);
-        swapVM  = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM  = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         TokenMock tA = new TokenMock("TokenA", "A");
         TokenMock tB = new TokenMock("TokenB", "B");
@@ -102,7 +102,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 bLt,
         uint256 bGt
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenLt,
             tokenB: tokenGt,
@@ -110,14 +110,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0), preTransferInData: "",
-            postTransferInTarget: address(0), postTransferInData: "",
-            preTransferOutTarget: address(0), preTransferOutData: "",
-            postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 XYCSwap.build()
@@ -134,7 +126,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenLt,
             tokenB: tokenGt,
@@ -142,14 +134,6 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0), preTransferInData: "",
-            postTransferInTarget: address(0), postTransferInData: "",
-            preTransferOutTarget: address(0), preTransferOutData: "",
-            postTransferOutTarget: address(0), postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 XYCConcentrateSwap.build(sqrtPmin, sqrtPmax)
@@ -160,27 +144,17 @@ contract XYCConcentrateCapitalEfficiencyTest is Test, OpcodesDebug {
     }
 
     function _tdIn(bytes memory sig) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: true,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: sig
         }));
     }
