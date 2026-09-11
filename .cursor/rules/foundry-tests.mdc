@@ -15,8 +15,9 @@ alwaysApply: false
 ## Inheritance
 
 - **Aqua tests**: `AquaSwapVMTest`
-- **Direct tests**: `Test` + `OpcodesDebug`
+- **Direct tests**: `Test` — do **not** inherit `OpcodesDebug` / `LimitOpcodesDebug` / `AquaOpcodesDebug` unless the test contract itself is a VM dispatcher (calls `_runOpcode`)
 - **Invariant tests**: `CoreInvariants`
+- **Dispatcher mocks**: `OpcodesDebug` (e.g. `BestRouteSelector`)
 
 ## Error Handling
 

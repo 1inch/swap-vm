@@ -10,7 +10,38 @@ permissions:
   contents: read
 
 jobs:
-  run-ci:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Cache Hardhat artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            artifacts
+            cache
+          key: hh-${{ runner.os }}-default-${{ hashFiles('hardhat.config.ts', 'yarn.lock', 'contracts/**/*.sol') }}
+          restore-keys: |
+            hh-${{ runner.os }}-default-
+
+      - name: Install node modules
+        run: yarn install --frozen-lockfile
+
+      - name: Run tests
+        run: yarn test
+
+  snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -30,7 +61,3 @@ jobs:
 
       - name: Run snapshot check
         run: yarn snapshot:check
-
-      - name: Run tests
-        id: test
-        run: yarn test

@@ -10,9 +10,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
+import { SwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { SwapRegisters } from "../../contracts/libs/VM.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PrintFee, PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
@@ -20,6 +19,7 @@ import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 contract DebugTest is Test {
     SwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -32,7 +32,8 @@ contract DebugTest is Test {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouterDebug(address(new Aqua()), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouterDebug(address(new Aqua()), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -75,7 +76,7 @@ contract DebugTest is Test {
     }
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -83,18 +84,6 @@ contract DebugTest is Test {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }

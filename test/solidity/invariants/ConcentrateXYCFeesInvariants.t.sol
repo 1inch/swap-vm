@@ -11,11 +11,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
@@ -23,15 +19,17 @@ import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentra
 import { dynamic } from "../utils/Dynamic.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
+import { TokenMockDecimals } from "../mocks/TokenMockDecimals.sol";
 
 /**
  * @title ConcentrateXYCFeesInvariants
  * @notice Tests invariants for XYCConcentrate + XYCSwap with fee configurations
  * @dev Tests concentrated liquidity AMM behavior with different fee structures
  */
-contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
+contract ConcentrateXYCFeesInvariants is Test, CoreInvariants {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -84,7 +82,8 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function setUp() public virtual {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -133,7 +132,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Implementation of _executeSwap for real swap execution
      */
     function _executeSwap(
-        SwapVM _swapVM,
+        SwapVMRouter _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -207,6 +206,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Test concentrate without fees
      */
     function test_ConcentrateXYC() public {
+        _run_test_ConcentrateXYC();
+    }
+
+    function _run_test_ConcentrateXYC() internal {
         bytes memory bytecode = _buildConcentrateProgram(
             balanceA, balanceB, sqrtPriceMin, sqrtPriceMax, 0, 0
         );
@@ -226,6 +229,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Test concentrate with flat fee on input
      */
     function test_ConcentrateXYCFlatFeeIn() public {
+        _run_test_ConcentrateXYCFlatFeeIn();
+    }
+
+    function _run_test_ConcentrateXYCFlatFeeIn() internal {
         bytes memory bytecode = _buildConcentrateProgram(
             balanceA, balanceB, sqrtPriceMin, sqrtPriceMax, flatFeeInBps, 0
         );
@@ -245,6 +252,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Test concentrate with protocol fee
      */
     function test_ConcentrateXYCProtocolFee() public virtual {
+        _run_test_ConcentrateXYCProtocolFee();
+    }
+
+    function _run_test_ConcentrateXYCProtocolFee() internal {
         // Pre-approve for protocol fee transfers
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
@@ -268,6 +279,10 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Test concentrate with multiple fees
      */
     function test_ConcentrateXYCMultipleFees() public {
+        _run_test_ConcentrateXYCMultipleFees();
+    }
+
+    function _run_test_ConcentrateXYCMultipleFees() internal {
         // Pre-approve for protocol fee transfers
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
@@ -289,7 +304,7 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // Helper functions
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -297,18 +312,6 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -333,30 +336,230 @@ contract ConcentrateXYCFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: aToB,
             allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
+    }
 
-        return abi.encodePacked(takerTraits);
+    function test_AsymmetricRangeUp() public {
+        _setupEdgePriceRange();
+        sqrtPriceMin = Math.sqrt(0.9e36);
+        sqrtPriceMax = Math.sqrt(1.5e36);
+        _computeInitialBalances();
+
+        bytes memory bytecode = _buildConcentrateProgram(
+            balanceA, balanceB, sqrtPriceMin, sqrtPriceMax, 0, 0
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order, false);
+
+        assertAllInvariantsWithConfig(swapVM, order, address(tokenB), address(tokenA), config);
+    }
+
+    function test_AsymmetricRangeDown() public {
+        _setupEdgePriceRange();
+        sqrtPriceMin = Math.sqrt(0.85e36);
+        sqrtPriceMax = Math.sqrt(1.15e36);
+        _computeInitialBalances();
+
+        bytes memory bytecode = _buildConcentrateProgram(
+            balanceA, balanceB, sqrtPriceMin, sqrtPriceMax, 0, 0
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        assertAllInvariantsWithConfig(swapVM, order, address(tokenA), address(tokenB), config);
+    }
+
+    function test_VeryNarrowRange() public {
+        _setupEdgePriceRange();
+        sqrtPriceMin = Math.sqrt(0.99e36);
+        sqrtPriceMax = Math.sqrt(1.01e36);
+        _computeInitialBalances();
+
+        bytes memory bytecode = _buildConcentrateProgram(
+            balanceA, balanceB, sqrtPriceMin, sqrtPriceMax, 0, 0
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        InvariantConfig memory config = _config(order);
+
+        assertAllInvariantsWithConfig(swapVM, order, address(tokenA), address(tokenB), config);
+    }
+
+    function _runAllFeeVariants() internal {
+        _run_test_ConcentrateXYC();
+        _run_test_ConcentrateXYCFlatFeeIn();
+        _run_test_ConcentrateXYCProtocolFee();
+        _run_test_ConcentrateXYCMultipleFees();
+    }
+
+    function test_DustAmounts() public {
+        testAmounts = new uint256[](8);
+        testAmounts[0] = 3;
+        testAmounts[1] = 10;
+        testAmounts[2] = 20;
+        testAmounts[3] = 50;
+        testAmounts[4] = 100;
+        testAmounts[5] = 500;
+        testAmounts[6] = 1000;
+        testAmounts[7] = 2000;
+        testAmountsExactOut = new uint256[](6);
+        testAmountsExactOut[0] = 1;
+        testAmountsExactOut[1] = 10;
+        testAmountsExactOut[2] = 100;
+        testAmountsExactOut[3] = 1000;
+        testAmountsExactOut[4] = 10000;
+        testAmountsExactOut[5] = 100000;
+        symmetryTolerance = 1;
+        additivityTolerance = 0;
+        monotonicityToleranceBps = 15000;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function _setupEdgePriceRange() internal {
+        testAmounts = new uint256[](4);
+        testAmounts[0] = 1e18;
+        testAmounts[1] = 10e18;
+        testAmounts[2] = 50e18;
+        testAmounts[3] = 100e18;
+        symmetryTolerance = 0;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+    }
+
+    function test_EdgePriceRange() public {
+        _setupEdgePriceRange();
+        _runAllFeeVariants();
+    }
+
+    function test_HugeLiquidity() public {
+        availableLiquidity = 2.5e25;
+        testAmounts = new uint256[](5);
+        testAmounts[0] = 1e21;
+        testAmounts[1] = 10e21;
+        testAmounts[2] = 100e21;
+        testAmounts[3] = 1e23;
+        testAmounts[4] = 10e23;
+        symmetryTolerance = 0;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_LargeAmounts() public {
+        testAmounts = new uint256[](5);
+        testAmounts[0] = 50e18;
+        testAmounts[1] = 100e18;
+        testAmounts[2] = 150e18;
+        testAmounts[3] = 200e18;
+        testAmounts[4] = 250e18;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 30e18;
+        testAmountsExactOut[1] = 50e18;
+        testAmountsExactOut[2] = 100e18;
+        symmetryTolerance = 0;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_MicroAmounts() public {
+        testAmounts = new uint256[](8);
+        testAmounts[0] = 2000;
+        testAmounts[1] = 5000;
+        testAmounts[2] = 10000;
+        testAmounts[3] = 100000;
+        testAmounts[4] = 1000000;
+        testAmounts[5] = 10000000;
+        testAmounts[6] = 100000000;
+        testAmounts[7] = 1000000000;
+        testAmountsExactOut = new uint256[](6);
+        testAmountsExactOut[0] = 1;
+        testAmountsExactOut[1] = 10;
+        testAmountsExactOut[2] = 100;
+        testAmountsExactOut[3] = 1000;
+        testAmountsExactOut[4] = 10000;
+        testAmountsExactOut[5] = 100000;
+        symmetryTolerance = 2;
+        additivityTolerance = 0;
+        monotonicityToleranceBps = 4;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_NarrowRange() public {
+        sqrtPriceMin = Math.sqrt(0.95e36);
+        sqrtPriceMax = Math.sqrt(1.05e36);
+        testAmounts = new uint256[](5);
+        testAmounts[0] = 1e18;
+        testAmounts[1] = 10e18;
+        testAmounts[2] = 50e18;
+        testAmounts[3] = 100e18;
+        testAmounts[4] = 200e18;
+        symmetryTolerance = 0;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_SmallAmounts() public {
+        testAmounts = new uint256[](5);
+        testAmounts[0] = 0.01e18;
+        testAmounts[1] = 0.1e18;
+        testAmounts[2] = 0.5e18;
+        testAmounts[3] = 1e18;
+        testAmounts[4] = 5e18;
+        symmetryTolerance = 1;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_TinyLiquidity() public {
+        tokenA = new TokenMockDecimals("Token I", "TKI", 6);
+        tokenB = new TokenMockDecimals("Token J", "TKJ", 6);
+        if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
+        TokenMockDecimals(address(tokenA)).mint(maker, type(uint128).max);
+        TokenMockDecimals(address(tokenB)).mint(maker, type(uint128).max);
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        availableLiquidity = 1000e6;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 1e5;
+        testAmounts[1] = 1e6;
+        testAmounts[2] = 10e6;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
+    }
+
+    function test_WideRange() public {
+        sqrtPriceMin = Math.sqrt(0.5e36);
+        sqrtPriceMax = Math.sqrt(2.0e36);
+        testAmounts = new uint256[](5);
+        testAmounts[0] = 1e18;
+        testAmounts[1] = 10e18;
+        testAmounts[2] = 50e18;
+        testAmounts[3] = 100e18;
+        testAmounts[4] = 200e18;
+        symmetryTolerance = 0;
+        additivityTolerance = 1;
+        _computeInitialBalances();
+        _runAllFeeVariants();
     }
 }

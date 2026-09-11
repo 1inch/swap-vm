@@ -8,14 +8,9 @@ import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { SwapVM } from "../../contracts/SwapVM.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
-import { AquaSwapVMRouter } from "../../contracts/routers/AquaSwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { SwapVMRouterDebug, AquaSwapVMRouter, SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { SwapRegisters } from "../../contracts/libs/VM.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
@@ -39,8 +34,9 @@ contract RefundRejectingTaker {
     }
 }
 
-contract NativePaymentTest is Test, OpcodesDebug {
+contract NativePaymentTest is Test {
     SwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     WETHMock public weth;
     TokenMock public token;
 
@@ -62,11 +58,12 @@ contract NativePaymentTest is Test, OpcodesDebug {
 
         weth = new WETHMock();
         token = new TokenMock("Token J", "TKJ");
-        swapVM = new SwapVMRouterDebug(address(0), address(weth), makeAddr("owner"), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouterDebug(address(0), address(weth), makeAddr("owner"), "SwapVM", "1.0.0");
 
         aqua = new Aqua();
         aquaHelper = new AquaSwapVMHelper(address(aqua));
-        aquaRouter = new AquaSwapVMRouter(address(aqua), address(weth), makeAddr("owner"), "SwapVM", "1.0.0");
+        aquaRouter = DeployCode.AquaSwapVMRouter(address(aqua), address(weth), makeAddr("owner"), "SwapVM", "1.0.0");
 
         token.mint(maker, 1_000_000e18);
 
@@ -95,7 +92,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
             ? (address(weth), address(token))
             : (address(token), address(weth));
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: lowerToken,
             tokenB: higherToken,
@@ -103,18 +100,6 @@ contract NativePaymentTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: allowZeroAmountIn,
             receiver: receiver,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -139,28 +124,18 @@ contract NativePaymentTest is Test, OpcodesDebug {
         bool isExactIn,
         bool isAToB,
         bytes memory signature
-    ) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    ) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddr,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: takerAddr,
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }
@@ -169,28 +144,18 @@ contract NativePaymentTest is Test, OpcodesDebug {
         address takerAddr,
         bool isAToB,
         bool useTransferFromAndAquaPush
-    ) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    ) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddr,
             isExactIn: true,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: useTransferFromAndAquaPush,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: takerAddr,
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }
@@ -450,7 +415,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
         // tokenIn = token, tokenOut = weth
         bytes memory takerData = _buildTakerData(taker, true, !_wethIsAToB(), signature);
 
-        vm.expectRevert(SwapVM.MsgValueInvalidToken.selector);
+        vm.expectRevert(SwapVMRouter.MsgValueInvalidToken.selector);
         vm.prank(taker);
         swapVM.swap{ value: 1e18 }(order, amountIn, takerData);
     }
@@ -463,7 +428,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _buildXYCOrder(false, address(0));
         bytes memory takerData = _buildTakerData(taker, true, _wethIsAToB(), signature);
 
-        vm.expectRevert(SwapVM.NotEnoughMsgValueAttached.selector);
+        vm.expectRevert(SwapVMRouter.NotEnoughMsgValueAttached.selector);
         vm.prank(taker);
         swapVM.swap{ value: amountIn - 1 }(order, amountIn, takerData);
     }
@@ -477,7 +442,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
         (uint256 quotedIn,,) = swapVM.quote(order, amountOut, takerData);
         vm.deal(taker, quotedIn - 1);
 
-        vm.expectRevert(SwapVM.NotEnoughMsgValueAttached.selector);
+        vm.expectRevert(SwapVMRouter.NotEnoughMsgValueAttached.selector);
         vm.prank(taker);
         swapVM.swap{ value: quotedIn - 1 }(order, amountOut, takerData);
     }
@@ -490,7 +455,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
 
         bytes memory takerData = _buildAquaTakerData(taker, _wethIsAToB(), false);
 
-        vm.expectRevert(SwapVM.UnexpectedMsgValue.selector);
+        vm.expectRevert(SwapVMRouter.UnexpectedMsgValue.selector);
         vm.prank(taker);
         aquaRouter.swap{ value: amountIn }(order, amountIn, takerData);
     }
@@ -517,7 +482,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
         (ISwapVM.Order memory order, bytes memory signature) = _buildXYCOrder(false, address(0));
         bytes memory takerData = _buildTakerData(address(mockTaker), true, _wethIsAToB(), signature);
 
-        vm.expectRevert(SwapVM.EthTransferFailed.selector);
+        vm.expectRevert(SwapVMRouter.EthTransferFailed.selector);
         mockTaker.doSwap{ value: amountIn + excess }(ISwapVM(address(swapVM)), order, amountIn, takerData);
     }
 

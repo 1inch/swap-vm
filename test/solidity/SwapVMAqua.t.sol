@@ -5,11 +5,11 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
-import { ISwapVM } from "../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
 
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { MockTakerFirstTransfer } from "./mocks/MockTakerFirstTransfer.sol";
 
 contract SwapVMAquaTest is AquaSwapVMTest {
@@ -86,27 +86,17 @@ contract SwapVMAquaTest is AquaSwapVMTest {
         tokenA.mint(address(takerFirstTransfer), expectedAmountOut);
 
         // Create custom taker data with isFirstTransferFromTaker = true
-        bytes memory customTakerData = TakerTraitsLib.build(TakerTraitsLib.Args({
+        bytes memory customTakerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(swapProgram.taker),
             isExactIn: swapProgram.isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: true,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
-            isFirstTransferFromTaker: true,  // This flag ensures tokens are first sent from taker
+            isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
-            isAToB: false, // zeroForOne=false: swap tokenB->tokenA, and tokenB > tokenA after sort
+            isAToB: false,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
 

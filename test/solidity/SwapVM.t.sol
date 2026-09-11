@@ -10,18 +10,16 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib, TakerTraits } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
 
-contract SwapVMTest is Test, OpcodesDebug {
+contract SwapVMTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -61,7 +59,8 @@ contract SwapVMTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy custom SwapVM router with Invalidators
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = new TokenMock("Token I", "TKI");
@@ -88,7 +87,7 @@ contract SwapVMTest is Test, OpcodesDebug {
             setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -96,18 +95,6 @@ contract SwapVMTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -117,20 +104,24 @@ contract SwapVMTest is Test, OpcodesDebug {
     }
 
     function _buildTakerData(uint256 threshold, bytes memory signature) internal view returns (bytes memory) {
-        // Build taker data step by step to avoid stack too deep
-        TakerTraitsLib.Args memory args;
-        args.taker = taker;
-        args.isExactIn = true;
-        args.isAToB = false;
-        args.isFirstTransferFromTaker = true;
-        args.threshold = threshold > 0 ? abi.encodePacked(threshold) : bytes("");
-        args.signature = signature;
+        bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        // All other fields remain default (false/0/empty)
-        return TakerTraitsLib.build(args);
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+            taker: taker,
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            isFirstTransferFromTaker: true,
+            useTransferFromAndAquaPush: false,
+            isAToB: false,
+            allowPartialFill: false,
+            threshold: thresholdData,
+            to: address(0),
+            hasPreTransferInCallback: false,
+            signature: signature
+        }));
     }
 
-    /// @notice Sets up expectation that SwapVM contract will emit Swapped event with these parameters
+    /// @notice Sets up expectation that SwapVMRouter contract will emit Swapped event with these parameters
     /// @dev The emit here is NOT broadcasting - it's Foundry's syntax to specify expected event values.
     ///      Test fails if contract doesn't emit matching event on next call.
     function _expectSwappedEvent(
@@ -143,7 +134,7 @@ contract SwapVMTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         vm.expectEmit(true, true, true, true, address(swapVM));
         // Specify expected event parameters (Foundry will verify contract emits this)
-        emit SwapVM.Swapped(
+        emit SwapVMRouter.Swapped(
             orderHash,
             maker,
             taker,
@@ -340,7 +331,7 @@ contract SwapVMTest is Test, OpcodesDebug {
 
         // === Verify Event Parameters ===
         vm.expectEmit(true, true, true, true, address(swapVM));
-        emit SwapVM.Swapped(
+        emit SwapVMRouter.Swapped(
             expectedOrderHash,
             maker,
             taker,

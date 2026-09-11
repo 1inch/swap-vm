@@ -11,11 +11,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
@@ -26,9 +22,10 @@ import { BaseFeeAdjuster } from "../../contracts/instructions/BaseFeeAdjuster.so
  * @notice Tests for BaseFeeAdjuster instruction functionality
  * @dev Tests gas-based price adjustments for limit orders
  */
-contract BaseFeeAdjusterTest is Test, OpcodesDebug {
+contract BaseFeeAdjusterTest is Test {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -39,7 +36,8 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -343,7 +341,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
     // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -351,18 +349,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -378,30 +364,18 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
 
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: false,
             allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
-
-        return abi.encodePacked(takerTraits);
     }
 }

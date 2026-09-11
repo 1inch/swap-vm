@@ -10,17 +10,15 @@ import { EthReceiver } from "@1inch/solidity-utils/contracts/mixins/EthReceiver.
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 
 import { WETHMock } from "./mocks/WETHMock.sol";
 
-contract UnwrapWethTest is Test, OpcodesDebug {
+contract UnwrapWethTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     WETHMock public weth;
     TokenMock public token;
 
@@ -35,7 +33,8 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         weth = new WETHMock();
-        swapVM = new SwapVMRouter(address(0), address(weth), msg.sender, "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(weth), msg.sender, "SwapVM", "1.0.0");
         token = new TokenMock("Token J", "TKJ");
 
         token.mint(maker, 1_000_000e18);
@@ -66,7 +65,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
             XYCSwap.build()
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: lowerToken,
             tokenB: higherToken,
@@ -74,18 +73,6 @@ contract UnwrapWethTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: receiver,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -101,27 +88,17 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         address recipient,
         bytes memory signature
     ) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: isExactIn,
             shouldUnwrapWeth: takerUnwrapWeth,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: recipient,
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }

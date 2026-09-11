@@ -14,10 +14,8 @@ import { DirectSwapVMHelper } from "./helpers/DirectSwapVMHelper.sol";
 import { AquaSwapVMHelper } from "./helpers/AquaSwapVMHelper.sol";
 import { DirectModeTaker } from "./helpers/DirectModeTaker.sol";
 
-import { ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { AquaSwapVMRouter } from "../../contracts/routers/AquaSwapVMRouter.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, TraitsHelper, DeployCode } from "./helpers/SwapVMTestSetup.sol";
 
 /// @title Tests for all 4 combinations of Aqua and direct transfers
 /// @notice Tests: Maker(Aqua/Direct) x Taker(AquaPush/Callback/Direct)
@@ -31,6 +29,7 @@ contract TransferModesCombinationsTest is Test {
 
     address public maker;
     uint256 public makerPrivateKey;
+    TraitsHelper internal orders;
     address public taker;
 
     uint256 constant BALANCE_A = 100e18;
@@ -38,6 +37,7 @@ contract TransferModesCombinationsTest is Test {
     uint256 constant SWAP_AMOUNT = 50e18;
 
     function setUp() public {
+        orders = DeployCode.TraitsHelper();
         aqua = new Aqua();
 
         // Deploy helpers with different opcodes
@@ -60,7 +60,7 @@ contract TransferModesCombinationsTest is Test {
     // ==================== Combination 1: Aqua Maker + Taker AquaPush ====================
 
     function test_AquaMaker_TakerAquaPush() public {
-        AquaSwapVMRouter router = aquaHelper.router();
+        SwapVMRouter router = aquaHelper.router();
 
         // Setup maker's Aqua balances
         tokenA.mint(maker, BALANCE_A);
@@ -69,7 +69,7 @@ contract TransferModesCombinationsTest is Test {
         ISwapVM.Order memory order = aquaHelper.createOrder(maker, tokenA, tokenB);
         _shipAquaStrategy(order, router);
 
-        // Setup taker with approval for SwapVM to do transferFrom + AquaPush
+        // Setup taker with approval for SwapVMRouter to do transferFrom + AquaPush
         tokenB.mint(taker, SWAP_AMOUNT);
         vm.prank(taker);
         tokenB.approve(address(router), type(uint256).max);
@@ -179,7 +179,7 @@ contract TransferModesCombinationsTest is Test {
 
     // ==================== Helper Functions ====================
 
-    function _shipAquaStrategy(ISwapVM.Order memory order, AquaSwapVMRouter router) internal {
+    function _shipAquaStrategy(ISwapVM.Order memory order, SwapVMRouter router) internal {
         vm.prank(maker);
         tokenA.approve(address(aqua), type(uint256).max);
         vm.prank(maker);
@@ -194,54 +194,34 @@ contract TransferModesCombinationsTest is Test {
         );
     }
 
-    function _buildTakerData(address takerAddr, bool useTransferFromAndAquaPush, bool hasCallback) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    function _buildTakerData(address takerAddr, bool useTransferFromAndAquaPush, bool hasCallback) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddr,
             isExactIn: true,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: useTransferFromAndAquaPush,
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            isAToB: false,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }
 
-    function _buildTakerDataWithSignature(address takerAddr, bool hasCallback, bytes memory signature) internal pure returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+    function _buildTakerDataWithSignature(address takerAddr, bool hasCallback, bytes memory signature) internal view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddr,
             isExactIn: true,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: hasCallback,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
-            isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
+            isAToB: false,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }

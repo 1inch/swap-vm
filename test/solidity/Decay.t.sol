@@ -11,19 +11,17 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { Decay } from "../../contracts/instructions/Decay.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
 
 
-contract DecayTest is Test, OpcodesDebug {
+contract DecayTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     address public tokenA;
     address public tokenB;
 
@@ -45,7 +43,8 @@ contract DecayTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy SwapVM router
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = address(new TokenMock("Token I", "TKI"));
@@ -91,7 +90,7 @@ contract DecayTest is Test, OpcodesDebug {
             Salt.build(uint32(0x1000 + orderNonce++))
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenA,
             tokenB: tokenB,
@@ -99,18 +98,6 @@ contract DecayTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -130,27 +117,17 @@ contract DecayTest is Test, OpcodesDebug {
         uint256 amountIn
     ) internal returns (uint256 actualAmountIn, uint256 actualAmountOut) {
         bool isAToB = tokenIn < tokenOut;
-        bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
+        bytes memory takerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: trader,
             isExactIn: true,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: true,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
 

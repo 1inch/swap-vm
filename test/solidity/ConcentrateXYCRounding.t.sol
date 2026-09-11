@@ -10,10 +10,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
@@ -27,11 +24,13 @@ import { dynamic } from "./utils/Dynamic.sol";
  *      2. Round-trip attacks (A→B→A cycles)
  *      3. Maker protection (liquidity must grow, not shrink)
  */
-contract ConcentrateXYCRounding is Test, OpcodesDebug {
+contract ConcentrateXYCRounding is Test {
     uint256 constant ONE = 1e18;
     uint24 constant FEE_BPS = 0.003e7; // 0.3%
 
     SwapVMRouter public swapVM;
+
+    TraitsHelper internal orders;
     address public tokenLt; // lower address
     address public tokenGt; // higher address
     address public maker;
@@ -41,7 +40,8 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     function setUp() public {
         makerPK = 0x1234;
         maker = vm.addr(makerPK);
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Ensure tokenLt < tokenGt
         TokenMock tA = new TokenMock("TokenA", "A");
@@ -68,7 +68,7 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
         uint256 sqrtPmin,
         uint256 sqrtPmax
     ) internal view returns (ISwapVM.Order memory order, bytes memory sig) {
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenLt,
             tokenB: tokenGt,
@@ -76,18 +76,6 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: bytes.concat(
                 DynamicBalances.build(bLt, bGt),
                 FeeFlatIn.build(FEE_BPS),
@@ -99,27 +87,17 @@ contract ConcentrateXYCRounding is Test, OpcodesDebug {
     }
 
     function _td(bytes memory sig, bool isExactIn, bool isAToB) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: taker,
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: sig
         }));
     }

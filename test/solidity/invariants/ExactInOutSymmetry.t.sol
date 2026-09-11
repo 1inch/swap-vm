@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../../contracts/SwapVM.sol";
+import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 
 /**
  * @title ExactInOutSymmetry
@@ -15,7 +15,7 @@ library ExactInOutSymmetry {
     error AsymmetryDetected(uint256 expectedIn, uint256 actualIn, uint256 diff);
 
     function assertSymmetry(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -43,7 +43,7 @@ library ExactInOutSymmetry {
     }
 
     function assertSymmetryBatch(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,

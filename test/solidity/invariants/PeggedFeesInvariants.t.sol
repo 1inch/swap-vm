@@ -10,11 +10,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
@@ -23,6 +19,7 @@ import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { ProtocolFeeProviderMock } from "../../../contracts/mocks/ProtocolFeeProviderMock.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
+import { TokenMockDecimals } from "../mocks/TokenMockDecimals.sol";
 
 
 /**
@@ -44,9 +41,10 @@ struct FeeConfig {
  * @notice Tests invariants for PeggedSwap + all types of fees
  * @dev Tests pegged curve with different fee structures
  */
-contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
+contract PeggedFeesInvariants is Test, CoreInvariants {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -101,7 +99,8 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     function setUp() public virtual {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -130,7 +129,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
      * @notice Implementation of _executeSwap for real swap execution
      */
     function _executeSwap(
-        SwapVM _swapVM,
+        SwapVMRouter _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -212,6 +211,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     // ====== Pegged Tests ======
 
     function test_Pegged() public {
+        _run_test_Pegged();
+    }
+
+    function _run_test_Pegged() internal {
         FeeConfig memory fees = _feeConfig();
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -227,6 +230,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedFlatFeeIn() public {
+        _run_test_PeggedFlatFeeIn();
+    }
+
+    function _run_test_PeggedFlatFeeIn() internal {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeInBps = flatFeeInBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
@@ -243,6 +250,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedFlatFeeOut() public {
+        _run_test_PeggedFlatFeeOut();
+    }
+
+    function _run_test_PeggedFlatFeeOut() internal {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeOutBps = flatFeeOutBps;
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
@@ -262,6 +273,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedProtocolFee() public virtual {
+        _run_test_PeggedProtocolFee();
+    }
+
+    function _run_test_PeggedProtocolFee() internal {
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
@@ -284,6 +299,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedProtocolFeeIn() public virtual {
+        _run_test_PeggedProtocolFeeIn();
+    }
+
+    function _run_test_PeggedProtocolFeeIn() internal {
         FeeConfig memory fees = _feeConfig();
         fees.protocolFeeInBps = protocolFeeOutBps; // Use same rate as protocolFeeOut
         bytes memory bytecode = _buildProgram(balanceA, balanceB, fees);
@@ -303,6 +322,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedDynamicProtocolFeeIn() public virtual {
+        _run_test_PeggedDynamicProtocolFeeIn();
+    }
+
+    function _run_test_PeggedDynamicProtocolFeeIn() internal {
         // Deploy fee provider with 0.2% fee
         ProtocolFeeProviderMock feeProviderMock = new ProtocolFeeProviderMock(
             protocolFeeOutBps,
@@ -330,6 +353,10 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
     }
 
     function test_PeggedMultipleFees() public {
+        _run_test_PeggedMultipleFees();
+    }
+
+    function _run_test_PeggedMultipleFees() internal {
         FeeConfig memory fees = _feeConfig();
         fees.flatFeeInBps = flatFeeInBps;
         fees.flatFeeOutBps = flatFeeOutBps;
@@ -354,7 +381,7 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
     // Helper functions
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -362,18 +389,6 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -389,30 +404,395 @@ contract PeggedFeesInvariants is Test, OpcodesDebug, CoreInvariants {
 
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
             threshold: thresholdData,
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
+    }
 
-        return abi.encodePacked(takerTraits);
+    function test_AsymmetricPool_ReverseSwap_NoAxisMismatch() public {
+        _setupVeryImbalancedDifferentDecimals();
+
+        uint256 abundantBalance = 100_000e18;
+        uint256 scarceBalance = 10e6;
+
+        bool tokenAIs18 = tokenA.decimals() == 18;
+
+        uint256 balanceTokenA = tokenAIs18 ? abundantBalance : scarceBalance;
+        uint256 balanceTokenB = tokenAIs18 ? scarceBalance : abundantBalance;
+        uint256 rateLtTest = tokenAIs18 ? 1 : 1e12;
+        uint256 rateGtTest = tokenAIs18 ? 1e12 : 1;
+        uint256 x0Config = balanceTokenA * rateLtTest;
+        uint256 y0Config = balanceTokenB * rateGtTest;
+
+        bytes memory bytecode = bytes.concat(
+            DynamicBalances.build(balanceTokenA, balanceTokenB),
+            PeggedSwap.build(x0Config, y0Config, linearWidth, rateLtTest, rateGtTest)
+        );
+
+        ISwapVM.Order memory order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            program: bytecode
+        }));
+
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        uint256 swapAmount = 1e18;
+        uint256 swapAmountReverse = 1e6;
+
+        address tokenInForward = address(tokenA) < address(tokenB) ? address(tokenA) : address(tokenB);
+        address tokenOutForward = address(tokenA) < address(tokenB) ? address(tokenB) : address(tokenA);
+
+        if (balanceTokenA < balanceTokenB) {
+            tokenInForward = address(tokenB);
+            tokenOutForward = address(tokenA);
+        }
+
+        bytes memory exactInData = _reverseSwapTakerData(signature, tokenInForward < tokenOutForward);
+        bytes memory exactInDataReverse = _reverseSwapTakerData(signature, tokenOutForward < tokenInForward);
+
+        try swapVM.asView().quote(order, swapAmount, exactInData) returns (uint256, uint256 outForward, bytes32) {
+            assertGt(outForward, 0, "Output should be non-zero");
+            uint256 maxReasonableOutput = swapAmount * 20;
+            uint256 outForwardScaled = outForward;
+            if (tokenOutForward == address(tokenA) && balanceTokenA < balanceTokenB) {
+                outForwardScaled = outForward * 1e12;
+            } else if (tokenOutForward == address(tokenB) && balanceTokenB < balanceTokenA) {
+                outForwardScaled = outForward * 1e12;
+            }
+            assertLe(
+                outForwardScaled,
+                maxReasonableOutput,
+                string.concat(
+                    "Reverse swap output wildly inflated - axis mismatch detected! ",
+                    "Output: ", vm.toString(outForwardScaled),
+                    ", Max reasonable: ", vm.toString(maxReasonableOutput)
+                )
+            );
+        } catch {}
+
+        try swapVM.asView().quote(order, swapAmountReverse, exactInDataReverse) returns (uint256, uint256 outReverse, bytes32) {
+            assertGt(outReverse, 0, "Reverse output should be non-zero");
+            uint256 outReverseScaled = outReverse;
+            if (tokenInForward == address(tokenA) && balanceTokenA < balanceTokenB) {
+                outReverseScaled = outReverse * 1e12;
+            } else if (tokenInForward == address(tokenB) && balanceTokenB < balanceTokenA) {
+                outReverseScaled = outReverse * 1e12;
+            }
+            uint256 normalizedInReverse = swapAmountReverse * 1e12;
+            uint256 capacityRate = abundantBalance / (scarceBalance * 1e12);
+            assertLe(
+                outReverseScaled,
+                normalizedInReverse * capacityRate * 2,
+                "Reverse direction also should not have axis mismatch"
+            );
+        } catch {}
+    }
+
+    function _reverseSwapTakerData(bytes memory signature, bool isAToB) private view returns (bytes memory) {
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+            taker: address(0),
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            isFirstTransferFromTaker: false,
+            useTransferFromAndAquaPush: false,
+            isAToB: isAToB,
+            allowPartialFill: false,
+            threshold: "",
+            to: address(this),
+            hasPreTransferInCallback: false,
+            signature: signature
+        }));
+    }
+
+    function _runAllFeeVariants() internal {
+        _run_test_Pegged();
+        _run_test_PeggedFlatFeeIn();
+        _run_test_PeggedFlatFeeOut();
+        _run_test_PeggedProtocolFee();
+        _run_test_PeggedProtocolFeeIn();
+        _run_test_PeggedDynamicProtocolFeeIn();
+        _run_test_PeggedMultipleFees();
+    }
+
+    function test_BalancedCurve() public {
+        linearWidth = 0.5e27;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 10e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
+    }
+
+    function test_BalancedPoolEdgeFees() public {
+        flatFeeInBps = 0.999e7;
+        flatFeeOutBps = 0.001e7;
+        protocolFeeOutBps = 0.1e7;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 10e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 0.1e18;
+        testAmountsExactOut[1] = 0.5e18;
+        testAmountsExactOut[2] = 1e18;
+        symmetryTolerance = 2100;
+        additivityTolerance = 2100;
+        skipSpotPrice = true;
+        _runAllFeeVariants();
+    }
+
+    function test_DustAmounts() public {
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 1000;
+        testAmounts[1] = 10000;
+        testAmounts[2] = 1e12;
+        skipMonotonicity = true;
+        skipSpotPrice = true;
+        symmetryTolerance = 3100;
+        additivityTolerance = 100;
+        _runAllFeeVariants();
+    }
+
+    function test_HugeLiquidity() public {
+        balanceA = 1e27;
+        balanceB = 1e27;
+        x0 = 1e27;
+        y0 = 1e27;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 1e24;
+        testAmounts[1] = 1e25;
+        testAmounts[2] = 1e26;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1e9;
+        additivityTolerance = 2e9;
+        _runAllFeeVariants();
+    }
+
+    function test_ImbalancedPoolHighFees() public {
+        balanceA = 10000e18;
+        balanceB = 1000e18;
+        x0 = 10000e18;
+        y0 = 1000e18;
+        linearWidth = 0.5e27;
+        flatFeeInBps = 0.05e7;
+        flatFeeOutBps = 0.05e7;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 5e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 10e18;
+        testAmountsExactOut[1] = 50e18;
+        testAmountsExactOut[2] = 100e18;
+        symmetryTolerance = 100;
+        additivityTolerance = 10;
+        roundingToleranceBps = 700;
+        _runAllFeeVariants();
+    }
+
+    function test_ImbalancedPoolLowFees() public {
+        balanceA = 10000e18;
+        balanceB = 1000e18;
+        x0 = 10000e18;
+        y0 = 1000e18;
+        linearWidth = 0.5e27;
+        flatFeeInBps = 0.001e7;
+        flatFeeOutBps = 0.001e7;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 5e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 10e18;
+        testAmountsExactOut[1] = 50e18;
+        testAmountsExactOut[2] = 100e18;
+        symmetryTolerance = 100;
+        _runAllFeeVariants();
+    }
+
+    function test_LargeAmounts() public {
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 100e18;
+        testAmounts[1] = 300e18;
+        testAmounts[2] = 500e18;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 50e18;
+        testAmountsExactOut[1] = 100e18;
+        testAmountsExactOut[2] = 200e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
+    }
+
+    function _setupVeryImbalancedDifferentDecimals() internal {
+        TokenMock token18 = TokenMock(address(new TokenMockDecimals("Token I", "TKI", 18)));
+        TokenMock token6 = TokenMock(address(new TokenMockDecimals("Token J", "TKJ", 6)));
+        (tokenA, tokenB) = address(token18) < address(token6) ? (token18, token6) : (token6, token18);
+        tokenA.mint(maker, type(uint128).max);
+        tokenB.mint(maker, type(uint128).max);
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        if (address(token18) < address(token6)) {
+            balanceA = 10e18;
+            balanceB = 10e6;
+            rateLt = 1;
+            rateGt = 1e12;
+        } else {
+            balanceA = 10e6;
+            balanceB = 10e18;
+            rateLt = 1e12;
+            rateGt = 1;
+        }
+        x0 = 10e18;
+        y0 = 10e18;
+        uint256 unitIn = address(token18) < address(token6) ? 1e18 : 1e6;
+        uint256 unitOut = address(token18) < address(token6) ? 1e6 : 1e18;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = unitIn / 10;
+        testAmounts[1] = unitIn / 2;
+        testAmounts[2] = unitIn;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = unitOut / 10;
+        testAmountsExactOut[1] = unitOut / 2;
+        testAmountsExactOut[2] = unitOut;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1e12;
+        additivityTolerance = 1000;
+        roundingToleranceBps = 400;
+    }
+
+    function test_LargeDifferentDecimals() public {
+        TokenMock token18 = TokenMock(address(new TokenMockDecimals("Token I", "TKI", 18)));
+        TokenMock token6 = TokenMock(address(new TokenMockDecimals("Token J", "TKJ", 6)));
+        (tokenA, tokenB) = address(token18) < address(token6) ? (token18, token6) : (token6, token18);
+        tokenA.mint(maker, type(uint128).max);
+        tokenB.mint(maker, type(uint128).max);
+        vm.prank(maker);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.approve(address(swapVM), type(uint256).max);
+        if (address(token18) < address(token6)) {
+            balanceA = 1_000_000e18;
+            balanceB = 1_000_000e6;
+            rateLt = 1;
+            rateGt = 1e12;
+        } else {
+            balanceA = 1_000_000e6;
+            balanceB = 1_000_000e18;
+            rateLt = 1e12;
+            rateGt = 1;
+        }
+        x0 = 1_000_000e18;
+        y0 = 1_000_000e18;
+        uint256 unitIn = address(token18) < address(token6) ? 1e18 : 1e6;
+        uint256 unitOut = address(token18) < address(token6) ? 1e6 : 1e18;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 1000 * unitIn;
+        testAmounts[1] = 10_000 * unitIn;
+        testAmounts[2] = 100_000 * unitIn;
+        testAmountsExactOut = new uint256[](3);
+        testAmountsExactOut[0] = 1000 * unitOut;
+        testAmountsExactOut[1] = 10_000 * unitOut;
+        testAmountsExactOut[2] = 100_000 * unitOut;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1e12;
+        additivityTolerance = 1000;
+        _runAllFeeVariants();
+    }
+
+    function test_MostlyCurved() public {
+        linearWidth = 0.2e27;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 10e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
+    }
+
+    function test_PureSquareRoot() public {
+        linearWidth = 0;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 10e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
+    }
+
+    function test_SmallAmounts() public {
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 0.01e18;
+        testAmounts[1] = 0.1e18;
+        testAmounts[2] = 1e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
+    }
+
+    function test_TinyLiquidity() public {
+        balanceA = 1e18;
+        balanceB = 1e18;
+        x0 = 1e18;
+        y0 = 1e18;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 0.01e18;
+        testAmounts[1] = 0.05e18;
+        testAmounts[2] = 0.1e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        roundingToleranceBps = 2500;
+        _runAllFeeVariants();
+    }
+
+    function test_VeryImbalancedDifferentDecimals() public {
+        _setupVeryImbalancedDifferentDecimals();
+        _runAllFeeVariants();
+    }
+
+    function test_VeryLinear() public {
+        linearWidth = 0.95e27;
+        testAmounts = new uint256[](3);
+        testAmounts[0] = 10e18;
+        testAmounts[1] = 50e18;
+        testAmounts[2] = 100e18;
+        flatFeeOutBps = 0.003e7;
+        symmetryTolerance = 1010;
+        additivityTolerance = 2000;
+        _runAllFeeVariants();
     }
 }

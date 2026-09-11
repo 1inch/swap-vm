@@ -6,19 +6,19 @@ pragma solidity ^0.8.27;
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { ISwapVM } from "../../../contracts/SwapVM.sol";
-import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";
-import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
-import { AquaOpcodesDebug } from "../../../contracts/opcodes/AquaOpcodesDebug.sol";
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { AquaSwapVMRouter, DeployCode, TraitsHelper } from "./SwapVMTestSetup.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { Salt } from "../../../contracts/instructions/Controls.sol";
 
-/// @title Helper contract for Aqua SwapVM with AquaOpcodesDebug
-contract AquaSwapVMHelper is AquaOpcodesDebug {
+/// @title Helper for Aqua orders — deploys AquaSwapVMRouter from artifact
+contract AquaSwapVMHelper {
     AquaSwapVMRouter public router;
+    TraitsHelper internal immutable orders;
 
     constructor(address aqua) {
-        router = new AquaSwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
+        router = DeployCode.AquaSwapVMRouter(aqua, address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
     }
 
     function createOrder(
@@ -31,7 +31,7 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
             Salt.build(uint64(uint256(keccak256(abi.encode(block.timestamp)))))
         );
 
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -39,18 +39,6 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
     }

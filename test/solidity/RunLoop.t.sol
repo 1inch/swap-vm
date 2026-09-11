@@ -9,11 +9,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
-import { Opcodes } from "../../contracts/opcodes/Opcodes.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
@@ -27,7 +24,6 @@ import { RequireMinRate, AdjustMinRate } from "../../contracts/instructions/MinR
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Extruction } from "../../contracts/instructions/Extruction.sol";
 import { ContextLib } from "../../contracts/libs/VM.sol";
-import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
 
 /**
  * @title RunLoopTest
@@ -37,9 +33,10 @@ import { BestRouteSelector } from "./mocks/BestRouteSelector.sol";
  *      - Nested runLoop execution through instructions
  *      - Stress tests and extruction + runLoop scenarios
  */
-contract RunLoopTest is Test, OpcodesDebug {
+contract RunLoopTest is Test {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -50,7 +47,8 @@ contract RunLoopTest is Test, OpcodesDebug {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -167,7 +165,7 @@ contract RunLoopTest is Test, OpcodesDebug {
         bytes memory takerData = _signAndPackTakerData(order);
 
         // Dispatcher rejects unknown/reserved opcodes with a typed error
-        vm.expectRevert(abi.encodeWithSelector(Opcodes.UnknownOpcode.selector, uint256(200)));
+        vm.expectRevert(abi.encodeWithSelector(SwapVMRouter.UnknownOpcode.selector, uint256(200)));
         swapVM.swap(order, 1e18, takerData);
     }
 
@@ -258,7 +256,7 @@ contract RunLoopTest is Test, OpcodesDebug {
      * @dev Key insight: Same balances, DIFFERENT strategies
      */
     function test_BestRouteSelector_XYC_vs_Pegged() public {
-        BestRouteSelector selector = new BestRouteSelector(address(aqua));
+        address selector = DeployCode.BestRouteSelector(address(aqua));
 
         // Strategy 1: XYC (constant product)
         bytes memory strategy1 = XYCSwap.build();
@@ -298,7 +296,7 @@ contract RunLoopTest is Test, OpcodesDebug {
     // ============================================
 
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -306,18 +304,6 @@ contract RunLoopTest is Test, OpcodesDebug {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -327,27 +313,17 @@ contract RunLoopTest is Test, OpcodesDebug {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: true,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
-            threshold: bytes(""),
+            threshold: "",
             to: taker,
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
     }
