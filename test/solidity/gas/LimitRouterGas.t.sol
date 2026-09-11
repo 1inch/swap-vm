@@ -8,7 +8,9 @@ import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
+import { LimitSwapVMRouter } from "../../../contracts/routers/LimitSwapVMRouter.sol";
+import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
+import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
 import { Salt, Deadline } from "../../../contracts/instructions/Controls.sol";
@@ -18,7 +20,6 @@ import { InvalidateTokenIn, InvalidateBit } from "../../../contracts/instruction
 /// @notice Limit-order gas benchmarks.
 contract LimitRouterGas is Test {
     LimitSwapVMRouter public swapVM;
-    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -33,8 +34,7 @@ contract LimitRouterGas is Test {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        orders = DeployCode.TraitsHelper();
-        swapVM = DeployCode.LimitSwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = new LimitSwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -274,7 +274,7 @@ contract LimitRouterGas is Test {
     }
 
     function buildOrder(bytes memory program, bool isExactIn) internal view returns (ISwapVM.Order memory, bytes memory) {
-        ISwapVM.Order memory order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
+        ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -282,23 +282,45 @@ contract LimitRouterGas is Test {
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
             receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
             program: program
         }));
 
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
 
-        bytes memory takerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+        bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
             threshold: "",
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
             signature: abi.encodePacked(r, s, v)
         }));
 

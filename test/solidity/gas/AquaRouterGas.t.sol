@@ -10,7 +10,9 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { AquaSwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
+import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";
+import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
+import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
@@ -23,7 +25,6 @@ import { dynamic } from "../utils/Dynamic.sol";
 contract AquaRouterGas is Test {
     Aqua public immutable aqua = new Aqua();
     AquaSwapVMRouter public swapVM;
-    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -37,8 +38,7 @@ contract AquaRouterGas is Test {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        orders = DeployCode.TraitsHelper();
-        swapVM = DeployCode.AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = new AquaSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -323,7 +323,7 @@ contract AquaRouterGas is Test {
         uint256 balanceA,
         uint256 balanceB
     ) internal returns (ISwapVM.Order memory order, bytes memory takerData) {
-        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
+        order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -331,6 +331,18 @@ contract AquaRouterGas is Test {
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
             receiver: address(0),
+            hasPreTransferInHook: false,
+            hasPostTransferInHook: false,
+            hasPreTransferOutHook: false,
+            hasPostTransferOutHook: false,
+            preTransferInTarget: address(0),
+            preTransferInData: "",
+            postTransferInTarget: address(0),
+            postTransferInData: "",
+            preTransferOutTarget: address(0),
+            preTransferOutData: "",
+            postTransferOutTarget: address(0),
+            postTransferOutData: "",
             program: program
         }));
 
@@ -344,17 +356,27 @@ contract AquaRouterGas is Test {
         );
         assertEq(strategyHash, orderHash);
 
-        takerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+        takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
+            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: true,
             isAToB: true,
             allowPartialFill: false,
             threshold: "",
             to: address(this),
+            deadline: 0,
             hasPreTransferInCallback: false,
+            hasPreTransferOutCallback: false,
+            preTransferInHookData: "",
+            postTransferInHookData: "",
+            preTransferOutHookData: "",
+            postTransferOutHookData: "",
+            preTransferInCallbackData: "",
+            preTransferOutCallbackData: "",
+            instructionsArgs: "",
             signature: ""
         }));
     }
