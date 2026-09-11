@@ -1,5 +1,7 @@
 # SwapVM
 
+**Git flow.** Branch from `main`, merge back to `main` via PR. When code goes to audit, cut `release/x.y` from `main`; audit fixes land there and are tagged `vx.y.z`. `main` keeps moving.
+
 [![Github Release](https://img.shields.io/github/v/tag/1inch/swap-vm?sort=semver&label=github)](https://github.com/1inch/swap-vm/releases/latest)
 [![CI](https://github.com/1inch/swap-vm/actions/workflows/ci.yml/badge.svg)](https://github.com/1inch/swap-vm/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@1inch/swap-vm.svg)](https://www.npmjs.com/package/@1inch/swap-vm)
