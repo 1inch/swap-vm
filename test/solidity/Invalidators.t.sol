@@ -176,12 +176,38 @@ contract InvalidatorsTest is Test, OpcodesDebug {
 
         // Fourth fill should fail - would exceed balance
         TokenMock(address(tokenA)).mint(taker, 1e18);
-        vm.expectRevert();
-        swapVM.swap(
-            order,
-            1e18,
-            exactInData
+        vm.expectRevert(abi.encodeWithSelector(
+            InvalidateTokenIn.InvalidateTokenInExceeded.selector, 11e18, 1e18, 10e18
+        ));
+        swapVM.swap(order, 1e18, exactInData);
+    }
+
+    /**
+     * Test token input invalidation - partial fills.
+     * In this test `InvalidateTokenIn` instruction placed before limit swap to trigger inner
+     * `ctx.runLoop()` call in `InvalidateTokenIn`.
+     */
+    function test_InvalidateTokenInPartialFillsBeforeSwap() public {
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(10e18, 200e18),
+            InvalidateTokenIn.build(),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactOutData = _signAndPackTakerData(order, false, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            (uint256 amountIn1,,) = swapVM.asView().quote(order, 20e18, exactOutData);
+            TokenMock(address(tokenA)).mint(taker, amountIn1);
+            swapVM.swap(order, 20e18, exactOutData);
+        }
+
+        TokenMock(address(tokenA)).mint(taker, 20e18);
+        // Balance is exhausted: the invalidator scales balanceIn down to 0, so the swap
+        // computes amountIn == 0 and MakerTraits rejects it before the exceeded check.
+        vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
+        swapVM.swap(order, 20e18, exactOutData);
     }
 
     /**
@@ -233,6 +259,50 @@ contract InvalidatorsTest is Test, OpcodesDebug {
         // Fourth fill should fail - would exceed output balance
         exactOutData = _signAndPackTakerData(order, false, 1e18);
         vm.expectRevert();
+        swapVM.swap(order, 1e18, exactOutData);
+    }
+
+    /** 
+     * Test token output invalidation.
+     * In this test `InvalidateTokenOut` instruction located before limit swap to trigger inner
+     * `ctx.runLoop()` call in `InvalidateTokenOut`.
+    */
+    function test_InvalidateTokenOutPartialFillsBeforeSwap() public {
+        // Order with 20 tokenB available for output
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 20e18),
+            InvalidateTokenOut.build(),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        // Use exactOut to control output amounts precisely
+        bytes memory exactOutData;
+
+        // First fill - want 8 tokenB out
+        exactOutData = _signAndPackTakerData(order, false, 40e18);
+        (uint256 amountIn1,,) = swapVM.asView().quote(order, 8e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn1);
+        swapVM.swap(order, 8e18, exactOutData);
+
+        // Second fill - want 7 tokenB out
+        exactOutData = _signAndPackTakerData(order, false, 35e18);
+        (uint256 amountIn2,,) = swapVM.asView().quote(order, 7e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn2);
+        swapVM.swap(order, 7e18, exactOutData);
+
+        // Third fill - want 5 tokenB out (total 20)
+        exactOutData = _signAndPackTakerData(order, false, 25e18);
+        (uint256 amountIn3,,) = swapVM.asView().quote(order, 5e18, exactOutData);
+        TokenMock(address(tokenA)).mint(taker, amountIn3);
+        swapVM.swap(order, 5e18, exactOutData);
+
+        // Fourth fill should fail - would exceed output balance
+        exactOutData = _signAndPackTakerData(order, false, 1e18);
+        // Balance is exhausted: the invalidator scales balanceOut down to 0, so the swap
+        // computes amountIn == 0 and MakerTraits rejects it before the exceeded check.
+        vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
         swapVM.swap(order, 1e18, exactOutData);
     }
 
