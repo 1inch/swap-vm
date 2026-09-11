@@ -39,7 +39,12 @@ contract DecayTest is Test, OpcodesDebug {
     uint256 constant STANDARD_SWAP = 100e18;
     uint256 constant TOLERANCE = 0.01e18; // 1%
 
+    // By default foundry's `block.timestamp` returns 1. We prefer to use realistic one.
+    uint40 constant DECAY_REALISTIC_START_TS = 0x123456;
+
     function setUp() public {
+        vm.warp(DECAY_REALISTIC_START_TS);
+
         // Setup maker with known private key for signing
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
@@ -84,9 +89,13 @@ contract DecayTest is Test, OpcodesDebug {
     uint256 private orderNonce = 0;
 
     function createDecayOrder() internal returns (ISwapVM.Order memory order, bytes memory signature) {
+        return createDecayOrder(DECAY_PERIOD);
+    }
+
+    function createDecayOrder(uint16 period) internal returns (ISwapVM.Order memory order, bytes memory signature) {
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(INITIAL_LIQUIDITY, INITIAL_LIQUIDITY),
-            Decay.build(DECAY_PERIOD),
+            Decay.build(period),
             XYCSwap.build(),
             Salt.build(uint32(0x1000 + orderNonce++))
         );
@@ -341,5 +350,24 @@ contract DecayTest is Test, OpcodesDebug {
 
         // Loss should be significant
         assertTrue(lossPercent > 5, "MEV loss should be > 5%");
+    }
+
+    /**
+     * Test Decay with a zero period applies no penalty and does not revert.
+     * With period 0 an offset expires in the block it is written, so `calcOffsetNow` must
+     * take its early return instead of falling through and dividing by the period.
+     */
+    function test_Decay_ZeroPeriod() public {
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder(0);
+
+        // First swap A->B writes an offset stamped with the current block timestamp.
+        executeSwap(trader1, order, signature, address(tokenA), address(tokenB), STANDARD_SWAP);
+
+        // Counter-swap B->A in the same block, so expiration == ts == block.timestamp.
+        (, uint256 outOpp) = executeSwap(trader2, order, signature, address(tokenB), address(tokenA), 50e18);
+
+        // Normal expected without decay: out = 50 * 1100 / (909 + 50) = 57.35...
+        uint256 expectedNormal = (uint256(50e18) * 1100) / 959;
+        assertApproxEqRel(outOpp, expectedNormal, TOLERANCE, "Zero period must apply no penalty");
     }
 }
