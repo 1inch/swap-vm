@@ -1,31 +1,6 @@
 # SwapVM
 
-**Release flow.** `main` is the development branch: `feat/*` and `fix/*` land there via PRs. At feature-freeze, `release/X.Y.Z` is branched from `main` (a patch is branched from tag `vX.Y.(Z-1)`, never from `main`). A release branch accepts only `fix/*` and `audit-<auditor>-<finding>/*` PRs, is merged back into `main`, and ships exactly one production deploy: CI commits the deployment artifact, tags `vX.Y.Z`, and the branch is frozen. Every deploy, patches included, is audited. The GitHub default branch points at the latest deployed release.
-
-```mermaid
-gitGraph
-    commit id: "feat A"
-    commit id: "feat B (1.0 freeze)"
-    branch "release/1.0.0"
-    commit id: "audit-oz-1"
-    checkout main
-    commit id: "feat C"
-    merge "release/1.0.0"
-    checkout "release/1.0.0"
-    commit id: "deploy artifact" tag: "v1.0.0"
-    checkout main
-    merge "release/1.0.0"
-    commit id: "feat D (1.1 freeze)"
-    branch "release/1.1.0"
-    checkout "release/1.0.0"
-    branch "release/1.0.1"
-    commit id: "fix CVE-x"
-    commit id: "deploy artifact " tag: "v1.0.1"
-    checkout main
-    merge "release/1.0.1"
-    checkout "release/1.1.0"
-    commit id: "cherry-pick CVE-x"
-```
+**Release flow:** `main` for development, one `release/X.Y.Z` branch per audited deploy, tags `vX.Y.Z` set by CI — see [docs/RELEASE_FLOW.md](docs/RELEASE_FLOW.md).
 
 [![Github Release](https://img.shields.io/github/v/tag/1inch/swap-vm?sort=semver&label=github)](https://github.com/1inch/swap-vm/releases/latest)
 [![CI](https://github.com/1inch/swap-vm/actions/workflows/ci.yml/badge.svg)](https://github.com/1inch/swap-vm/actions/workflows/ci.yml)
