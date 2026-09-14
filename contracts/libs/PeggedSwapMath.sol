@@ -10,19 +10,26 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 /// @notice Provides all mathematical operations for PeggedSwap curve (p=0.5)
 /// @notice Formula: √u + √v + A(u + v) = C
 /// @dev Uses 1e27 scale for higher precision (reduces rounding error by ~10^9)
+///
+/// @notice Library input parameters conventions:
+/// @notice  - `x`, `y`, `x0`, `y0` - raw token amounts. Only `invariantFromReserves` takes them and normalize.
+/// @notice  - `u`, `v`, `a`, `invariantC` - values ALREADY scaled by ONE.
+/// @notice    `invariant` and `solve` functions assume this and do not normalize.
+///
+/// @notice Square roots pre-multiply by ONE. For a scaled input u = U * ONE, where U is the real value:
+/// @notice     sqrt(u * ONE) = sqrt(U * ONE^2) = sqrt(U) * ONE
 library PeggedSwapMath {
     uint256 internal constant ONE = 1e27;
     // A is the linear width
     uint256 internal constant MAX_LINEAR_WIDTH = 5000 * ONE;
 
-    error PeggedSwapMathNoSolution();
     error PeggedSwapMathInvalidInput();
 
     /// @notice Calculate invariant value: √u + √v + A(u + v)
     /// @param u Normalized x value (x/X₀) scaled by ONE
     /// @param v Normalized y value (y/Y₀) scaled by ONE
     /// @param a Linear width parameter scaled by ONE
-    /// @return Invariant value scaled by sqrt(ONE)
+    /// @return Invariant value scaled by ONE
     function invariant(uint256 u, uint256 v, uint256 a) internal pure returns (uint256) {
         uint256 sqrtU = Math.sqrt(u * ONE);
         uint256 sqrtV = Math.sqrt(v * ONE);
@@ -37,7 +44,7 @@ library PeggedSwapMath {
     /// @param x0 Initial X reserve (normalization factor)
     /// @param y0 Initial Y reserve (normalization factor)
     /// @param a Linear width parameter scaled by ONE
-    /// @return Invariant value scaled by sqrt(ONE)
+    /// @return Invariant value scaled by ONE
     function invariantFromReserves(
         uint256 x,
         uint256 y,
@@ -92,9 +99,8 @@ library PeggedSwapMath {
 
         // Round the discriminant root DOWN: smaller √D → larger v.
         // A larger v is the maker-favorable
+        // sqrtDiscriminant equals to `sqrt((ONE + (ONE * D)) * ONE) = sqrt(ONE² + D²)` Always `>= ONE`.
         uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Floor);
-
-        require(sqrtDiscriminant >= ONE, PeggedSwapMathNoSolution());
 
         uint256 denominator = ONE + sqrtDiscriminant;
 
