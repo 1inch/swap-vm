@@ -44,8 +44,13 @@ library Decay {
         period = args.at(0).asU16();
     }
 
+    struct TokenOffsets {
+        DecayOffset asTokenIn;
+        DecayOffset asTokenOut;
+    }
+
     struct Storage {
-        mapping(bytes32 orderHash => mapping(address token => mapping(bool direction => DecayOffset))) offset;
+        mapping(bytes32 orderHash => mapping(address token => TokenOffsets)) offset;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -57,11 +62,14 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        ctx.swap.balanceIn += calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][true], period);
-        ctx.swap.balanceOut -= calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][false], period);
+        TokenOffsets storage offsetsIn = $.offset[ctx.query.orderHash][ctx.query.tokenIn];
+        TokenOffsets storage offsetsOut = $.offset[ctx.query.orderHash][ctx.query.tokenOut];
 
-        uint216 offsetIn = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][false], period);
-        uint216 offsetOut = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][true], period);
+        ctx.swap.balanceIn += calcOffsetNow(offsetsIn.asTokenOut, period);
+        ctx.swap.balanceOut -= calcOffsetNow(offsetsOut.asTokenIn, period);
+
+        uint216 offsetIn = calcOffsetNow(offsetsIn.asTokenIn, period);
+        uint216 offsetOut = calcOffsetNow(offsetsOut.asTokenOut, period);
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
@@ -69,8 +77,8 @@ library Decay {
         offsetOut += amountOut.toUint216();
 
         if (!ctx.vm.isStaticContext) {
-            $.offset[ctx.query.orderHash][ctx.query.tokenIn][false] = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
-            $.offset[ctx.query.orderHash][ctx.query.tokenOut][true] = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
+            offsetsIn.asTokenIn = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
+            offsetsOut.asTokenOut = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
         }
     }
 
