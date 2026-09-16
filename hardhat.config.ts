@@ -14,6 +14,7 @@ const swapVmCompiler = {
     },
     viaIR: true,
   },
+  isolated: true
 };
 
 export default defineConfig({
@@ -31,11 +32,11 @@ export default defineConfig({
       production: { compilers: [swapVmCompiler] },
     },
   },
-  paths: {
-    sources: "./src",
-  },
   test: {
     solidity: {
+      fuzz: {
+        runs: 1024,
+      },
       fsPermissions: {
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },
@@ -54,10 +55,10 @@ export default defineConfig({
     },
   },
   warnings: {
-    "test/**/*": {
+    "test/solidity/**/*": {
       "initcode-size": "off",
     },
-    "src/routers/*Debug.sol": {
+    "contracts/routers/*Debug.sol": {
       "code-size": "off",
     },
     "npm/@1inch/solidity-utils@*/**/*": {

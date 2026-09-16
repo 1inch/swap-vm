@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { InstructionArgs } from "./InstructionArgs.sol";
+import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
+import { ISwapVM } from "../interfaces/ISwapVM.sol";
+
+type MakerTraits is uint256;
+using MakerTraitsLib for MakerTraits global;
+
+library MakerTraitsLib {
+    using SafeCast for uint256;
+
+    using Calldata for bytes;
+    using InstructionArgs for bytes;
+
+    error MakerTraitsMissingHookData();
+    error MakerTraitsMissingHookTarget();
+    error MakerTraitsMissingHasPreTransferInFlag();
+    error MakerTraitsMissingHasPostTransferInFlag();
+    error MakerTraitsMissingHasPreTransferOutFlag();
+    error MakerTraitsMissingHasPostTransferOutFlag();
+    error MakerTraitsTokensNotSorted();
+    error MakerTraitsZeroAmountInNotAllowed();
+
+    uint256 constant internal SHOULD_UNWRAP_BIT_FLAG = 1 << 255;
+    uint256 constant internal USE_AQUA_INSTEAD_OF_SIGNATURE_BIT_FLAG = 1 << 254;
+    uint256 constant internal ALLOW_ZERO_AMOUNT_IN = 1 << 253;
+    uint256 constant internal HAS_PRE_TRANSFER_IN_HOOK_BIT_FLAG = 1 << 252;
+    uint256 constant internal HAS_POST_TRANSFER_IN_HOOK_BIT_FLAG = 1 << 251;
+    uint256 constant internal HAS_PRE_TRANSFER_OUT_HOOK_BIT_FLAG = 1 << 250;
+    uint256 constant internal HAS_POST_TRANSFER_OUT_HOOK_BIT_FLAG = 1 << 249;
+    uint256 constant internal PRE_TRANSFER_IN_HOOK_HAS_TARGET = 1 << 248;
+    uint256 constant internal POST_TRANSFER_IN_HOOK_HAS_TARGET = 1 << 247;
+    uint256 constant internal PRE_TRANSFER_OUT_HOOK_HAS_TARGET = 1 << 246;
+    uint256 constant internal POST_TRANSFER_OUT_HOOK_HAS_TARGET = 1 << 245;
+
+    uint256 constant internal ORDER_DATA_SLICES_INDEXES_BIT_OFFSET = 160;
+    uint256 constant internal ORDER_DATA_SLICES_INDEX_BIT_MASK = type(uint16).max;
+    uint256 constant internal ORDER_DATA_SLICES_INDEX_BIT_SIZE_SHL = 4;
+
+    enum OrderDataSlices {
+        PreTransferInHook,
+        PostTransferInHook,
+        PreTransferOutHook,
+        PostTransferOutHook,
+        Program
+    }
+
+    /// @notice Arguments for building maker order
+    /// @param maker Liquidity provider address
+    /// @param receiver Recipient address (address(0) defaults to maker)
+    /// @param tokenA Token with lower address
+    /// @param tokenB Token with greater address
+    /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
+    /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
+    /// @param allowZeroAmountIn Allow zero input amount swaps
+    /// @param hasPreTransferInHook Enable pre-transfer-in hook
+    /// @param hasPostTransferInHook Enable post-transfer-in hook
+    /// @param hasPreTransferOutHook Enable pre-transfer-out hook
+    /// @param hasPostTransferOutHook Enable post-transfer-out hook
+    /// @param preTransferInTarget Hook contract address (maker if zero/same)
+    /// @param preTransferInData Hook calldata
+    /// @param postTransferInTarget Hook contract address
+    /// @param postTransferInData Hook calldata
+    /// @param preTransferOutTarget Hook contract address
+    /// @param preTransferOutData Hook calldata
+    /// @param postTransferOutTarget Hook contract address
+    /// @param postTransferOutData Hook calldata
+    /// @param program VM bytecode to execute
+    struct Args {
+        address maker;
+        address receiver;
+
+        address tokenA;
+        address tokenB;
+
+        bool shouldUnwrapWeth;
+        bool useAquaInsteadOfSignature;
+        bool allowZeroAmountIn;
+        bool hasPreTransferInHook;
+        bool hasPostTransferInHook;
+        bool hasPreTransferOutHook;
+        bool hasPostTransferOutHook;
+
+        address preTransferInTarget;
+        bytes preTransferInData;
+        address postTransferInTarget;
+        bytes postTransferInData;
+        address preTransferOutTarget;
+        bytes preTransferOutData;
+        address postTransferOutTarget;
+        bytes postTransferOutData;
+        bytes program;
+    }
+
+    /// @notice Build maker order from arguments
+    /// @dev Packs traits, hooks, and program into Order structure
+    /// @param args Order configuration arguments
+    /// @return order Complete Order ready for execution or signing
+    function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
+        require(args.tokenA < args.tokenB, MakerTraitsTokensNotSorted());
+
+        bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
+        bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);
+        bool preTransferOutHasTarget = args.preTransferOutTarget != args.maker && args.preTransferOutTarget != address(0);
+        bool postTransferOutHasTarget = args.postTransferOutTarget != args.maker && args.postTransferOutTarget != address(0);
+        if (preTransferInHasTarget || args.preTransferInData.length > 0) {
+            require(args.hasPreTransferInHook, MakerTraitsMissingHasPreTransferInFlag());
+        }
+        if (postTransferInHasTarget || args.postTransferInData.length > 0) {
+            require(args.hasPostTransferInHook, MakerTraitsMissingHasPostTransferInFlag());
+        }
+        if (preTransferOutHasTarget || args.preTransferOutData.length > 0) {
+            require(args.hasPreTransferOutHook, MakerTraitsMissingHasPreTransferOutFlag());
+        }
+        if (postTransferOutHasTarget || args.postTransferOutData.length > 0) {
+            require(args.hasPostTransferOutHook, MakerTraitsMissingHasPostTransferOutFlag());
+        }
+
+        uint256 index0 = 40 + (preTransferInHasTarget ? 20 : 0) + args.preTransferInData.length;
+        uint256 index1 = index0 + (postTransferInHasTarget ? 20 : 0) + args.postTransferInData.length;
+        uint256 index2 = index1 + (preTransferOutHasTarget ? 20 : 0) + args.preTransferOutData.length;
+        uint256 index3 = index2 + (postTransferOutHasTarget ? 20 : 0) + args.postTransferOutData.length;
+
+        uint64 orderDataIndexes = uint64(bytes8(abi.encodePacked(
+            index3.toUint16(),
+            index2.toUint16(),
+            index1.toUint16(),
+            index0.toUint16()
+        )));
+
+        return ISwapVM.Order({
+            maker: args.maker,
+            traits: MakerTraits.wrap(
+                (args.shouldUnwrapWeth ? SHOULD_UNWRAP_BIT_FLAG : 0) |
+                (args.useAquaInsteadOfSignature ? USE_AQUA_INSTEAD_OF_SIGNATURE_BIT_FLAG : 0) |
+                (args.allowZeroAmountIn ? ALLOW_ZERO_AMOUNT_IN : 0) |
+                (args.hasPreTransferInHook ? HAS_PRE_TRANSFER_IN_HOOK_BIT_FLAG : 0) |
+                (args.hasPostTransferInHook ? HAS_POST_TRANSFER_IN_HOOK_BIT_FLAG : 0) |
+                (args.hasPreTransferOutHook ? HAS_PRE_TRANSFER_OUT_HOOK_BIT_FLAG : 0) |
+                (args.hasPostTransferOutHook ? HAS_POST_TRANSFER_OUT_HOOK_BIT_FLAG : 0) |
+                (preTransferInHasTarget ? PRE_TRANSFER_IN_HOOK_HAS_TARGET : 0) |
+                (postTransferInHasTarget ? POST_TRANSFER_IN_HOOK_HAS_TARGET : 0) |
+                (preTransferOutHasTarget ? PRE_TRANSFER_OUT_HOOK_HAS_TARGET : 0) |
+                (postTransferOutHasTarget ? POST_TRANSFER_OUT_HOOK_HAS_TARGET : 0) |
+                (uint256(orderDataIndexes) << ORDER_DATA_SLICES_INDEXES_BIT_OFFSET) |
+                uint160(args.receiver)
+            ),
+            data: bytes.concat(
+                abi.encodePacked(args.tokenA, args.tokenB),
+                preTransferInHasTarget ? abi.encodePacked(args.preTransferInTarget) : bytes(""),
+                args.preTransferInData,
+                postTransferInHasTarget ? abi.encodePacked(args.postTransferInTarget) : bytes(""),
+                args.postTransferInData,
+                preTransferOutHasTarget ? abi.encodePacked(args.preTransferOutTarget) : bytes(""),
+                args.preTransferOutData,
+                postTransferOutHasTarget ? abi.encodePacked(args.postTransferOutTarget) : bytes(""),
+                args.postTransferOutData,
+                args.program
+            )
+        });
+    }
+
+    function validate(MakerTraits traits, uint256 amountIn) internal pure {
+        require(amountIn > 0 || traits.allowZeroAmountIn(), MakerTraitsZeroAmountInNotAllowed());
+    }
+
+    function shouldUnwrapWeth(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & SHOULD_UNWRAP_BIT_FLAG) != 0;
+    }
+
+    function useAquaInsteadOfSignature(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & USE_AQUA_INSTEAD_OF_SIGNATURE_BIT_FLAG) != 0;
+    }
+
+    function allowZeroAmountIn(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & ALLOW_ZERO_AMOUNT_IN) != 0;
+    }
+
+    function hasPreTransferInHook(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & HAS_PRE_TRANSFER_IN_HOOK_BIT_FLAG) != 0;
+    }
+
+    function hasPostTransferInHook(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & HAS_POST_TRANSFER_IN_HOOK_BIT_FLAG) != 0;
+    }
+
+    function hasPreTransferOutHook(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & HAS_PRE_TRANSFER_OUT_HOOK_BIT_FLAG) != 0;
+    }
+
+    function hasPostTransferOutHook(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & HAS_POST_TRANSFER_OUT_HOOK_BIT_FLAG) != 0;
+    }
+
+    function receiver(MakerTraits traits, address maker) internal pure returns (address) {
+        address to = address(uint160(MakerTraits.unwrap(traits)));
+        return to == address(0) ? maker : to;
+    }
+
+    // Slices getters
+
+    function tokens(MakerTraits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
+        // In case there are not enough bytes in `data`, this block would fill missing bytes with zeros
+        // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
+        tokenA = data.at(0).asAddress();
+        tokenB = data.at(20).asAddress();
+    }
+
+    function program(MakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
+        return _getDataSlice(traits, data, OrderDataSlices.Program);
+    }
+
+    function preTransferInHook(MakerTraits traits, address maker, bytes calldata data) internal pure returns (IMakerHooks target, bytes calldata hookData) {
+        return _getDataSliceWithTarget(traits, maker, data, OrderDataSlices.PreTransferInHook, PRE_TRANSFER_IN_HOOK_HAS_TARGET);
+    }
+
+    function postTransferInHook(MakerTraits traits, address maker, bytes calldata data) internal pure returns (IMakerHooks target, bytes calldata hookData) {
+        return _getDataSliceWithTarget(traits, maker, data, OrderDataSlices.PostTransferInHook, POST_TRANSFER_IN_HOOK_HAS_TARGET);
+    }
+
+    function preTransferOutHook(MakerTraits traits, address maker, bytes calldata data) internal pure returns (IMakerHooks target, bytes calldata hookData) {
+        return _getDataSliceWithTarget(traits, maker, data, OrderDataSlices.PreTransferOutHook, PRE_TRANSFER_OUT_HOOK_HAS_TARGET);
+    }
+
+    function postTransferOutHook(MakerTraits traits, address maker, bytes calldata data) internal pure returns (IMakerHooks target, bytes calldata hookData) {
+        return _getDataSliceWithTarget(traits, maker, data, OrderDataSlices.PostTransferOutHook, POST_TRANSFER_OUT_HOOK_HAS_TARGET);
+    }
+
+    function _getDataSliceWithTarget(MakerTraits traits, address maker, bytes calldata data, OrderDataSlices slice, uint256 bitFlag) private pure returns (IMakerHooks target, bytes calldata hookData) {
+        hookData = _getDataSlice(traits, data, slice);
+
+        if ((MakerTraits.unwrap(traits) & bitFlag) != 0) {
+            target = IMakerHooks(address(bytes20(hookData.slice(0, 20, MakerTraitsMissingHookTarget.selector))));
+            hookData = hookData.slice(20);
+        } else {
+            target = IMakerHooks(maker);
+        }
+    }
+
+    function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
+        unchecked {
+            return data.slice(
+                (slice == type(OrderDataSlices).min) ? 40 : _getOffset(traits, uint256(slice) - 1),
+                (slice == type(OrderDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
+                MakerTraitsMissingHookData.selector
+            );
+        }
+    }
+
+    function _getOffset(MakerTraits traits, uint256 sliceNumber) private pure returns (uint256) {
+        uint256 bitShift = (sliceNumber << ORDER_DATA_SLICES_INDEX_BIT_SIZE_SHL);
+        return (MakerTraits.unwrap(traits) >> ORDER_DATA_SLICES_INDEXES_BIT_OFFSET >> bitShift) & ORDER_DATA_SLICES_INDEX_BIT_MASK;
+    }
+}

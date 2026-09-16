@@ -1,0 +1,243 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { FeeMeta, FeeMetaLib } from "../libs/ProtocolFee.sol";
+
+/// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
+/// @dev Encoding: [uint32 bitIndex]
+library InvalidateBit {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
+
+    Opcode constant opcode = Opcode.InvalidateBit;
+
+    function sizeOf(uint32) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 4;
+    }
+
+    function build(uint32 bitIndex) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(bitIndex)), bitIndex).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint32 bitIndex) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(bitIndex, 4);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint32 bitIndex) {
+        bitIndex = args.at(0).asU32();
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(uint256 slotIndex => uint256)) bitmap;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = StorageSlots.InvalidateBit;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
+        uint32 bitIndex = parse(args);
+        uint256 slot = bitIndex >> 8;
+
+        uint256 bitmap = $.bitmap[ctx.query.maker][slot];
+        uint256 bit = 1 << (bitIndex & 0xff);
+        require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
+
+        ctx.runLoop();
+
+        if (!ctx.vm.isStaticContext) {
+            $.bitmap[ctx.query.maker][slot] |= bit;
+        }
+    }
+}
+
+contract InvalidateBitExternal {
+    event InvalidateBitUpdated(address indexed maker, uint256 slotIndex, uint256 slotValue);
+
+    function bitInvalidators(address maker, uint256 slotIndex) external view returns (uint256) {
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
+        return $.bitmap[maker][slotIndex];
+    }
+
+    function invalidateBit(uint256 bitIndex) external {
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
+
+        uint256 slot = bitIndex >> 8;
+        uint256 newSlotValue = $.bitmap[msg.sender][slot] | (1 << (bitIndex & 0xff));
+        $.bitmap[msg.sender][slot] = newSlotValue;
+        emit InvalidateBitUpdated(msg.sender, slot, newSlotValue);
+    }
+
+    function invalidateBits(uint256 slot, uint256 mask) external {
+        InvalidateBit.Storage storage $ = InvalidateBit.store();
+
+        uint256 newSlotValue = $.bitmap[msg.sender][slot] | mask;
+        $.bitmap[msg.sender][slot] = newSlotValue;
+        emit InvalidateBitUpdated(msg.sender, slot, newSlotValue);
+    }
+}
+
+/// @notice InvalidateTokenIn opcode, bounds cumulative amount in across all fills by the strategy balance in
+///   Reduces balance registries according to the filled portion
+///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
+/// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library InvalidateTokenIn {
+    using InstructionBuilder for MemoryPtr;
+    using FeeMetaLib for FeeMeta;
+
+    error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
+
+    Opcode constant opcode = Opcode.InvalidateTokenIn;
+
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf();
+    }
+
+    function build() internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
+    }
+
+    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptrStart.patchLength(ptr);
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = StorageSlots.InvalidateTokenIn;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata) internal {
+        Storage storage $ = store();
+
+        uint256 balanceIn = ctx.swap.balanceIn;
+        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
+
+        ctx.swap.balanceIn = balanceIn - filled;
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn;
+
+        (uint256 amountIn,) = ctx.runLoop();
+
+        filled += amountIn;
+        require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountIn, balanceIn);
+
+        if (!ctx.vm.isStaticContext) {
+            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
+        }
+    }
+}
+
+contract InvalidateTokenInExternal {
+    event InvalidateTokenInFilled(address indexed maker, bytes32 indexed orderHash);
+
+    function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+        return $.filled[maker][orderHash][token];
+    }
+
+    function invalidateTokenIn(bytes32 orderHash, address token) external {
+        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+
+        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        emit InvalidateTokenInFilled(msg.sender, orderHash);
+    }
+}
+
+/// @notice InvalidateTokenOut opcode, bounds cumulative amount out across all fills by the strategy balance out
+///   Reduces balance registries according to the filled portion
+///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
+/// @dev Encoding: []
+/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library InvalidateTokenOut {
+    using InstructionBuilder for MemoryPtr;
+
+    using FeeMetaLib for FeeMeta;
+    using Math for uint256;
+
+    error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
+
+    Opcode constant opcode = Opcode.InvalidateTokenOut;
+
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf();
+    }
+
+    function build() internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf())).resolve();
+    }
+
+    function build(MemoryPtr ptrStart) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptrStart.patchLength(ptr);
+    }
+
+    struct Storage {
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = StorageSlots.InvalidateTokenOut;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata) internal {
+        Storage storage $ = store();
+
+        uint256 balanceOut = ctx.swap.balanceOut;
+        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
+
+        ctx.swap.balanceOut = balanceOut - filled;
+        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut);
+
+        (, uint256 amountOut) = ctx.runLoop();
+
+        filled += amountOut;
+        require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
+        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountOut, balanceOut);
+
+        if (!ctx.vm.isStaticContext) {
+            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;
+        }
+    }
+}
+
+contract InvalidateTokenOutExternal {
+    event InvalidateTokenOutFilled(address indexed maker, bytes32 indexed orderHash);
+
+    function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+        return $.filled[maker][orderHash][token];
+    }
+
+    function invalidateTokenOut(bytes32 orderHash, address token) external {
+        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+
+        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        emit InvalidateTokenOutFilled(msg.sender, orderHash);
+    }
+}

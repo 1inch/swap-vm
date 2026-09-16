@@ -3,11 +3,7 @@
   "version": "0.0.6",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "type": "module",
-  "main": "index.js",
-  "directories": {
-    "lib": "lib",
-    "test": "test"
-  },
+  "packageManager": "yarn@1.22.22",
   "dependencies": {
     "@1inch/aqua": "github:1inch/aqua#v1.0.0",
     "@1inch/solidity-utils": "6.9.10",
@@ -27,13 +23,13 @@
     "@1inch/solidity-utils": "6.9.10"
   },
   "scripts": {
+    "clean": "npx hardhat clean",
     "test": "npx hardhat test",
     "test:solidity": "npx hardhat test solidity",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
-    "snapshot": "npx hardhat clean && npx hardhat test solidity --snapshot --grep test_",
-    "snapshot:check": "npx hardhat clean && npx hardhat test solidity --snapshot-check",
-    "snapshot:e2e": "bash scripts/snapshot-e2e.sh"
+    "snapshot": "npx hardhat test solidity --snapshot ./test/solidity/gas/*",
+    "snapshot:check": "npx hardhat test solidity --snapshot-check ./test/solidity/gas/*"
   },
   "repository": {
     "type": "git",
@@ -44,5 +40,5 @@
   "bugs": {
     "url": "https://github.com/1inch/swap-vm/issues"
   },
-  "homepage": "https://github.com/1inch/swap-vm#readme"
+  "homepage": "https://github.com/1inch/swap-vm"
 }

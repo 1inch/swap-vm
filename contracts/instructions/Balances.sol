@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+
+import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { StorageSlots } from "../libs/StorageSlots.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
+
+/// @notice StaticBalances opcode, set context token balances to specified values
+/// @dev Encoding: [uint256 balanceA, uint256 balanceB]
+library StaticBalances {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    Opcode constant opcode = Opcode.StaticBalances;
+
+    function sizeOf(uint256, uint256) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 32 + 32;
+    }
+
+    function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(balanceA, 32).push(balanceB, 32);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
+        balanceA = args.at(0).asU256();
+        balanceB = args.at(32).asU256();
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        uint256 balanceIn;
+        uint256 balanceOut;
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
+        else (balanceOut, balanceIn) = parse(args);
+
+        ctx.swap.balanceIn = balanceIn;
+        ctx.swap.balanceOut = balanceOut;
+    }
+}
+
+/// @notice DynamicBalances opcode, set context token balances to storage values, initialized with specified values
+/// @dev Encoding: [uint256 balanceA, uint256 balanceB]
+/// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
+library DynamicBalances {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    error DynamicBalancesReachZero();
+
+    Opcode constant opcode = Opcode.DynamicBalances;
+
+    function sizeOf(uint256, uint256) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 32 + 32;
+    }
+
+    function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(balanceA, 32).push(balanceB, 32);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint256 balanceA, uint256 balanceB) {
+        balanceA = args.at(0).asU256();
+        balanceB = args.at(32).asU256();
+    }
+
+    struct Storage {
+        mapping(bytes32 orderHash => mapping(address token => uint256)) balance;
+    }
+
+    function store() internal pure returns (Storage storage $) {
+        bytes32 slot = StorageSlots.DynamicBalances;
+        assembly ("memory-safe") { $.slot := slot }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
+
+        uint256 balanceIn = $.balance[ctx.query.orderHash][ctx.query.tokenIn];
+        uint256 balanceOut = $.balance[ctx.query.orderHash][ctx.query.tokenOut];
+
+        if (balanceIn | balanceOut == 0) {
+            if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
+            else (balanceOut, balanceIn) = parse(args);
+        }
+
+        ctx.swap.balanceIn = balanceIn;
+        ctx.swap.balanceOut = balanceOut;
+
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+
+        balanceIn += amountIn;
+        balanceOut -= amountOut;
+        require(balanceIn | balanceOut != 0, DynamicBalancesReachZero());
+
+        if (!ctx.vm.isStaticContext) {
+            $.balance[ctx.query.orderHash][ctx.query.tokenIn] = balanceIn;
+            $.balance[ctx.query.orderHash][ctx.query.tokenOut] = balanceOut;
+        }
+    }
+}
+
+contract DynamicBalancesExternal {
+    function balance(bytes32 orderHash, address token) external view returns (uint256) {
+        DynamicBalances.Storage storage $ = DynamicBalances.store();
+        return $.balance[orderHash][token];
+    }
+}

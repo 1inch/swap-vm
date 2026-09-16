@@ -1,0 +1,329 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+
+type TakerTraits is uint256;
+using TakerTraitsLib for TakerTraits global;
+
+library TakerTraitsLib {
+    using SafeCast for uint256;
+    using Math for uint256;
+    using Calldata for bytes;
+
+    error TakerTraitsMissingTraits();
+    error TakerTraitsMissingHookData();
+    error TakerTraitsMissingHasPreTransferInFlag();
+    error TakerTraitsMissingHasPreTransferOutFlag();
+    error TakerTraitsThresholdLengthInvalid(bytes threshold);
+    error TakerTraitsNonExactThresholdAmountIn(uint256 amountIn, uint256 amountThreshold);
+    error TakerTraitsNonExactThresholdAmountOut(uint256 amountOut, uint256 amountThreshold);
+    error TakerTraitsInsufficientMinOutputAmount(uint256 amountOut, uint256 amountOutMin);
+    error TakerTraitsAmountOutMustBeGreaterThanZero(uint256 amountOut);
+    error TakerTraitsExceedingMaxInputAmount(uint256 amountIn, uint256 amountInMax);
+    error TakerTraitsTakerAmountInMismatch(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsTakerAmountOutMismatch(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsTakerAmountInExceed(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsTakerAmountOutExceed(uint256 takerAmount, uint256 computedAmount);
+    error TakerTraitsDeadlineExpired();
+
+    /// @notice Arguments for building taker traits
+    /// @param taker Swap executor address
+    /// @param isExactIn True for exact input, false for exact output
+    /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
+    /// @param isStrictThresholdAmount Require exact threshold match (vs min/max)
+    /// @param isFirstTransferFromTaker Transfer order: taker->maker first or maker->taker first
+    /// @param useTransferFromAndAquaPush Use transferFrom + Aqua push pattern
+    /// @param isAToB True for tokenA->tokenB swap, false for tokenB->tokenA swap
+    /// @param allowPartialFill Allow swaps for part of taker-specified amount
+    /// @param threshold Min output (exactIn) or max input (exactOut), 32 bytes or empty
+    /// @param to Recipient address (zero defaults to taker)
+    /// @param deadline Expiration timestamp (0 = no deadline)
+    /// @param hasPreTransferInCallback Enable pre-transfer-in callback
+    /// @param hasPreTransferOutCallback Enable pre-transfer-out callback
+    /// @param preTransferInHookData Data for maker's pre-transfer-in hook
+    /// @param postTransferInHookData Data for maker's post-transfer-in hook
+    /// @param preTransferOutHookData Data for maker's pre-transfer-out hook
+    /// @param postTransferOutHookData Data for maker's post-transfer-out hook
+    /// @param preTransferInCallbackData Data for taker's pre-transfer-in callback
+    /// @param preTransferOutCallbackData Data for taker's pre-transfer-out callback
+    /// @param instructionsArgs Dynamic arguments for VM instructions
+    /// @param signature Order signature (for non-Aqua orders)
+    struct Args {
+        address taker;
+        bool isExactIn;
+        bool shouldUnwrapWeth;
+        bool isStrictThresholdAmount;
+        bool isFirstTransferFromTaker;
+        bool useTransferFromAndAquaPush;
+        bool isAToB;
+        bool allowPartialFill;
+        bytes threshold;
+        address to;
+        uint40 deadline;
+
+        bool hasPreTransferInCallback;
+        bool hasPreTransferOutCallback;
+        bytes preTransferInHookData;
+        bytes postTransferInHookData;
+        bytes preTransferOutHookData;
+        bytes postTransferOutHookData;
+        bytes preTransferInCallbackData;
+        bytes preTransferOutCallbackData;
+        bytes instructionsArgs;
+        bytes signature;
+    }
+
+    enum TakerDataSlices {
+        Threshold,
+        To,
+        Deadline,
+        PreTransferInHook,
+        PostTransferInHook,
+        PreTransferOutHook,
+        PostTransferOutHook,
+        PreTransferInCallback,
+        PreTransferOutCallback,
+        InstructionsArgs,
+        Signature
+    }
+
+    uint256 constant internal TAKER_DATA_SLICES_INDEXES_BIT_OFFSET = 16;
+    uint256 constant internal TAKER_DATA_SLICES_INDEX_BIT_MAP = type(uint16).max;
+    uint256 constant internal TAKER_DATA_SLICES_INDEX_BIT_SIZE_SHL = 4;
+
+    uint16 constant internal IS_EXACT_IN_BIT_FLAG = 0x0001;
+    uint16 constant internal SHOULD_UNWRAP_BIT_FLAG = 0x0002;
+    uint16 constant internal HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG = 0x0004;
+    uint16 constant internal HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG = 0x0008;
+    uint16 constant internal IS_STRICT_THRESHOLD_BIT_FLAG = 0x0010;
+    uint16 constant internal IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG = 0x0020;
+    uint16 constant internal USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG = 0x0040;
+    uint16 constant internal IS_A_TO_B_BIT_FLAG = 0x0080;
+    uint16 constant internal ALLOW_PARTIAL_FILL = 0x0100;
+
+    /// @notice Build taker traits and data from arguments
+    /// @dev Packs traits, hooks, callbacks, and signature into single bytes
+    /// @param args Taker configuration arguments
+    /// @return packed Complete taker traits and data ready for swap execution
+    function build(Args memory args) internal pure returns (bytes memory packed) {
+        require(args.threshold.length == 32 || args.threshold.length == 0, TakerTraitsThresholdLengthInvalid(args.threshold));
+
+        if (args.preTransferInCallbackData.length > 0) {
+            require(args.hasPreTransferInCallback, TakerTraitsMissingHasPreTransferInFlag());
+        }
+        if (args.preTransferOutCallbackData.length > 0) {
+            require(args.hasPreTransferOutCallback, TakerTraitsMissingHasPreTransferOutFlag());
+        }
+
+        uint256 index0 = args.threshold.length;
+        uint256 index1 = index0 + (args.to != address(0) && args.to != args.taker ? 20 : 0);
+        uint256 index2 = index1 + (args.deadline != 0 ? 5 : 0);
+        uint256 index3 = index2 + args.preTransferInHookData.length;
+        uint256 index4 = index3 + args.postTransferInHookData.length;
+        uint256 index5 = index4 + args.preTransferOutHookData.length;
+        uint256 index6 = index5 + args.postTransferOutHookData.length;
+        uint256 index7 = index6 + args.preTransferInCallbackData.length;
+        uint256 index8 = index7 + args.preTransferOutCallbackData.length;
+        uint256 index9 = index8 + args.instructionsArgs.length;
+
+        bytes memory slicesIndexes = abi.encodePacked(
+            index9.toUint16(),
+            index8.toUint16(),
+            index7.toUint16(),
+            index6.toUint16(),
+            index5.toUint16(),
+            index4.toUint16(),
+            index3.toUint16(),
+            index2.toUint16(),
+            index1.toUint16(),
+            index0.toUint16()
+        );
+
+        uint16 flags =
+            (args.isExactIn ? IS_EXACT_IN_BIT_FLAG : 0) |
+            (args.shouldUnwrapWeth ? SHOULD_UNWRAP_BIT_FLAG : 0) |
+            (args.isStrictThresholdAmount ? IS_STRICT_THRESHOLD_BIT_FLAG : 0) |
+            (args.isFirstTransferFromTaker ? IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG : 0) |
+            (args.useTransferFromAndAquaPush ? USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG : 0) |
+            (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
+            (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0) |
+            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0) | 
+            (args.allowPartialFill ? ALLOW_PARTIAL_FILL : 0);
+
+        packed = abi.encodePacked(
+            slicesIndexes,
+            flags,
+            args.threshold,
+            (args.to != address(0) && args.to != args.taker ? abi.encodePacked(args.to) : bytes("")),
+            (args.deadline != 0 ? abi.encodePacked(args.deadline) : bytes("")),
+            args.preTransferInHookData,
+            args.postTransferInHookData,
+            args.preTransferOutHookData,
+            args.postTransferOutHookData,
+            args.preTransferInCallbackData,
+            args.preTransferOutCallbackData,
+            args.instructionsArgs,
+            args.signature
+        );
+    }
+
+    /// @notice Parse taker traits from calldata
+    /// @dev Extracts traits header (22 bytes) and returns remaining data
+    /// @param data Packed taker traits and data
+    /// @return traits Parsed TakerTraits configuration
+    /// @return tail Remaining calldata after traits header
+    function parse(bytes calldata data) internal pure returns (TakerTraits traits, bytes calldata tail) {
+        traits = TakerTraits.wrap(uint176(bytes22(data.slice(0, 22, TakerTraitsMissingTraits.selector))));
+        tail = data.slice(22);
+    }
+
+    function validate(TakerTraits traits, bytes calldata takerData, uint256 takerAmount, uint256 amountIn, uint256 amountOut) internal view {
+        require(amountOut > 0, TakerTraitsAmountOutMustBeGreaterThanZero(amountOut));
+
+        uint40 takerDeadline = traits.deadline(takerData);
+        require(takerDeadline == 0 || block.timestamp <= takerDeadline, TakerTraitsDeadlineExpired());
+
+        if (traits.isExactIn()) {
+            if (traits.allowPartialFill()) {
+                require(takerAmount >= amountIn, TakerTraitsTakerAmountInExceed(takerAmount, amountIn));
+            } else {
+                require(takerAmount == amountIn, TakerTraitsTakerAmountInMismatch(takerAmount, amountIn));
+            }
+
+            (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
+            if (hasThreshold) {
+                if (traits.isStrictThresholdAmount()) {
+                    require(amountOut == thresholdAmount, TakerTraitsNonExactThresholdAmountOut(amountOut, thresholdAmount));
+                } else {
+                    if (traits.allowPartialFill() && takerAmount != 0) {
+                        thresholdAmount = thresholdAmount.mulDiv(amountIn, takerAmount, Math.Rounding.Ceil);
+                    }
+                    require(amountOut >= thresholdAmount, TakerTraitsInsufficientMinOutputAmount(amountOut, thresholdAmount));
+                }
+            }
+        } else {
+            if (traits.allowPartialFill()) {
+                require(takerAmount >= amountOut, TakerTraitsTakerAmountOutExceed(takerAmount, amountOut));
+            } else {
+                require(takerAmount == amountOut, TakerTraitsTakerAmountOutMismatch(takerAmount, amountOut));
+            }
+
+            (bool hasThreshold, uint256 thresholdAmount) = traits.threshold(takerData);
+            if (hasThreshold) {
+                if (traits.isStrictThresholdAmount()) {
+                    require(amountIn == thresholdAmount, TakerTraitsNonExactThresholdAmountIn(amountIn, thresholdAmount));
+                } else {
+                    if (traits.allowPartialFill() && takerAmount != 0) {
+                        thresholdAmount = thresholdAmount.mulDiv(amountOut, takerAmount);
+                    }
+                    require(amountIn <= thresholdAmount, TakerTraitsExceedingMaxInputAmount(amountIn, thresholdAmount));
+                }
+            }
+        }
+    }
+
+    function isExactIn(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & IS_EXACT_IN_BIT_FLAG) != 0;
+    }
+
+    function shouldUnwrapWeth(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & SHOULD_UNWRAP_BIT_FLAG) != 0;
+    }
+
+    function hasPreTransferInCallback(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG) != 0;
+    }
+
+    function hasPreTransferOutCallback(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG) != 0;
+    }
+
+    function isStrictThresholdAmount(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & IS_STRICT_THRESHOLD_BIT_FLAG) != 0;
+    }
+
+    function isFirstTransferFromTaker(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & IS_FIRST_TRANSFER_FROM_TAKER_BIT_FLAG) != 0;
+    }
+
+    function useTransferFromAndAquaPush(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG) != 0;
+    }
+
+    function isAToB(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & IS_A_TO_B_BIT_FLAG) != 0;
+    }
+
+    function allowPartialFill(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & ALLOW_PARTIAL_FILL) != 0;
+    }
+
+    function threshold(TakerTraits traits, bytes calldata data) internal pure returns (bool hasThreshold, uint256 thresholdAmount) {
+        bytes calldata thresholdData = _getDataSlice(traits, data, TakerDataSlices.Threshold);
+        return (thresholdData.length == 32, uint256(bytes32(thresholdData)));
+    }
+
+    function to(TakerTraits traits, bytes calldata data, address taker) internal pure returns (address) {
+        bytes calldata toData = _getDataSlice(traits, data, TakerDataSlices.To);
+        return toData.length == 20 ? address(bytes20(toData)) : taker;
+    }
+
+    function deadline(TakerTraits traits, bytes calldata data) internal pure returns (uint40) {
+        bytes calldata deadlineData = _getDataSlice(traits, data, TakerDataSlices.Deadline);
+        return deadlineData.length == 5 ? uint40(bytes5(deadlineData)) : 0;
+    }
+
+    function preTransferInHookData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PreTransferInHook);
+    }
+
+    function postTransferInHookData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PostTransferInHook);
+    }
+
+    function preTransferOutHookData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PreTransferOutHook);
+    }
+
+    function postTransferOutHookData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PostTransferOutHook);
+    }
+
+    function preTransferInCallbackData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PreTransferInCallback);
+    }
+
+    function preTransferOutCallbackData(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata hookData) {
+        return _getDataSlice(traits, data, TakerDataSlices.PreTransferOutCallback);
+    }
+
+    function instructionsArgs(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
+        return _getDataSlice(traits, data, TakerDataSlices.InstructionsArgs);
+    }
+
+    function signature(TakerTraits traits, bytes calldata data) internal pure returns (bytes calldata) {
+        return _getDataSlice(traits, data, TakerDataSlices.Signature);
+    }
+
+    function _getDataSlice(TakerTraits traits, bytes calldata data, TakerDataSlices slice) private pure returns (bytes calldata) {
+        unchecked {
+            return data.slice(
+                (slice == type(TakerDataSlices).min) ? 0 : _getOffset(traits, uint256(slice) - 1),
+                (slice == type(TakerDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
+                TakerTraitsMissingHookData.selector
+            );
+        }
+    }
+
+    function _getOffset(TakerTraits traits, uint256 sliceNumber) private pure returns (uint256) {
+        uint256 bitShift = (sliceNumber << TAKER_DATA_SLICES_INDEX_BIT_SIZE_SHL);
+        return (TakerTraits.unwrap(traits) >> TAKER_DATA_SLICES_INDEXES_BIT_OFFSET >> bitShift) & TAKER_DATA_SLICES_INDEX_BIT_MAP;
+    }
+}

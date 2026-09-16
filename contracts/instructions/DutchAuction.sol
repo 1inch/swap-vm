@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity ^0.8.27;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © 2025 Degensoft Ltd
+
+import { Context } from "../libs/VM.sol";
+import { Opcode } from "../libs/OpcodeList.sol";
+import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
+import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { Power } from "../libs/Power.sol";
+
+/// @notice DutchAuctionBalanceIn opcode, applies exponential decay to balance in (maker exact in)
+///   Reverts after duration passes
+/// @dev Encoding: [uint40 start, uint16 duration, uint64 decay]
+/// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
+library DutchAuctionBalanceIn {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    using Power for uint256;
+
+    error DutchAuctionWrongDecayFactor(uint64 decay);
+    error DutchAuctionExpired(uint256 currentTime, uint256 deadline);
+
+    Opcode constant opcode = Opcode.DutchAuctionBalanceIn;
+
+    uint256 constant ONE = 1e18;
+
+    function sizeOf(uint40, uint16, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 5 + 2 + 8;
+    }
+
+    function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(start, duration, decay)), start, duration, decay).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint40 start, uint16 duration, uint64 decay) internal pure returns (MemoryPtr ptr) {
+        require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
+
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(start, 5).push(duration, 2).push(decay, 8);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint40 start, uint16 duration, uint64 decay) {
+        start = args.at(0).asU40();
+        duration = args.at(5).asU16();
+        decay = args.at(7).asU64();
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal view {
+        (uint40 start, uint16 duration, uint64 decay) = parse(args);
+
+        require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
+        uint256 elapsed = block.timestamp - start;
+
+        ctx.swap.balanceIn = ctx.swap.balanceIn * uint256(decay).pow(elapsed, ONE) / ONE;
+    }
+}
+
+/// @notice DutchAuctionBalanceOut opcode, applies exponential growth to balance out (maker exact out)
+///   Reverts after duration passes
+/// @dev Encoding: [uint40 start, uint16 duration, uint64 decay]
+///   Inverse exponential factor encoded `growth = 1 / decay`
+/// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
+library DutchAuctionBalanceOut {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    using Power for uint256;
+
+    error DutchAuctionWrongDecayFactor(uint64 decay);
+    error DutchAuctionExpired(uint256 currentTime, uint256 deadline);
+
+    Opcode constant opcode = Opcode.DutchAuctionBalanceOut;
+
+    uint256 constant ONE = 1e18;
+
+    function sizeOf(uint40, uint16, uint64) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 5 + 2 + 8;
+    }
+
+    function build(uint40 start, uint16 duration, uint64 decay) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(start, duration, decay)), start, duration, decay).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, uint40 start, uint16 duration, uint64 decay) internal pure returns (MemoryPtr ptr) {
+        require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
+
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(start, 5).push(duration, 2).push(decay, 8);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (uint40 start, uint16 duration, uint64 decay) {
+        start = args.at(0).asU40();
+        duration = args.at(5).asU16();
+        decay = args.at(7).asU64();
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal view {
+        (uint40 start, uint16 duration, uint64 decay) = parse(args);
+
+        require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
+        uint256 elapsed = block.timestamp - start;
+
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ONE / uint256(decay).pow(elapsed, ONE);
+    }
+}

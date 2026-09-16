@@ -27,9 +27,9 @@ VM-based swap protocol where orders are bytecode programs.
 
 ## Key Locations
 
-- Core VM: `src/SwapVM.sol` (abstract base)
-- Instructions: `src/instructions/`
-- Opcodes: `src/opcodes/` (Opcodes, LimitOpcodes, AquaOpcodes)
-- Libraries: `src/libs/` (VM.sol, MakerTraits.sol, TakerTraits.sol)
-- Routers: `src/routers/`
-- Interfaces: `src/interfaces/`
+- Core VM: `contracts/SwapVM.sol` (abstract base)
+- Instructions: `contracts/instructions/`
+- Opcodes: `contracts/opcodes/` (Opcodes, LimitOpcodes, AquaOpcodes)
+- Libraries: `contracts/libs/` (VM.sol, MakerTraits.sol, TakerTraits.sol)
+- Routers: `contracts/routers/`
+- Interfaces: `contracts/interfaces/`

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
-pragma solidity 0.8.30;
+pragma solidity ^0.8.27;
 
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
@@ -8,7 +8,7 @@ import { Script } from "forge-std/Script.sol";
 
 import { Config } from "./utils/Config.sol";
 
-import { AquaSwapVMRouter } from "../src/routers/AquaSwapVMRouter.sol";
+import { AquaSwapVMRouter } from "../contracts/routers/AquaSwapVMRouter.sol";
 
 // solhint-disable no-console
 import { console2 } from "forge-std/console2.sol";

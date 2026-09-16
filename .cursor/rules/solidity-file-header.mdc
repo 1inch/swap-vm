@@ -1,0 +1,18 @@
+---
+description: Use when creating a Solidity file or choosing SPDX-License-Identifier
+alwaysApply: false
+---
+
+# Solidity File Header
+
+Start every new Solidity file with:
+
+```solidity
+// SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
+pragma solidity <version>;
+
+/// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
+/// @custom:copyright © <creation year> Degensoft Ltd
+```
+
+Choose `<version>` using `solidity-pragma.mdc`.
