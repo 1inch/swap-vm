@@ -100,7 +100,7 @@ library PeggedSwapMath {
         // Round the discriminant root DOWN: smaller √D → larger v.
         // A larger v is the maker-favorable
         // sqrtDiscriminant equals to `sqrt((ONE + (ONE * D)) * ONE) = sqrt(ONE² + D²)` Always `>= ONE`.
-        uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE, Math.Rounding.Floor);
+        uint256 sqrtDiscriminant = Math.sqrt(discriminant * ONE);
 
         uint256 denominator = ONE + sqrtDiscriminant;
 
