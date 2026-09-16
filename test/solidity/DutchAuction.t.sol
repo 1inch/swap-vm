@@ -38,6 +38,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
     // By default foundry's `block.timestamp` returns 1. We prefer to use realistic one.
     uint40 constant AUCTION_REALISTIC_START_TS = 0x123456;
+    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -234,6 +235,48 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
         vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
         vm.assertEq(amountOut, 320e18, "Invalid amountOut");
+    }
+
+    function test_DutchAuctionBalanceIn_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceIn.build(RELATIVE_TIME_FLAG_MASK, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
+    }
+
+    function test_DutchAuctionBalanceOut_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceOut.build(RELATIVE_TIME_FLAG_MASK, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
     }
 
     /**

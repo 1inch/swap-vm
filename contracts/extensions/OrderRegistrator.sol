@@ -12,13 +12,35 @@ import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 library OrderRegistratorLib {
+    /// @dev Order already known
+    error OrderAlreadyRegistered(bytes32 orderHash);
+
     struct Storage {
-        mapping(bytes32 orderHash => uint256) announcedAt;
+        mapping(bytes32 orderHash => uint40) announcedAt;
     }
 
     function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.OrderRegistrator;
         assembly ("memory-safe") { $.slot := slot }
+    }
+
+    /// @dev Announce new order, revert if already known
+    function announce(bytes32 orderHash) internal {
+        Storage storage $ = OrderRegistratorLib.store();
+
+        require($.announcedAt[orderHash] == 0, OrderAlreadyRegistered(orderHash));
+        $.announcedAt[orderHash] = uint40(block.timestamp);
+    }
+
+    /// @dev Order announcement time, lazy-initialized
+    function announcedAt(bytes32 orderHash, bool isStaticContext) internal returns (uint40 ts) {
+        Storage storage $ = OrderRegistratorLib.store();
+
+        ts = $.announcedAt[orderHash];
+        if (ts == 0) {
+            ts = uint40(block.timestamp);
+            if (!isStaticContext) $.announcedAt[orderHash] = ts;
+        }
     }
 }
 
@@ -31,8 +53,6 @@ abstract contract OrderRegistrator {
 
     /// @dev Signature verification failed for the order
     error BadSignature(address maker, bytes32 orderHash, bytes signature);
-    /// @dev Order already known
-    error OrderAlreadyRegistered(bytes32 orderHash);
 
     IAqua private immutable AQUA;
 
@@ -48,8 +68,6 @@ abstract contract OrderRegistrator {
     function hash(ISwapVM.Order calldata) public virtual view returns (bytes32);
 
     function registerOrder(ISwapVM.Order calldata order, bytes calldata signature) external {
-        OrderRegistratorLib.Storage storage $ = OrderRegistratorLib.store();
-
         bytes32 orderHash = hash(order);
 
         // Strategy is created with aqua or signed by maker
@@ -60,9 +78,7 @@ abstract contract OrderRegistrator {
             require(order.maker.recoverOrIsValidSignature(orderHash, signature), BadSignature(order.maker, orderHash, signature));
         }
 
-        require($.announcedAt[orderHash] == 0, OrderAlreadyRegistered(orderHash));
-        $.announcedAt[orderHash] = block.timestamp;
-
+        OrderRegistratorLib.announce(orderHash);
         emit OrderRegistered(order, signature);
     }
 }

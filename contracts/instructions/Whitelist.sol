@@ -9,6 +9,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { Time } from "../libs/Time.sol";
 
 /// @notice PrivateOrder opcode, allows the order to be executed only by the specified taker
 /// @dev Encoding: [uint80 allowedTaker]
@@ -188,11 +189,11 @@ library WhitelistSequential {
         unchecked { count = (args.length - (5 + 2)) / 12; }
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
+    function exec(Context memory ctx, bytes calldata args) internal {
         uint80 sender = uint80(uint160(ctx.query.taker));
 
         uint256 timeLeft = block.timestamp;
-        uint40 start = parseStart(args);
+        uint40 start = Time.resolve(ctx, parseStart(args));
         require(timeLeft >= start, WhitelistSequentialTimeViolation());
         unchecked { timeLeft -= start; }
 

@@ -36,6 +36,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
     uint256 constant BALANCE_A = 1000e18;
     uint256 constant BALANCE_B = 2000e18;
     uint256 constant SWAP_AMOUNT = 1e18;
+    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     address[25] ALLOWED_TAKERS;
     uint40 START;
@@ -230,6 +231,34 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
                 }
             }
         }
+    }
+
+    function test_WhitelistSequential_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        START = RELATIVE_TIME_FLAG_MASK;
+
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Sequential, 2));
+        bytes memory takerData = _buildTakerData();
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
+        takerData = bytes.concat(takerData, abi.encodePacked(r, s, v));
+
+        tokenB.mint(ALLOWED_TAKERS[0], SWAP_AMOUNT);
+        vm.prank(ALLOWED_TAKERS[0]);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        vm.warp(announcedAt);
+        vm.prank(ALLOWED_TAKERS[0]);
+        (, uint256 amountOut,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
+        assertEq(amountOut, 2 * SWAP_AMOUNT * BALANCE_A / BALANCE_B);
+
+        vm.prank(ALLOWED_TAKERS[1]);
+        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
+
+        vm.warp(announcedAt + DURATIONS[0]);
+        vm.prank(ALLOWED_TAKERS[1]);
+        (, amountOut,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+        assertEq(amountOut, 2 * SWAP_AMOUNT * BALANCE_A / BALANCE_B);
     }
 
     function test_Whitelist_Sequential_GasBenchmark() public {
