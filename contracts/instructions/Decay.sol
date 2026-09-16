@@ -44,13 +44,23 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    struct TokenOffsets {
-        DecayOffset asTokenIn;
-        DecayOffset asTokenOut;
+    /// @dev Swap volumes for a single token.
+    struct TokenVolumes {
+        /// @dev Volume of token when it was swapped as token in.
+        DecayVolume asTokenIn;
+        /// @dev Volume of token when it was swapped as token out.
+        DecayVolume asTokenOut;
+    }
+
+    struct OrderTokenVolumes {
+        /// @dev Volumes for order token A.
+        TokenVolumes tokenA;
+        /// @dev Volumes for order token B.
+        TokenVolumes tokenB;
     }
 
     struct Storage {
-        mapping(bytes32 orderHash => mapping(address token => TokenOffsets)) offset;
+        mapping(bytes32 orderHash => OrderTokenVolumes) orderTokenVolumes;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -62,48 +72,53 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        TokenOffsets storage offsetsIn = $.offset[ctx.query.orderHash][ctx.query.tokenIn];
-        TokenOffsets storage offsetsOut = $.offset[ctx.query.orderHash][ctx.query.tokenOut];
+        OrderTokenVolumes storage volumes = $.orderTokenVolumes[ctx.query.orderHash];
 
-        ctx.swap.balanceIn += calcOffsetNow(offsetsIn.asTokenOut, period);
-        ctx.swap.balanceOut -= calcOffsetNow(offsetsOut.asTokenIn, period);
+        TokenVolumes storage volumeTokenIn;
+        TokenVolumes storage volumeTokenOut;
+        if (ctx.query.tokenIn < ctx.query.tokenOut) (volumeTokenIn, volumeTokenOut) = (volumes.tokenA, volumes.tokenB);
+        else (volumeTokenIn, volumeTokenOut) = (volumes.tokenB, volumes.tokenA);
 
-        uint216 offsetIn = calcOffsetNow(offsetsIn.asTokenIn, period);
-        uint216 offsetOut = calcOffsetNow(offsetsOut.asTokenOut, period);
+        ctx.swap.balanceIn += remainingVolume(volumeTokenIn.asTokenOut, period);
+        ctx.swap.balanceOut -= remainingVolume(volumeTokenOut.asTokenIn, period);
+
+        uint216 volumeIn = remainingVolume(volumeTokenIn.asTokenIn, period);
+        uint216 volumeOut = remainingVolume(volumeTokenOut.asTokenOut, period);
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        offsetIn += amountIn.toUint216();
-        offsetOut += amountOut.toUint216();
+        volumeIn += amountIn.toUint216();
+        volumeOut += amountOut.toUint216();
 
         if (!ctx.vm.isStaticContext) {
-            offsetsIn.asTokenIn = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
-            offsetsOut.asTokenOut = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
+            volumeTokenIn.asTokenIn = DecayVolumeLib.encode(volumeIn, uint40(block.timestamp));
+            volumeTokenOut.asTokenOut = DecayVolumeLib.encode(volumeOut, uint40(block.timestamp));
         }
     }
 
-    function calcOffsetNow(DecayOffset data, uint16 period) internal view returns (uint216) {
+    /// @dev Decay volume decreases linearly over time. Returns the remaining volume after given period.
+    function remainingVolume(DecayVolume data, uint16 period) internal view returns (uint216) {
         unchecked {
-            (uint216 offset, uint40 ts) = DecayOffsetLib.decode(data);
+            (uint216 volume, uint40 ts) = DecayVolumeLib.decode(data);
 
             uint256 expiration = uint256(ts) + period;
             if (block.timestamp >= expiration) return 0;
             uint256 timeLeft = expiration - block.timestamp;
 
             // timeLeft < period
-            return uint216(offset * timeLeft / period);
+            return uint216(volume * timeLeft / period);
         }
     }
 }
 
-type DecayOffset is uint256;
+type DecayVolume is uint256;
 
-library DecayOffsetLib {
-    function encode(uint216 offset, uint40 ts) internal pure returns (DecayOffset) {
-        return DecayOffset.wrap((uint256(offset) << 40) | ts);
+library DecayVolumeLib {
+    function encode(uint216 volume, uint40 ts) internal pure returns (DecayVolume) {
+        return DecayVolume.wrap((uint256(volume) << 40) | ts);
     }
 
-    function decode(DecayOffset data) internal pure returns (uint216 offset, uint40 ts) {
-        return (uint216(DecayOffset.unwrap(data) >> 40), uint40(DecayOffset.unwrap(data)));
+    function decode(DecayVolume data) internal pure returns (uint216 volume, uint40 ts) {
+        return (uint216(DecayVolume.unwrap(data) >> 40), uint40(DecayVolume.unwrap(data)));
     }
 }
