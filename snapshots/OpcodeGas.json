@@ -21,7 +21,7 @@
   "OnlyTakerTokenBalanceNonZero": "1877",
   "OnlyTakerTokenSupplyShareGte": "4869",
   "OnlyTxOriginTokenBalanceNonZero": "4516",
-  "PeggedSwap": "8017",
+  "PeggedSwap": "7989",
   "PiecewiseLinearScaleBalanceIn": "1593",
   "PiecewiseLinearScaleBalanceOut": "1628",
   "PrivateOrder": "1359",
@@ -32,6 +32,6 @@
   "ValidateSeriesEpoch": "3534",
   "WhitelistCoequal": "1524",
   "WhitelistSequential": "1749",
-  "XYCConcentrateSwap": "4559",
+  "XYCConcentrateSwap": "4385",
   "XYCSwap": "1007"
 }

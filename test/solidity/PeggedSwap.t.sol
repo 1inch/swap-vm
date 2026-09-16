@@ -37,6 +37,10 @@ contract PeggedSwapMathWrapper {
     function computeInvariantFromReserves(uint256 x, uint256 y, uint256 x0, uint256 y0, uint256 a) external pure returns (uint256) {
         return PeggedSwapMath.invariantFromReserves(x, y, x0, y0, a);
     }
+
+    function buildPeggedSwap(uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB) external pure {
+        PeggedSwap.build(x0, y0, linearWidth, rateA, rateB);
+    }
 }
 
 contract PeggedSwapTest is Test, OpcodesDebug {
@@ -55,6 +59,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         uint256 y0;
         uint256 linearWidth;
         uint256 feeInBps;
+        uint256 feeOutBps;
     }
 
     function setUp() public {
@@ -95,6 +100,7 @@ contract PeggedSwapTest is Test, OpcodesDebug {
         bytes memory programBytes = bytes.concat(
             DynamicBalances.build(setup.balanceA, setup.balanceB),
             setup.feeInBps > 0 ? FeeFlatIn.build(uint24(setup.feeInBps)) : bytes(""),
+            setup.feeOutBps > 0 ? FeeFlatOut.build(uint24(setup.feeOutBps)) : bytes(""),
             PeggedSwap.build(setup.x0, setup.y0, setup.linearWidth, rateA, rateB)
         );
 
@@ -188,7 +194,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -216,7 +223,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -236,7 +244,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 9000e18,
             y0: 8000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -258,7 +267,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 9000e18,
             y0: 8000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -280,7 +290,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 9000e18,
             y0: 8000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -302,7 +313,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 9000e18,
             y0: 8000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0.003e9
+            feeInBps: 0.003e9,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -346,7 +358,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 x0: poolSize,
                 y0: poolSize,
                 linearWidth: linearWidths[i],
-                feeInBps: 0
+                feeInBps: 0,
+                feeOutBps: 0
             });
 
             ISwapVM.Order memory order = _createOrder(setup);
@@ -371,7 +384,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0, // Pure sqrt curve
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -406,7 +420,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 5000e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -424,7 +439,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100_000e18,
             y0: 100_000e18,
             linearWidth: 5000e27, // at cap
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -454,7 +470,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 x0: 50_000e18,
                 y0: 50_000e18,
                 linearWidth: as_[i],
-                feeInBps: 0
+                feeInBps: 0,
+                feeOutBps: 0
             });
             ISwapVM.Order memory order = _createOrder(setup);
             _assertSwapQuoteConsistency(order, 1_000e18, true);
@@ -476,7 +493,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 x0: poolSize,
                 y0: poolSize,
                 linearWidth: as_[i],
-                feeInBps: 0
+                feeInBps: 0,
+                feeOutBps: 0
             });
 
             ISwapVM.Order memory order = _createOrder(setup);
@@ -509,7 +527,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.5e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -536,7 +555,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 99000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -569,7 +589,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1_000_000e18,
             y0: 1_000e18,
             linearWidth: 0,  // pure sqrt curve
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -602,7 +623,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1_000_000e18,
             y0: 1_000e18,
             linearWidth: 0,  // pure sqrt curve
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -637,7 +659,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         PoolSetup memory setupWithFee = PoolSetup({
@@ -646,7 +669,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 100000e18,
             y0: 100000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0.003e7 // 0.3%
+            feeInBps: 0.003e7, // 0.3%
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory orderNoFee = _createOrder(setupNoFee);
@@ -681,7 +705,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -727,7 +752,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -777,7 +803,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -800,7 +827,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -819,7 +847,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: 1000e18,
             y0: 1000e18,
             linearWidth: 0.8e27,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         });
 
         ISwapVM.Order memory order = _createOrder(setup);
@@ -1115,7 +1144,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
                 x0: poolSize,
                 y0: poolSize,
                 linearWidth: linearWidths[w],
-                feeInBps: 0
+                feeInBps: 0,
+                feeOutBps: 0
             });
 
             ISwapVM.Order memory order = _createOrder(setup);
@@ -1313,7 +1343,8 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             x0: RATED_X0,
             y0: RATED_Y0,
             linearWidth: RATED_WIDTH,
-            feeInBps: 0
+            feeInBps: 0,
+            feeOutBps: 0
         }), RATE_A, RATE_B);
     }
 
@@ -1415,5 +1446,74 @@ contract PeggedSwapTest is Test, OpcodesDebug {
             RATED_X0, RATED_Y0, RATED_WIDTH
         );
         assertGe(inv2, inv0 - 1, "Invariant must not decrease after round trip");
+    }
+
+    /// @notice PeggedSwap.build rejects zero reserves, zero rates and an over-wide linear region.
+    function test_Fail_PeggedSwapInvalidBuildArgs() public {
+        PeggedSwapMathWrapper wrapper = new PeggedSwapMathWrapper();
+        uint256 maxWidth = PeggedSwapMath.MAX_LINEAR_WIDTH;
+
+        // Zero initial reserves.
+        vm.expectRevert(abi.encodeWithSelector(PeggedSwap.PeggedSwapInvalidInitialBalances.selector, 0, 1e21));
+        wrapper.buildPeggedSwap(0, 1e21, 0.8e27, 1, 1);
+        vm.expectRevert(abi.encodeWithSelector(PeggedSwap.PeggedSwapInvalidInitialBalances.selector, 1e21, 0));
+        wrapper.buildPeggedSwap(1e21, 0, 0.8e27, 1, 1);
+
+        // Linear width above the maximum.
+        vm.expectRevert(abi.encodeWithSelector(PeggedSwap.PeggedSwapInvalidLinearWidth.selector, maxWidth + 1));
+        wrapper.buildPeggedSwap(1e21, 1e21, maxWidth + 1, 1, 1);
+
+        // Zero rates.
+        vm.expectRevert(abi.encodeWithSelector(PeggedSwap.PeggedSwapInvalidRates.selector, 0, 1));
+        wrapper.buildPeggedSwap(1e21, 1e21, 0.8e27, 0, 1);
+        vm.expectRevert(abi.encodeWithSelector(PeggedSwap.PeggedSwapInvalidRates.selector, 1, 0));
+        wrapper.buildPeggedSwap(1e21, 1e21, 0.8e27, 1, 0);
+
+        // Boundary values that must still build, so a guard rejecting everything cannot pass.
+        wrapper.buildPeggedSwap(1, 1, 0, 1, 1);
+        wrapper.buildPeggedSwap(1e21, 1e21, maxWidth, 1, 1);
+    }
+
+    /// @notice Exact-out of 1 wei must still charge at least 1 wei in.
+    /// At this pool size the normalized x does not move for a 1 wei output, so `amountIn`
+    /// ceilDivs to 0. Without the minimum-charge guard the taker would get output for free
+    /// (here the order rejects it outright with MakerTraitsZeroAmountInNotAllowed).
+    function test_PeggedSwap_MinimumOneWeiCharge() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1e27,
+            balanceB: 1e27,
+            x0: 1e27,
+            y0: 1e27,
+            linearWidth: 0.8e27,
+            feeInBps: 0,
+            feeOutBps: 0
+        });
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createOrder(setup), 1, false, true);
+
+        assertEq(swappedOut, 1, "Exact-out must deliver the requested 1 wei");
+        assertEq(swappedIn, 1, "Nonzero output must cost at least 1 wei in");
+    }
+
+    function test_PeggedSwap_FeeFlatOut() public {
+        PoolSetup memory setup = PoolSetup({
+            balanceA: 1e27,
+            balanceB: 1e27,
+            x0: 1e27,
+            y0: 1e27,
+            linearWidth: 0.8e27,
+            feeInBps: 0,
+            // Fee is equal to 25%
+            feeOutBps: FeeFlatOut.BPS >> 2
+        });
+
+        (uint256 swappedIn, uint256 swappedOut) = _quoteAndSwap(_createOrder(setup), 1e18, true, true);
+
+        assertEq(swappedIn, 1e18, "Invalid swappedIn");
+        // Verify, that swappedOut is less than 0.75 * 1e18.
+        assertLe(swappedOut, 0.75e18, "Fee 25% wasn't taken");
+
+        uint256 precision = 1e9;
+        assertGe(precision, 0.75e18 - swappedOut, "Expect pegged swap will return value close 1:1 swap");
     }
 }
