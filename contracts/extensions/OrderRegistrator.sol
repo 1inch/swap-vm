@@ -16,7 +16,7 @@ library OrderRegistratorLib {
     error OrderAlreadyRegistered(bytes32 orderHash);
 
     struct Storage {
-        mapping(bytes32 orderHash => uint40) announcedAt;
+        mapping(bytes32 orderHash => uint256) announcedAt;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -29,17 +29,17 @@ library OrderRegistratorLib {
         Storage storage $ = OrderRegistratorLib.store();
 
         require($.announcedAt[orderHash] == 0, OrderAlreadyRegistered(orderHash));
-        $.announcedAt[orderHash] = uint40(block.timestamp);
+        $.announcedAt[orderHash] = block.timestamp;
     }
 
     /// @dev Order announcement time, lazy-initialized
     function announcedAt(bytes32 orderHash, bool isStaticContext) internal returns (uint40 ts) {
         Storage storage $ = OrderRegistratorLib.store();
 
-        ts = $.announcedAt[orderHash];
+        ts = uint40($.announcedAt[orderHash]);
         if (ts == 0) {
             ts = uint40(block.timestamp);
-            if (!isStaticContext) $.announcedAt[orderHash] = ts;
+            if (!isStaticContext) $.announcedAt[orderHash] = block.timestamp;
         }
     }
 }
