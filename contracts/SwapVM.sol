@@ -14,6 +14,7 @@ import { TransientLockUnsafeLib } from "@1inch/solidity-utils/contracts/librarie
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol";
+import { PermitAndCall } from "@1inch/solidity-utils/contracts/mixins/PermitAndCall.sol";
 
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
@@ -27,7 +28,7 @@ import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
 /// @dev This contract is Ownable via Rescuable mixin
-abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrator {
+abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, OrderRegistrator {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
