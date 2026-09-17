@@ -46,8 +46,6 @@ library Decay {
 
     /// @dev Virtual balances for a single token.
     struct TokenVirtualBalances {
-        /// @dev Virtual balance when this token was swapped as token in.
-        VirtualBalance asTokenIn;
         /// @dev Virtual balance when this token was swapped as token out.
         VirtualBalance asTokenOut;
     }
@@ -80,18 +78,12 @@ library Decay {
         else (virtualBalanceTokenIn, virtualBalanceTokenOut) = (virtualBalances.tokenB, virtualBalances.tokenA);
 
         ctx.swap.balanceIn += remainingVirtualBalance(virtualBalanceTokenIn.asTokenOut, period);
-        ctx.swap.balanceOut -= remainingVirtualBalance(virtualBalanceTokenOut.asTokenIn, period);
-
-        uint216 virtualBalanceIn = remainingVirtualBalance(virtualBalanceTokenIn.asTokenIn, period);
         uint216 virtualBalanceOut = remainingVirtualBalance(virtualBalanceTokenOut.asTokenOut, period);
 
-        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+        (, uint256 amountOut ) = ctx.runLoop();
 
-        virtualBalanceIn += amountIn.toUint216();
         virtualBalanceOut += amountOut.toUint216();
-
         if (!ctx.vm.isStaticContext) {
-            virtualBalanceTokenIn.asTokenIn = VirtualBalanceLib.encode(virtualBalanceIn, uint40(block.timestamp));
             virtualBalanceTokenOut.asTokenOut = VirtualBalanceLib.encode(virtualBalanceOut, uint40(block.timestamp));
         }
     }
