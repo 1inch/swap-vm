@@ -47,6 +47,7 @@ contract DirectSwapVMHelper is OpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,

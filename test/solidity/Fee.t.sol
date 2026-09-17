@@ -93,6 +93,7 @@ contract FeeTest is Test, OpcodesDebug {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
@@ -131,6 +132,7 @@ contract FeeTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,

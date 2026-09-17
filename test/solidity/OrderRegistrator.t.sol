@@ -129,6 +129,7 @@ contract OrderRegistratorTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: useAqua,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
