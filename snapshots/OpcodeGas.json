@@ -1,10 +1,10 @@
 {
   "AdjustMinRate": "1677",
   "BaseFeeAdjuster": "1347",
-  "Deadline": "593",
+  "Deadline": "660",
   "Decay": "52610",
-  "DutchAuctionBalanceIn": "1606",
-  "DutchAuctionBalanceOut": "1663",
+  "DutchAuctionBalanceIn": "1675",
+  "DutchAuctionBalanceOut": "1732",
   "DynamicBalances": "26925",
   "FeeFlatIn": "1722",
   "FeeFlatOut": "1606",
@@ -22,8 +22,8 @@
   "OnlyTakerTokenSupplyShareGte": "4869",
   "OnlyTxOriginTokenBalanceNonZero": "4516",
   "PeggedSwap": "7989",
-  "PiecewiseLinearScaleBalanceIn": "1593",
-  "PiecewiseLinearScaleBalanceOut": "1628",
+  "PiecewiseLinearScaleBalanceIn": "1674",
+  "PiecewiseLinearScaleBalanceOut": "1712",
   "PrivateOrder": "1359",
   "RequireMinRate": "1558",
   "Salt": "982",
@@ -31,7 +31,7 @@
   "Stop": "326",
   "ValidateSeriesEpoch": "3534",
   "WhitelistCoequal": "1524",
-  "WhitelistSequential": "1749",
+  "WhitelistSequential": "1815",
   "XYCConcentrateSwap": "4385",
   "XYCSwap": "1007"
 }

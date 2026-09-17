@@ -39,6 +39,8 @@ contract ControlsTest is Test, OpcodesDebug {
     uint256 public makerPK = 0x1234;
     address public taker;
 
+    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
+
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
@@ -113,6 +115,28 @@ contract ControlsTest is Test, OpcodesDebug {
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, deadline));
         swapVM.swap(order, 1e18, takerData);
+    }
+
+    function test_Deadline_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        uint40 lifetime = 1 hours;
+        uint40 deadline = RELATIVE_TIME_FLAG_MASK | lifetime;
+
+        bytes memory bytecode = bytes.concat(
+            Deadline.build(deadline),
+            StaticBalances.build(100e18, 100e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        vm.warp(announcedAt);
+        assertEq(_executeSwap(order, address(tokenA), address(tokenB), 1e18), 1e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + lifetime + 1);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
+        vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, announcedAt + lifetime));
+        swapVM.quote(order, 1e18, takerData);
     }
 
     /**
