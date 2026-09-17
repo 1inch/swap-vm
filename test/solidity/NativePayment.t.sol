@@ -101,6 +101,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
             tokenB: higherToken,
             shouldUnwrapWeth: makerUnwrapWeth,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: allowZeroAmountIn,
             receiver: receiver,
             hasPreTransferInHook: false,
@@ -140,6 +141,16 @@ contract NativePaymentTest is Test, OpcodesDebug {
         bool isAToB,
         bytes memory signature
     ) internal pure returns (bytes memory) {
+        return _buildTakerData(takerAddr, isExactIn, isAToB, signature, false);
+    }
+
+    function _buildTakerData(
+        address takerAddr,
+        bool isExactIn,
+        bool isAToB,
+        bytes memory signature,
+        bool usePermit2
+    ) internal pure returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: takerAddr,
             isExactIn: isExactIn,
@@ -149,6 +160,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: usePermit2,
             threshold: "",
             to: takerAddr,
             deadline: 0,
@@ -179,6 +191,7 @@ contract NativePaymentTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: useTransferFromAndAquaPush,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: takerAddr,
             deadline: 0,
@@ -261,6 +274,26 @@ contract NativePaymentTest is Test, OpcodesDebug {
         swapVM.swap{ value: amountIn }(order, amountIn, takerData);
 
         assertEq(weth.balanceOf(taker), amountIn, "Native payment must take precedence over taker's WETH");
+        assertEq(taker.balance, 0, "Attached ETH should be consumed");
+    }
+
+    function test_NativePayment_Permit2Ignored() public {
+        uint256 amountIn = 10e18;
+        _prepareWeth(taker, amountIn);
+        uint256 takerWethBefore = weth.balanceOf(taker);
+        vm.deal(taker, amountIn);
+        vm.prank(taker);
+        weth.approve(address(swapVM), 0);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _buildXYCOrder(false, address(0));
+        bytes memory takerData = _buildTakerData(taker, true, _wethIsAToB(), signature, true);
+
+        vm.prank(taker);
+        (uint256 actualAmountIn,,) = swapVM.swap{ value: amountIn }(order, amountIn, takerData);
+
+        assertEq(actualAmountIn, amountIn, "amountIn mismatch");
+        assertEq(weth.balanceOf(maker), amountIn, "Maker should receive native-funded WETH");
+        assertEq(weth.balanceOf(taker), takerWethBefore, "Permit2 must not pull taker's WETH");
         assertEq(taker.balance, 0, "Attached ETH should be consumed");
     }
 

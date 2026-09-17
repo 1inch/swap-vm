@@ -18,6 +18,7 @@ import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Ba
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 
 import { WETHMock } from "./mocks/WETHMock.sol";
+import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
 
 contract UnwrapWethTest is Test, OpcodesDebug {
     SwapVMRouter public swapVM;
@@ -58,6 +59,16 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         address tokenA,
         address tokenB
     ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        return _buildOrder(makerUnwrapWeth, receiver, tokenA, tokenB, false);
+    }
+
+    function _buildOrder(
+        bool makerUnwrapWeth,
+        address receiver,
+        address tokenA,
+        address tokenB,
+        bool usePermit2
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         // MakerTraits requires tokenA < tokenB; balances are symmetric so ordering of values is irrelevant
         (address lowerToken, address higherToken) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
 
@@ -72,6 +83,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
             tokenB: higherToken,
             shouldUnwrapWeth: makerUnwrapWeth,
             useAquaInsteadOfSignature: false,
+            usePermit2: usePermit2,
             allowZeroAmountIn: false,
             receiver: receiver,
             hasPreTransferInHook: false,
@@ -101,6 +113,17 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         address recipient,
         bytes memory signature
     ) internal view returns (bytes memory) {
+        return _buildTakerData(isExactIn, takerUnwrapWeth, isAToB, recipient, signature, false);
+    }
+
+    function _buildTakerData(
+        bool isExactIn,
+        bool takerUnwrapWeth,
+        bool isAToB,
+        address recipient,
+        bytes memory signature,
+        bool usePermit2
+    ) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
@@ -110,6 +133,7 @@ contract UnwrapWethTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: usePermit2,
             threshold: "",
             to: recipient,
             deadline: 0,
@@ -163,6 +187,26 @@ contract UnwrapWethTest is Test, OpcodesDebug {
         assertEq(takerWethBefore - weth.balanceOf(taker), actualAmountIn, "Taker should spend WETH");
     }
 
+    function test_MakerShouldReceiveEth_Permit2() public {
+        Permit2TestLib.install();
+        uint256 amountIn = 10e18;
+        _prepareWeth(taker, amountIn);
+        Permit2TestLib.approve(address(weth), taker, address(swapVM), uint160(amountIn), type(uint48).max);
+        vm.prank(taker);
+        weth.approve(address(swapVM), 0);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(true, address(0), address(weth), address(token));
+        bytes memory takerData = _buildTakerData(true, false, address(weth) < address(token), taker, signature, true);
+
+        uint256 makerEthBefore = maker.balance;
+        vm.prank(taker);
+        (uint256 actualAmountIn,,) = swapVM.swap(order, amountIn, takerData);
+
+        assertEq(maker.balance - makerEthBefore, actualAmountIn, "Maker should receive Permit2-funded ETH");
+        assertEq(weth.balanceOf(maker), 0, "Maker should not receive WETH");
+        assertEq(Permit2TestLib.allowance(taker, address(weth), address(swapVM)).amount, 0, "Taker Permit2 allowance not consumed");
+    }
+
     function test_MakerShouldReciveEthToCustomAddress() public {
         address makerReceiver = makeAddr("makerReceiver");
         uint256 amountIn = 10e18;
@@ -203,6 +247,27 @@ contract UnwrapWethTest is Test, OpcodesDebug {
 
         // Maker sends WETH
         assertEq(makerWethBefore - weth.balanceOf(maker), amountOut, "Maker should spend WETH");
+    }
+
+    function test_TakerShouldReceiveEth_Permit2() public {
+        Permit2TestLib.install();
+        uint256 amountIn = 10e18;
+        _prepareWeth(maker, ORDER_BALANCE);
+        Permit2TestLib.approve(address(weth), maker, address(swapVM), uint160(ORDER_BALANCE), type(uint48).max);
+        vm.prank(maker);
+        weth.approve(address(swapVM), 0);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(0), address(token), address(weth), true);
+        bytes memory takerData = _buildTakerData(true, true, address(token) < address(weth), taker, signature);
+
+        uint256 takerEthBefore = taker.balance;
+        uint256 makerWethBefore = weth.balanceOf(maker);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
+
+        assertEq(taker.balance - takerEthBefore, amountOut, "Taker should receive Permit2-funded ETH");
+        assertEq(makerWethBefore - weth.balanceOf(maker), amountOut, "Maker should spend WETH through Permit2");
+        assertEq(Permit2TestLib.allowance(maker, address(weth), address(swapVM)).amount, ORDER_BALANCE - amountOut, "Wrong remaining maker Permit2 allowance");
     }
 
     function test_TakerShouldReciveEthToCustomAddress() public {

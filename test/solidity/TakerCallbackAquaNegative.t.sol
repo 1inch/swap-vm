@@ -66,6 +66,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
             useTransferFromAndAquaPush: false, // Taker should push via callback
             isAToB: false, // swap is tokenB->tokenA, tokenB > tokenA after sort
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             deadline: 0,

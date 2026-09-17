@@ -260,7 +260,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
                     if (_acceptNativePayment(ctx.swap.amountIn)) {
                         WETH.safeDeposit(ctx.swap.amountIn);
                     } else {
-                        IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.taker, address(this), ctx.swap.amountIn);
+                        IERC20(ctx.query.tokenIn).safeTransferFromUniversal(ctx.query.taker, address(this), ctx.swap.amountIn, takerTraits.usePermit2());
                     }
                     fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
 
@@ -283,8 +283,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
                     IERC20(ctx.query.tokenIn).safeTransfer(order.traits.receiver(order.maker), ctx.swap.amountIn - fee);
                 }
             } else {
-                fee = FeeMetaLib.resolveInSafeTransferFromTaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker);
-                _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn - fee, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
+                fee = FeeMetaLib.resolveInSafeTransferFromTaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker, takerTraits.usePermit2());
+                _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn - fee, ctx.query.orderHash, false, takerTraits.usePermit2(), order.traits.shouldUnwrapWeth());
             }
         } else {
             if (msg.value > 0) _sendEth(msg.sender, msg.value);
@@ -331,9 +331,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
 
         uint256 fee;
         if (order.traits.useAquaInsteadOfSignature()) fee = FeeMetaLib.resolveOutAquaPullMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, AQUA, order.maker, ctx.query.orderHash);
-        else fee = FeeMetaLib.resolveOutSafeTransferFromMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, order.maker);
+        else fee = FeeMetaLib.resolveOutSafeTransferFromMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, order.maker, order.traits.usePermit2());
 
-        _transferFrom(order.maker, takerTraits.to(takerData, msg.sender), ctx.query.tokenOut, ctx.swap.amountOut, ctx.query.orderHash, order.traits.useAquaInsteadOfSignature(), takerTraits.shouldUnwrapWeth());
+        _transferFrom(order.maker, takerTraits.to(takerData, msg.sender), ctx.query.tokenOut, ctx.swap.amountOut, ctx.query.orderHash, order.traits.useAquaInsteadOfSignature(), order.traits.usePermit2(), takerTraits.shouldUnwrapWeth());
 
         if (order.traits.hasPostTransferOutHook()) {
             (IMakerHooks target, bytes calldata makerHookData) = order.traits.postTransferOutHook(order.maker, order.data);
@@ -342,20 +342,20 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
         }
     }
 
-    function _transferFrom(address from, address to, address token, uint256 amount, bytes32 orderHash, bool useAqua, bool unwrapWeth) private {
+    function _transferFrom(address from, address to, address token, uint256 amount, bytes32 orderHash, bool useAqua, bool usePermit2, bool unwrapWeth) private {
         if (unwrapWeth && token == address(WETH)) {
-            _transferOrPull(from, address(this), token, amount, orderHash, useAqua);
+            _transferOrPull(from, address(this), token, amount, orderHash, useAqua, usePermit2);
             IWETH(token).safeWithdrawTo(amount, to);
         } else {
-            _transferOrPull(from, to, token, amount, orderHash, useAqua);
+            _transferOrPull(from, to, token, amount, orderHash, useAqua, usePermit2);
         }
     }
 
-    function _transferOrPull(address from, address to, address token, uint256 amount, bytes32 orderHash, bool useAqua) private {
+    function _transferOrPull(address from, address to, address token, uint256 amount, bytes32 orderHash, bool useAqua, bool usePermit2) private {
         if (useAqua) {
             AQUA.pull(from, orderHash, token, amount, to);
         } else {
-            IERC20(token).safeTransferFrom(from, to, amount);
+            IERC20(token).safeTransferFromUniversal(from, to, amount, usePermit2);
         }
     }
 
