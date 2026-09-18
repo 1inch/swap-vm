@@ -228,15 +228,17 @@ contract DecayTest is Test, OpcodesDebug {
             50e18
         );
 
-        // Normal expected without decay: out = 50 * 1100 / (909 + 50) = 57.35...
-        uint256 expectedNormal = (uint256(50e18) * 1100) / 959;
+        // Unpenalized reverse: out = 50 * 1100 / (909.09... + 50) ≈ 57.35
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+        uint256 balanceAAfter = INITIAL_LIQUIDITY + STANDARD_SWAP;
+        uint256 balanceBAfter = INITIAL_LIQUIDITY - outFirst;
+        uint256 expectedNormal = (uint256(50e18) * balanceAAfter) / (balanceBAfter + 50e18);
 
-        // With decay penalty, actual output should be less
+        // With decay, virtual B = remaining B + amountOut = 1000, so out = 50 * 1100 / 1050 ≈ 52.38
+        uint256 expectedPenalized = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY + 50e18);
+
         assertTrue(outOpp < expectedNormal, "Opposite direction MUST have penalty");
-
-        // Verify penalty is significant (>10%)
-        uint256 penalty = ((expectedNormal - outOpp) * 100) / expectedNormal;
-        assertTrue(penalty > 10, "Penalty should be > 10%");
+        assertApproxEqRel(outOpp, expectedPenalized, TOLERANCE, "Reverse should add remaining out-resistance to balanceIn");
     }
 
     // Test 2: Decay over time
@@ -292,9 +294,17 @@ contract DecayTest is Test, OpcodesDebug {
         assertTrue(rateImmediate < rateHalf, "Rate should improve at half decay");
         assertTrue(rateHalf < rateFull, "Rate should be best after full decay");
 
-        // After full decay, should be close to normal AMM rate
-        // Strategy state has changed, but rate should be significantly better
-        assertTrue(rateFull > rateImmediate * 11 / 10, "Full decay rate should be >10% better than immediate");
+        // Immediate: virtual B = 1000. Half: leftover resistance is outFirst/2.
+        // Full: resistance expired, rate matches the unpenalized reverse AMM.
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+        uint256 balanceAAfter = INITIAL_LIQUIDITY + STANDARD_SWAP;
+        uint256 expectedImmediate = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY + 50e18);
+        uint256 expectedHalf = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY - outFirst / 2 + 50e18);
+        uint256 expectedFull = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY - outFirst + 50e18);
+
+        assertApproxEqRel(outImmediate, expectedImmediate, TOLERANCE, "Immediate reverse uses full out-resistance");
+        assertApproxEqRel(outHalf, expectedHalf, TOLERANCE, "Half decay should leave half the out-resistance");
+        assertApproxEqRel(outFull, expectedFull, TOLERANCE, "Full decay should restore the unpenalized AMM rate");
     }
 
     // Test 3: MEV Protection (Sandwich Attack)

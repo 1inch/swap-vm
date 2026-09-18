@@ -44,21 +44,17 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev Virtual balances for a single token.
-    struct TokenVirtualBalances {
-        /// @dev Virtual balance when this token was swapped as token out.
-        VirtualBalance asTokenOut;
-    }
 
-    struct OrderTokensVirtualBalances {
-        /// @dev Virtual balances for order's token A.
-        TokenVirtualBalances tokenA;
-        /// @dev Virtual balances for order's token B.
-        TokenVirtualBalances tokenB;
+    /// @dev Balances of order's tokens traded in previous swaps and not yet expired.
+    struct OrderResistance {
+        /// @dev Amount of token A will be resistant to swap 
+        Resistance resistanceA;
+        /// @dev Resistance of order's token B.
+        Resistance resistanceB;
     }
 
     struct Storage {
-        mapping(bytes32 orderHash => OrderTokensVirtualBalances) orderVirtualBalances;
+        mapping(bytes32 orderHash => OrderResistance) orderResistance;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -70,28 +66,29 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        OrderTokensVirtualBalances storage virtualBalances = $.orderVirtualBalances[ctx.query.orderHash];
+        OrderResistance storage resistance = $.orderResistance[ctx.query.orderHash];
+        bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        TokenVirtualBalances storage virtualBalanceTokenIn;
-        TokenVirtualBalances storage virtualBalanceTokenOut;
-        if (ctx.query.tokenIn < ctx.query.tokenOut) (virtualBalanceTokenIn, virtualBalanceTokenOut) = (virtualBalances.tokenA, virtualBalances.tokenB);
-        else (virtualBalanceTokenIn, virtualBalanceTokenOut) = (virtualBalances.tokenB, virtualBalances.tokenA);
+        Resistance resistanceIn = aToB ? resistance.resistanceA : resistance.resistanceB;
+        Resistance resistanceOut = aToB ? resistance.resistanceB : resistance.resistanceA;
 
-        ctx.swap.balanceIn += remainingVirtualBalance(virtualBalanceTokenIn.asTokenOut, period);
-        uint216 virtualBalanceOut = remainingVirtualBalance(virtualBalanceTokenOut.asTokenOut, period);
+        ctx.swap.balanceIn += remainingResistance(resistanceIn, period);
+        uint216 remainingResistanceOut = remainingResistance(resistanceOut, period);
 
         (, uint256 amountOut ) = ctx.runLoop();
 
-        virtualBalanceOut += amountOut.toUint216();
+        remainingResistanceOut += amountOut.toUint216();
         if (!ctx.vm.isStaticContext) {
-            virtualBalanceTokenOut.asTokenOut = VirtualBalanceLib.encode(virtualBalanceOut, uint40(block.timestamp));
+            Resistance encoded = ResistanceLib.encode(remainingResistanceOut, uint40(block.timestamp));
+            if (aToB) resistance.resistanceB = encoded;
+            else resistance.resistanceA = encoded;
         }
     }
 
     /// @dev Virtual balance decreases linearly over time. Returns the remaining amount within the period.
-    function remainingVirtualBalance(VirtualBalance data, uint16 period) internal view returns (uint216) {
+    function remainingResistance(Resistance data, uint16 period) internal view returns (uint216) {
         unchecked {
-            (uint216 amount, uint40 ts) = VirtualBalanceLib.decode(data);
+            (uint216 amount, uint40 ts) = ResistanceLib.decode(data);
 
             uint256 expiration = uint256(ts) + period;
             if (block.timestamp >= expiration) return 0;
@@ -104,14 +101,14 @@ library Decay {
 }
 
 /// @dev Virtual balance means the remaining amount of token that was swapped in previous swaps and not yet expired.
-type VirtualBalance is uint256;
+type Resistance is uint256;
 
-library VirtualBalanceLib {
-    function encode(uint216 amount, uint40 ts) internal pure returns (VirtualBalance) {
-        return VirtualBalance.wrap((uint256(amount) << 40) | ts);
+library ResistanceLib {
+    function encode(uint216 amount, uint40 ts) internal pure returns (Resistance) {
+        return Resistance.wrap((uint256(amount) << 40) | ts);
     }
 
-    function decode(VirtualBalance data) internal pure returns (uint216 amount, uint40 ts) {
-        return (uint216(VirtualBalance.unwrap(data) >> 40), uint40(VirtualBalance.unwrap(data)));
+    function decode(Resistance data) internal pure returns (uint216 amount, uint40 ts) {
+        return (uint216(Resistance.unwrap(data) >> 40), uint40(Resistance.unwrap(data)));
     }
 }
