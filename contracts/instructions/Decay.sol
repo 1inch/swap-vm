@@ -13,8 +13,8 @@ import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice Decay opcode, increase balance in and decrease balance out by offsets decaying over time since last trade
-///   Offsets are increased at each swap by amount in and amount out against the current swap direction,
+/// @notice Decay opcode, increase balance in and decrease balance out by virtual balances decaying over time since last trade
+///   Virtual balances are increased at each swap by amount in and amount out against the current swap direction,
 ///   making immediate counter-swap have a worse price
 /// @dev Encoding: [uint16 period]
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
@@ -44,8 +44,17 @@ library Decay {
         period = args.at(0).asU16();
     }
 
+
+    /// @dev Balances of order's tokens traded in previous swaps and not yet expired.
+    struct OrderResistance {
+        /// @dev Amount of token A will be resistant to swap 
+        Resistance resistanceA;
+        /// @dev Resistance of order's token B.
+        Resistance resistanceB;
+    }
+
     struct Storage {
-        mapping(bytes32 orderHash => mapping(address token => mapping(bool direction => DecayOffset))) offset;
+        mapping(bytes32 orderHash => OrderResistance) orderResistance;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -57,45 +66,49 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        ctx.swap.balanceIn += calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][true], period);
-        ctx.swap.balanceOut -= calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][false], period);
+        OrderResistance storage resistance = $.orderResistance[ctx.query.orderHash];
+        bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        uint216 offsetIn = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][false], period);
-        uint216 offsetOut = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][true], period);
+        Resistance resistanceIn = aToB ? resistance.resistanceA : resistance.resistanceB;
+        Resistance resistanceOut = aToB ? resistance.resistanceB : resistance.resistanceA;
 
-        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+        ctx.swap.balanceIn += remainingResistance(resistanceIn, period);
+        uint216 remainingResistanceOut = remainingResistance(resistanceOut, period);
 
-        offsetIn += amountIn.toUint216();
-        offsetOut += amountOut.toUint216();
+        (, uint256 amountOut ) = ctx.runLoop();
 
+        remainingResistanceOut += amountOut.toUint216();
         if (!ctx.vm.isStaticContext) {
-            $.offset[ctx.query.orderHash][ctx.query.tokenIn][false] = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
-            $.offset[ctx.query.orderHash][ctx.query.tokenOut][true] = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
+            Resistance encoded = ResistanceLib.encode(remainingResistanceOut, uint40(block.timestamp));
+            if (aToB) resistance.resistanceB = encoded;
+            else resistance.resistanceA = encoded;
         }
     }
 
-    function calcOffsetNow(DecayOffset data, uint16 period) internal view returns (uint216) {
+    /// @dev Virtual balance decreases linearly over time. Returns the remaining amount within the period.
+    function remainingResistance(Resistance data, uint16 period) internal view returns (uint216) {
         unchecked {
-            (uint216 offset, uint40 ts) = DecayOffsetLib.decode(data);
+            (uint216 amount, uint40 ts) = ResistanceLib.decode(data);
 
             uint256 expiration = uint256(ts) + period;
             if (block.timestamp >= expiration) return 0;
             uint256 timeLeft = expiration - block.timestamp;
 
             // timeLeft < period
-            return uint216(offset * timeLeft / period);
+            return uint216(amount * timeLeft / period);
         }
     }
 }
 
-type DecayOffset is uint256;
+/// @dev Virtual balance means the remaining amount of token that was swapped in previous swaps and not yet expired.
+type Resistance is uint256;
 
-library DecayOffsetLib {
-    function encode(uint216 offset, uint40 ts) internal pure returns (DecayOffset) {
-        return DecayOffset.wrap((uint256(offset) << 40) | ts);
+library ResistanceLib {
+    function encode(uint216 amount, uint40 ts) internal pure returns (Resistance) {
+        return Resistance.wrap((uint256(amount) << 40) | ts);
     }
 
-    function decode(DecayOffset data) internal pure returns (uint216 offset, uint40 ts) {
-        return (uint216(DecayOffset.unwrap(data) >> 40), uint40(DecayOffset.unwrap(data)));
+    function decode(Resistance data) internal pure returns (uint216 amount, uint40 ts) {
+        return (uint216(Resistance.unwrap(data) >> 40), uint40(Resistance.unwrap(data)));
     }
 }
