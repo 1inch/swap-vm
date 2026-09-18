@@ -20,7 +20,7 @@ import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
 import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
 import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
-import { FeeMetaLib, FeeReceiverLib } from "./libs/ProtocolFee.sol";
+import { FeeMetaLib, FeeReceiverLib, ProtocolFeeLib } from "./libs/ProtocolFee.sol";
 import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
 
 /// @title SwapVM
@@ -155,7 +155,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
             fee: ProtocolFee({
                 meta: FeeMetaLib.init(),
                 receivers: FeeReceiverLib.init(),
-                feeTotal: 0
+                surplusEstimation: 0
             })
         });
 
@@ -209,7 +209,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
             fee: ProtocolFee({
                 meta: FeeMetaLib.init(),
                 receivers: FeeReceiverLib.init(),
-                feeTotal: 0
+                surplusEstimation: 0
             })
         });
 
@@ -262,7 +262,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
                     } else {
                         IERC20(ctx.query.tokenIn).safeTransferFrom(ctx.query.taker, address(this), ctx.swap.amountIn);
                     }
-                    fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
+                    fee = ProtocolFeeLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
 
                     IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn - fee);
                     AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn - fee);
@@ -271,11 +271,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
                     require(balanceIn >= originalAquaBalanceIn + ctx.swap.amountIn, AquaBalanceInsufficientAfterTakerPush(balanceIn, originalAquaBalanceIn, ctx.swap.amountIn));
 
-                    fee = FeeMetaLib.resolveInAquaPullMaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, AQUA, order.maker, ctx.query.orderHash);
+                    fee = ProtocolFeeLib.resolveInAquaPullMaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, AQUA, order.maker, ctx.query.orderHash);
                 }
             } else if (_acceptNativePayment(ctx.swap.amountIn)) {
                 WETH.safeDeposit(ctx.swap.amountIn);
-                fee = FeeMetaLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
+                fee = ProtocolFeeLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
 
                 if (order.traits.shouldUnwrapWeth()) {
                     WETH.safeWithdrawTo(ctx.swap.amountIn - fee, order.traits.receiver(order.maker));
@@ -283,7 +283,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
                     IERC20(ctx.query.tokenIn).safeTransfer(order.traits.receiver(order.maker), ctx.swap.amountIn - fee);
                 }
             } else {
-                fee = FeeMetaLib.resolveInSafeTransferFromTaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker);
+                fee = ProtocolFeeLib.resolveInSafeTransferFromTaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker);
                 _transferFrom(ctx.query.taker, order.traits.receiver(order.maker), ctx.query.tokenIn, ctx.swap.amountIn - fee, ctx.query.orderHash, false, order.traits.shouldUnwrapWeth());
             }
         } else {
@@ -330,8 +330,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, OrderRegistrato
         }
 
         uint256 fee;
-        if (order.traits.useAquaInsteadOfSignature()) fee = FeeMetaLib.resolveOutAquaPullMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, AQUA, order.maker, ctx.query.orderHash);
-        else fee = FeeMetaLib.resolveOutSafeTransferFromMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, order.maker);
+        if (order.traits.useAquaInsteadOfSignature()) fee = ProtocolFeeLib.resolveOutAquaPullMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, AQUA, order.maker, ctx.query.orderHash);
+        else fee = ProtocolFeeLib.resolveOutSafeTransferFromMaker(ctx.fee, ctx.query.tokenOut, ctx.swap.amountOut, order.maker);
 
         _transferFrom(order.maker, takerTraits.to(takerData, msg.sender), ctx.query.tokenOut, ctx.swap.amountOut, ctx.query.orderHash, order.traits.useAquaInsteadOfSignature(), takerTraits.shouldUnwrapWeth());
 

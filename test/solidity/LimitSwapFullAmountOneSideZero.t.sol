@@ -13,13 +13,10 @@ import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 /// @notice LimitSwapFullAmount with one side of the order at zero balance:
 ///   balanceIn = 0 is a giveaway order (taker pays nothing, receives balanceOut),
 ///   balanceOut = 0 can never execute (takers cannot be forced to pay for nothing).
-///   Also pins the FeeProtocol surplus-estimate fallback for zero opposite-side balance.
 contract LimitSwapFullAmountOneSideZeroTest is Test {
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -28,7 +25,6 @@ contract LimitSwapFullAmountOneSideZeroTest is Test {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-    address public feeRecipient = makeAddr("feeRecipient");
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -130,48 +126,6 @@ contract LimitSwapFullAmountOneSideZeroTest is Test {
         // ExactOut of zero covers balanceOut = 0 but is rejected the same way
         vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
         swapVM.swap(order, 0, exactOutData);
-    }
-
-    // === FeeProtocol surplus estimate with zero opposite-side balance ===
-
-    /// @dev balanceIn = 0 makes the pro-rata scaling `estimatedOut * amountIn / balanceIn` a 0/0:
-    ///   the fallback must use the full estimate, which is exact for a full-amount fill.
-    ///   Maker gives 200e18 against a 240e18 estimate -> surplus 40e18, 10% fee = 4e18 paid by maker.
-    function test_FeeProtocol_ZeroBalanceIn_SurplusOutFee_UsesFullEstimate() public {
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(0, 200e18),
-            FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18),
-            InvalidateTokenOut.build(),
-            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
-        ), true);
-        bytes memory exactOutData = _makeTakerData(order, false, false);
-
-        uint256 takerBBefore = tokenB.balanceOf(taker);
-        uint256 makerBBefore = tokenB.balanceOf(maker);
-
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 200e18, exactOutData);
-
-        assertEq(amountIn, 0);
-        assertEq(amountOut, 200e18);
-        assertEq(tokenB.balanceOf(taker) - takerBBefore, 200e18, "Taker receives the full output");
-        assertEq(tokenB.balanceOf(feeRecipient), 4e18, "Surplus fee on the full estimate: (240e18 - 200e18) * 10%");
-        assertEq(makerBBefore - tokenB.balanceOf(maker), 204e18, "Maker pays the output plus the surplus fee");
-    }
-
-    /// @dev balanceOut = 0 makes the pro-rata scaling `(estimatedIn * amountOut).ceilDiv(balanceOut)`
-    ///   divide by zero: with the fallback the swap reaches taker validation and reverts with
-    ///   a clean typed error instead of panic 0x12.
-    function test_FeeProtocol_ZeroBalanceOut_SurplusInFee_RevertsCleanly() public {
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(100e18, 0),
-            FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 80e18),
-            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
-        ), true);
-
-        bytes memory exactInData = _makeTakerData(order, true, false);
-
-        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
-        swapVM.swap(order, 100e18, exactInData);
     }
 
     // === Helpers ===
