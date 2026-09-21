@@ -307,8 +307,61 @@ contract DecayTest is Test, OpcodesDebug {
         assertApproxEqRel(outFull, expectedFull, TOLERANCE, "Full decay should restore the unpenalized AMM rate");
     }
 
+    function test_MEVSandwichProtection_SmallFrontRun() public {
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
+        uint256 mevInitialBalance = TokenMock(tokenA).balanceOf(mevBot);
+
+        // MEV Bot front-runs with small A->B swap (50e18)
+        (uint256 mevIn1, uint256 mevOut1) = executeSwap(
+            mevBot,
+            order,
+            signature,
+            address(tokenA),
+            address(tokenB),
+            50e18 // small front-run
+        );
+
+        // Victim swaps A->B (same direction, no penalty, 200e18)
+        (, uint256 victimOut) = executeSwap(
+            trader1,
+            order,
+            signature,
+            address(tokenA),
+            address(tokenB),
+            200e18
+        );
+
+        // Verify victim gets reasonable rate (no penalty for same direction)
+        // After 50e18 swap strategy is: 1050:952.
+        // After 200e18 swap strategy is: 1250:800
+        uint256 expectedVictimOut = (uint256(200e18) * 870) / 1150;
+        assertApproxEqRel(victimOut, expectedVictimOut, TOLERANCE * 2, "Victim should get normal rate");
+
+        // MEV Bot back-runs with B->A (opposite direction, PENALIZED)
+        executeSwap(
+            mevBot,
+            order,
+            signature,
+            address(tokenB),
+            address(tokenA),
+            mevOut1 // Try to swap back all B
+        );
+
+        uint256 mevFinalBalance = TokenMock(tokenA).balanceOf(mevBot);
+
+        // MEV Bot MUST lose money
+        assertTrue(mevFinalBalance < mevInitialBalance, "MEV bot MUST lose money on sandwich");
+
+        // Calculate loss
+        uint256 loss = mevInitialBalance - mevFinalBalance;
+        uint256 lossPercent = (loss * 100) / mevIn1;
+
+        // Loss should be significant
+        assertTrue(lossPercent > 5, "MEV loss should be > 5%");
+    }
+
     // Test 3: MEV Protection (Sandwich Attack)
-    function test_MEVSandwichProtection() public {
+    function test_MEVSandwichProtection_LargeFrontRun() public {
         (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
 
         uint256 mevInitialBalance = TokenMock(tokenA).balanceOf(mevBot);
