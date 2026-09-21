@@ -49,8 +49,8 @@ export default defineConfig({
   solidity: {
     splitTestsCompilation: true,
     profiles: {
-      default: { compilers: [fastTestCompiler] },
-      production: { compilers: [swapVmCompiler] },
+      default: { compilers: [swapVmCompiler] },
+      fast: { compilers: [fastTestCompiler] },
     },
   },
   test: {

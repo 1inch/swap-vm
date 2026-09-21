@@ -24,13 +24,14 @@
   },
   "scripts": {
     "clean": "npx hardhat clean",
-    "test": "npx hardhat test",
-    "test:solidity": "npx hardhat test solidity",
+    "test": "npx hardhat test --build-profile fast",
+    "test:solidity": "npx hardhat test solidity --build-profile fast",
     "test:typescript": "npx hardhat test nodejs",
     "build": "npx hardhat compile",
+    "build:fast": "npx hardhat compile --build-profile fast",
     "build:production": "npx hardhat compile --build-profile production",
-    "snapshot": "npx hardhat test solidity --build-profile production --snapshot ./test/solidity/gas/*",
-    "snapshot:check": "npx hardhat test solidity --build-profile production --snapshot-check ./test/solidity/gas/*"
+    "snapshot": "npx hardhat test solidity --snapshot ./test/solidity/gas/*",
+    "snapshot:check": "npx hardhat test solidity --snapshot-check ./test/solidity/gas/*"
   },
   "repository": {
     "type": "git",
