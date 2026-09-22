@@ -95,24 +95,26 @@ library Decay {
         TokenResistance storage resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
         TokenResistance storage resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
 
-        ctx.swap.balanceIn += remainingResistance(resistanceIn.asInput, resistanceIn.ts, period);
-        ctx.swap.balanceOut -= remainingResistance(resistanceOut.asOutput, resistanceOut.ts, period); 
+        uint112 remainingInAsInput = remainingResistance(resistanceIn.asInput, resistanceIn.ts, period);
+        uint112 remainingOutAsOutput = remainingResistance(resistanceOut.asOutput, resistanceOut.ts, period);
+        ctx.swap.balanceIn += remainingInAsInput;
+        ctx.swap.balanceOut -= remainingOutAsOutput;
 
-        uint112 remainingResistanceIn = remainingResistance(resistanceIn.asOutput,resistanceIn.ts, period);
-        uint112 remainingResistanceOut = remainingResistance(resistanceOut.asInput,resistanceOut.ts, period);
+        uint112 remainingInAsOutput = remainingResistance(resistanceIn.asOutput, resistanceIn.ts, period);
+        uint112 remainingOutAsInput = remainingResistance(resistanceOut.asInput, resistanceOut.ts, period);
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
         if (!ctx.vm.isStaticContext) {
             uint32 ts = uint32(block.timestamp);
             TokenResistance memory inUpdated = TokenResistance({
-                asInput: resistanceIn.asInput,
-                asOutput: remainingResistanceIn + amountIn.toUint112(),
+                asInput: remainingInAsInput,
+                asOutput: remainingInAsOutput + amountIn.toUint112(),
                 ts: ts
             });
             TokenResistance memory outUpdated = TokenResistance({
-                asInput: remainingResistanceOut + amountOut.toUint112(),
-                asOutput: resistanceOut.asOutput,
+                asInput: remainingOutAsInput + amountOut.toUint112(),
+                asOutput: remainingOutAsOutput,
                 ts: ts
             });
             if (aToB) {

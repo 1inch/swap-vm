@@ -316,6 +316,50 @@ contract DecayTest is Test, OpcodesDebug {
         assertApproxEqRel(outFull, expectedFull, TOLERANCE, "Full decay should restore the unpenalized AMM rate");
     }
 
+    /// @dev Writing the packed slot restamps `ts`. The untouched field must be stored as
+    ///      `remaining(...)`, not the raw amount — otherwise leftover is revived for a full period.
+    function test_Decay_RestampStoresRemaining() public {
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
+        uint256 reverseIn = 50e18;
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+
+        executeSwap(trader1, order, signature, address(tokenA), address(tokenB), STANDARD_SWAP);
+
+        vm.warp(block.timestamp + DECAY_PERIOD / 2);
+
+        uint256 remDx = STANDARD_SWAP * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 remDy = outFirst * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 virtualA1 = INITIAL_LIQUIDITY + STANDARD_SWAP - remDx;
+        uint256 virtualB1 = INITIAL_LIQUIDITY - outFirst + remDy;
+        uint256 expectedRev1 = (reverseIn * virtualA1) / (virtualB1 + reverseIn);
+
+        (, uint256 outRev1) = executeSwap(
+            trader2, order, signature, address(tokenB), address(tokenA), reverseIn
+        );
+        assertApproxEqRel(outRev1, expectedRev1, TOLERANCE, "Half-decay reverse applies remaining, not raw leftover");
+
+        // Packed slot restamps ts. Copy fields must be remaining at write, not the raw amounts:
+        // A.asOutput = remDx, B.asInput = remDy (reverseIn lands on B.asOutput, unused on B→A).
+        uint256 balanceA = INITIAL_LIQUIDITY + STANDARD_SWAP - outRev1;
+        uint256 balanceB = INITIAL_LIQUIDITY - outFirst + reverseIn;
+
+        vm.warp(block.timestamp + DECAY_PERIOD / 2);
+
+        uint256 remAOut = remDx * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 remBIn = remDy * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 expectedRev2 = (reverseIn * (balanceA - remAOut)) / (balanceB + remBIn + reverseIn);
+
+        (, uint256 outRev2) = executeSwap(
+            trader1, order, signature, address(tokenB), address(tokenA), reverseIn
+        );
+        assertApproxEqRel(
+            outRev2,
+            expectedRev2,
+            TOLERANCE,
+            "Second reverse must decay leftover from remaining-at-restamp, not the raw pre-decay amount"
+        );
+    }
+
     function test_MEVSandwichProtection_SmallFrontRun() public {
         (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
         uint256 mevInitialBalance = TokenMock(tokenA).balanceOf(mevBot);

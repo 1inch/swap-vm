@@ -2,7 +2,7 @@
   "AdjustMinRate": "1677",
   "BaseFeeAdjuster": "1347",
   "Deadline": "593",
-  "Decay": "48105",
+  "Decay": "47899",
   "DutchAuctionBalanceIn": "1606",
   "DutchAuctionBalanceOut": "1663",
   "DynamicBalances": "26914",
