@@ -44,13 +44,27 @@ library Decay {
         period = args.at(0).asU16();
     }
 
+    /// @dev Per-token virtual offsets. On a counter-swap they are applied to the XYC
+    ///      balances and price will move to block's initial price.
+    ///
+    ///      asInput:  T left the pool (T was tokenOut, stored as that swap's amountOut).
+    ///                When T is tokenIn:  `balanceIn += remaining(asInput)` — give back the T that was taken out.
+    ///      asOutput: T entered the pool (T was tokenIn, stored as that swap's amountIn).
+    ///                When T is tokenOut: `balanceOut -= remaining(asOutput)` — remove the T that was brought in.
+    ///
+    ///      Example A→B then B→A in one block: A→B writes `A.asOutput = dx`, `B.asInput = dy`.
+    ///      B→A applies `balanceIn += B.asInput` and `balanceOut -= A.asOutput`.
+    struct TokenResistance {
+        /// @dev Remaining T that previously left the pool; added to balanceIn when T is tokenIn.
+        Resistance asInput;
+        /// @dev Remaining T that previously entered the pool; subtracted from balanceOut when T is tokenOut.
+        Resistance asOutput;
+    }
 
-    /// @dev Balances of order's tokens traded in previous swaps and not yet expired.
+    /// @dev Both tokens of a two-sided order. `tokenA` is the smaller address.
     struct OrderResistance {
-        /// @dev Amount of token A will be resistant to swap 
-        Resistance resistanceA;
-        /// @dev Resistance of order's token B.
-        Resistance resistanceB;
+        TokenResistance tokenA;
+        TokenResistance tokenB;
     }
 
     struct Storage {
@@ -69,19 +83,20 @@ library Decay {
         OrderResistance storage resistance = $.orderResistance[ctx.query.orderHash];
         bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        Resistance resistanceIn = aToB ? resistance.resistanceA : resistance.resistanceB;
-        Resistance resistanceOut = aToB ? resistance.resistanceB : resistance.resistanceA;
+        TokenResistance storage resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
+        TokenResistance storage resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
 
-        ctx.swap.balanceIn += remainingResistance(resistanceIn, period);
-        uint216 remainingResistanceOut = remainingResistance(resistanceOut, period);
+        ctx.swap.balanceIn += remainingResistance(resistanceIn.asInput, period);
+        ctx.swap.balanceOut -= remainingResistance(resistanceOut.asOutput, period); 
 
-        (, uint256 amountOut ) = ctx.runLoop();
+        uint216 remainingResistanceIn = remainingResistance(resistanceIn.asOutput, period);
+        uint216 remainingResistanceOut = remainingResistance(resistanceOut.asInput, period);
 
-        remainingResistanceOut += amountOut.toUint216();
+        (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+
         if (!ctx.vm.isStaticContext) {
-            Resistance encoded = ResistanceLib.encode(remainingResistanceOut, uint40(block.timestamp));
-            if (aToB) resistance.resistanceB = encoded;
-            else resistance.resistanceA = encoded;
+            resistanceIn.asOutput = ResistanceLib.encode(remainingResistanceIn + amountIn.toUint216(), uint40(block.timestamp));
+            resistanceOut.asInput = ResistanceLib.encode(remainingResistanceOut + amountOut.toUint216(), uint40(block.timestamp));
         }
     }
 

@@ -5,6 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
@@ -228,17 +229,17 @@ contract DecayTest is Test, OpcodesDebug {
             50e18
         );
 
-        // Unpenalized reverse: out = 50 * 1100 / (909.09... + 50) ≈ 57.35
+        // Unpenalized reverse (offsets expired): out = 50 * 1100 / (909.09... + 50) ≈ 57.35
         uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
         uint256 balanceAAfter = INITIAL_LIQUIDITY + STANDARD_SWAP;
         uint256 balanceBAfter = INITIAL_LIQUIDITY - outFirst;
         uint256 expectedNormal = (uint256(50e18) * balanceAAfter) / (balanceBAfter + 50e18);
 
-        // With decay, virtual B = remaining B + amountOut = 1000, so out = 50 * 1100 / 1050 ≈ 52.38
-        uint256 expectedPenalized = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY + 50e18);
+        // Same-block reverse: both offsets apply in full, virtual reserves back to (1000, 1000)
+        uint256 expectedPenalized = (uint256(50e18) * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + 50e18);
 
         assertTrue(outOpp < expectedNormal, "Opposite direction MUST have penalty");
-        assertApproxEqRel(outOpp, expectedPenalized, TOLERANCE, "Reverse should add remaining out-resistance to balanceIn");
+        assertApproxEqRel(outOpp, expectedPenalized, TOLERANCE, "Same-block reverse restores virtual (x, y)");
     }
 
     // Test 2: Decay over time
@@ -294,16 +295,24 @@ contract DecayTest is Test, OpcodesDebug {
         assertTrue(rateImmediate < rateHalf, "Rate should improve at half decay");
         assertTrue(rateHalf < rateFull, "Rate should be best after full decay");
 
-        // Immediate: virtual B = 1000. Half: leftover resistance is outFirst/2.
-        // Full: resistance expired, rate matches the unpenalized reverse AMM.
+        // After A→B of STANDARD_SWAP: actual (1100, 1000-outFirst), A.asOutput=dx, B.asInput=outFirst.
+        // Reverse B→A of 50 applies remaining: virtualA = 1100 - f*dx, virtualB = 1000 - (1-f)*outFirst.
         uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
-        uint256 balanceAAfter = INITIAL_LIQUIDITY + STANDARD_SWAP;
-        uint256 expectedImmediate = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY + 50e18);
-        uint256 expectedHalf = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY - outFirst / 2 + 50e18);
-        uint256 expectedFull = (uint256(50e18) * balanceAAfter) / (INITIAL_LIQUIDITY - outFirst + 50e18);
+        uint256 reverseIn = 50e18;
 
-        assertApproxEqRel(outImmediate, expectedImmediate, TOLERANCE, "Immediate reverse uses full out-resistance");
-        assertApproxEqRel(outHalf, expectedHalf, TOLERANCE, "Half decay should leave half the out-resistance");
+        // Immediate (f=1): virtual reserves back to (1000, 1000)
+        uint256 expectedImmediate = (reverseIn * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + reverseIn);
+
+        // Half (f=1/2): virtualA = 1050, virtualB = 1000 - outFirst/2
+        uint256 expectedHalf = (reverseIn * (INITIAL_LIQUIDITY + STANDARD_SWAP / 2))
+            / (INITIAL_LIQUIDITY - outFirst / 2 + reverseIn);
+
+        // Full (f=0): offsets expired, plain AMM on actual reserves
+        uint256 expectedFull = (reverseIn * (INITIAL_LIQUIDITY + STANDARD_SWAP))
+            / (INITIAL_LIQUIDITY - outFirst + reverseIn);
+
+        assertApproxEqRel(outImmediate, expectedImmediate, TOLERANCE, "Immediate reverse restores virtual (x, y)");
+        assertApproxEqRel(outHalf, expectedHalf, TOLERANCE, "Half decay applies half of both offsets");
         assertApproxEqRel(outFull, expectedFull, TOLERANCE, "Full decay should restore the unpenalized AMM rate");
     }
 
