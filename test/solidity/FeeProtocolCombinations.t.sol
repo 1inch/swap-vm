@@ -20,6 +20,7 @@ import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
 
 import { ProtocolFeeProviderMock } from "../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
 
 uint256 constant BPS = 1e7;
 
@@ -73,6 +74,10 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     // ========== Program / order helpers ==========
 
     function _createOrder(bytes memory feeInstruction) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        return _createOrder(feeInstruction, false);
+    }
+
+    function _createOrder(bytes memory feeInstruction, bool usePermit2) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         bytes memory programBytes = bytes.concat(
             StaticBalances.build(BALANCE_A, BALANCE_B),
             feeInstruction,
@@ -85,6 +90,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: usePermit2,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
@@ -108,6 +114,10 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
+        return _takerData(isExactIn, signature, false);
+    }
+
+    function _takerData(bool isExactIn, bytes memory signature, bool usePermit2) internal view returns (bytes memory) {
         return TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: taker,
             isExactIn: isExactIn,
@@ -117,6 +127,7 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: usePermit2,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -196,6 +207,31 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         assertEq(amountOut, _xycOut(netIn), "Curve priced on net input");
     }
 
+    function test_MultipleReceivers_FeeIn_ExactIn_Permit2() public {
+        Permit2TestLib.install();
+
+        uint256 amountIn = 10e18;
+        vm.prank(taker);
+        TokenMock(tokenA).approve(address(swapVM), 0);
+        Permit2TestLib.approve(tokenA, taker, address(swapVM), uint160(amountIn), type(uint48).max);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(true, _receivers2(0.01e7, 0, 0.005e7, 0), _noProviders())
+        );
+
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature, true));
+
+        uint256 fee1 = amountIn * 0.01e7 / BPS;
+        uint256 fee2 = amountIn * 0.005e7 / BPS;
+        assertEq(TokenMock(tokenA).balanceOf(receiver1), fee1, "Receiver1 Permit2 fee");
+        assertEq(TokenMock(tokenA).balanceOf(receiver2), fee2, "Receiver2 Permit2 fee");
+        assertEq(TokenMock(tokenA).balanceOf(maker), makerBalanceBefore + amountIn - fee1 - fee2, "Maker receives Permit2 net");
+        assertEq(amountOut, _xycOut(amountIn - fee1 - fee2), "Curve priced on Permit2 net input");
+        assertEq(Permit2TestLib.allowance(taker, tokenA, address(swapVM)).amount, 0, "Taker Permit2 allowance not consumed");
+    }
+
     /// @notice Two flat fee-out receivers split the out-side fee via the totalBps gross-up;
     ///         their fees sum to what the curve over-delivered
     function test_MultipleReceivers_FeeOut_ExactIn() public {
@@ -226,6 +262,37 @@ contract FeeProtocolCombinationsTest is Test, OpcodesDebug {
         assertApproxEqAbs(fee1 + fee2, grossOut - netOut, 2, "Fees sum to the priced out-side total");
 
         assertEq(TokenMock(tokenB).balanceOf(maker), makerBalanceBefore - netOut - fee1 - fee2, "Maker pays net plus fees");
+    }
+
+    function test_MultipleReceivers_FeeOut_ExactIn_Permit2() public {
+        Permit2TestLib.install();
+
+        uint24 totalBps = 0.015e7;
+        uint256 amountIn = 10e18;
+        uint256 grossOut = _xycOut(amountIn);
+        uint256 netOut = grossOut - grossOut * totalBps / BPS;
+        uint256 fee1 = netOut * 0.01e7 / (BPS - totalBps);
+        uint256 fee2 = netOut * 0.005e7 / (BPS - totalBps);
+
+        vm.prank(maker);
+        TokenMock(tokenB).approve(address(swapVM), 0);
+        Permit2TestLib.approve(tokenB, maker, address(swapVM), uint160(netOut + fee1 + fee2), type(uint48).max);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
+            FeeProtocol.build(false, _receivers2(0.01e7, 0, 0.005e7, 0), _noProviders()), true
+        );
+
+        uint256 makerBalanceBefore = TokenMock(tokenB).balanceOf(maker);
+        uint256 takerBalanceBefore = TokenMock(tokenB).balanceOf(taker);
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, _takerData(true, signature));
+
+        assertEq(amountOut, netOut, "Taker receives Permit2 net output");
+        assertEq(TokenMock(tokenB).balanceOf(taker), takerBalanceBefore + netOut, "Taker got Permit2 output");
+        assertEq(TokenMock(tokenB).balanceOf(receiver1), fee1, "Receiver1 Permit2 fee");
+        assertEq(TokenMock(tokenB).balanceOf(receiver2), fee2, "Receiver2 Permit2 fee");
+        assertEq(TokenMock(tokenB).balanceOf(maker), makerBalanceBefore - netOut - fee1 - fee2, "Maker pays Permit2 output and fees");
+        assertEq(Permit2TestLib.allowance(maker, tokenB, address(swapVM)).amount, 0, "Maker Permit2 allowance not consumed");
     }
 
     // ========== Provider + receiver ==========

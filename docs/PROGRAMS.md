@@ -29,6 +29,9 @@ When designing a SwapVM program, we focus on these security-critical technical p
   - **Static balances (`StaticBalances`)**: fixed-rate, stateless execution; typically used for 1D strategies (limit orders, auctions, RFQ-like flows).
   - **Dynamic balances (`DynamicBalances`)**: stateful reserves updated across swaps; typically used for 2D AMM strategies.
   - **Aqua-backed mode (`useAquaInsteadOfSignature = true`)**: balances are sourced/settled via Aqua instead of signature-based local state.
+- **Transfer authorization and settlement:**
+  - **Maker Permit2:** `MakerTraits.usePermit2` routes non-Aqua ERC-20 `tokenOut` pulls from the maker through Permit2.
+  - **Taker Permit2:** `TakerTraits.usePermit2` routes ERC-20 `tokenIn` pulls from the taker through Permit2. This covers non-Aqua settlement and Aqua orders with `useTransferFromAndAquaPush`; native payment and pre-pushed Aqua balances bypass it.
 - **Instruction ordering is security-critical:**
   - Reordering instructions can change pricing, settlement amounts, invalidation behavior, and external side effects.
   - Fee instruction placement is especially sensitive and can alter economic outcomes.
@@ -179,6 +182,7 @@ bytes memory bytecode = bytes.concat(
   - Authorization and balance source differ (Aqua balance mode vs signature mode).
   - `useAquaInsteadOfSignature` changes settlement/auth flow, not VM strategy composition itself.
   - Core AMM or limit instruction logic can remain the same.
+- **Permit2:** Maker `usePermit2` must remain false because Aqua settles maker funds. Taker Permit2 can be used with `useTransferFromAndAquaPush` when the router pulls `tokenIn` before pushing it to Aqua.
 - **Important:** SwapVM strategy composition works both with Aqua-backed settlement and without Aqua (signature-based mode).
 
 

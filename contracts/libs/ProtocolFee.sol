@@ -150,7 +150,8 @@ library ProtocolFeeLib {
         ProtocolFee memory data,
         address tokenIn,
         uint256 amountIn,
-        address taker
+        address taker,
+        bool usePermit2
     ) internal returns (uint256 totalFee) {
         uint8 count = FeeMetaLib.decodeCount(data.meta);
         bool isTokenIn = FeeMetaLib.decodeIsTokenIn(data.meta);
@@ -168,7 +169,7 @@ library ProtocolFeeLib {
             (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn);
             totalFee += fee;
 
-            IERC20(tokenIn).safeTransferFrom(taker, receiver, fee);
+            IERC20(tokenIn).safeTransferFromUniversal(taker, receiver, fee, usePermit2);
         }
     }
 
@@ -204,7 +205,8 @@ library ProtocolFeeLib {
         ProtocolFee memory data,
         address tokenOut,
         uint256 amountOut,
-        address maker
+        address maker,
+        bool usePermit2
     ) internal returns (uint256 totalFee) {
         uint8 count = FeeMetaLib.decodeCount(data.meta);
         bool isTokenOut = FeeMetaLib.decodeIsTokenOut(data.meta);
@@ -222,7 +224,7 @@ library ProtocolFeeLib {
             (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut);
             totalFee += fee;
 
-            IERC20(tokenOut).safeTransferFrom(maker, receiver, fee);
+            IERC20(tokenOut).safeTransferFromUniversal(maker, receiver, fee, usePermit2);
         }
     }
 }

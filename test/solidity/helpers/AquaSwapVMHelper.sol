@@ -37,6 +37,7 @@ contract AquaSwapVMHelper is AquaOpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,

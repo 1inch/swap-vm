@@ -74,11 +74,10 @@ library FeeProtocol {
         ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
 
         for (uint256 i; i < providers.length; i++) {
-            ptr = ptr.push(
-                InstructionBuilder.encodeBool(true, 0) |
+            uint8 flags = InstructionBuilder.encodeBool(true, 0) |
                 InstructionBuilder.encodeBool(providers[i].takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(providers[i].takeSurplusFee, 2)
-            ).push(providers[i].provider);
+                InstructionBuilder.encodeBool(providers[i].takeSurplusFee, 2);
+            ptr = ptr.push(flags).push(providers[i].provider);
         }
 
         for (uint256 i; i < receivers.length; i++) {

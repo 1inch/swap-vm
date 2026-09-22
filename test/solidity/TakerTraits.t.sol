@@ -38,6 +38,11 @@ contract TakerTraitsWrapper {
         preIn = traits.preTransferInCallbackData(tail);
         preOut = traits.preTransferOutCallbackData(tail);
     }
+
+    function parseUsePermit2(bytes calldata packed) external pure returns (bool) {
+        (TakerTraits traits,) = TakerTraitsLib.parse(packed);
+        return traits.usePermit2();
+    }
 }
 
 /**
@@ -392,6 +397,17 @@ contract TakerTraitsTest is Test, OpcodesDebug {
         assertEq(readPreOut, preOutData, "PreTransferOut: incorrect callback data");
     }
 
+    function test_Build_Permit2Flag_RoundTrips() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        TakerTraitsLib.Args memory args;
+        args.taker = taker;
+
+        assertFalse(wrapper.parseUsePermit2(wrapper.build(args)), "Permit2 flag should default to false");
+
+        args.usePermit2 = true;
+        assertTrue(wrapper.parseUsePermit2(wrapper.build(args)), "Permit2 flag should round-trip");
+    }
+
     // ==================== Full Data Slices Test ====================
 
     function test_AllDataSlices_Populated() public {
@@ -644,6 +660,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: false,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -673,6 +690,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
@@ -715,6 +733,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: preInData.length > 0,
@@ -760,6 +779,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
