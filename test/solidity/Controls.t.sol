@@ -13,6 +13,7 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -38,8 +39,6 @@ contract ControlsTest is Test, OpcodesDebug {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-
-    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -120,7 +119,7 @@ contract ControlsTest is Test, OpcodesDebug {
     function test_Deadline_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         uint40 lifetime = 1 hours;
-        uint40 deadline = RELATIVE_TIME_FLAG_MASK | lifetime;
+        uint40 deadline = Time.RELATIVE_TIME_FLAG | lifetime;
 
         bytes memory bytecode = bytes.concat(
             Deadline.build(deadline),

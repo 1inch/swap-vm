@@ -7,8 +7,8 @@
   "LimitSwap_InvalidateTokenIn_exactIn": "79022",
   "InvalidateBit_LimitSwap_exactOut": "78668",
   "InvalidateBit_LimitSwap_exactIn": "78541",
-  "FullLimitSwap_exactOut": "80341",
-  "FullLimitSwap_exactIn": "80214",
-  "Deadline_LimitSwap_exactOut": "55664",
-  "Deadline_LimitSwap_exactIn": "55537"
+  "FullLimitSwap_exactOut": "80335",
+  "FullLimitSwap_exactIn": "80208",
+  "Deadline_LimitSwap_exactOut": "55658",
+  "Deadline_LimitSwap_exactIn": "55531"
 }

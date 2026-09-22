@@ -14,6 +14,7 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { LimitSwapVMRouter } from "../../contracts/routers/LimitSwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { Context } from "../../contracts/libs/VM.sol";
 import { Opcodes } from "../../contracts/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol";
@@ -36,7 +37,6 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
     uint256 constant BALANCE_A = 1000e18;
     uint256 constant BALANCE_B = 2000e18;
     uint256 constant SWAP_AMOUNT = 1e18;
-    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     address[25] ALLOWED_TAKERS;
     uint40 START;
@@ -235,7 +235,7 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
 
     function test_WhitelistSequential_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
-        START = RELATIVE_TIME_FLAG_MASK;
+        START = Time.RELATIVE_TIME_FLAG;
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Sequential, 2));
         bytes memory takerData = _buildTakerData();

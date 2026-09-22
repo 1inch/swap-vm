@@ -16,6 +16,7 @@ import { SwapVM } from "../../contracts/SwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -38,7 +39,6 @@ contract DutchAuctionTest is Test, OpcodesDebug {
 
     // By default foundry's `block.timestamp` returns 1. We prefer to use realistic one.
     uint40 constant AUCTION_REALISTIC_START_TS = 0x123456;
-    uint40 constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -241,7 +241,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(RELATIVE_TIME_FLAG_MASK, 300, 0.5e18),
+            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -262,7 +262,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(RELATIVE_TIME_FLAG_MASK, 300, 0.5e18),
+            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);

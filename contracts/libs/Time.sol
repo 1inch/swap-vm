@@ -9,11 +9,11 @@ import { OrderRegistratorLib } from "../extensions/OrderRegistrator.sol";
 
 library Time {
     /// @dev High timestamp bit set -> treat timestamp as time since announceAt
-    uint8 constant RELATIVE_TIME_FLAG = 39;
+    uint40 constant RELATIVE_TIME_FLAG = 1 << 39;
     uint40 constant TIMESTAMP_MASK = 0x7fffffffff;
 
     function resolve(Context memory ctx, uint40 ts) internal returns (uint40) {
-        if ((ts >> RELATIVE_TIME_FLAG) & 1 > 0) {
+        if (ts & RELATIVE_TIME_FLAG != 0) {
             return (ts & TIMESTAMP_MASK) + OrderRegistratorLib.announcedAt(ctx.query.orderHash, ctx.vm.isStaticContext);
         }
 

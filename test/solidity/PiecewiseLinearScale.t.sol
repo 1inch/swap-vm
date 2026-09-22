@@ -14,6 +14,7 @@ import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol
 
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../contracts/instructions/PiecewiseLinearScale.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -31,7 +32,6 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     // 18 decimals 100 * 10 ** 12, feels reasonable
     uint256 internal constant MAX_AMOUNT = 1e18 * 1e12 * 100;
     uint256 internal constant MAKER_PRIVATE_KEY = 0xBEEF;
-    uint40 internal constant RELATIVE_TIME_FLAG_MASK = uint40(1) << 39;
 
     function setUp() public {
         swapVM = new LimitSwapVMRouterDebug(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
@@ -248,7 +248,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         scales[1] = uint24(2 ** 23 - 1);
 
         ISwapVM.Order memory order = _buildOrder(
-            _buildProgram(4e18, 4e18, RELATIVE_TIME_FLAG_MASK, durations, scales, true)
+            _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, true)
         );
         bytes memory takerData = _buildTakerData(true);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PRIVATE_KEY, swapVM.hash(order));
@@ -279,7 +279,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         scales[1] = type(uint24).max;
 
         ISwapVM.Order memory order = _buildOrder(
-            _buildProgram(4e18, 4e18, RELATIVE_TIME_FLAG_MASK, durations, scales, false)
+            _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, false)
         );
         bytes memory takerData = _buildTakerData(true);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PRIVATE_KEY, swapVM.hash(order));
