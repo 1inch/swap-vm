@@ -7,17 +7,20 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
+import { Context, SwapRegisters } from "../../contracts/libs/VM.sol";
+import { Opcode } from "../../contracts/libs/OpcodeList.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
 import { PiecewiseLinearScaleBalanceIn } from "../../contracts/instructions/PiecewiseLinearScale.sol";
-import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
-import { FeeMeta, FeeMetaLib } from "../../contracts/libs/ProtocolFee.sol";
+import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
+import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 contract ProtocolSurplusPartialFillTest is Test {
@@ -57,15 +60,15 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 
     /// @dev Order: 100e18 in -> 200e18 out, maker estimates 80e18 total input, 10% surplus fee.
-    ///   The maker's fixed axis is the output: InvalidateTokenOut precedes FeeProtocol and scales
-    ///   the token-in estimate by the delivered output fraction.
+    ///   FeeProtocolSurplus precedes InvalidateTokenOut and scales the token-in estimate by the
+    ///   delivered output fraction.
     ///   Each fill of half the order must contribute half the estimate: surplus 10e18, fee 1e18 per fill,
     ///   regardless of being the first or the second fill and of over-asking.
     function test_SurplusIn_Multifill_ProRataEstimate() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenOut.build(),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 80e18),
+            InvalidateTokenOut.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactInData = _makeTakerData(order, true);
@@ -95,14 +98,14 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 
     /// @dev Order: 100e18 in -> 200e18 out, maker estimates 240e18 total output, 10% surplus fee.
-    ///   The maker's fixed axis is the input: InvalidateTokenIn precedes FeeProtocol and scales
-    ///   the token-out estimate by the consumed input fraction.
+    ///   FeeProtocolSurplus precedes InvalidateTokenIn and scales the token-out estimate by the
+    ///   consumed input fraction.
     ///   Each fill of half the order compares against half the estimate: surplus 20e18, fee 2e18 per fill.
     function test_SurplusOut_Multifill_ProRataEstimate() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenIn.build(),
             FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18),
+            InvalidateTokenIn.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _makeTakerData(order, false);
@@ -160,7 +163,7 @@ contract ProtocolSurplusPartialFillTest is Test {
                 ? ask * feeBps / BPS
                 : expectedNet * feeBps / (BPS - feeBps);
 
-            // InvalidateTokenOut scales the estimate by this fill's output over the whole order, rounding up
+            // FeeProtocolSurplus scales the estimate by this fill's output over the whole order, rounding up
             uint256 share = (estimate * expectedOut).ceilDiv(balanceOut);
             uint256 expectedFee = expectedFlat + (expectedNet > share ? expectedNet - share : 0) * surplusBps / BPS;
 
@@ -215,7 +218,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             uint256 expectedIn = expectedGross >= scaledOut ? remainingIn : (expectedGross * remainingIn).ceilDiv(scaledOut);
             uint256 expectedOut = expectedGross - expectedGross * feeBps / BPS;
 
-            // InvalidateTokenIn scales the estimate by this fill's input over the whole order, rounding down;
+            // FeeProtocolSurplus scales the estimate by this fill's input over the whole order, rounding down;
             // the surplus is the estimate share shortfall against the really delivered gross
             uint256 share = estimate * expectedIn / balanceIn;
             uint256 expectedFee = expectedGross * feeBps / BPS + (share > expectedGross ? share - expectedGross : 0) * surplusBps / BPS;
@@ -249,9 +252,9 @@ contract ProtocolSurplusPartialFillTest is Test {
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
+            FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 50e18),
             InvalidateTokenOut.build(),
             PiecewiseLinearScaleBalanceIn.build(uint40(block.timestamp + 1000), durations, scales),
-            FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 50e18),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _makeTakerData(order, false);
@@ -270,9 +273,8 @@ contract ProtocolSurplusPartialFillTest is Test {
         assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 200e18);
     }
 
-    /// @dev Without a token invalidator nothing scales the estimate: it applies to each fill in full.
-    ///   A fill paying above the whole-order estimate is charged the whole shortfall every time.
-    function test_SurplusIn_NoInvalidator_EstimateAppliesInFull() public {
+    /// @dev FeeProtocolSurplus scales the estimate without relying on an invalidator.
+    function test_SurplusIn_NoInvalidator_EstimateIsProRata() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 40e18),
@@ -280,20 +282,20 @@ contract ProtocolSurplusPartialFillTest is Test {
         ));
         bytes memory exactInData = _makeTakerData(order, true);
 
-        // Nothing invalidates the order: identical half fills are re-charged against the full estimate
+        // Nothing invalidates the order, so identical half fills can repeat.
         for (uint256 fill = 0; fill < 2; fill++) {
             uint256 recipientBefore = tokenA.balanceOf(feeRecipient);
             (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 50e18, exactInData);
 
             assertEq(amountIn, 50e18);
             assertEq(amountOut, 100e18);
-            // realIn 50e18 vs the full 40e18 estimate -> surplus 10e18, fee 1e18
-            assertEq(tokenA.balanceOf(feeRecipient) - recipientBefore, 1e18, "Full estimate applies to every fill");
+            // estimate share 20e18, realIn 50e18 -> surplus 30e18, fee 3e18
+            assertEq(tokenA.balanceOf(feeRecipient) - recipientBefore, 3e18, "Estimate should be scaled to the fill");
         }
     }
 
-    /// @dev Without a token invalidator a partial fill below the whole-order estimate pays no surplus fee
-    function test_SurplusIn_NoInvalidator_NoSurplusBelowEstimate() public {
+    /// @dev Without an invalidator the estimate is still scaled to the actual output.
+    function test_SurplusIn_NoInvalidator_ChargesScaledSurplus() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 80e18),
@@ -305,14 +307,12 @@ contract ProtocolSurplusPartialFillTest is Test {
         (uint256 amountIn,,) = swapVM.swap(order, 50e18, exactInData);
 
         assertEq(amountIn, 50e18);
-        assertEq(tokenA.balanceOf(feeRecipient), 0, "realIn 50e18 below the full 80e18 estimate: no surplus");
-        assertEq(tokenA.balanceOf(maker) - makerBefore, 50e18, "Maker receives the full input");
+        assertEq(tokenA.balanceOf(feeRecipient), 1e18, "realIn 50e18 exceeds the scaled 40e18 estimate");
+        assertEq(tokenA.balanceOf(maker) - makerBefore, 49e18, "Maker receives input minus surplus fee");
     }
 
-    /// @dev Without a token invalidator the token-out estimate also applies in full: the maker pays the
-    ///   surplus fee on the whole-order shortfall even for a partial fill. Makers taking surplus-out fees
-    ///   are expected to track the order with InvalidateTokenIn (or accept full-amount fills only).
-    function test_SurplusOut_NoInvalidator_EstimateAppliesInFull() public {
+    /// @dev Without an invalidator the token-out estimate is still scaled to the actual input.
+    function test_SurplusOut_NoInvalidator_EstimateIsProRata() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
             FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18),
@@ -325,20 +325,19 @@ contract ProtocolSurplusPartialFillTest is Test {
 
         assertEq(amountIn, 50e18);
         assertEq(amountOut, 100e18);
-        // realOut 100e18 vs the full 240e18 estimate -> surplus 140e18, fee 14e18 paid by the maker
-        assertEq(tokenB.balanceOf(feeRecipient), 14e18, "Full estimate applies to the partial fill");
-        assertEq(makerBefore - tokenB.balanceOf(maker), 114e18, "Maker pays the output and the surplus fee");
+        // estimate share 120e18, realOut 100e18 -> surplus 20e18, fee 2e18 paid by the maker
+        assertEq(tokenB.balanceOf(feeRecipient), 2e18, "Estimate should be scaled to the fill");
+        assertEq(makerBefore - tokenB.balanceOf(maker), 102e18, "Maker pays the output and the surplus fee");
     }
 
-    /// @dev Canonical program: the invalidator tracks the maker's fixed axis and precedes FeeProtocol,
-    ///   while the fee/surplus token sits on the opposite (floating) axis
+    /// @dev Canonical program: FeeProtocol and FeeProtocolSurplus precede the fixed-axis invalidator.
     function _flatSurplusOrder(bool isTokenIn, uint256 balanceIn, uint256 balanceOut, uint24 feeBps, uint24 surplusBps, uint256 estimate) internal view returns (ISwapVM.Order memory) {
         return _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            isTokenIn ? InvalidateTokenOut.build() : InvalidateTokenIn.build(),
             isTokenIn
-                ? FeeBuilders.protocolFlatSurplusIn(feeBps, surplusBps, feeRecipient, uint216(estimate))
-                : FeeBuilders.protocolFlatSurplusOut(feeBps, surplusBps, feeRecipient, uint216(estimate)),
+                ? FeeBuilders.protocolFlatSurplusIn(feeBps, surplusBps, feeRecipient, estimate)
+                : FeeBuilders.protocolFlatSurplusOut(feeBps, surplusBps, feeRecipient, estimate),
+            isTokenIn ? InvalidateTokenOut.build() : InvalidateTokenIn.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
     }
@@ -397,42 +396,62 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 }
 
-/// @notice Unit tests for the decrease-only, maker-favoring surplus estimate scaling
-contract FeeMetaScaleSurplusEstimateTest is Test {
-    using FeeMetaLib for FeeMeta;
+/// @notice Unit tests for maker-favoring FeeProtocolSurplus estimate scaling
+contract FeeProtocolSurplusScaleTest is Test {
+    error UnexpectedOpcode(uint256 opcode);
 
-    function scaleExternal(FeeMeta meta, uint256 num, uint256 denom) external pure returns (FeeMeta) {
-        return meta.scaleSurplusEstimate(num, denom);
+    function _dispatch(Context memory ctx, uint256 opcode, bytes calldata args) internal {
+        if (opcode == uint8(Opcode.FeeProtocolSurplus)) return FeeProtocolSurplus.exec(ctx, args);
+        if (opcode == uint8(Opcode.PatchSwapRegisters)) return PatchSwapRegisters.exec(ctx, args);
+        revert UnexpectedOpcode(opcode);
     }
 
-    function test_ScaleSurplusEstimate_RoundsForMaker() public pure {
-        // Token-in estimate rounds up: bigger estimate -> smaller surplus charged off the maker's input
-        FeeMeta metaIn = FeeMetaLib.encode(true, 3, 123, 100);
-        assertEq(metaIn.scaleSurplusEstimate(1, 3).decodeSurplusEstimate(), 34);
+    function scaleExternal(
+        bool isTokenIn,
+        uint256 balance,
+        bytes calldata program
+    ) external returns (uint256) {
+        Context memory ctx;
+        if (isTokenIn) ctx.swap.balanceOut = balance;
+        else ctx.swap.balanceIn = balance;
 
-        // Token-out estimate rounds down: smaller estimate -> smaller shortfall paid by the maker
-        FeeMeta metaOut = FeeMetaLib.encode(false, 3, 123, 100);
-        assertEq(metaOut.scaleSurplusEstimate(1, 3).decodeSurplusEstimate(), 33);
+        ctx.vm.dispatch = _dispatch;
+        ctx.vm.isStaticContext = true;
+        ctx.vm.programPtr = CalldataPtrLib.from(program);
+        ctx.runLoop();
+
+        return ctx.fee.surplusEstimation;
     }
 
-    function test_ScaleSurplusEstimate_PreservesMetaFields() public pure {
-        FeeMeta meta = FeeMetaLib.encode(true, 7, 456, 1000).scaleSurplusEstimate(1, 4);
-
-        assertEq(meta.decodeSurplusEstimate(), 250);
-        assertTrue(meta.decodeIsTokenIn());
-        assertEq(meta.decodeCount(), 7);
-        assertEq(meta.decodeTotalBps(), 456);
+    function test_ScaleSurplusEstimate_RoundsForMaker() public {
+        assertEq(_scale(true, 100, 3, 1), 34, "Token-in estimate should round up");
+        assertEq(_scale(false, 100, 3, 1), 33, "Token-out estimate should round down");
     }
 
-    function test_ScaleSurplusEstimate_FullFillKeepsEstimate() public pure {
-        FeeMeta meta = FeeMetaLib.encode(false, 1, 0, 1e18).scaleSurplusEstimate(5e17, 5e17);
-        assertEq(meta.decodeSurplusEstimate(), 1e18, "num == denom is a full fill of the remaining order");
+    function test_ScaleSurplusEstimate_FullFillKeepsEstimate() public {
+        assertEq(_scale(true, 1e18, 5e17, 5e17), 1e18);
+        assertEq(_scale(false, 1e18, 5e17, 5e17), 1e18);
     }
 
-    function test_ScaleSurplusEstimate_Revert_ScaleUp() public {
-        FeeMeta meta = FeeMetaLib.encode(true, 1, 0, 100);
+    function test_ScaleSurplusEstimate_SupportsUint256Estimate() public {
+        assertEq(_scale(true, type(uint256).max, 1, 1), type(uint256).max);
+    }
 
-        vm.expectRevert(FeeMetaLib.FeeMetaSurplusScaleUp.selector);
-        this.scaleExternal(meta, 4, 3);
+    function _scale(bool isTokenIn, uint256 estimated, uint256 balance, uint256 fill) private returns (uint256) {
+        SwapRegisters memory result = SwapRegisters({
+            balanceIn: 0,
+            balanceOut: 0,
+            amountIn: isTokenIn ? 0 : fill,
+            amountOut: isTokenIn ? fill : 0
+        });
+
+        return this.scaleExternal(
+            isTokenIn,
+            balance,
+            bytes.concat(
+                FeeProtocolSurplus.build(isTokenIn, estimated),
+                PatchSwapRegisters.build(result)
+            )
+        );
     }
 }
