@@ -49,23 +49,28 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev Token amounts that resist price changes on the following counter-swaps.
+    /// @dev Per-token leftover, one storage slot: `uint112 asInput | uint112 asOutput | uint32 ts`.
+    ///      Amounts fade linearly from `ts` over the instruction `period`. A swap that
+    ///      exceeds `uint112` (or leftover + amount) reverts.
     ///
     ///      asInput:  this token left the pool the last time it was sold. On a buy of this
     ///                token, add that amount back (`balanceIn += remaining`).
     ///      asOutput: this token entered the pool the last time it was bought. On a sell of
     ///                this token, take that amount back out (`balanceOut -= remaining`).
+    ///      ts:       last time this token's leftover was written.
     ///
     ///      A → B stores `A.asOutput = dx` and `B.asInput = dy`. The following B → A uses them
     ///      and gets the price from before that A → B.
     struct TokenResistance {
-        /// @dev Remaining T that previously left the pool; added to balanceIn when T is tokenIn.
-        Resistance asInput;
-        /// @dev Remaining T that previously entered the pool; subtracted from balanceOut when T is tokenOut.
-        Resistance asOutput;
+        /// @dev Leftover of T that left the pool; added to balanceIn when T is tokenIn.
+        uint112 asInput;
+        /// @dev Leftover of T that entered the pool; subtracted from balanceOut when T is tokenOut.
+        uint112 asOutput;
+        /// @dev Timestamp of the last write to this slot.
+        uint32 ts;
     }
 
-    /// @dev Both tokens of a two-sided order. `tokenA` is the smaller address.
+    /// @dev Two packed slots (`tokenA`, `tokenB`). `tokenA` is the smaller address.
     struct OrderResistance {
         TokenResistance tokenA;
         TokenResistance tokenB;
@@ -90,44 +95,45 @@ library Decay {
         TokenResistance storage resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
         TokenResistance storage resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
 
-        ctx.swap.balanceIn += remainingResistance(resistanceIn.asInput, period);
-        ctx.swap.balanceOut -= remainingResistance(resistanceOut.asOutput, period); 
+        ctx.swap.balanceIn += remainingResistance(resistanceIn.asInput, resistanceIn.ts, period);
+        ctx.swap.balanceOut -= remainingResistance(resistanceOut.asOutput, resistanceOut.ts, period); 
 
-        uint216 remainingResistanceIn = remainingResistance(resistanceIn.asOutput, period);
-        uint216 remainingResistanceOut = remainingResistance(resistanceOut.asInput, period);
+        uint112 remainingResistanceIn = remainingResistance(resistanceIn.asOutput,resistanceIn.ts, period);
+        uint112 remainingResistanceOut = remainingResistance(resistanceOut.asInput,resistanceOut.ts, period);
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
         if (!ctx.vm.isStaticContext) {
-            resistanceIn.asOutput = ResistanceLib.encode(remainingResistanceIn + amountIn.toUint216(), uint40(block.timestamp));
-            resistanceOut.asInput = ResistanceLib.encode(remainingResistanceOut + amountOut.toUint216(), uint40(block.timestamp));
+            uint32 ts = uint32(block.timestamp);
+            TokenResistance memory inUpdated = TokenResistance({
+                asInput: resistanceIn.asInput,
+                asOutput: remainingResistanceIn + amountIn.toUint112(),
+                ts: ts
+            });
+            TokenResistance memory outUpdated = TokenResistance({
+                asInput: remainingResistanceOut + amountOut.toUint112(),
+                asOutput: resistanceOut.asOutput,
+                ts: ts
+            });
+            if (aToB) {
+                resistance.tokenA = inUpdated;
+                resistance.tokenB = outUpdated;
+            } else {
+                resistance.tokenB = inUpdated;
+                resistance.tokenA = outUpdated;
+            }
         }
     }
 
-    /// @dev Virtual balance decreases linearly over time. Returns the remaining amount within the period.
-    function remainingResistance(Resistance data, uint16 period) internal view returns (uint216) {
+    /// @dev Leftover amount after linear decay from `ts` over `period`. Zero if expired.
+    function remainingResistance(uint112 amount, uint32 ts, uint16 period) internal view returns (uint112) {
         unchecked {
-            (uint216 amount, uint40 ts) = ResistanceLib.decode(data);
-
             uint256 expiration = uint256(ts) + period;
             if (block.timestamp >= expiration) return 0;
             uint256 timeLeft = expiration - block.timestamp;
 
             // timeLeft < period
-            return uint216(amount * timeLeft / period);
+            return uint112(amount * timeLeft / period);
         }
-    }
-}
-
-/// @dev Remaining amount of the token swapped in previous swaps and not yet expired.
-type Resistance is uint256;
-
-library ResistanceLib {
-    function encode(uint216 amount, uint40 ts) internal pure returns (Resistance) {
-        return Resistance.wrap((uint256(amount) << 40) | ts);
-    }
-
-    function decode(Resistance data) internal pure returns (uint216 amount, uint40 ts) {
-        return (uint216(Resistance.unwrap(data) >> 40), uint40(Resistance.unwrap(data)));
     }
 }
