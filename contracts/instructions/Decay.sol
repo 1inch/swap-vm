@@ -13,19 +13,13 @@ import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice Decay: for a reverse swap, pretend the pool did not move.
+/// @notice Decay prevents the reverse-swap price from updating immediately.
+///     It spreads the swap amount over `period`, which shrinks the arbitrage window.
 ///
-///   After A→B the pool has more A and less B, so the price moved. Decay remembers
-///   those two amounts. The next B→A adds the missing B and removes the extra A
-///   before computing the swap, so it uses the old price. Selling back cannot
-///   profit from the move, and a sandwich cannot profit from a victim in the
-///   same direction.
-///
-///   The memory is not deleted after it is used. It only fades to zero over
-///   `period` seconds. A second A→B does not touch it. So if the block is
-///   A→B, then B→A, then A→B again, that last A→B still subtracts the B→A
-///   memory: it looks like the reverse never happened, not like the price
-///   at the start of the block.
+/// @dev Example: after A → B, a B → A swap is filled at a worse price.
+///     Decay stores the swapped amounts and adjusts virtual balances to restore
+///     the price from before that A → B, not the price at which A → B filled.
+///     This can defend against front-running and sandwich attacks.
 ///
 /// @dev Encoding: [uint16 period]
 /// @dev Expected to run once per strategy; the first instance writes storage.
@@ -55,15 +49,15 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev How much of this token to add or remove on a swap, fading over `period`.
+    /// @dev Token amounts that resist price changes on the following counter-swaps.
     ///
-    ///      asInput:  this token left the pool last time it was sold. On a buy of this
+    ///      asInput:  this token left the pool the last time it was sold. On a buy of this
     ///                token, add that amount back (`balanceIn += remaining`).
-    ///      asOutput: this token entered the pool last time it was bought. On a sell of
+    ///      asOutput: this token entered the pool the last time it was bought. On a sell of
     ///                this token, take that amount back out (`balanceOut -= remaining`).
     ///
-    ///      A→B stores A.asOutput = dx and B.asInput = dy. The following B→A uses them
-    ///      and gets the old price. A later A→B uses the B→A store, not the first A→B.
+    ///      A → B stores `A.asOutput = dx` and `B.asInput = dy`. The following B → A uses them
+    ///      and gets the price from before that A → B.
     struct TokenResistance {
         /// @dev Remaining T that previously left the pool; added to balanceIn when T is tokenIn.
         Resistance asInput;
@@ -125,7 +119,7 @@ library Decay {
     }
 }
 
-/// @dev Virtual balance means the remaining amount of token that was swapped in previous swaps and not yet expired.
+/// @dev Remaining amount of the token swapped in previous swaps and not yet expired.
 type Resistance is uint256;
 
 library ResistanceLib {
