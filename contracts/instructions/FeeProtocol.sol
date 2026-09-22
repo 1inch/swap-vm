@@ -74,13 +74,10 @@ library FeeProtocol {
         ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
 
         for (uint256 i; i < providers.length; i++) {
-            bool takeFlatFee = providers[i].takeFlatFee;
-            bool takeSurplusFee = providers[i].takeSurplusFee;
-
             ptr = ptr.push(
                 InstructionBuilder.encodeBool(true, 0) |
-                InstructionBuilder.encodeBool(takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(takeSurplusFee, 2)
+                InstructionBuilder.encodeBool(providers[i].takeFlatFee, 1) |
+                InstructionBuilder.encodeBool(providers[i].takeSurplusFee, 2)
             ).push(providers[i].provider);
         }
 
@@ -236,15 +233,13 @@ library FeeProtocolSurplus {
             ctx.runLoop();
 
             // Estimated receive round up to shrink surplus fee
-            estimated = (estimated * ctx.swap.amountOut).ceilDiv(balanceOut);
+            ctx.fee.surplusEstimation = (estimated * ctx.swap.amountOut).ceilDiv(balanceOut);
         } else {
             uint256 balanceIn = ctx.swap.balanceIn;
             ctx.runLoop();
 
             // Estimated spend round down to shrink surplus fee
-            estimated = estimated * ctx.swap.amountIn / balanceIn;
+            ctx.fee.surplusEstimation = estimated * ctx.swap.amountIn / balanceIn;
         }
-
-        ctx.fee.surplusEstimation = estimated;
     }
 }

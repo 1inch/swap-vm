@@ -17,7 +17,6 @@ import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
 
 contract FeeProtocolCommissionsTest is Test {
     uint256 constant BPS = 1e7;
-    // Header is one byte and each static receiver is 27 bytes: 1 + 9 * 27 <= 255, while 10 exceed argsLength.
     uint256 constant MAX_RECEIVERS = 9;
 
     SwapVMRouterDebug public swapVM;
