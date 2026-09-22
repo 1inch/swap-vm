@@ -97,6 +97,10 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
             XYCSwap.build()
         );
 
+        return _createOrderWithProgram(programBytes);
+    }
+
+    function _createOrderWithProgram(bytes memory programBytes) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
         // === Create Order ===
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
@@ -318,6 +322,71 @@ contract ProtocolFeeTest is Test, OpcodesDebug {
         (ISwapVM.Order memory orderWithFlatFee,) = _createOrder(setup);
         (uint256 amountInAfterFlatFee,,) = swapVM.asView().quote(orderWithFlatFee, amountOut, exactInTakerData);
         assertLt(amountInAfterFlatFee, amountInAfterBothFee, "Only flat fee should result in lower amountIn than both fees");
+    }
+
+    // ========== FeeFlat -> FeeProtocol ordering ==========
+
+    function test_ProtocolFeeAfterFlatFeeIn_ExactIn() public {
+        uint256 balanceIn = 100e18;
+        uint256 balanceOut = 200e18;
+        uint256 amountIn = 100e18;
+        uint24 flatFeeBps = 0.20e7;
+        uint24 protocolFeeBps = 0.05e7;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithProgram(bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            FeeFlatIn.build(flatFeeBps),
+            FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeRecipient),
+            XYCSwap.build()
+        ));
+
+        bytes memory takerData = _swappingTakerData(
+            _quotingTakerData(TakerSetup({ isExactIn: true })),
+            signature
+        );
+
+        vm.prank(taker);
+        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
+
+        uint256 flatFee = amountIn * flatFeeBps / BPS;
+        uint256 amountInAfterFlatFee = amountIn - flatFee;
+        uint256 protocolFee = amountInAfterFlatFee * protocolFeeBps / BPS;
+        uint256 effectiveAmountIn = amountInAfterFlatFee - protocolFee;
+
+        assertEq(actualAmountIn, amountIn);
+        assertEq(TokenMock(tokenA).balanceOf(protocolFeeRecipient), protocolFee);
+        assertEq(amountOut, balanceOut * effectiveAmountIn / (balanceIn + effectiveAmountIn));
+    }
+
+    function test_ProtocolFeeAfterFlatFeeOut_ExactIn() public {
+        uint256 balanceIn = 100e18;
+        uint256 balanceOut = 200e18;
+        uint256 amountIn = 100e18;
+        uint24 flatFeeBps = 0.20e7;
+        uint24 protocolFeeBps = 0.05e7;
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithProgram(bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            FeeFlatOut.build(flatFeeBps),
+            FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeRecipient),
+            XYCSwap.build()
+        ));
+
+        bytes memory takerData = _swappingTakerData(
+            _quotingTakerData(TakerSetup({ isExactIn: true })),
+            signature
+        );
+
+        vm.prank(taker);
+        (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
+
+        uint256 rawAmountOut = balanceOut * amountIn / (balanceIn + amountIn);
+        uint256 protocolFee = rawAmountOut * protocolFeeBps / BPS;
+        uint256 amountOutAfterProtocolFee = rawAmountOut - protocolFee;
+        uint256 flatFee = amountOutAfterProtocolFee * flatFeeBps / BPS;
+
+        assertEq(TokenMock(tokenB).balanceOf(protocolFeeRecipient), protocolFee);
+        assertEq(amountOut, amountOutAfterProtocolFee - flatFee);
     }
 
     // ========== Protocol Fee AmountIn Tests ==========

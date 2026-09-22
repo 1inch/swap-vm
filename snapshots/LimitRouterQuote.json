@@ -3,12 +3,12 @@
   "Salt_LimitSwap_exactIn": "11252",
   "LimitSwap_exactOut": "10683",
   "LimitSwap_exactIn": "10551",
-  "LimitSwap_InvalidateTokenIn_exactOut": "14647",
-  "LimitSwap_InvalidateTokenIn_exactIn": "14515",
+  "LimitSwap_InvalidateTokenIn_exactOut": "14317",
+  "LimitSwap_InvalidateTokenIn_exactIn": "14185",
   "InvalidateBit_LimitSwap_exactOut": "13874",
   "InvalidateBit_LimitSwap_exactIn": "13742",
-  "FullLimitSwap_exactOut": "15772",
-  "FullLimitSwap_exactIn": "15640",
+  "FullLimitSwap_exactOut": "15442",
+  "FullLimitSwap_exactIn": "15310",
   "Deadline_LimitSwap_exactOut": "11131",
   "Deadline_LimitSwap_exactIn": "10999"
 }
