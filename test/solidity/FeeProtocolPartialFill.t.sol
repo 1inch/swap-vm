@@ -202,7 +202,7 @@ contract FeeProtocolPartialFillTest is Test {
         FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
         receivers[0] = FeeProtocol.ReceiverConfig({ receiver: feeRecipient, feeBps: feeBps, surplusBps: 0 });
 
-        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0), 0);
+        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0));
     }
 
     function decodeMismatch(bytes calldata reason) external pure returns (uint256 takerAmount, uint256 computedAmount) {

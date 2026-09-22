@@ -136,10 +136,11 @@ library PrintFee {
         uint8 count = FeeMetaLib.decodeCount(ctx.fee.meta);
 
         console.log("ProtocolFee {");
-        console.log("    count:    ", count);
-        console.log("    isTokenIn:", FeeMetaLib.decodeIsTokenIn(ctx.fee.meta));
-        console.log("    totalBps: ", FeeMetaLib.decodeTotalBps(ctx.fee.meta));
-        console.log("    estimated:", FeeMetaLib.decodeSurplusEstimate(ctx.fee.meta));
+        console.log("    count:            ", count);
+        console.log("    isTokenIn:        ", FeeMetaLib.decodeIsTokenIn(ctx.fee.meta));
+        console.log("    totalFeeBps:      ", FeeMetaLib.decodeTotalFeeBps(ctx.fee.meta));
+        console.log("    totalFeeAmount:   ", FeeMetaLib.decodeTotalFeeAmount(ctx.fee.meta));
+        console.log("    surplusEstimation:", ctx.fee.surplusEstimation);
         for (uint256 i; i < count; i++) {
             console.log(string.concat("    receiver[", toHexString(i), "]:  "), FeeReceiverLib.decodeReceiver(ctx.fee.receivers[i]));
             console.log(string.concat("    feeBps[", toHexString(i), "]:    "), FeeReceiverLib.decodeFeeBps(ctx.fee.receivers[i]));

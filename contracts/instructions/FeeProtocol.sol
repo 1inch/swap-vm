@@ -20,24 +20,20 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev Flat percent fee is payed by taker
 ///   Fee in token in is added to amount in, fee in token out is charged from amount out
 /// @dev Surplus fee is payed by maker
-///   Estimated amount in / out is scaled according to the amount-to-balance proportion by InvalidateTokenOut / InvalidateTokenIn opcodes
+///   Estimated amount in / out is set and scaled according to the amount-to-balance proportion by FeeProtocolSurplus opcode
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
-/// @dev Encoding: [uint8 header, [uint8 flags, address target, uint24 feeBps?, uint24 surplusBps?] * count, uint216 surplusEstimate?]
-///   header: [bit isTokenIn, bit3 _, uint4 count]
-///   flags: [bit isProvider, bit takeFlatFee, bit takeSurplusFee, bit5 _]
-///   feeBps is encoded if corresponding takeFlatFee flag is set and isProvider flag is not set
-///   surplusBps is encoded if corresponding takeSurplusFee flag is set and isProvider flag is not set
-///   surplusEstimate is encoded if any of takeSurplusFee flags is set
+/// @dev Encoding: [uint8 header, bytes21 provider * providers.length, bytes27 receiver * receivers.length]
+///   header: [bit isTokenIn, bit3 _, uint4 count]; count = providers.length + receivers.length
+///   provider: [bit true, bit takeFlatFee, bit takeSurplusFee, bit5 _, address provider]
+///   receiver: [bit false, bit7 _, address receiver, uint24 feeBps, uint24 surplusBps]
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
+///   The opcode is expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
 library FeeProtocol {
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    using Math for uint256;
     using SafeCast for uint256;
 
-    error FeeProtocolNoFeeFlagsSet();
-    error FeeProtocolBadTarget();
     error FeeProtocolExceedMaxCount();
     error FeeBpsOutOfRange(uint256 feeBps, uint256 surplusBps);
 
@@ -57,77 +53,38 @@ library FeeProtocol {
         bool takeSurplusFee;
     }
 
-    function sizeOf(
-        bool,
-        ReceiverConfig[] memory receivers,
-        ProviderConfig[] memory providers,
-        uint216
-    ) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + receivers.length * (1 + 20 + 6) + providers.length * (1 + 20) + 27;
+    function sizeOf(bool, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + receivers.length * (1 + 20 + 6) + providers.length * (1 + 20);
     }
 
-    function build(
-        bool isTokenIn,
-        ReceiverConfig[] memory receivers,
-        ProviderConfig[] memory providers,
-        uint216 surplusEstimate
-    ) internal pure returns (bytes memory slice) {
-        (slice, ) = build(
-            MemoryPtrLib.alloc(sizeOf(isTokenIn, receivers, providers, surplusEstimate)),
-            isTokenIn, receivers, providers, surplusEstimate
-        ).resolveShrink();
+    function build(bool isTokenIn, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, receivers, providers)), isTokenIn, receivers, providers).resolve();
     }
 
     function build(
         MemoryPtr ptrStart,
         bool isTokenIn,
         ReceiverConfig[] memory receivers,
-        ProviderConfig[] memory providers,
-        uint216 surplusEstimate
+        ProviderConfig[] memory providers
     ) internal pure returns (MemoryPtr ptr) {
         uint256 count = receivers.length + providers.length;
-        require(count < 16, FeeProtocolExceedMaxCount());
+        require(count <= 0x0f, FeeProtocolExceedMaxCount());
 
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
-        bool encodeSurplusEstimate;
-
-        for (uint256 i; i < receivers.length; i++) {
-            bool takeFlatFee = receivers[i].feeBps > 0;
-            bool takeSurplusFee = receivers[i].surplusBps > 0;
-
-            require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
-            require(receivers[i].receiver != address(0), FeeProtocolBadTarget());
-
-            ptr = ptr.push(
-                InstructionBuilder.encodeBool(false, 0) |
-                InstructionBuilder.encodeBool(takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(takeSurplusFee, 2)
-            ).push(receivers[i].receiver);
-
-            if (takeFlatFee) ptr = ptr.push(receivers[i].feeBps, 3);
-            if (takeSurplusFee) ptr = ptr.push(receivers[i].surplusBps, 3);
-
-            encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
-        }
 
         for (uint256 i; i < providers.length; i++) {
-            bool takeFlatFee = providers[i].takeFlatFee;
-            bool takeSurplusFee = providers[i].takeSurplusFee;
-
-            require(takeFlatFee || takeSurplusFee, FeeProtocolNoFeeFlagsSet());
-            require(providers[i].provider != address(0), FeeProtocolBadTarget());
-
             ptr = ptr.push(
                 InstructionBuilder.encodeBool(true, 0) |
-                InstructionBuilder.encodeBool(takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(takeSurplusFee, 2)
+                InstructionBuilder.encodeBool(providers[i].takeFlatFee, 1) |
+                InstructionBuilder.encodeBool(providers[i].takeSurplusFee, 2)
             ).push(providers[i].provider);
-
-            encodeSurplusEstimate = encodeSurplusEstimate || takeSurplusFee;
         }
 
-        if (encodeSurplusEstimate) ptr = ptr.push(surplusEstimate, 27);
+        for (uint256 i; i < receivers.length; i++) {
+            ptr = ptr.push(InstructionBuilder.encodeBool(false, 0)).push(receivers[i].receiver);
+            ptr = ptr.push(receivers[i].feeBps, 3).push(receivers[i].surplusBps, 3);
+        }
 
         ptrStart.patchLength(ptr);
     }
@@ -150,10 +107,6 @@ library FeeProtocol {
 
     function parseFeeBps(bytes calldata args, uint256 shift) internal pure returns (uint24 feeBps) {
         feeBps = args.at(shift).asU24();
-    }
-
-    function parseSurplusEstimated(bytes calldata args, uint256 shift) internal pure returns (uint216 estimated) {
-        estimated = args.at(shift).asU216();
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
@@ -188,21 +141,17 @@ library FeeProtocol {
             } else {
                 receiver = target;
 
-                if (takeFlatFee) {
-                    feeBps = parseFeeBps(args, shift);
-                    unchecked { shift += 3; }
-                }
-                if (takeSurplusFee) {
-                    surplusBps = parseFeeBps(args, shift);
-                    unchecked { shift += 3; }
-                }
+                feeBps = parseFeeBps(args, shift);
+                unchecked { shift += 3; }
+                surplusBps = parseFeeBps(args, shift);
+                unchecked { shift += 3; }
             }
 
             if (receiver == address(0) || (feeBps == 0 && surplusBps == 0)) {
                 unchecked { count--; }
             } else {
                 receivers[i] = FeeReceiverLib.encode(receiver, feeBps, surplusBps);
-                unchecked { 
+                unchecked {
                     totalFeeBps += feeBps;
                     totalSurplusBps += surplusBps;
                     i++;
@@ -212,37 +161,85 @@ library FeeProtocol {
 
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
 
-        uint216 surplusEstimate;
-        if (totalSurplusBps > 0) surplusEstimate = parseSurplusEstimated(args, shift);
-
-        ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), surplusEstimate);
-        ctx.fee.receivers = receivers;
-
-        uint256 fee;
-
-        // Using floor division, protocol fees should not be rapacious
+        // Protocol fees rounded down
+        // Reduce amounts for totalFeeBps once here, split totalFeeAmount across receivers at transfer phase
+        uint256 totalFeeAmount;
         if (isTokenIn) {
             if (ctx.query.isExactIn) {
-                fee = ctx.swap.amountIn * totalFeeBps / BPS;
-                ctx.swap.amountIn -= fee;
+                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
+                ctx.swap.amountIn -= totalFeeAmount;
 
                 uint256 reduction = ctx.swap.amountIn;
                 ctx.runLoop();
                 reduction -= ctx.swap.amountIn;
 
-                if (reduction > 0) fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                if (reduction > 0) totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             } else {
                 ctx.runLoop();
-                fee = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
             }
-            ctx.swap.amountIn += fee;
+            ctx.swap.amountIn += totalFeeAmount;
         } else {
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
-            fee = ctx.swap.amountOut * totalFeeBps / BPS;
-            ctx.swap.amountOut -= fee;
+            totalFeeAmount = ctx.swap.amountOut * totalFeeBps / BPS;
+            ctx.swap.amountOut -= totalFeeAmount;
         }
 
-        ctx.fee.feeTotal = fee;
+        if (totalFeeBps == 0) totalFeeBps = 1; // Avoid zero total bps for unconditional final receiver amounts calculation
+        ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), totalFeeAmount.toUint216());
+        ctx.fee.receivers = receivers;
+    }
+}
+
+/// @notice FeeProtocolSurplus opcode, set maker total receive or spend estimation in addition to FeeProtocol which set receivers
+/// @dev Encoding: [bool isTokenIn, uint256 estimated]
+///   isTokenIn should match the flag set in FeeProtocol
+/// @dev Supports only single direction swaps, scales estimation according to the amount-to-balance proportion
+/// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
+///   The opcode is expected to be applied before InvalidateTokenIn or InvalidateTokenOut to apply scaling properly
+library FeeProtocolSurplus {
+    using InstructionArgs for bytes;
+    using InstructionBuilder for MemoryPtr;
+
+    using Math for uint256;
+
+    Opcode constant opcode = Opcode.FeeProtocolSurplus;
+
+    function sizeOf(bool, uint256) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + 32;
+    }
+
+    function build(bool isTokenIn, uint256 estimated) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, estimated)), isTokenIn, estimated).resolve();
+    }
+
+    function build(MemoryPtr ptrStart, bool isTokenIn, uint256 estimated) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0)).push(estimated, 32);
+        ptrStart.patchLength(ptr);
+    }
+
+    function parse(bytes calldata args) internal pure returns (bool isTokenIn, uint256 estimated) {
+        isTokenIn = args.at(0).asBool(0);
+        estimated = args.at(1).asU256();
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        (bool isTokenIn, uint256 estimated) = parse(args);
+
+        if (isTokenIn) {
+            uint256 balanceOut = ctx.swap.balanceOut;
+            ctx.runLoop();
+
+            // Estimated receive round up to shrink surplus fee
+            ctx.fee.surplusEstimation = (estimated * ctx.swap.amountOut).ceilDiv(balanceOut);
+        } else {
+            uint256 balanceIn = ctx.swap.balanceIn;
+            ctx.runLoop();
+
+            // Estimated spend round down to shrink surplus fee
+            ctx.fee.surplusEstimation = estimated * ctx.swap.amountIn / balanceIn;
+        }
     }
 }
