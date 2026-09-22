@@ -9,6 +9,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { Time } from "../libs/Time.sol";
 
 /// @notice PiecewiseLinearScaleBalanceIn opcode, apply a piecewise-linear scale to the balance in (maker exact in)
 ///   Applies initial scale before start and last scale after end
@@ -42,8 +43,8 @@ library PiecewiseLinearScaleBalanceIn {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
-        ctx.swap.balanceIn = (ctx.swap.balanceIn * PiecewiseLinearScale.calcScaleNow(args)) >> 24;
+    function exec(Context memory ctx, bytes calldata args) internal {
+        ctx.swap.balanceIn = (ctx.swap.balanceIn * PiecewiseLinearScale.calcScaleNow(ctx, args)) >> 24;
     }
 }
 
@@ -79,8 +80,8 @@ library PiecewiseLinearScaleBalanceOut {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
-        ctx.swap.balanceOut = (ctx.swap.balanceOut * PiecewiseLinearScale.calcScaleNow(args)) >> 24;
+    function exec(Context memory ctx, bytes calldata args) internal {
+        ctx.swap.balanceOut = (ctx.swap.balanceOut * PiecewiseLinearScale.calcScaleNow(ctx, args)) >> 24;
     }
 }
 
@@ -128,9 +129,9 @@ library PiecewiseLinearScale {
     }
 
     /// @notice Find the current interval and get linear time-weighted scale, returns initial or last scale for no matching interval
-    function calcScaleNow(bytes calldata args) internal view returns (uint256 scale) {
+    function calcScaleNow(Context memory ctx, bytes calldata args) internal returns (uint256 scale) {
         unchecked {
-            uint40 start = args.parseStartTimestamp();
+            uint40 start = Time.resolve(ctx, args.parseStartTimestamp());
             uint256 max = args.parseIntervalsCount(); // max == durations.length == scales.length - 1
 
             uint256 timeLeft = block.timestamp;

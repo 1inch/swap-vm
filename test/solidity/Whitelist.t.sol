@@ -14,6 +14,7 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { LimitSwapVMRouter } from "../../contracts/routers/LimitSwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { Context } from "../../contracts/libs/VM.sol";
 import { Opcodes } from "../../contracts/opcodes/Opcodes.sol";
 import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol";
@@ -230,6 +231,34 @@ contract WhitelistTest is Test, LimitOpcodesDebug {
                 }
             }
         }
+    }
+
+    function test_WhitelistSequential_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        START = Time.RELATIVE_TIME_FLAG;
+
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(WhitelistType.Sequential, 2));
+        bytes memory takerData = _buildTakerData();
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
+        takerData = bytes.concat(takerData, abi.encodePacked(r, s, v));
+
+        tokenB.mint(ALLOWED_TAKERS[0], SWAP_AMOUNT);
+        vm.prank(ALLOWED_TAKERS[0]);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        vm.warp(announcedAt);
+        vm.prank(ALLOWED_TAKERS[0]);
+        (, uint256 amountOut,) = swapVM.swap(order, SWAP_AMOUNT, takerData);
+        assertEq(amountOut, 2 * SWAP_AMOUNT * BALANCE_A / BALANCE_B);
+
+        vm.prank(ALLOWED_TAKERS[1]);
+        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
+        swapVM.quote(order, SWAP_AMOUNT, takerData);
+
+        vm.warp(announcedAt + DURATIONS[0]);
+        vm.prank(ALLOWED_TAKERS[1]);
+        (, amountOut,) = swapVM.quote(order, SWAP_AMOUNT, takerData);
+        assertEq(amountOut, 2 * SWAP_AMOUNT * BALANCE_A / BALANCE_B);
     }
 
     function test_Whitelist_Sequential_GasBenchmark() public {
