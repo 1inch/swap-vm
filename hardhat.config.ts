@@ -38,6 +38,7 @@ export default defineConfig({
         runs: 1024,
       },
       fsPermissions: {
+        readDirectory: ["./node_modules/@1inch/solidity-utils/dist/src"],
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },
     },

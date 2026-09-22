@@ -97,6 +97,7 @@ contract SwapVMAquaTest is AquaSwapVMTest {
             useTransferFromAndAquaPush: false,
             isAToB: false, // zeroForOne=false: swap tokenB->tokenA, and tokenB > tokenA after sort
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             deadline: 0,

@@ -131,6 +131,7 @@ contract AquaSwapVMTest is AquaStrategyBuilders {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "", // no minimum output
             to: address(0),
             deadline: 0,

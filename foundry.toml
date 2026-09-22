@@ -6,7 +6,8 @@ optimizer      = true
 optimizer_runs = 700
 via_ir         = true
 fs_permissions = [
-    { access = "read", path = "./config" }
+    { access = "read", path = "./config" },
+    { access = "read", path = "./node_modules/@1inch/solidity-utils/dist/src" }
 ]
 remappings = [
     "forge-std/=node_modules/forge-std/src/",
