@@ -49,31 +49,10 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev Per-token leftover, one storage slot: `uint112 asInput | uint112 asOutput | uint32 ts`.
-    ///      Amounts fade linearly from `ts` over the instruction `period`. A swap that
-    ///      exceeds `uint112` (or leftover + amount) reverts.
-    ///
-    ///      asInput:  this token left the pool the last time it was sold. On a buy of this
-    ///                token, add that amount back (`balanceIn += remaining`).
-    ///      asOutput: this token entered the pool the last time it was bought. On a sell of
-    ///                this token, take that amount back out (`balanceOut -= remaining`).
-    ///      ts:       last time this token's leftover was written.
-    ///
-    ///      A → B stores `A.asOutput = dx` and `B.asInput = dy`. The following B → A uses them
-    ///      and gets the price from before that A → B.
-    struct TokenResistance {
-        /// @dev Leftover of T that left the pool; added to balanceIn when T is tokenIn.
-        uint112 asInput;
-        /// @dev Leftover of T that entered the pool; subtracted from balanceOut when T is tokenOut.
-        uint112 asOutput;
-        /// @dev Timestamp of the last write to this slot.
-        uint32 ts;
-    }
-
     /// @dev Two packed slots (`tokenA`, `tokenB`). `tokenA` is the smaller address.
     struct OrderResistance {
-        TokenResistance tokenA;
-        TokenResistance tokenB;
+        Resistance tokenA;
+        Resistance tokenB;
     }
 
     struct Storage {
@@ -92,50 +71,65 @@ library Decay {
         OrderResistance storage resistance = $.orderResistance[ctx.query.orderHash];
         bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        TokenResistance storage resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
-        TokenResistance storage resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
+        Resistance resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
+        Resistance resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
 
-        uint112 remainingInAsInput = remainingResistance(resistanceIn.asInput, resistanceIn.ts, period);
-        uint112 remainingOutAsOutput = remainingResistance(resistanceOut.asOutput, resistanceOut.ts, period);
+        // Both slots are written with the same timestamp.
+        (uint112 resistanceInAsInput, uint112 resistanceInAsOutput, uint32 ts) = resistanceIn.decode();
+        (uint112 resistanceOutAsInput, uint112 resistanceOutAsOutput, ) = resistanceOut.decode();
+
+        uint256 expiration = uint256(ts) + period;
+        uint256 timeLeft = block.timestamp < expiration ? expiration - block.timestamp : 0;
+
+        uint112 remainingInAsInput = remainingResistance(resistanceInAsInput, timeLeft, period);
+        uint112 remainingOutAsOutput = remainingResistance(resistanceOutAsOutput, timeLeft, period);
+        // Apply the remaining resistance before pricing.
         ctx.swap.balanceIn += remainingInAsInput;
         ctx.swap.balanceOut -= remainingOutAsOutput;
 
-        uint112 remainingInAsOutput = remainingResistance(resistanceIn.asOutput, resistanceIn.ts, period);
-        uint112 remainingOutAsInput = remainingResistance(resistanceOut.asInput, resistanceOut.ts, period);
+        uint112 remainingInAsOutput = remainingResistance(resistanceInAsOutput, timeLeft, period);
+        uint112 remainingOutAsInput = remainingResistance(resistanceOutAsInput, timeLeft, period);
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
         if (!ctx.vm.isStaticContext) {
-            uint32 ts = uint32(block.timestamp);
-            TokenResistance memory inUpdated = TokenResistance({
-                asInput: remainingInAsInput,
-                asOutput: remainingInAsOutput + amountIn.toUint112(),
-                ts: ts
-            });
-            TokenResistance memory outUpdated = TokenResistance({
-                asInput: remainingOutAsInput + amountOut.toUint112(),
-                asOutput: remainingOutAsOutput,
-                ts: ts
-            });
+            // Carry leftovers forward and add this swap.
+            uint32 current_ts = uint32(block.timestamp);
+            Resistance resistanceInUpdated = ResistanceLib.encode(remainingInAsInput, remainingInAsOutput + amountIn.toUint112(), current_ts);
+            Resistance resistanceOutUpdated = ResistanceLib.encode(remainingOutAsInput + amountOut.toUint112(),remainingOutAsOutput, current_ts);
             if (aToB) {
-                resistance.tokenA = inUpdated;
-                resistance.tokenB = outUpdated;
+                resistance.tokenA = resistanceInUpdated;
+                resistance.tokenB = resistanceOutUpdated;
             } else {
-                resistance.tokenB = inUpdated;
-                resistance.tokenA = outUpdated;
+                resistance.tokenA = resistanceOutUpdated;
+                resistance.tokenB = resistanceInUpdated;
             }
         }
     }
 
-    /// @dev Leftover amount after linear decay from `ts` over `period`. Zero if expired.
-    function remainingResistance(uint112 amount, uint32 ts, uint16 period) internal view returns (uint112) {
-        unchecked {
-            uint256 expiration = uint256(ts) + period;
-            if (block.timestamp >= expiration) return 0;
-            uint256 timeLeft = expiration - block.timestamp;
+    function remainingResistance(uint112 amount, uint256 timeLeft, uint16 period) private pure returns (uint112) {
+        if (timeLeft == 0) return 0;
+        return uint112(uint256(amount) * timeLeft / period);
+    }
+}
 
-            // timeLeft < period
-            return uint112(amount * timeLeft / period);
-        }
+
+/// @dev Packed per-token resistance: `uint112 asInput | uint112 asOutput | uint32 ts`.
+///      `asInput` is the amount that left the pool when this token was sold; it is added
+///      to `balanceIn` when this token is bought. `asOutput` is the amount that entered
+///      the pool when this token was bought; it is subtracted from `balanceOut` when this
+///      token is sold. Both amounts decay linearly from `ts` over the instruction period.
+///      A → B stores `A.asOutput = amountIn` and `B.asInput = amountOut`.
+type Resistance is uint256;
+using ResistanceLib for Resistance;
+
+library ResistanceLib {
+    function encode(uint112 asInput, uint112 asOutput, uint32 ts) internal pure returns (Resistance) {
+        return Resistance.wrap((uint256(asInput) << 144) | uint256(asOutput) << 32 | ts);
+    }
+
+    function decode(Resistance data) internal pure returns (uint112, uint112, uint32) {
+        uint256 raw = Resistance.unwrap(data);
+        return (uint112(raw >> 144), uint112(raw >> 32), uint32(raw));
     }
 }
