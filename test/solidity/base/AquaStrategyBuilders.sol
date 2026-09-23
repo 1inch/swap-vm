@@ -104,6 +104,7 @@ abstract contract AquaStrategyBuilders is TestConstants, Test, AquaOpcodesDebug 
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,

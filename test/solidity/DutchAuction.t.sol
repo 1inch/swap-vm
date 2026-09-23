@@ -16,6 +16,7 @@ import { SwapVM } from "../../contracts/SwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -236,6 +237,48 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         vm.assertEq(amountOut, 320e18, "Invalid amountOut");
     }
 
+    function test_DutchAuctionBalanceIn_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
+    }
+
+    function test_DutchAuctionBalanceOut_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
+    }
+
     /**
      * Test Dutch auction build failed for decay < 1.
      */
@@ -344,6 +387,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
@@ -391,6 +435,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: allowPartialFill,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             deadline: 0,

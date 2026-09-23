@@ -14,6 +14,7 @@ import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol
 
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../contracts/instructions/PiecewiseLinearScale.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
@@ -30,6 +31,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     // Upper bound for fuzzed order/swap amounts
     // 18 decimals 100 * 10 ** 12, feels reasonable
     uint256 internal constant MAX_AMOUNT = 1e18 * 1e12 * 100;
+    uint256 internal constant MAKER_PRIVATE_KEY = 0xBEEF;
 
     function setUp() public {
         swapVM = new LimitSwapVMRouterDebug(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
@@ -234,6 +236,68 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             (, uint256 amountOutMidRight,) = swapVM.quote(order, takingAmount, takerDataExactIn);
             assertApproxEqAbs((amountOutMidLeft + amountOutMidRight) / 2, (amountOutPast + amountOutNext) / 2, (makingAmount >> 24) + 1);
         }
+    }
+
+    function test_PiecewiseLinearScaleBalanceIn_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        maker = vm.addr(MAKER_PRIVATE_KEY);
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 100;
+        scales[0] = type(uint24).max;
+        scales[1] = uint24(2 ** 23 - 1);
+
+        ISwapVM.Order memory order = _buildOrder(
+            _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, true)
+        );
+        bytes memory takerData = _buildTakerData(true);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PRIVATE_KEY, swapVM.hash(order));
+        takerData = bytes.concat(takerData, abi.encodePacked(r, s, v));
+
+        tokenA.mint(address(this), 3e18);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.mint(maker, 3e18);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        vm.warp(announcedAt);
+        (, uint256 amountOut,) = swapVM.swap(order, 3e18, takerData);
+        assertEq(amountOut, 3e18);
+
+        vm.warp(announcedAt + 50);
+        (, amountOut,) = swapVM.quote(order, 3e18, takerData);
+        assertEq(amountOut, 4e18);
+    }
+
+    function test_PiecewiseLinearScaleBalanceOut_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        maker = vm.addr(MAKER_PRIVATE_KEY);
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 100;
+        scales[0] = uint24(2 ** 23 - 1);
+        scales[1] = type(uint24).max;
+
+        ISwapVM.Order memory order = _buildOrder(
+            _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, false)
+        );
+        bytes memory takerData = _buildTakerData(true);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PRIVATE_KEY, swapVM.hash(order));
+        takerData = bytes.concat(takerData, abi.encodePacked(r, s, v));
+
+        tokenA.mint(address(this), 4e18);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        tokenB.mint(maker, 2e18);
+        vm.prank(maker);
+        tokenB.approve(address(swapVM), type(uint256).max);
+
+        vm.warp(announcedAt);
+        (, uint256 amountOut,) = swapVM.swap(order, 4e18, takerData);
+        assertEq(amountOut, 2e18);
+
+        vm.warp(announcedAt + 50);
+        (, amountOut,) = swapVM.quote(order, 4e18, takerData);
+        assertEq(amountOut, 3e18);
     }
 
     function test_PiecewiseLinearScale_GasBenchmark() public {
@@ -771,6 +835,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             receiver: address(0),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: true,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
@@ -798,6 +863,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             deadline: 0,

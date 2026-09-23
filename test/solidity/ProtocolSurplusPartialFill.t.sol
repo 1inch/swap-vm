@@ -102,12 +102,15 @@ contract ProtocolSurplusPartialFillTest is Test {
     ///   consumed input fraction.
     ///   Each fill of half the order compares against half the estimate: surplus 20e18, fee 2e18 per fill.
     function test_SurplusOut_Multifill_ProRataEstimate() public {
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
+        bytes memory protocolFee = FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18);
+        bytes memory program = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18),
+            protocolFee,
             InvalidateTokenIn.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
-        ));
+        );
+
+        ISwapVM.Order memory order = _createOrder(program);
         bytes memory exactOutData = _makeTakerData(order, false);
 
         // First fill: half the order
@@ -349,6 +352,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             hasPreTransferInHook: false,
@@ -379,6 +383,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: true,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             deadline: 0,

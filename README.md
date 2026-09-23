@@ -38,7 +38,7 @@ Context
 
 Instructions set balances, apply curves, fees and guards, and leave the missing amount in the registers. After `runLoop()` SwapVM validates maker and taker constraints, runs hooks and callbacks, and moves tokens. `quote()` runs the same program in a static context (`router.asView().quote(...)`), so quote and swap agree.
 
-**Authorization** is one of:
+**Order authorization** is one of:
 
 - **Signature** — EIP-712 over `Order(address maker, uint256 traits, bytes data)`, verified on every fill.
 - **Aqua** (`useAquaInsteadOfSignature`) — no signature; `orderHash = keccak256(abi.encode(order))`, balances are read from and settled through [1inch Aqua](https://github.com/1inch/aqua) (`safeBalances`, `pull`, `push`). Custom receiver and WETH unwrapping are not allowed in this mode.
@@ -111,6 +111,7 @@ ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
     shouldUnwrapWeth: false,
     useAquaInsteadOfSignature: false,
     allowZeroAmountIn: false,
+    usePermit2: false,                     // true: pull maker tokenOut through Permit2
     hasPreTransferInHook: false,  hasPostTransferInHook: false,
     hasPreTransferOutHook: false, hasPostTransferOutHook: false,
     preTransferInTarget: address(0),  preTransferInData: "",
@@ -133,7 +134,7 @@ bytes memory program = bytes.concat(
 );
 ```
 
-With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come from Aqua after `aqua.ship(...)`. The curve bytecode is the same in both modes.
+With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come from Aqua after `aqua.ship(...)`. The curve bytecode is the same in both modes, and maker `usePermit2` must remain false because Aqua settles maker funds.
 
 ### Hooks
 
@@ -144,7 +145,7 @@ With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come fr
 - Add `Deadline`. Use `InvalidateBit` for one-shot orders, `InvalidateTokenIn` / `InvalidateTokenOut` for partial fills, `ValidateSeriesEpoch` to cancel a whole series at once.
 - Guard rates with `RequireMinRate` or `AdjustMinRate`; consider `Decay` for AMM positions.
 - `Salt` makes otherwise identical orders hash differently.
-- Approve the router: `tokenOut` is pulled from the maker with `transferFrom` (signature mode) or Aqua `pull`.
+- Authorize the router to pull `tokenOut`: approve the router directly for ERC-20 `transferFrom`, or approve Permit2 and set `usePermit2: true`. Aqua orders use Aqua `pull`.
 
 ## Takers
 
@@ -154,6 +155,7 @@ bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
     isExactIn: true,                       // `amount` is the input amount
     isAToB: true,                          // pay tokenA, receive tokenB
     allowPartialFill: false,               // true: fill up to `amount`, threshold scales pro rata
+    usePermit2: false,                     // true: pull taker tokenIn through Permit2
     shouldUnwrapWeth: false,               // unwrap WETH received as tokenOut
     isStrictThresholdAmount: false,        // true: require the exact threshold amount
     isFirstTransferFromTaker: false,       // default: maker's tokenOut is sent first
@@ -176,6 +178,12 @@ bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
 - Reuse the same `takerData` for `quote` and `swap`.
 - Send ETH with `swap` when `tokenIn` is WETH; SwapVM wraps it and refunds the excess.
 - By default the maker's `tokenOut` is transferred first, so `ITakerCallbacks.preTransferInCallback` can source `tokenIn` flash-swap style. Set `isFirstTransferFromTaker` to pay first.
+
+### Permit2 transfers
+
+Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, while taker `usePermit2` controls `tokenIn`. The selected mode also applies to protocol-fee transfers on that side.
+
+`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`.
 
 ## Order registry and canonical strategies
 
