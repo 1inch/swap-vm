@@ -132,6 +132,7 @@ contract DecayTest is Test, OpcodesDebug {
         return (order, signature);
     }
 
+
     function executeSwap(
         address trader,
         ISwapVM.Order memory order,
@@ -470,22 +471,12 @@ contract DecayTest is Test, OpcodesDebug {
         assertTrue(lossPercent > 5, "MEV loss should be > 5%");
     }
 
-    /**
-     * Test Decay with a zero period applies no penalty and does not revert.
-     * With period 0 an offset expires in the block it is written, so `calcOffsetNow` must
-     * take its early return instead of falling through and dividing by the period.
-     */
+    function buildDecay(uint16 period) external pure {
+        Decay.build(period);
+    }
+
     function test_Decay_ZeroPeriod() public {
-        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder(0);
-
-        // First swap A->B writes an offset stamped with the current block timestamp.
-        executeSwap(trader1, order, signature, address(tokenA), address(tokenB), STANDARD_SWAP);
-
-        // Counter-swap B->A in the same block, so expiration == ts == block.timestamp.
-        (, uint256 outOpp) = executeSwap(trader2, order, signature, address(tokenB), address(tokenA), 50e18);
-
-        // Normal expected without decay: out = 50 * 1100 / (909 + 50) = 57.35...
-        uint256 expectedNormal = (uint256(50e18) * 1100) / 959;
-        assertApproxEqRel(outOpp, expectedNormal, TOLERANCE, "Zero period must apply no penalty");
+        vm.expectRevert(Decay.PeriodMustBeNonZero.selector);
+        this.buildDecay(0);
     }
 }

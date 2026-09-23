@@ -14,12 +14,12 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Decay prevents the reverse-swap price from updating immediately.
-///     It spreads the swap amount over `period`, which shrinks the arbitrage window.
+///  It spreads the swap amount over `period`, which shrinks the arbitrage window.
 ///
 /// @dev Example: after A → B, a B → A swap is filled at a worse price.
-///     Decay stores the swapped amounts and adjusts virtual balances to restore
-///     the price from before that A → B, not the price at which A → B filled.
-///     This can defend against front-running and sandwich attacks.
+///  Decay stores the swapped amounts and adjusts virtual balances to restore
+///  the price from before that A → B, not the price at which A → B filled.
+///  This can defend against front-running and sandwich attacks.
 ///
 /// @dev Encoding: [uint16 period]
 /// @dev Expected to run once per strategy; the first instance writes storage.
@@ -31,6 +31,8 @@ library Decay {
 
     Opcode constant opcode = Opcode.Decay;
 
+    error PeriodMustBeNonZero();
+
     function sizeOf(uint16) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 2;
     }
@@ -40,6 +42,7 @@ library Decay {
     }
 
     function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
+        require(period > 0, PeriodMustBeNonZero());
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(period, 2);
         ptrStart.patchLength(ptr);
@@ -92,11 +95,12 @@ library Decay {
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
+        // Carry leftovers forward and add this swap.
+        uint32 current_ts = uint32(block.timestamp);
+        Resistance resistanceInUpdated = ResistanceLib.encode(remainingInAsInput, remainingInAsOutput + amountIn.toUint112(), current_ts);
+        Resistance resistanceOutUpdated = ResistanceLib.encode(remainingOutAsInput + amountOut.toUint112(),remainingOutAsOutput, current_ts);
+
         if (!ctx.vm.isStaticContext) {
-            // Carry leftovers forward and add this swap.
-            uint32 current_ts = uint32(block.timestamp);
-            Resistance resistanceInUpdated = ResistanceLib.encode(remainingInAsInput, remainingInAsOutput + amountIn.toUint112(), current_ts);
-            Resistance resistanceOutUpdated = ResistanceLib.encode(remainingOutAsInput + amountOut.toUint112(),remainingOutAsOutput, current_ts);
             if (aToB) {
                 resistance.tokenA = resistanceInUpdated;
                 resistance.tokenB = resistanceOutUpdated;
@@ -108,18 +112,17 @@ library Decay {
     }
 
     function remainingResistance(uint112 amount, uint256 timeLeft, uint16 period) private pure returns (uint112) {
-        if (timeLeft == 0) return 0;
         return uint112(uint256(amount) * timeLeft / period);
     }
 }
 
 
 /// @dev Packed per-token resistance: `uint112 asInput | uint112 asOutput | uint32 ts`.
-///      `asInput` is the amount that left the pool when this token was sold; it is added
-///      to `balanceIn` when this token is bought. `asOutput` is the amount that entered
-///      the pool when this token was bought; it is subtracted from `balanceOut` when this
-///      token is sold. Both amounts decay linearly from `ts` over the instruction period.
-///      A → B stores `A.asOutput = amountIn` and `B.asInput = amountOut`.
+///  `asInput` is the amount that left the pool when this token was sold; it is added
+///  to `balanceIn` when this token is bought. `asOutput` is the amount that entered
+///  the pool when this token was bought; it is subtracted from `balanceOut` when this
+///  token is sold. Both amounts decay linearly from `ts` over the instruction period.
+///  A → B stores `A.asOutput = amountIn` and `B.asInput = amountOut`.
 type Resistance is uint256;
 using ResistanceLib for Resistance;
 
