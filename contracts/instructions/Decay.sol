@@ -14,8 +14,8 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Decay opcode, increase balance in and decrease balance out by offsets decaying over time since last trade
-///   Offsets are increased at each swap by amount in and amount out against the current swap direction,
-///   making immediate counter-swap have a worse price
+///   Offsets are increased at each swap by amount in and amount out against the current swap direction
+///   making the immediate counter-swap price the same as if no swap occurred and releasing liquidity over time
 /// @dev Encoding: [uint16 period]
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library Decay {
@@ -44,8 +44,13 @@ library Decay {
         period = args.at(0).asU16();
     }
 
+    struct Offsets {
+        DecayOffset aToB;
+        DecayOffset bToA;
+    }
+
     struct Storage {
-        mapping(bytes32 orderHash => mapping(address token => mapping(bool direction => DecayOffset))) offset;
+        mapping(bytes32 orderHash => Offsets) offsets;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -57,33 +62,40 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        ctx.swap.balanceIn += calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][true], period);
-        ctx.swap.balanceOut -= calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][false], period);
+        Offsets storage offsets = $.offsets[ctx.query.orderHash];
+        bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        uint216 offsetIn = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenIn][false], period);
-        uint216 offsetOut = calcOffsetNow($.offset[ctx.query.orderHash][ctx.query.tokenOut][true], period);
+        DecayOffset offsetForward;
+        DecayOffset offsetBackward;
+        if (aToB) (offsetForward, offsetBackward) = (offsets.aToB, offsets.bToA);
+        else (offsetForward, offsetBackward) = (offsets.bToA, offsets.aToB);
+
+        (uint112 offsetInForward, uint112 offsetOutForward) = calcOffsetsNow(offsetForward, period);
+        ctx.swap.balanceIn += offsetInForward;
+        ctx.swap.balanceOut -= offsetOutForward;
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        offsetIn += amountIn.toUint216();
-        offsetOut += amountOut.toUint216();
+        (uint112 offsetInBackward, uint112 offsetOutBackward) = calcOffsetsNow(offsetBackward, period);
+        offsetInBackward += amountOut.toUint112();
+        offsetOutBackward += amountIn.toUint112();
 
         if (!ctx.vm.isStaticContext) {
-            $.offset[ctx.query.orderHash][ctx.query.tokenIn][false] = DecayOffsetLib.encode(offsetIn, uint40(block.timestamp));
-            $.offset[ctx.query.orderHash][ctx.query.tokenOut][true] = DecayOffsetLib.encode(offsetOut, uint40(block.timestamp));
+            if (aToB) offsets.bToA = DecayOffsetLib.encode(offsetInBackward, offsetOutBackward);
+            else offsets.aToB = DecayOffsetLib.encode(offsetInBackward, offsetOutBackward);
         }
     }
 
-    function calcOffsetNow(DecayOffset data, uint16 period) internal view returns (uint216) {
+    function calcOffsetsNow(DecayOffset data, uint16 period) internal view returns (uint112, uint112) {
         unchecked {
-            (uint216 offset, uint40 ts) = DecayOffsetLib.decode(data);
+            (uint112 offsetIn, uint112 offsetOut, uint32 ts) = DecayOffsetLib.decode(data);
 
             uint256 expiration = uint256(ts) + period;
-            if (block.timestamp >= expiration) return 0;
+            if (block.timestamp >= expiration) return (0, 0);
             uint256 timeLeft = expiration - block.timestamp;
 
             // timeLeft < period
-            return uint216(offset * timeLeft / period);
+            return (uint112(offsetIn * timeLeft / period), uint112(offsetOut * timeLeft / period));
         }
     }
 }
@@ -91,11 +103,12 @@ library Decay {
 type DecayOffset is uint256;
 
 library DecayOffsetLib {
-    function encode(uint216 offset, uint40 ts) internal pure returns (DecayOffset) {
-        return DecayOffset.wrap((uint256(offset) << 40) | ts);
+    function encode(uint112 offsetIn, uint112 offsetOut) internal view returns (DecayOffset) {
+        return DecayOffset.wrap((uint256(offsetIn) << 144) | uint256(offsetOut) << 32 | block.timestamp);
     }
 
-    function decode(DecayOffset data) internal pure returns (uint216 offset, uint40 ts) {
-        return (uint216(DecayOffset.unwrap(data) >> 40), uint40(DecayOffset.unwrap(data)));
+    function decode(DecayOffset data) internal pure returns (uint112 offsetIn, uint112 offsetOut, uint32 ts) {
+        uint256 raw = DecayOffset.unwrap(data);
+        return (uint112(raw >> 144), uint112(raw >> 32), uint32(raw));
     }
 }
