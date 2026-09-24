@@ -22,7 +22,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///  This can defend against front-running and sandwich attacks.
 ///
 /// @dev Encoding: [uint16 period]
-/// @dev Expected to run once per strategy; the first instance writes storage.
+/// @dev Expected to run no more than once per strategy; the first instance writes storage.
 library Decay {
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -31,7 +31,7 @@ library Decay {
 
     Opcode constant opcode = Opcode.Decay;
 
-    error PeriodMustBeNonZero();
+    error DecayPeriodMustBeNonZero();
 
     function sizeOf(uint16) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 2;
@@ -42,7 +42,7 @@ library Decay {
     }
 
     function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
-        require(period > 0, PeriodMustBeNonZero());
+        require(period > 0, DecayPeriodMustBeNonZero());
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(period, 2);
         ptrStart.patchLength(ptr);
@@ -52,7 +52,6 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev One packed slot per swap direction.
     struct OrderResistance {
         Resistance aToB;
         Resistance bToA;
@@ -83,7 +82,6 @@ library Decay {
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        // Update out of `if (!ctx.vm.isStaticContext) {}` because casting `toUint112()` can potentially revert.
         Resistance forwardUpdated = ResistanceLib.encodeNow(
             (forwardIn + amountIn).toUint112(), 
             (forwardOut + amountOut).toUint112()
@@ -96,9 +94,8 @@ library Decay {
     }
 }
 
-/// @dev Packed resistance created by one swap direction:
-///  `uint112 amountIn | uint112 amountOut | uint32 ts`.
-///  The opposite direction adds `amountOut` to its virtual input balance and subtracts
+/// @dev Packed resistance data for swap direction: `uint112 amountIn | uint112 amountOut | uint32 ts`.
+///  The backward direction adds `amountOut` to its virtual balanceIn and subtracts
 ///  `amountIn` from its virtual output balance. Both amounts decay linearly from `ts`.
 type Resistance is uint256;
 using ResistanceLib for Resistance;
