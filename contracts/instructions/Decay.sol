@@ -52,10 +52,10 @@ library Decay {
         period = args.at(0).asU16();
     }
 
-    /// @dev Two packed slots (`tokenA`, `tokenB`). `tokenA` is the smaller address.
+    /// @dev One packed slot per swap direction.
     struct OrderResistance {
-        Resistance tokenA;
-        Resistance tokenB;
+        Resistance aToB;
+        Resistance bToA;
     }
 
     struct Storage {
@@ -71,68 +71,59 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        OrderResistance storage resistance = $.orderResistance[ctx.query.orderHash];
+        OrderResistance storage r = $.orderResistance[ctx.query.orderHash];
         bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        Resistance resistanceIn = aToB ? resistance.tokenA : resistance.tokenB;
-        Resistance resistanceOut = aToB ? resistance.tokenB : resistance.tokenA;
+        (uint112 forwardIn, uint112 forwardOut) = aToB ? r.aToB.remaining(period) : r.bToA.remaining(period);
+        (uint112 backwardIn, uint112 backwardOut) = aToB ? r.bToA.remaining(period) : r.aToB.remaining(period);
 
-        // Both slots are written with the same timestamp.
-        (uint112 resistanceInAsInput, uint112 resistanceInAsOutput, uint32 ts) = resistanceIn.decode();
-        (uint112 resistanceOutAsInput, uint112 resistanceOutAsOutput, ) = resistanceOut.decode();
-
-        uint256 expiration = uint256(ts) + period;
-        uint256 timeLeft = block.timestamp < expiration ? expiration - block.timestamp : 0;
-
-        uint112 remainingInAsInput = remainingResistance(resistanceInAsInput, timeLeft, period);
-        uint112 remainingOutAsOutput = remainingResistance(resistanceOutAsOutput, timeLeft, period);
         // Apply the remaining resistance before pricing.
-        ctx.swap.balanceIn += remainingInAsInput;
-        ctx.swap.balanceOut -= remainingOutAsOutput;
-
-        uint112 remainingInAsOutput = remainingResistance(resistanceInAsOutput, timeLeft, period);
-        uint112 remainingOutAsInput = remainingResistance(resistanceOutAsInput, timeLeft, period);
+        ctx.swap.balanceIn += backwardOut;
+        ctx.swap.balanceOut -= backwardIn;
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        // Carry leftovers forward and add this swap.
-        uint32 current_ts = uint32(block.timestamp);
-        Resistance resistanceInUpdated = ResistanceLib.encode(remainingInAsInput, remainingInAsOutput + amountIn.toUint112(), current_ts);
-        Resistance resistanceOutUpdated = ResistanceLib.encode(remainingOutAsInput + amountOut.toUint112(),remainingOutAsOutput, current_ts);
+        // Update out of `if (!ctx.vm.isStaticContext) {}` because casting `toUint112()` can potentially revert.
+        Resistance forwardUpdated = ResistanceLib.encode(
+            forwardIn + amountIn.toUint112(),
+            forwardOut + amountOut.toUint112(),
+            uint32(block.timestamp)
+        );
 
         if (!ctx.vm.isStaticContext) {
-            if (aToB) {
-                resistance.tokenA = resistanceInUpdated;
-                resistance.tokenB = resistanceOutUpdated;
-            } else {
-                resistance.tokenA = resistanceOutUpdated;
-                resistance.tokenB = resistanceInUpdated;
-            }
+            if (aToB) r.aToB = forwardUpdated;
+            else r.bToA = forwardUpdated;
         }
-    }
-
-    function remainingResistance(uint112 amount, uint256 timeLeft, uint16 period) private pure returns (uint112) {
-        return uint112(uint256(amount) * timeLeft / period);
     }
 }
 
 
-/// @dev Packed per-token resistance: `uint112 asInput | uint112 asOutput | uint32 ts`.
-///  `asInput` is the amount that left the pool when this token was sold; it is added
-///  to `balanceIn` when this token is bought. `asOutput` is the amount that entered
-///  the pool when this token was bought; it is subtracted from `balanceOut` when this
-///  token is sold. Both amounts decay linearly from `ts` over the instruction period.
-///  A → B stores `A.asOutput = amountIn` and `B.asInput = amountOut`.
+/// @dev Packed resistance created by one swap direction:
+///  `uint112 amountIn | uint112 amountOut | uint32 ts`.
+///  The opposite direction adds `amountOut` to its virtual input balance and subtracts
+///  `amountIn` from its virtual output balance. Both amounts decay linearly from `ts`.
 type Resistance is uint256;
 using ResistanceLib for Resistance;
 
 library ResistanceLib {
-    function encode(uint112 asInput, uint112 asOutput, uint32 ts) internal pure returns (Resistance) {
-        return Resistance.wrap((uint256(asInput) << 144) | uint256(asOutput) << 32 | ts);
+    function encode(uint112 amountIn, uint112 amountOut, uint32 ts) internal pure returns (Resistance) {
+        return Resistance.wrap((uint256(amountIn) << 144) | uint256(amountOut) << 32 | ts);
     }
 
     function decode(Resistance data) internal pure returns (uint112, uint112, uint32) {
         uint256 raw = Resistance.unwrap(data);
         return (uint112(raw >> 144), uint112(raw >> 32), uint32(raw));
+    }
+
+    function remaining(Resistance self, uint16 period) internal view returns(uint112 amountIn, uint112 amountOut) {
+        uint32 ts;
+        (amountIn, amountOut, ts) = self.decode();
+
+        uint256 expiration = uint256(ts) + period;
+        if (block.timestamp >= expiration) return (0, 0);
+
+        uint256 timeLeft = expiration - block.timestamp;
+        amountIn = uint112(uint256(amountIn) * timeLeft / period);
+        amountOut = uint112(uint256(amountOut) * timeLeft / period);
     }
 }
