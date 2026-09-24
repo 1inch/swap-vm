@@ -74,8 +74,8 @@ library Decay {
         OrderResistance storage r = $.orderResistance[ctx.query.orderHash];
         bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        (uint112 forwardIn, uint112 forwardOut) = aToB ? r.aToB.remaining(period) : r.bToA.remaining(period);
-        (uint112 backwardIn, uint112 backwardOut) = aToB ? r.bToA.remaining(period) : r.aToB.remaining(period);
+        (uint256 forwardIn, uint256 forwardOut) = aToB ? r.aToB.remaining(period) : r.bToA.remaining(period);
+        (uint256 backwardIn, uint256 backwardOut) = aToB ? r.bToA.remaining(period) : r.aToB.remaining(period);
 
         // Apply the remaining resistance before pricing.
         ctx.swap.balanceIn += backwardOut;
@@ -84,10 +84,9 @@ library Decay {
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
         // Update out of `if (!ctx.vm.isStaticContext) {}` because casting `toUint112()` can potentially revert.
-        Resistance forwardUpdated = ResistanceLib.encode(
-            forwardIn + amountIn.toUint112(),
-            forwardOut + amountOut.toUint112(),
-            uint32(block.timestamp)
+        Resistance forwardUpdated = ResistanceLib.encodeNow(
+            (forwardIn + amountIn).toUint112(), 
+            (forwardOut + amountOut).toUint112()
         );
 
         if (!ctx.vm.isStaticContext) {
@@ -106,8 +105,8 @@ type Resistance is uint256;
 using ResistanceLib for Resistance;
 
 library ResistanceLib {
-    function encode(uint112 amountIn, uint112 amountOut, uint32 ts) internal pure returns (Resistance) {
-        return Resistance.wrap((uint256(amountIn) << 144) | uint256(amountOut) << 32 | ts);
+    function encodeNow(uint112 amountIn, uint112 amountOut) internal view returns (Resistance) {
+        return Resistance.wrap((uint256(amountIn) << 144) | uint256(amountOut) << 32 | block.timestamp);
     }
 
     function decode(Resistance data) internal pure returns (uint112, uint112, uint32) {
@@ -115,15 +114,17 @@ library ResistanceLib {
         return (uint112(raw >> 144), uint112(raw >> 32), uint32(raw));
     }
 
-    function remaining(Resistance self, uint16 period) internal view returns(uint112 amountIn, uint112 amountOut) {
-        uint32 ts;
-        (amountIn, amountOut, ts) = self.decode();
+    function remaining(Resistance self, uint16 period) internal view returns(uint256 amountIn, uint256 amountOut) {
+        unchecked {
+            uint32 ts;
+            (amountIn, amountOut, ts) = self.decode();
 
-        uint256 expiration = uint256(ts) + period;
-        if (block.timestamp >= expiration) return (0, 0);
+            uint256 expiration = uint256(ts) + period;
+            if (block.timestamp >= expiration) return (0, 0);
 
-        uint256 timeLeft = expiration - block.timestamp;
-        amountIn = uint112(uint256(amountIn) * timeLeft / period);
-        amountOut = uint112(uint256(amountOut) * timeLeft / period);
+            uint256 timeLeft = expiration - block.timestamp;
+            amountIn = amountIn * timeLeft / period;
+            amountOut = amountOut * timeLeft / period;
+        }
     }
 }
