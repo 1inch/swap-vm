@@ -96,7 +96,6 @@ library Decay {
     }
 }
 
-
 /// @dev Packed resistance created by one swap direction:
 ///  `uint112 amountIn | uint112 amountOut | uint32 ts`.
 ///  The opposite direction adds `amountOut` to its virtual input balance and subtracts
