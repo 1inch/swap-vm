@@ -13,16 +13,15 @@ import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
-/// @notice Decay prevents the reverse-swap price from updating immediately.
-///  It spreads the swap amount over `period`, which shrinks the arbitrage window.
+/// @notice Decay prevents the reverse-swap price from updating immediately
+///   It spreads the swap amount over `period`, releasing liquidity to market over time
+/// @dev Encoding: [uint16 period]
+/// @dev Expected to run no more than once per strategy, the first instance writes storage
 ///
 /// @dev Example: after A → B, a B → A swap is filled at a worse price.
-///  Decay stores the swapped amounts and adjusts virtual balances to restore
-///  the price from before that A → B, not the price at which A → B filled.
-///  This can defend against front-running and sandwich attacks.
-///
-/// @dev Encoding: [uint16 period]
-/// @dev Expected to run no more than once per strategy; the first instance writes storage.
+///   Decay stores the swapped amounts and adjusts virtual balances to restore
+///   the price from before that A → B, not the price at which A → B filled.
+///   This can defend against front-running and sandwich attacks.
 library Decay {
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -43,6 +42,7 @@ library Decay {
 
     function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
         require(period > 0, DecayPeriodMustBeNonZero());
+
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(period, 2);
         ptrStart.patchLength(ptr);
@@ -58,7 +58,7 @@ library Decay {
     }
 
     struct Storage {
-        mapping(bytes32 orderHash => OrderResistance) orderResistance;
+        mapping(bytes32 orderHash => OrderResistance) resistance;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -70,33 +70,34 @@ library Decay {
         Storage storage $ = store();
         uint16 period = parse(args);
 
-        OrderResistance storage r = $.orderResistance[ctx.query.orderHash];
+        OrderResistance storage r = $.resistance[ctx.query.orderHash];
         bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
 
         (uint256 forwardIn, uint256 forwardOut) = aToB ? r.aToB.remaining(period) : r.bToA.remaining(period);
         (uint256 backwardIn, uint256 backwardOut) = aToB ? r.bToA.remaining(period) : r.aToB.remaining(period);
 
-        // Apply the remaining resistance before pricing.
+        // Apply the remaining resistance before pricing
         ctx.swap.balanceIn += backwardOut;
         ctx.swap.balanceOut -= backwardIn;
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        Resistance forwardUpdated = ResistanceLib.encodeNow(
-            (forwardIn + amountIn).toUint112(), 
+        Resistance forward = ResistanceLib.encodeNow(
+            (forwardIn + amountIn).toUint112(),
             (forwardOut + amountOut).toUint112()
         );
 
         if (!ctx.vm.isStaticContext) {
-            if (aToB) r.aToB = forwardUpdated;
-            else r.bToA = forwardUpdated;
+            if (aToB) r.aToB = forward;
+            else r.bToA = forward;
         }
     }
 }
 
-/// @dev Packed resistance data for swap direction: `uint112 amountIn | uint112 amountOut | uint32 ts`.
-///  The backward direction adds `amountOut` to its virtual balanceIn and subtracts
-///  `amountIn` from its virtual output balance. Both amounts decay linearly from `ts`.
+/// @dev Packed resistance created by one swap direction
+/// @dev Encoding: [uint112 amountIn, uint112 amountOut, uint32 ts]
+///   The opposite direction adds `amountOut` to its virtual input balance and subtracts
+///   `amountIn` from its virtual output balance. Both amounts decay linearly from `ts`
 type Resistance is uint256;
 using ResistanceLib for Resistance;
 
