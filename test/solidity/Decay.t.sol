@@ -5,6 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
@@ -131,6 +132,7 @@ contract DecayTest is Test, OpcodesDebug {
         return (order, signature);
     }
 
+
     function executeSwap(
         address trader,
         ISwapVM.Order memory order,
@@ -230,15 +232,17 @@ contract DecayTest is Test, OpcodesDebug {
             50e18
         );
 
-        // Normal expected without decay: out = 50 * 1100 / (909 + 50) = 57.35...
-        uint256 expectedNormal = (uint256(50e18) * 1100) / 959;
+        // Unpenalized reverse (offsets expired): out = 50 * 1100 / (909.09... + 50) ≈ 57.35
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+        uint256 balanceAAfter = INITIAL_LIQUIDITY + STANDARD_SWAP;
+        uint256 balanceBAfter = INITIAL_LIQUIDITY - outFirst;
+        uint256 expectedNormal = (uint256(50e18) * balanceAAfter) / (balanceBAfter + 50e18);
 
-        // With decay penalty, actual output should be less
+        // Same-block reverse: both offsets apply in full, virtual reserves back to (1000, 1000)
+        uint256 expectedPenalized = (uint256(50e18) * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + 50e18);
+
         assertTrue(outOpp < expectedNormal, "Opposite direction MUST have penalty");
-
-        // Verify penalty is significant (>10%)
-        uint256 penalty = ((expectedNormal - outOpp) * 100) / expectedNormal;
-        assertTrue(penalty > 10, "Penalty should be > 10%");
+        assertApproxEqRel(outOpp, expectedPenalized, TOLERANCE, "Same-block reverse restores virtual (x, y)");
     }
 
     // Test 2: Decay over time
@@ -294,13 +298,121 @@ contract DecayTest is Test, OpcodesDebug {
         assertTrue(rateImmediate < rateHalf, "Rate should improve at half decay");
         assertTrue(rateHalf < rateFull, "Rate should be best after full decay");
 
-        // After full decay, should be close to normal AMM rate
-        // Strategy state has changed, but rate should be significantly better
-        assertTrue(rateFull > rateImmediate * 11 / 10, "Full decay rate should be >10% better than immediate");
+        // After A→B of STANDARD_SWAP: actual (1100, 1000-outFirst), A.asOutput=dx, B.asInput=outFirst.
+        // Reverse B→A of 50 applies remaining: virtualA = 1100 - f*dx, virtualB = 1000 - (1-f)*outFirst.
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+        uint256 reverseIn = 50e18;
+
+        // Immediate (f=1): virtual reserves back to (1000, 1000)
+        uint256 expectedImmediate = (reverseIn * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + reverseIn);
+
+        // Half (f=1/2): virtualA = 1050, virtualB = 1000 - outFirst/2
+        uint256 expectedHalf = (reverseIn * (INITIAL_LIQUIDITY + STANDARD_SWAP / 2))
+            / (INITIAL_LIQUIDITY - outFirst / 2 + reverseIn);
+
+        // Full (f=0): offsets expired, plain AMM on actual reserves
+        uint256 expectedFull = (reverseIn * (INITIAL_LIQUIDITY + STANDARD_SWAP))
+            / (INITIAL_LIQUIDITY - outFirst + reverseIn);
+
+        assertApproxEqRel(outImmediate, expectedImmediate, TOLERANCE, "Immediate reverse restores virtual (x, y)");
+        assertApproxEqRel(outHalf, expectedHalf, TOLERANCE, "Half decay applies half of both offsets");
+        assertApproxEqRel(outFull, expectedFull, TOLERANCE, "Full decay should restore the unpenalized AMM rate");
+    }
+
+    function test_Decay_OppositeDirectionDoesNotRestartDecay() public {
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
+        uint256 reverseIn = 50e18;
+        uint256 outFirst = (STANDARD_SWAP * INITIAL_LIQUIDITY) / (INITIAL_LIQUIDITY + STANDARD_SWAP);
+
+        executeSwap(trader1, order, signature, address(tokenA), address(tokenB), STANDARD_SWAP);
+
+        vm.warp(block.timestamp + DECAY_PERIOD / 2);
+
+        uint256 remDx = STANDARD_SWAP * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 remDy = outFirst * (DECAY_PERIOD / 2) / DECAY_PERIOD;
+        uint256 virtualA1 = INITIAL_LIQUIDITY + STANDARD_SWAP - remDx;
+        uint256 virtualB1 = INITIAL_LIQUIDITY - outFirst + remDy;
+        uint256 expectedRev1 = (reverseIn * virtualA1) / (virtualB1 + reverseIn);
+
+        (, uint256 outRev1) = executeSwap(
+            trader2, order, signature, address(tokenB), address(tokenA), reverseIn
+        );
+        assertApproxEqRel(outRev1, expectedRev1, TOLERANCE, "Half-decay reverse applies remaining, not raw leftover");
+
+        uint256 balanceA = INITIAL_LIQUIDITY + STANDARD_SWAP - outRev1;
+        uint256 balanceB = INITIAL_LIQUIDITY - outFirst + reverseIn;
+
+        vm.warp(block.timestamp + DECAY_PERIOD / 2);
+
+        // The original A→B resistance expires at t0 + period despite the intermediate B→A swap.
+        uint256 expectedRev2 = (reverseIn * balanceA) / (balanceB + reverseIn);
+
+        (, uint256 outRev2) = executeSwap(
+            trader1, order, signature, address(tokenB), address(tokenA), reverseIn
+        );
+        assertApproxEqRel(
+            outRev2,
+            expectedRev2,
+            TOLERANCE,
+            "Opposite-direction swaps must not restart decay"
+        );
+    }
+
+    function test_MEVSandwichProtection_SmallFrontRun() public {
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
+        uint256 mevInitialBalance = TokenMock(tokenA).balanceOf(mevBot);
+
+        // MEV Bot front-runs with small A->B swap (50e18)
+        (uint256 mevIn1, uint256 mevOut1) = executeSwap(
+            mevBot,
+            order,
+            signature,
+            address(tokenA),
+            address(tokenB),
+            50e18 // small front-run
+        );
+
+        // Victim swaps A->B (same direction, no penalty, 200e18)
+        (, uint256 victimOut) = executeSwap(
+            trader1,
+            order,
+            signature,
+            address(tokenA),
+            address(tokenB),
+            200e18
+        );
+
+        // Verify victim gets reasonable rate (no penalty for same direction)
+        // After 50e18 swap strategy is: 1050:952.
+        // After 200e18 swap strategy is: 1250:800
+        uint256 expectedVictimOut = (uint256(200e18) * 870) / 1150;
+        assertApproxEqRel(victimOut, expectedVictimOut, TOLERANCE * 2, "Victim should get normal rate");
+
+        // MEV Bot back-runs with B->A (opposite direction, PENALIZED)
+        executeSwap(
+            mevBot,
+            order,
+            signature,
+            address(tokenB),
+            address(tokenA),
+            mevOut1 // Try to swap back all B
+        );
+
+        uint256 mevFinalBalance = TokenMock(tokenA).balanceOf(mevBot);
+
+        // MEV Bot MUST lose money
+        assertTrue(mevFinalBalance < mevInitialBalance, "MEV bot MUST lose money on sandwich");
+
+        // Calculate loss
+        uint256 loss = mevInitialBalance - mevFinalBalance;
+        uint256 lossPercent = (loss * 100) / mevIn1;
+
+        // Loss should be significant
+        assertTrue(lossPercent > 5, "MEV loss should be > 5%");
     }
 
     // Test 3: MEV Protection (Sandwich Attack)
-    function test_MEVSandwichProtection() public {
+    function test_MEVSandwichProtection_LargeFrontRun() public {
         (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder();
 
         uint256 mevInitialBalance = TokenMock(tokenA).balanceOf(mevBot);
@@ -354,22 +466,12 @@ contract DecayTest is Test, OpcodesDebug {
         assertTrue(lossPercent > 5, "MEV loss should be > 5%");
     }
 
-    /**
-     * Test Decay with a zero period applies no penalty and does not revert.
-     * With period 0 an offset expires in the block it is written, so `calcOffsetNow` must
-     * take its early return instead of falling through and dividing by the period.
-     */
+    function buildDecay(uint16 period) external pure {
+        Decay.build(period);
+    }
+
     function test_Decay_ZeroPeriod() public {
-        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder(0);
-
-        // First swap A->B writes an offset stamped with the current block timestamp.
-        executeSwap(trader1, order, signature, address(tokenA), address(tokenB), STANDARD_SWAP);
-
-        // Counter-swap B->A in the same block, so expiration == ts == block.timestamp.
-        (, uint256 outOpp) = executeSwap(trader2, order, signature, address(tokenB), address(tokenA), 50e18);
-
-        // Normal expected without decay: out = 50 * 1100 / (909 + 50) = 57.35...
-        uint256 expectedNormal = (uint256(50e18) * 1100) / 959;
-        assertApproxEqRel(outOpp, expectedNormal, TOLERANCE, "Zero period must apply no penalty");
+        vm.expectRevert(Decay.DecayPeriodMustBeNonZero.selector);
+        this.buildDecay(0);
     }
 }
