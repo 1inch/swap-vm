@@ -471,7 +471,7 @@ contract DecayTest is Test, OpcodesDebug {
     }
 
     function test_Decay_ZeroPeriod() public {
-        vm.expectRevert(Decay.PeriodMustBeNonZero.selector);
+        vm.expectRevert(Decay.DecayPeriodMustBeNonZero.selector);
         this.buildDecay(0);
     }
 }
