@@ -60,7 +60,9 @@ library DutchAuctionBalanceIn {
         start = Time.resolve(ctx, start);
 
         uint256 elapsed = block.timestamp - start;
-        uint256 balance = ctx.swap.balanceIn * (BPS + surchargeBps) * uint256(decay).pow(elapsed, ONE) / (ONE * BPS);
+        uint256 factor = (BPS + surchargeBps) * uint256(decay).pow(elapsed, ONE);
+
+        uint256 balance = ctx.swap.balanceIn * factor / (ONE * BPS);
         if (balance <= ctx.swap.balanceIn) return;
 
         ctx.swap.surcharge += balance - ctx.swap.balanceIn;
@@ -115,7 +117,10 @@ library DutchAuctionBalanceOut {
         start = Time.resolve(ctx, start);
 
         uint256 elapsed = block.timestamp - start;
-        uint256 balance = (ctx.swap.balanceOut * BPS * ONE).ceilDiv((BPS + surchargeBps) * uint256(decay).pow(elapsed, ONE));
+        uint256 factor = (BPS + surchargeBps) * uint256(decay).pow(elapsed, ONE);
+        if (factor == 0) return;
+
+        uint256 balance = (ctx.swap.balanceOut * BPS * ONE).ceilDiv(factor);
         if (balance >= ctx.swap.balanceOut) return;
 
         ctx.swap.surcharge += ctx.swap.balanceOut - balance;
