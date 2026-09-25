@@ -203,7 +203,7 @@ contract FeeProtocolCommissionsTest is Test {
     function _order(bool isTokenIn, uint256 count, uint24[10] memory fees, uint256 amountIn, uint256 amountOut) internal view returns (ISwapVM.Order memory) {
         return _createOrder(bytes.concat(
             _feeProtocolProgram(isTokenIn, count, fees),
-            PatchSwapRegisters.build(SwapRegisters({ balanceIn: 0, balanceOut: 0, amountIn: amountIn, amountOut: amountOut }))
+            PatchSwapRegisters.build(SwapRegisters({ balanceIn: 0, balanceOut: 0, amountIn: amountIn, amountOut: amountOut, surcharge: 0 }))
         ));
     }
 

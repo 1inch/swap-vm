@@ -13,12 +13,12 @@ import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenS
 import { StaticBalances } from "../instructions/Balances.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
-import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
-import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../instructions/PiecewiseLinearSurcharge.sol";
 
 contract LimitOpcodes is
     InvalidateBitExternal,
@@ -43,7 +43,8 @@ contract LimitOpcodes is
         else if (opcode == InvalidateTokenOut.opcode.asU8()) InvalidateTokenOut.exec(ctx, args);
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
-        else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceIn.opcode.asU8()) BaseFeeAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == BaseFeeAdjusterBalanceOut.opcode.asU8()) BaseFeeAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeProtocolSurplus.opcode.asU8()) FeeProtocolSurplus.exec(ctx, args);
@@ -51,8 +52,8 @@ contract LimitOpcodes is
         else if (opcode == ValidateSeriesEpoch.opcode.asU8()) ValidateSeriesEpoch.exec(ctx, args);
         else if (opcode == PrivateOrder.opcode.asU8()) PrivateOrder.exec(ctx, args);
         else if (opcode == WhitelistCoequal.opcode.asU8()) WhitelistCoequal.exec(ctx, args);
-        else if (opcode == PiecewiseLinearScaleBalanceIn.opcode.asU8()) PiecewiseLinearScaleBalanceIn.exec(ctx, args);
-        else if (opcode == PiecewiseLinearScaleBalanceOut.opcode.asU8()) PiecewiseLinearScaleBalanceOut.exec(ctx, args);
+        else if (opcode == PiecewiseLinearSurchargeBalanceIn.opcode.asU8()) PiecewiseLinearSurchargeBalanceIn.exec(ctx, args);
+        else if (opcode == PiecewiseLinearSurchargeBalanceOut.opcode.asU8()) PiecewiseLinearSurchargeBalanceOut.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
         else revert UnknownOpcode(opcode);

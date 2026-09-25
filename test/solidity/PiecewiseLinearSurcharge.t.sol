@@ -8,6 +8,8 @@ import { Test, console } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { LimitSwapVMRouterDebug } from "../../contracts/routers/LimitSwapVMRouterDebug.sol";
 import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol";
@@ -16,12 +18,17 @@ import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
-import { PiecewiseLinearScale, PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../contracts/instructions/PiecewiseLinearScale.sol";
+import {
+    PiecewiseLinearSurcharge,
+    PiecewiseLinearSurchargeBalanceIn,
+    PiecewiseLinearSurchargeBalanceOut
+} from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
+/// @title PiecewiseLinearSurcharge tests
+contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
+    using Math for uint256;
 
-/// @title PiecewiseLinearScale tests
-contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
     Aqua public immutable aqua;
     LimitSwapVMRouterDebug public swapVM;
     TokenMock public tokenA;
@@ -52,31 +59,14 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         return bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
             scaleIn
-                ? PiecewiseLinearScaleBalanceIn.build(timestamp, durations, scales)
-                : PiecewiseLinearScaleBalanceOut.build(timestamp, durations, scales),
+                ? PiecewiseLinearSurchargeBalanceIn.build(timestamp, durations, scales)
+                : PiecewiseLinearSurchargeBalanceOut.build(timestamp, durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
 
-    /// @notice Unscale Verification
-    /// @dev The `unscaleValue` MUST return the minimal value scaling which back would give the same scaled result
-    function testFuzz_PiecewiseLinearScale_UnscaleValue(uint256 value, uint24 scale) public pure {
-        value = bound(value, 0, type(uint232).max);
-
-        uint256 unscaled = PiecewiseLinearScale.unscaleValue(value, scale);
-        uint256 scaled = PiecewiseLinearScale.scaleValue(unscaled, scale);
-
-        assertEq(scaled, value);
-
-        if (unscaled > 0) {
-            uint256 scaledLess = PiecewiseLinearScale.scaleValue(unscaled - 1, scale);
-            assertLt(scaledLess, value);
-        }
-    }
-
-    /// @notice Dutch auction via a descending piecewise-linear scale sample
     /// @dev Maker has a limited `makingAmount` of `tokenB` and wishes to sell it for at least `takingAmount` of `tokenA`
-    function testFuzz_PiecewiseLinearScale_DutchExample_MakerExactIn(
+    function testFuzz_PiecewiseLinearSurcharge_DutchExample_MakerExactSell(
         uint256 makingAmount,
         uint256 takingAmount,
         uint8 pointsCountSeed,
@@ -94,34 +84,34 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint40 timestamp = timestampSeed;
         uint256 last = pointsCount - 1;
 
-        scales[0] = type(uint24).max; // Initial scale = 1.0
+        scales[0] = scaleSeed[0];
         for (uint256 i = 1; i < pointsCount; i++) {
             scales[i] = uint24(bound(scaleSeed[i], 0, uint256(scales[i - 1]))); // Descending scales
             durations[i - 1] = uint16(bound(durationSeed[i - 1], 1, type(uint16).max)); // Non-zero durations
         }
+        scales[last] = 0;
 
-        // It is important that `balanceIn` is not `takingAmount` and should be calculated
-        uint256 balanceIn = PiecewiseLinearScale.unscaleValue(takingAmount, scales[last]);
-
-        ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, makingAmount, timestamp, durations, scales, true));
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(takingAmount, makingAmount, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
         bytes memory takerDataExactOut = _buildTakerData(false);
 
         uint256 amountOut;
         uint256 amountIn;
 
-        // At the initial point the whole `makingAmount` sells for exactly `balanceIn`, and one wei less in buys strictly less
+        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[0]);
+
+        // At the initial point the whole `makingAmount` sells for exactly `takingAmount + surcharge`, and one wei less in buys strictly less
         vm.warp(timestamp);
-        (, amountOut,) = swapVM.quote(order, balanceIn, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount + surcharge, takerDataExactIn);
         assertEq(amountOut, makingAmount);
-        (, amountOut,) = swapVM.quote(order, balanceIn - 1, takerDataExactIn);
+        (, amountOut,) = swapVM.quote(order, takingAmount + surcharge - 1, takerDataExactIn);
         assertLt(amountOut, makingAmount);
 
-        // At the initial point the whole `makingAmount` buys for exactly `balanceIn`, and one wei less out requires less or equal in
+        // At the initial point the whole `makingAmount` buys for exactly `takingAmount + surcharge`, and one wei less out requires less or equal in
         (amountIn,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-        assertEq(amountIn, balanceIn);
+        assertEq(amountIn, takingAmount + surcharge);
         (amountIn,,) = swapVM.quote(order, makingAmount - 1, takerDataExactOut);
-        assertLe(amountIn, balanceIn);
+        assertLe(amountIn, takingAmount + surcharge);
 
         // At the final point the whole `makingAmount` sells for exactly `takingAmount`, and one wei less in buys strictly less
         vm.warp(timestamp + _sum(durations, last));
@@ -143,20 +133,22 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-            assertEq(amountInNext, PiecewiseLinearScale.scaleValue(balanceIn, scales[k]));
+            assertEq(amountInNext, takingAmount + PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
             (uint256 amountInMidLeft,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k) + 1) / 2);
             (uint256 amountInMidRight,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-            assertApproxEqAbs((amountInMidLeft + amountInMidRight) / 2, (amountInPast + amountInNext) / 2, (balanceIn >> 24) + 1);
+
+            uint256 midExpected = (amountInPast + amountInNext) / 2;
+            uint256 midFactual = (amountInMidLeft + amountInMidRight) / 2;
+            assertApproxEqAbs(midExpected, midFactual, takingAmount.ceilDiv(1 << 24));
         }
     }
 
-    /// @notice Dutch auction via a ascending piecewise-linear scale sample
-    /// @dev Maker want exact `takingAmount` of `tokenA` and ready to pay `makingAmount` of `tokenB` at max
-    function testFuzz_PiecewiseLinearScale_DutchExample_MakerExactOut(
+    /// @dev Maker want exact `takingAmount` of `tokenA` and ready to pay at most `makingAmount` of `tokenB`
+    function testFuzz_PiecewiseLinearSurcharge_DutchExample_MakerExactBuy(
         uint256 makingAmount,
         uint256 takingAmount,
         uint8 pointsCountSeed,
@@ -174,36 +166,32 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint40 timestamp = timestampSeed;
         uint256 last = pointsCount - 1;
 
-        // Initial scale set so that minimal balanceOut >= 2
-        scales[0] = uint24(bound(scaleSeed[0], (2 * 2 ** 24 + makingAmount - 1) / makingAmount - 1, type(uint24).max));
+        scales[0] = scaleSeed[0];
         for (uint256 i = 1; i < pointsCount; i++) {
-            scales[i] = uint24(bound(scaleSeed[i], uint256(scales[i - 1]), type(uint24).max)); // Ascending scales
+            scales[i] = uint24(bound(scaleSeed[i], 0, uint256(scales[i - 1]))); // Descending scales
             durations[i - 1] = uint16(bound(durationSeed[i - 1], 1, type(uint16).max)); // Non-zero durations
         }
-        scales[last] = type(uint24).max; // Last scale = 1.0
+        scales[last] = 0;
 
-        // Here `balanceOut = makingAmount` with last scale 1.0
         ISwapVM.Order memory order = _buildOrder(_buildProgram(takingAmount, makingAmount, timestamp, durations, scales, false));
         bytes memory takerDataExactIn = _buildTakerData(true);
         bytes memory takerDataExactOut = _buildTakerData(false);
 
         uint256 amountOut;
         uint256 amountIn;
+        uint256 surcharge = PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[0]);
 
-        // The least `balanceOut` with the worst scale
-        uint256 balanceOutInitial = PiecewiseLinearScale.scaleValue(makingAmount, scales[0]);
-
-        // At the initial point the whole `takingAmount` sells for exactly `balanceOutInitial`, and one wei less in sells strictly less
+        // At the initial point the whole `takingAmount` sells for exactly `makingAmount - surcharge`, and one wei less in sells strictly less
         vm.warp(timestamp);
         (, amountOut,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-        assertEq(amountOut, balanceOutInitial);
+        assertEq(amountOut, makingAmount - surcharge);
         (, amountOut,) = swapVM.quote(order, takingAmount - 1, takerDataExactIn);
-        assertLt(amountOut, balanceOutInitial);
+        assertLt(amountOut, makingAmount - surcharge);
 
-        // At the initial point the whole `takingAmount` buys for exactly `balanceOutInitial`, and one wei less out requires less or equal in
-        (amountIn,,) = swapVM.quote(order, balanceOutInitial, takerDataExactOut);
+        // At the initial point the whole `takingAmount` buys for exactly `makingAmount - surcharge`, and one wei less out requires less or equal in
+        (amountIn,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
         assertEq(amountIn, takingAmount);
-        (amountIn,,) = swapVM.quote(order, balanceOutInitial - 1, takerDataExactOut);
+        (amountIn,,) = swapVM.quote(order, makingAmount - surcharge - 1, takerDataExactOut);
         assertLe(amountIn, takingAmount);
 
         // At the final point the whole `takingAmount` sells for exactly `makingAmount`, and one wei less in sells strictly less
@@ -222,30 +210,69 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         for (uint256 k = 1; k < pointsCount; k++) {
             vm.warp(timestamp + _sum(durations, k - 1));
-            (, uint256 amountOutPast,) = swapVM.quote(order, takingAmount, takerDataExactIn);
+            (uint256 amountInPast,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
 
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
-            (, uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-            assertEq(amountOutNext, PiecewiseLinearScale.scaleValue(makingAmount, scales[k]));
+            (,uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
+            assertEq(amountOutNext, makingAmount - PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[k]));
+            (uint256 amountInNext,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
-            (, uint256 amountOutMidLeft,) = swapVM.quote(order, takingAmount, takerDataExactIn);
+            (uint256 amountInMidLeft,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k) + 1) / 2);
-            (, uint256 amountOutMidRight,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-            assertApproxEqAbs((amountOutMidLeft + amountOutMidRight) / 2, (amountOutPast + amountOutNext) / 2, (makingAmount >> 24) + 1);
+            (uint256 amountInMidRight,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
+
+            uint256 midExpected = (amountInPast + amountInNext) / 2;
+            uint256 midFactual = (amountInMidLeft + amountInMidRight) / 2;
+            assertApproxEqAbs(midExpected, midFactual, takingAmount.ceilDiv(1 << 24) + takingAmount.ceilDiv(makingAmount - surcharge));
         }
     }
 
-    function test_PiecewiseLinearScaleBalanceIn_RelativeToOrderAnnouncement() public {
+    function testFuzz_PiecewiseLinearSurcharge_InAndOutQuotesMatch(uint256 balanceIn, uint256 balanceOut) public {
+        balanceIn = bound(balanceIn, 4, MAX_AMOUNT);
+        balanceOut = bound(balanceOut, 4, MAX_AMOUNT);
+        uint40 timestamp = 1000;
+
+        uint16[] memory durations = new uint16[](2);
+        durations[0] = 100;
+        durations[1] = 100;
+
+        uint24[] memory scales = new uint24[](3);
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(uint256(10) * (1 << 24) / 100);
+        scales[2] = 0;
+
+        ISwapVM.Order memory orderIn = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
+        ISwapVM.Order memory orderOut = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, false));
+
+        bytes memory takerDataExactIn = _buildTakerData(true);
+        bytes memory takerDataExactOut = _buildTakerData(false);
+
+        uint256[7] memory offsets = [uint256(0), 12, 13, 25, 100, 175, 200];
+        for (uint256 i; i < offsets.length; i++) {
+            vm.warp(uint256(timestamp) + offsets[i]);
+
+            (uint256 amountInFromInOrder,,) = swapVM.quote(orderIn, balanceOut / 2, takerDataExactOut);
+            (uint256 amountInFromOutOrder,,) = swapVM.quote(orderOut, balanceOut / 2, takerDataExactOut);
+
+            (,uint256 amountOutFromInOrder,) = swapVM.quote(orderIn, balanceIn / 2, takerDataExactIn);
+            (,uint256 amountOutFromOutOrder,) = swapVM.quote(orderOut, balanceIn / 2, takerDataExactIn);
+
+            assertApproxEqAbs(amountInFromInOrder, amountInFromOutOrder, balanceIn.ceilDiv(balanceOut));
+            assertApproxEqAbs(amountOutFromInOrder, amountOutFromOutOrder, balanceOut.ceilDiv(balanceIn));
+        }
+    }
+
+    function test_PiecewiseLinearSurchargeBalanceIn_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         maker = vm.addr(MAKER_PRIVATE_KEY);
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 100;
         scales[0] = type(uint24).max;
-        scales[1] = uint24(2 ** 23 - 1);
+        scales[1] = uint24(2 ** 23);
 
         ISwapVM.Order memory order = _buildOrder(
             _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, true)
@@ -262,21 +289,21 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         vm.warp(announcedAt);
         (, uint256 amountOut,) = swapVM.swap(order, 3e18, takerData);
-        assertEq(amountOut, 3e18);
+        assertEq(amountOut, 1_500_000_044_703_484_913);
 
         vm.warp(announcedAt + 50);
         (, amountOut,) = swapVM.quote(order, 3e18, takerData);
-        assertEq(amountOut, 4e18);
+        assertEq(amountOut, 1_714_285_772_673_939_727);
     }
 
-    function test_PiecewiseLinearScaleBalanceOut_RelativeToOrderAnnouncement() public {
+    function test_PiecewiseLinearSurchargeBalanceOut_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         maker = vm.addr(MAKER_PRIVATE_KEY);
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 100;
-        scales[0] = uint24(2 ** 23 - 1);
-        scales[1] = type(uint24).max;
+        scales[0] = type(uint24).max;
+        scales[1] = uint24(2 ** 23);
 
         ISwapVM.Order memory order = _buildOrder(
             _buildProgram(4e18, 4e18, Time.RELATIVE_TIME_FLAG, durations, scales, false)
@@ -287,20 +314,20 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
 
         tokenA.mint(address(this), 4e18);
         tokenA.approve(address(swapVM), type(uint256).max);
-        tokenB.mint(maker, 2e18);
+        tokenB.mint(maker, 3e18);
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
         vm.warp(announcedAt);
         (, uint256 amountOut,) = swapVM.swap(order, 4e18, takerData);
-        assertEq(amountOut, 2e18);
+        assertEq(amountOut, 2_000_000_059_604_646_552);
 
         vm.warp(announcedAt + 50);
         (, amountOut,) = swapVM.quote(order, 4e18, takerData);
-        assertEq(amountOut, 3e18);
+        assertEq(amountOut, 2_285_714_363_565_252_971);
     }
 
-    function test_PiecewiseLinearScale_GasBenchmark() public {
+    function test_PiecewiseLinearSurcharge_GasBenchmark() public {
         // Warmup account
         address(swapVM).staticcall("");
 
@@ -340,18 +367,18 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         }
     }
 
-    function test_PiecewiseLinearScale_Basic() public {
+    function test_PiecewiseLinearSurcharge_Basic() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
         uint16[] memory durations = new uint16[](5);
         uint24[] memory scales = new uint24[](6);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 100;  scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 200;  scales[2] = uint24(2 ** 20 * 5 - 1);
-            durations[2] = 100;  scales[3] = uint24(2 ** 22 - 1);
-            durations[3] = 0;    scales[4] = uint24(2 ** 21 - 1);
-            durations[4] = 100;  scales[5] = uint24(2 ** 20 * 3 - 1);
+            durations[0] = 100;  scales[1] = uint24(2 ** 23);
+            durations[1] = 200;  scales[2] = uint24(2 ** 20 * 5);
+            durations[2] = 100;  scales[3] = uint24(2 ** 22);
+            durations[3] = 0;    scales[4] = uint24(2 ** 21);
+            durations[4] = 100;  scales[5] = uint24(2 ** 20 * 3);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -363,118 +390,118 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_201_007);
+            assertEq(amountOutCalc, 20_050_126);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 24_874_999);
+            assertEq(amountInCalc, 49_874_998);
         }
         {
             vm.warp(1050);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 53_333_333);
+            assertEq(amountOutCalc, 22_857_143);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 18_750_000);
+            assertEq(amountInCalc, 43_749_999);
         }
         {
             vm.warp(1100);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
         {
             vm.warp(1101);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_150_285);
+            assertEq(amountOutCalc, 26_683_344);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_476_562);
+            assertEq(amountInCalc, 37_476_562);
         }
         {
             vm.warp(1270);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 117_431_196);
+            assertEq(amountOutCalc, 29_836_830);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 8_515_625);
+            assertEq(amountInCalc, 33_515_625);
         }
         {
             vm.warp(1300);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 128_000_000);
+            assertEq(amountOutCalc, 30_476_190);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 7_812_500);
+            assertEq(amountInCalc, 32_812_500);
         }
         {
             vm.warp(1301);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 128_256_518);
+            assertEq(amountOutCalc, 30_490_710);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 7_796_875);
+            assertEq(amountInCalc, 32_796_875);
         }
         {
             vm.warp(1350);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 142_222_222);
+            assertEq(amountOutCalc, 31_219_512);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 7_031_250);
+            assertEq(amountInCalc, 32_031_250);
         }
         {
             vm.warp(1400);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
         {
             vm.warp(1425);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 284_444_444);
+            assertEq(amountOutCalc, 35_068_493);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_515_625);
+            assertEq(amountInCalc, 28_515_625);
         }
         {
             vm.warp(1450);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 256_000_000);
+            assertEq(amountOutCalc, 34_594_594);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_906_250);
+            assertEq(amountInCalc, 28_906_250);
         }
         {
             vm.warp(1500);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 213_333_333);
+            assertEq(amountOutCalc, 33_684_210);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 4_687_500);
+            assertEq(amountInCalc, 29_687_500);
         }
         {
             vm.warp(1501);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 213_333_333);
+            assertEq(amountOutCalc, 33_684_210);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 4_687_500);
+            assertEq(amountInCalc, 29_687_500);
         }
         {
             vm.warp(100_000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 213_333_333);
+            assertEq(amountOutCalc, 33_684_210);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 4_687_500);
+            assertEq(amountInCalc, 29_687_500);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_Single() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_Single() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -484,7 +511,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 0;    scales[1] = uint24(2 ** 23 - 1);
+            durations[0] = 0;    scales[1] = uint24(2 ** 23);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -493,34 +520,34 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_Double() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_Double() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -530,8 +557,8 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](2);
         uint24[] memory scales = new uint24[](3);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 0;    scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 0;    scales[2] = uint24(2 ** 22 - 1);
+            durations[0] = 0;    scales[1] = uint24(2 ** 23);
+            durations[1] = 0;    scales[2] = uint24(2 ** 22);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -540,34 +567,34 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_SingleWrapped() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_SingleWrapped() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -577,9 +604,9 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](3);
         uint24[] memory scales = new uint24[](4);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 2;    scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 0;    scales[2] = uint24(2 ** 22 - 1);
-            durations[2] = 2;    scales[3] = uint24(2 ** 21 - 1);
+            durations[0] = 2;    scales[1] = uint24(2 ** 23);
+            durations[1] = 0;    scales[2] = uint24(2 ** 22);
+            durations[2] = 2;    scales[3] = uint24(2 ** 21);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -588,55 +615,55 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 53_333_333);
+            assertEq(amountOutCalc, 22_857_143);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 18_750_000);
+            assertEq(amountInCalc, 43_749_999);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
         {
             vm.warp(1003);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 213_333_333);
+            assertEq(amountOutCalc, 33_684_210);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 4_687_500);
+            assertEq(amountInCalc, 29_687_500);
         }
         {
             vm.warp(1004);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 320_000_000);
+            assertEq(amountOutCalc, 35_555_555);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_125_000);
+            assertEq(amountInCalc, 28_125_000);
         }
         {
             vm.warp(1005);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 320_000_000);
+            assertEq(amountOutCalc, 35_555_555);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_125_000);
+            assertEq(amountInCalc, 28_125_000);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_DoubleWrapped() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_DoubleWrapped() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -646,10 +673,10 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](4);
         uint24[] memory scales = new uint24[](5);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 2;    scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 0;    scales[2] = uint24(2 ** 21 * 3 - 1);
-            durations[2] = 0;    scales[3] = uint24(2 ** 22 - 1);
-            durations[3] = 2;    scales[4] = uint24(2 ** 21 - 1);
+            durations[0] = 2;    scales[1] = uint24(2 ** 23);
+            durations[1] = 0;    scales[2] = uint24(2 ** 21 * 3);
+            durations[2] = 0;    scales[3] = uint24(2 ** 22);
+            durations[3] = 2;    scales[4] = uint24(2 ** 21);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -658,55 +685,55 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 53_333_333);
+            assertEq(amountOutCalc, 22_857_143);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 18_750_000);
+            assertEq(amountInCalc, 43_749_999);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
         {
             vm.warp(1003);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 213_333_333);
+            assertEq(amountOutCalc, 33_684_210);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 4_687_500);
+            assertEq(amountInCalc, 29_687_500);
         }
         {
             vm.warp(1004);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 320_000_000);
+            assertEq(amountOutCalc, 35_555_555);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_125_000);
+            assertEq(amountInCalc, 28_125_000);
         }
         {
             vm.warp(1005);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 320_000_000);
+            assertEq(amountOutCalc, 35_555_555);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 3_125_000);
+            assertEq(amountInCalc, 28_125_000);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_SingleFirst() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_SingleFirst() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -716,8 +743,8 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](2);
         uint24[] memory scales = new uint24[](3);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 0;    scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 2;    scales[2] = uint24(2 ** 22 - 1);
+            durations[0] = 0;    scales[1] = uint24(2 ** 23);
+            durations[1] = 2;    scales[2] = uint24(2 ** 22);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -726,41 +753,41 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 106_666_666);
+            assertEq(amountOutCalc, 29_090_909);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 9_375_000);
+            assertEq(amountInCalc, 34_375_000);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
         {
             vm.warp(1003);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
     }
 
-    function test_PiecewiseLinearScale_ZeroDuration_SingleLast() public {
+    function test_PiecewiseLinearSurcharge_ZeroDuration_SingleLast() public {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 4000e18;
 
@@ -770,8 +797,8 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         uint16[] memory durations = new uint16[](2);
         uint24[] memory scales = new uint24[](3);
         uint40 timestamp = 1000; scales[0] = uint24(2 ** 24 - 1);
-            durations[0] = 2;    scales[1] = uint24(2 ** 23 - 1);
-            durations[1] = 0;    scales[2] = uint24(2 ** 22 - 1);
+            durations[0] = 2;    scales[1] = uint24(2 ** 23);
+            durations[1] = 0;    scales[2] = uint24(2 ** 22);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(balanceIn, balanceOut, timestamp, durations, scales, true));
         bytes memory takerDataExactIn = _buildTakerData(true);
@@ -780,44 +807,44 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
         {
             vm.warp(999);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1000);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 40_000_000);
+            assertEq(amountOutCalc, 20_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 25_000_000);
+            assertEq(amountInCalc, 49_999_999);
         }
         {
             vm.warp(1001);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 53_333_333);
+            assertEq(amountOutCalc, 22_857_143);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 18_750_000);
+            assertEq(amountInCalc, 43_749_999);
         }
         {
             vm.warp(1002);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 80_000_000);
+            assertEq(amountOutCalc, 26_666_666);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 12_500_000);
+            assertEq(amountInCalc, 37_500_000);
         }
         {
             vm.warp(1003);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
         {
             vm.warp(1003);
             (, uint256 amountOutCalc,) = swapVM.quote(order, amountIn, takerDataExactIn);
-            assertEq(amountOutCalc, 160_000_000);
+            assertEq(amountOutCalc, 32_000_000);
             (uint256 amountInCalc,,) = swapVM.quote(order, amountOut, takerDataExactOut);
-            assertEq(amountInCalc, 6_250_000);
+            assertEq(amountInCalc, 31_250_000);
         }
     }
 
@@ -862,7 +889,7 @@ contract PiecewiseLinearScaleTest is Test, LimitOpcodesDebug {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
-            allowPartialFill: false,
+            allowPartialFill: true,
             usePermit2: false,
             threshold: "",
             to: address(this),

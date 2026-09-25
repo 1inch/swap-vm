@@ -52,7 +52,8 @@ contract DebugTest is Test {
                 balanceIn: 123e18,
                 balanceOut: 98e18,
                 amountIn: AMOUNT,
-                amountOut: AMOUNT
+                amountOut: AMOUNT,
+                surcharge: 17e18
             })),
             PrintSwapRegisters.build(),
             PrintSwapQuery.build(),

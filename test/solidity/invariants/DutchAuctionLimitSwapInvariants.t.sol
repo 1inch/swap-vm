@@ -89,13 +89,13 @@ contract DutchAuctionLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
      */
     function _testDutchAuctionWithDecay(uint64 decayFactor, bool useIn) private {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
+        uint24 surchargeBps = 0.5e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             useIn ?
-                DutchAuctionBalanceIn.build(startTime, duration, decayFactor) :
-                DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+                DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps) :
+                DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -108,7 +108,7 @@ contract DutchAuctionLimitSwapInvariants is Test, OpcodesDebug, CoreInvariants {
         timeOffsets[0] = 0;     // Start
         timeOffsets[1] = 60;    // 1 minute
         timeOffsets[2] = 150;   // 2.5 minutes
-        timeOffsets[3] = 299;   // Just before expiry
+        timeOffsets[3] = 299;
 
         for (uint256 i = 0; i < timeOffsets.length; i++) {
             // Save snapshot before time manipulation

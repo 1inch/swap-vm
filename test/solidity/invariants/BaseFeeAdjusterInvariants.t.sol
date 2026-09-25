@@ -15,17 +15,17 @@ import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../../contracts/opcodes/OpcodesDebug.sol";
-import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
+import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { BaseFeeAdjuster } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { PiecewiseLinearSurchargeBalanceIn } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
 /**
  * @title BaseFeeAdjusterInvariants
- * @notice Tests invariants for BaseFeeAdjuster instruction with LimitSwap
- * @dev Tests gas-based price adjustments applied to limit orders
+ * @notice Tests invariants for balance-based gas compensation with LimitSwap
  */
 contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
     Aqua public immutable aqua;
@@ -46,7 +46,6 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
-        // Setup tokens and approvals for maker
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 2e30);
         vm.prank(maker);
@@ -54,208 +53,127 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
-        // Setup approvals for taker (test contract)
         tokenA.approve(address(swapVM), type(uint256).max);
         tokenB.approve(address(swapVM), type(uint256).max);
     }
 
-    /**
-     * @notice Implementation of _executeSwap for real swap execution
-     */
     function _executeSwap(
         SwapVM _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
-        address tokenOut,
+        address,
         uint256 amount,
         bytes memory takerData
     ) internal override returns (uint256 amountIn, uint256 amountOut) {
-        // Mint the input tokens
         TokenMock(tokenIn).mint(taker, amount * 10);
-
-        // Execute the swap
-        (uint256 actualIn, uint256 actualOut,) = _swapVM.swap(
-            order,
-            amount,
-            takerData
-        );
-
-        // Verify the swap consumed the expected input amount
-
-
-        return (actualIn, actualOut);
+        (amountIn, amountOut,) = _swapVM.swap(order, amount, takerData);
     }
 
     /**
-     * Test BaseFeeAdjuster invariants with low gas price
+     * Test BaseFeeAdjuster invariants at the base gas price.
      */
     function test_BaseFeeAdjuster_LowGas() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
-        );
-
-        _testInvariants(bytecode, 20 gwei, false, false); // Base gas price
+        bytes memory bytecode = _buildBalanceInProgram(20 gwei, 3000e18, 150_000);
+        _testInvariants(bytecode, 20 gwei);
     }
 
     /**
-     * Test BaseFeeAdjuster invariants with moderate gas price
+     * Test BaseFeeAdjuster invariants at a moderate gas price.
      */
     function test_BaseFeeAdjuster_ModerateGas() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
-        );
-
-        // TODO: research invariant behavior at moderate gas prices
-        _testInvariants(bytecode, 100 gwei, true, true); // 5x base gas
+        bytes memory bytecode = _buildBalanceInProgram(20 gwei, 3000e18, 150_000);
+        _testInvariants(bytecode, 100 gwei);
     }
 
     /**
-     * Test BaseFeeAdjuster invariants with high gas price
+     * Test BaseFeeAdjuster invariants at a high gas price.
      */
     function test_BaseFeeAdjuster_HighGas() public {
-        uint64 baseGasPrice = 30 gwei;
-        uint96 ethToTokenPrice = 2500e18;
-        uint24 gasAmount = 200_000;
-        uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1e30, 2e30),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
-        );
-
-        // TODO: research invariant behavior at high gas prices
-        _testInvariants(bytecode, 300 gwei, true, true); // 10x base gas
+        bytes memory bytecode = _buildBalanceInProgram(30 gwei, 2500e18, 200_000);
+        _testInvariants(bytecode, 300 gwei);
     }
 
     /**
-     * Test BaseFeeAdjuster with different ETH prices
+     * Test BaseFeeAdjuster with different ETH prices.
      */
     function test_BaseFeeAdjuster_DifferentEthPrices() public {
-        uint64 baseGasPrice = 25 gwei;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 98e16; // 0.98 = 2% max adjustment
-
         uint96[] memory ethPrices = new uint96[](3);
-        ethPrices[0] = 1500e18;  // Low ETH price
-        ethPrices[1] = 3000e18;  // Medium ETH price
-        ethPrices[2] = 5000e18;  // High ETH price
+        ethPrices[0] = 1500e18;
+        ethPrices[1] = 3000e18;
+        ethPrices[2] = 5000e18;
 
         for (uint256 i = 0; i < ethPrices.length; i++) {
-            bytes memory bytecode = bytes.concat(
-                StaticBalances.build(1e30, 2e30),
-                LimitSwap.build(address(tokenA), address(tokenB)),
-                BaseFeeAdjuster.build(baseGasPrice, ethPrices[i], gasAmount, 1e18 - maxPriceDecay)
-            );
-
-            // TODO: Analyze invariant behavior across different ETH prices
-            _testInvariants(bytecode, 150 gwei, true, true);
+            _testInvariants(_buildBalanceInProgram(25 gwei, ethPrices[i], 150_000), 150 gwei);
         }
     }
 
     /**
-     * Test BaseFeeAdjuster with DutchAuction on input
+     * Test BaseFeeAdjusterBalanceIn with DutchAuctionBalanceIn.
      */
     function test_BaseFeeAdjuster_WithDutchAuctionIn() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
-        uint64 decayFactor = 0.99e18;
-
-        uint64 baseGasPrice = 25 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16;
-
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            DutchAuctionBalanceIn.build(startTime, 0.999e18, 0.5e7),
+            BaseFeeAdjusterBalanceIn.build(25 gwei, 3000e18, 150_000),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        // Test at mid-auction with high gas
         vm.warp(startTime + 150);
-        // TODO: Analyze invariant behavior with DutchAuction and gas adjustment
-        _testInvariants(bytecode, 200 gwei, true, true);
+        _testInvariants(bytecode, 200 gwei);
     }
 
     /**
-     * Test BaseFeeAdjuster with DutchAuction on output
+     * Test BaseFeeAdjusterBalanceOut with DutchAuctionBalanceOut.
      */
     function test_BaseFeeAdjuster_WithDutchAuctionOut() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
-        uint64 decayFactor = 0.99e18;
-
-        uint64 baseGasPrice = 25 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16;
-
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
-            LimitSwap.build(address(tokenA), address(tokenB)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            DutchAuctionBalanceOut.build(startTime, 0.999e18, 0.5e7),
+            BaseFeeAdjusterBalanceOut.build(25 gwei, 3000e18, 150_000),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
 
-        // Test at mid-auction with high gas
         vm.warp(startTime + 150);
-        // TODO: Analyze invariant behavior with DutchAuction output and gas adjustment
-        _testInvariants(bytecode, 200 gwei, true, true);
+        _testInvariants(bytecode, 200 gwei);
+    }
+
+    function _buildBalanceInProgram(
+        uint64 baseGasPrice,
+        uint96 ethPrice,
+        uint24 gasAmount
+    ) private view returns (bytes memory) {
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 1;
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(1 << 22);
+
+        return bytes.concat(
+            StaticBalances.build(1e30, 2e30),
+            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethPrice, gasAmount),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
     }
 
     /**
-     * Helper to test invariants for a given bytecode and gas price
-     *
-     * @notice BaseFeeAdjuster breaks symmetry and additivity invariants due to its asymmetric
-     * application of gas cost adjustments:
-     * - In exactIn mode: it increases amountOut based on (extraCostInToken1 / amountOut)
-     * - In exactOut mode: it decreases amountIn based on (extraCostInToken1 / amountIn)
-     *
-     * This asymmetry means that:
-     * 1. exactIn(X) -> Y, then exactOut(Y) -> X' where X' ≠ X (breaks symmetry)
-     * 2. The sum of partial swaps differs from a full swap (breaks additivity)
-     *
-     * The percentage adjustments are calculated against different bases (amountOut vs amountIn),
-     * causing the invariant violations.
+     * The adjuster changes virtual balances before LimitSwap, so linear-rate
+     * symmetry and additivity remain valid at every gas price.
      */
-    function _testInvariants(bytes memory bytecode, uint256 gasPrice, bool skipAdditivity, bool skipSymmetry) private {
+    function _testInvariants(bytes memory bytecode, uint256 gasPrice) private {
         ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Set gas price
         vm.fee(gasPrice);
 
-        // Use smaller test amounts to avoid overflow with gas adjustments
         uint256[] memory testAmounts = new uint256[](3);
         testAmounts[0] = 1000e18;
         testAmounts[1] = 5000e18;
         testAmounts[2] = 10000e18;
 
-        InvariantConfig memory config = createInvariantConfig(testAmounts, 100); // 100 wei tolerance
+        InvariantConfig memory config = createInvariantConfig(testAmounts, 100);
         config.exactInTakerData = _signAndPackTakerData(order, true, 0);
         config.exactOutTakerData = _signAndPackTakerData(order, false, type(uint256).max);
-
-        // Skip invariants based on parameters
-        // TODO: Research if additivity can be preserved for gas-adjusted orders
-        config.skipAdditivity = skipAdditivity;
-
-        // TODO: Research if symmetry can be restored despite asymmetric gas adjustments
-        config.skipSymmetry = skipSymmetry;
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -266,7 +184,6 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         );
     }
 
-    // Helper functions
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
@@ -301,7 +218,6 @@ contract BaseFeeAdjusterInvariants is Test, OpcodesDebug, CoreInvariants {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({

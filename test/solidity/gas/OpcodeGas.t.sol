@@ -15,13 +15,13 @@ import { LimitSwap, LimitSwapFullAmount } from "../../../contracts/instructions/
 import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
-import { BaseFeeAdjuster } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
 import { RequireMinRate, AdjustMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
-import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../../contracts/instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
@@ -105,14 +105,15 @@ contract OpcodeGas is Test {
         _snapshot("FeeFlatOut", FeeFlatOut.build(0.10e7));
         _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
         _snapshot("DynamicBalances", DynamicBalances.build(AMOUNT, AMOUNT));
-        _snapshot("DutchAuctionBalanceIn", DutchAuctionBalanceIn.build(uint40(block.timestamp), 300, 0.5e18));
-        _snapshot("DutchAuctionBalanceOut", DutchAuctionBalanceOut.build(uint40(block.timestamp), 300, 0.5e18));
-        _snapshot("PiecewiseLinearScaleBalanceIn", PiecewiseLinearScaleBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
-        _snapshot("PiecewiseLinearScaleBalanceOut", PiecewiseLinearScaleBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("DutchAuctionBalanceIn", DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("DutchAuctionBalanceOut", DutchAuctionBalanceOut.build(uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("PiecewiseLinearSurchargeBalanceIn", PiecewiseLinearSurchargeBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("PiecewiseLinearSurchargeBalanceOut", PiecewiseLinearSurchargeBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
         _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
-        _snapshot("BaseFeeAdjuster", BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18));
+        _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
+        _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 

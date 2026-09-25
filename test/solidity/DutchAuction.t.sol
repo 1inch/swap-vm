@@ -6,6 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
@@ -28,6 +29,8 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/i
  * @dev Tests time-based price decay behavior
  */
 contract DutchAuctionTest is Test, OpcodesDebug {
+    using Math for uint256;
+
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
@@ -91,63 +94,61 @@ contract DutchAuctionTest is Test, OpcodesDebug {
     }
 
     /**
-     * Test Dutch auction out expiry
+     * Test Dutch auction out stops at the order balance
      */
-    function test_DutchAuctionOut_Expiry() public {
+    function test_DutchAuctionOut_CapsAtBaseBalance() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
-        uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
+        uint24 surchargeBps = 0.5e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        // Warp past expiry
-        vm.warp(startTime + duration + 1);
+        vm.warp(startTime + 300);
 
-        // Should revert on actual swap execution
         TokenMock(address(tokenA)).mint(taker, 10e18);
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
-        swapVM.swap(
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
             order,
             10e18,
             exactInData
         );
+        assertEq(amountIn, 10e18);
+        assertEq(amountOut, 20e18);
     }
 
     /**
-     * Test Dutch auction in expiry
+     * Test Dutch auction in stops at the order balance
      */
-    function test_DutchAuctionIn_Expiry() public {
+    function test_DutchAuctionIn_CapsAtBaseBalance() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
-        uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
+        uint24 surchargeBps = 0.5e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        // Warp past expiry
-        vm.warp(startTime + duration + 1);
+        vm.warp(startTime + 300);
 
-        // Should revert on actual swap execution
         TokenMock(address(tokenA)).mint(taker, 10e18);
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionExpired.selector, block.timestamp, startTime + duration)); // Dutch auction should revert when expired
-        swapVM.swap(
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(
             order,
             10e18,
             exactInData
         );
+        assertEq(amountIn, 10e18);
+        assertEq(amountOut, 20e18);
     }
 
     /**
@@ -155,12 +156,12 @@ contract DutchAuctionTest is Test, OpcodesDebug {
      */
     function test_DutchAuctionIn_ExactDecayedAmount() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
-        uint16 duration = 300; // 5 minutes
-        uint64 decayFactor = 0.5e18; // 50% loss every second
+        uint64 decayFactor = 0.75e18; // 25% loss every second
+        uint24 surchargeBps = 0.6e7; // 60% initial surcharge
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -175,23 +176,21 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         TokenMock(address(tokenA)).mint(taker, 10e18);
         (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
         vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
-        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
+        vm.assertEq(amountOut, 12.5e18, "Invalid amountOut");
 
-        // Adjust to time 2 seconds. Price will `P = balanceOut / balanceIn` grow 4 times.
+        // After one second balanceIn is 100e18 * 1.6 * 0.75 = 120e18.
+        vm.warp(startTime + 1);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 16_666_666_666_666_666_666, "Invalid amountOut");
+
+        // After two seconds the decayed surcharge is exhausted and balanceIn stays at 100e18.
         vm.warp(startTime + 2);
         TokenMock(address(tokenA)).mint(taker, 10e18);
         (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
         vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
-        vm.assertEq(amountOut, 80e18, "Invalid amountOut");
-
-        // Adjust to time 4 seconds. `balanceIn` has decayed to 6.25e18, below the 10e18 input,
-        // so LimitSwap clamps to a partial fill and the taker takes the whole `balanceOut`.
-        vm.warp(startTime + 4);
-        TokenMock(address(tokenA)).mint(taker, 10e18);
-        bytes memory partialFillData = _signAndPackTakerData(order, true, 0, true);
-        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, partialFillData);
-        vm.assertEq(amountIn, 6.25e18, "Partial fill must cap amountIn at balanceIn");
-        vm.assertEq(amountOut, 200e18, "Invalid amountOut");
+        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
     }
 
     /**
@@ -199,12 +198,12 @@ contract DutchAuctionTest is Test, OpcodesDebug {
      */
     function test_DutchAuctionOut_ExactDecayedAmount() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
-        uint16 duration = 300; // 5 minutes
-        uint64 decayFactor = 0.5e18; // 50% loss every second
+        uint64 decayFactor = 0.75e18; // 25% loss every second
+        uint24 surchargeBps = 0.6e7; // 60% initial surcharge
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -219,29 +218,67 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         TokenMock(address(tokenA)).mint(taker, 10e18);
         (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
         vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
-        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
+        vm.assertEq(amountOut, 12.5e18, "Invalid amountOut");
 
-        // Adjust to time 2 seconds. Price will `P = balanceOut / balanceIn` grow 4 times.
+        // After one second balanceOut is 200e18 / (1.6 * 0.75).
+        vm.warp(startTime + 1);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 16_666_666_666_666_666_666, "Invalid amountOut");
+
+        // After two seconds the decayed surcharge is exhausted and balanceOut stays at 200e18.
         vm.warp(startTime + 2);
         TokenMock(address(tokenA)).mint(taker, 10e18);
         (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
         vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
-        vm.assertEq(amountOut, 80e18, "Invalid amountOut");
+        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
+    }
 
-        // Adjust to time 4 seconds. `balanceIn` stays at 100e18, so there is no partial fill:
-        // `balanceOut` has grown to 3200e18 and the full 10e18 in buys 320e18 out.
-        vm.warp(startTime + 4);
-        TokenMock(address(tokenA)).mint(taker, 10e18);
-        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
-        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
-        vm.assertEq(amountOut, 320e18, "Invalid amountOut");
+    function testFuzz_DutchAuction_InAndOutQuotesMatch(uint256 balanceIn, uint256 balanceOut) public {
+        balanceIn = bound(balanceIn, 4, 1e32);
+        balanceOut = bound(balanceOut, 4, 1e32);
+
+        uint40 timestamp = AUCTION_REALISTIC_START_TS;
+        uint64 decay = 0.999e18;
+        uint24 surchargeBps = 0.5e7;
+
+        ISwapVM.Order memory orderIn = _createOrder(bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            DutchAuctionBalanceIn.build(timestamp, decay, surchargeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+        ISwapVM.Order memory orderOut = _createOrder(bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            DutchAuctionBalanceOut.build(timestamp, decay, surchargeBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+
+        bytes memory takerDataExactInForInOrder = _signAndPackTakerData(orderIn, true, 0, true);
+        bytes memory takerDataExactInForOutOrder = _signAndPackTakerData(orderOut, true, 0, true);
+        bytes memory takerDataExactOutForInOrder = _signAndPackTakerData(orderIn, false, 0, true);
+        bytes memory takerDataExactOutForOutOrder = _signAndPackTakerData(orderOut, false, 0, true);
+
+        uint256[7] memory offsets = [uint256(0), 12, 13, 25, 100, 175, 200];
+        for (uint256 i; i < offsets.length; i++) {
+            vm.warp(uint256(timestamp) + offsets[i]);
+
+            (uint256 amountInFromInOrder,,) = swapVM.quote(orderIn, balanceOut / 2, takerDataExactOutForInOrder);
+            (uint256 amountInFromOutOrder,,) = swapVM.quote(orderOut, balanceOut / 2, takerDataExactOutForOutOrder);
+
+            (,uint256 amountOutFromInOrder,) = swapVM.quote(orderIn, balanceIn / 2, takerDataExactInForInOrder);
+            (,uint256 amountOutFromOutOrder,) = swapVM.quote(orderOut, balanceIn / 2, takerDataExactInForOutOrder);
+
+            assertApproxEqAbs(amountInFromInOrder, amountInFromOutOrder, 2 * balanceIn.ceilDiv(balanceOut));
+            assertApproxEqAbs(amountOutFromInOrder, amountOutFromOutOrder, 2 * balanceOut.ceilDiv(balanceIn));
+        }
     }
 
     function test_DutchAuctionBalanceIn_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -250,19 +287,19 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         vm.warp(announcedAt);
         tokenA.mint(taker, 10e18);
         (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
-        assertEq(amountOut, 20e18);
+        assertEq(amountOut, 13_333_333_333_333_333_333);
         assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
 
         vm.warp(announcedAt + 1);
         (, amountOut,) = swapVM.quote(order, 10e18, takerData);
-        assertEq(amountOut, 40e18);
+        assertEq(amountOut, 20e18);
     }
 
     function test_DutchAuctionBalanceOut_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -271,52 +308,77 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         vm.warp(announcedAt);
         tokenA.mint(taker, 10e18);
         (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
-        assertEq(amountOut, 20e18);
+        assertEq(amountOut, 13_333_333_333_333_333_333);
         assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
 
         vm.warp(announcedAt + 1);
         (, amountOut,) = swapVM.quote(order, 10e18, takerData);
-        assertEq(amountOut, 40e18);
+        assertEq(amountOut, 20e18);
     }
 
     /**
-     * Test Dutch auction build failed for decay < 1.
+     * Test DutchAuctionBalanceOut rounds inverse decay up.
+     */
+    function test_DutchAuctionOut_RoundingUp() public {
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
+
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(1e18, 10),
+            DutchAuctionBalanceOut.build(startTime, 0.9e18, 0.9e7),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(startTime + 1);
+        (, uint256 amountOut,) = swapVM.quote(order, 1e18, exactInData);
+        vm.assertEq(amountOut, 6, "Invalid rounded amountOut");
+    }
+
+    /**
+     * Test Dutch auction build rejects invalid decay and surcharge values.
      */
     function test_Fail_DutchAuctionInvalidDecay() public {
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 300, 1e18);
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
 
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 300, 1e18);
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
 
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 300, 1e18 + 1);
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
 
         vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 300, 1e18 + 1);
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
+
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
+
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
     }
 
     /// @dev Simple wrapper over library function `DutchAuctionBalanceIn.build`.
-    function buildDutchAuctionBalanceIn(uint40 start, uint16 duration, uint64 decay) external pure {
-        DutchAuctionBalanceIn.build(start, duration, decay);
+    function buildDutchAuctionBalanceIn(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
+        DutchAuctionBalanceIn.build(start, decay, surchargeBps);
     }
 
     /// @dev Simple wrapper over library function `DutchAuctionBalanceOut.build`.
-    function buildDutchAuctionBalanceOut(uint40 start, uint16 duration, uint64 decay) external pure {
-        DutchAuctionBalanceOut.build(start, duration, decay);
+    function buildDutchAuctionBalanceOut(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
+        DutchAuctionBalanceOut.build(start, decay, surchargeBps);
     }
     /**
      * Helper to test Dutch auction with specific decay factor
      */
     function _testDutchAuctionWithDecay(uint64 decayFactor, bool useIn) private {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
-        uint16 duration = 300;
+        uint24 surchargeBps = 0.5e7;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             useIn ?
-                DutchAuctionBalanceIn.build(startTime, duration, decayFactor) :
-                DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+                DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps) :
+                DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -328,7 +390,7 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         timeOffsets[0] = 0;     // Start
         timeOffsets[1] = 60;    // 1 minute
         timeOffsets[2] = 150;   // 2.5 minutes
-        timeOffsets[3] = 299;   // Just before expiry
+        timeOffsets[3] = 299;
 
         uint256[] memory outputs = new uint256[](4);
 
@@ -364,19 +426,20 @@ contract DutchAuctionTest is Test, OpcodesDebug {
         if (useIn) {
             // For balance in decay: as time passes, the effective balance in decreases
             // This makes the price better for the taker (Dutch auction effect)
-            // So for the same input amount, we get MORE output over time
+            // So for the same input amount, output grows until it reaches the order balance
             for (uint256 i = 1; i < outputs.length; i++) {
-                assertGt(outputs[i], outputs[i-1], "Output should increase over time for balance in decay");
+                assertGe(outputs[i], outputs[i-1], "Output should not decrease over time for balance in decay");
             }
         } else {
             // For balance out decay: as time passes, the effective balance out INCREASES
             // (dividing by smaller decay factor increases the balance)
             // This also makes the price better for the taker
-            // So for the same input amount, we get MORE output over time
+            // So for the same input amount, output grows until it reaches the order balance
             for (uint256 i = 1; i < outputs.length; i++) {
-                assertGt(outputs[i], outputs[i-1], "Output should increase over time for balance out decay");
+                assertGe(outputs[i], outputs[i-1], "Output should not decrease over time for balance out decay");
             }
         }
+        assertGt(outputs[outputs.length - 1], outputs[0], "Auction should improve the taker price");
     }
 
     // Helper functions
