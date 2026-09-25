@@ -41,6 +41,7 @@ library PrintSwapRegisters {
         console.log("    balanceOut:", ctx.swap.balanceOut);
         console.log("    amountIn:  ", ctx.swap.amountIn);
         console.log("    amountOut: ", ctx.swap.amountOut);
+        console.log("    surcharge: ", ctx.swap.surcharge);
         console.log("}");
     }
 }
@@ -203,7 +204,7 @@ library PrintGasLeft {
 }
 
 /// @notice PatchSwapRegisters opcode, modify internal vm state for debugging
-/// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut]
+/// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut, uint256 surcharge]
 library PatchSwapRegisters {
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -211,7 +212,7 @@ library PatchSwapRegisters {
     Opcode constant opcode = Opcode.PatchSwapRegisters;
 
     function sizeOf(SwapRegisters memory) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32;
+        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
     function build(SwapRegisters memory swap) internal pure returns (bytes memory) {
@@ -220,7 +221,12 @@ library PatchSwapRegisters {
 
     function build(MemoryPtr ptrStart, SwapRegisters memory swap) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(swap.balanceIn, 32).push(swap.balanceOut, 32).push(swap.amountIn, 32).push(swap.amountOut, 32);
+        ptr = ptr
+            .push(swap.balanceIn, 32)
+            .push(swap.balanceOut, 32)
+            .push(swap.amountIn, 32)
+            .push(swap.amountOut, 32)
+            .push(swap.surcharge, 32);
         ptrStart.patchLength(ptr);
     }
 
@@ -229,7 +235,8 @@ library PatchSwapRegisters {
             balanceIn: args.at(0).asU256(),
             balanceOut: args.at(32).asU256(),
             amountIn: args.at(64).asU256(),
-            amountOut: args.at(96).asU256()
+            amountOut: args.at(96).asU256(),
+            surcharge: args.at(128).asU256()
         });
     }
 

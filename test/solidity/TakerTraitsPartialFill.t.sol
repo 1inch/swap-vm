@@ -133,7 +133,8 @@ contract TakerTraitsPartialFillTest is Test {
             balanceIn: 0,
             balanceOut: 0,
             amountIn: amountIn,
-            amountOut: amountOut
+            amountOut: amountOut,
+            surcharge: 0
         }));
     }
 

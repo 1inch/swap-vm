@@ -5,26 +5,24 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../contracts/SwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
-import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
+import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
-import { BaseFeeAdjuster } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
+import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 
 /**
  * @title BaseFeeAdjusterTest
- * @notice Tests for BaseFeeAdjuster instruction functionality
- * @dev Tests gas-based price adjustments for limit orders
+ * @notice Tests gas-cost compensation against accumulated balance surcharges
  */
 contract BaseFeeAdjusterTest is Test, OpcodesDebug {
     Aqua public immutable aqua;
@@ -45,303 +43,296 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
 
-        // Setup tokens and approvals for maker
-        tokenA.mint(maker, 10000e18);
-        tokenB.mint(maker, 10000e18);
+        tokenA.mint(maker, 1e30);
+        tokenB.mint(maker, 1e30);
         vm.prank(maker);
         tokenA.approve(address(swapVM), type(uint256).max);
         vm.prank(maker);
         tokenB.approve(address(swapVM), type(uint256).max);
 
-        // Setup approvals for taker (test contract)
         tokenA.approve(address(swapVM), type(uint256).max);
         tokenB.approve(address(swapVM), type(uint256).max);
     }
 
     /**
-     * Test BaseFeeAdjuster with LimitSwap at different gas prices
+     * Test BaseFeeAdjusterBalanceIn with LimitSwap at different gas prices.
      */
     function test_BaseFeeAdjusterLimitSwapGasVariations() public {
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 1e18;
+        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
         uint64 baseGasPrice = 20 gwei;
-        uint96 ethToTokenPrice = 3000e18; // 1 ETH = 3000 tokens
+        uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceInProgram(
+                balanceIn,
+                balanceOut,
+                surchargeScale,
+                baseGasPrice,
+                ethToTokenPrice,
+                gasAmount
+            )
         );
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Test at different gas prices
         uint256[] memory gasPrices = new uint256[](4);
-        gasPrices[0] = 20 gwei;   // Base gas price - no adjustment
-        gasPrices[1] = 50 gwei;   // Moderate gas - some adjustment
-        gasPrices[2] = 100 gwei;  // High gas - significant adjustment
-        gasPrices[3] = 200 gwei;  // Very high gas - max adjustment
+        gasPrices[0] = 20 gwei;
+        gasPrices[1] = 50 gwei;
+        gasPrices[2] = 100 gwei;
+        gasPrices[3] = 200 gwei;
 
-        uint256[] memory expectedOutputs = new uint256[](4);
+        uint256 amountIn = 1000e18;
+        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        uint256 previousOutput;
 
         for (uint256 i = 0; i < gasPrices.length; i++) {
-            // Set base fee (gas price)
             vm.fee(gasPrices[i]);
+            (, uint256 quotedOut,) = swapVM.asView().quote(order, amountIn, exactInData);
 
-            bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+            uint256 discount;
+            if (gasPrices[i] > baseGasPrice) {
+                discount = (gasPrices[i] - baseGasPrice) * gasAmount * ethToTokenPrice / 1e18;
+                if (discount > surcharge) discount = surcharge;
+            }
+            uint256 expectedOut = amountIn * balanceOut / (balanceIn + surcharge - discount);
 
-            // Quote with current gas conditions - swap B to A
-            (, uint256 quotedOut,) = swapVM.asView().quote(
-                order,
-                3000e18, // 3000 tokenB
-                exactInData
-            );
-
-            expectedOutputs[i] = quotedOut;
-        }
-
-        // Verify outputs increase with gas price (or stay same if capped)
-        for (uint256 i = 1; i < expectedOutputs.length; i++) {
-            assertGe(expectedOutputs[i], expectedOutputs[i-1], "Higher gas should improve or maintain price");
+            assertEq(quotedOut, expectedOut, "Unexpected gas adjustment");
+            assertGe(quotedOut, previousOutput, "Higher gas should not worsen the taker price");
+            previousOutput = quotedOut;
         }
     }
 
     /**
-     * Test BaseFeeAdjuster with DutchAuction combination
+     * Test BaseFeeAdjusterBalanceOut with a Dutch auction at different times.
      */
     function test_BaseFeeAdjusterWithDutchAuction() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300; // 5 minutes
-        uint64 decayFactor = 0.999e18; // 0.999 = 0.1% decay per second
-
+        uint64 decayFactor = 0.999e18;
+        uint24 surchargeBps = 0.5e7;
         uint64 baseGasPrice = 25 gwei;
         uint96 ethToTokenPrice = 3500e18;
         uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
 
         bytes memory bytecode = bytes.concat(
-            StaticBalances.build(1000e18, 3500000e18), // 3500:1 rate (Swap B to A; ascending tokenA, tokenB)
-            // DutchAuction adjusts balances, then LimitSwap computes amounts
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            // BaseFeeAdjuster must be applied after the swap
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+            StaticBalances.build(1000e18, 3500e18),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            BaseFeeAdjusterBalanceOut.build(baseGasPrice, ethToTokenPrice, gasAmount),
+            LimitSwap.build(address(tokenA), address(tokenB))
         );
-
         ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        // Test at different times and gas prices
         uint256[] memory timeOffsets = new uint256[](3);
-        timeOffsets[0] = 0;    // Start
-        timeOffsets[1] = 150;  // Mid auction
-        timeOffsets[2] = 299;  // Near end
+        timeOffsets[0] = 0;
+        timeOffsets[1] = 150;
+        timeOffsets[2] = 299;
 
-        uint256[] memory gasPrices = new uint256[](2);
-        gasPrices[0] = 30 gwei;
-        gasPrices[1] = 100 gwei;
+        for (uint256 i = 0; i < timeOffsets.length; i++) {
+            vm.warp(startTime + timeOffsets[i]);
 
-        for (uint256 t = 0; t < timeOffsets.length; t++) {
-            for (uint256 g = 0; g < gasPrices.length; g++) {
-                uint256 snapshot = vm.snapshot();
+            vm.fee(30 gwei);
+            (, uint256 lowGasOutput,) = swapVM.asView().quote(order, 100e18, exactInData);
 
-                vm.warp(startTime + timeOffsets[t]);
-                vm.fee(gasPrices[g]);
+            vm.fee(100 gwei);
+            (, uint256 highGasOutput,) = swapVM.asView().quote(order, 100e18, exactInData);
 
-                bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-
-                (, uint256 quotedOut,) = swapVM.asView().quote(
-                    order,
-                    3500e18, // 3500 tokenB
-                    exactInData
-                );
-
-                // Ensure we have valid output
-                assertGt(quotedOut, 0, "Should get positive output");
-
-                vm.revertTo(snapshot);
-            }
+            assertGt(lowGasOutput, 0, "Dutch auction should produce output");
+            assertGe(highGasOutput, lowGasOutput, "Higher gas should consume more surcharge");
         }
     }
 
     /**
-     * Test max price decay limits
+     * Test that compensation cannot exceed the accumulated surcharge.
      */
-    function test_BaseFeeAdjusterMaxDecayLimits() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 95e16; // 0.95 = 5% max adjustment - generous limit
+    function test_BaseFeeAdjusterSurchargeCap() public {
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 1e18;
+        uint24 surchargeScale = uint24((uint256(1) << 24) / 20);
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceInProgram(
+                balanceIn,
+                balanceOut,
+                surchargeScale,
+                20 gwei,
+                3000e18,
+                150_000
+            )
         );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Test at extremely high gas price
-        vm.fee(1000 gwei); // Very high gas
-
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        (, uint256 quotedOut,) = swapVM.asView().quote(
-            order,
-            3000e18, // 3000 tokenB input
-            exactInData
-        );
+        vm.fee(1000 gwei);
+        (, uint256 quotedOut,) = swapVM.asView().quote(order, balanceIn, exactInData);
 
-        // Should be capped by maxPriceDecay
-        // Base output is 1, max increase with 5% cap = 1 * 1.05 = 1.05
-        assertLe(quotedOut, 1.05e18, "Should be capped by max decay");
-        assertGe(quotedOut, 1e18, "Should improve from base price");
+        assertEq(quotedOut, balanceOut, "Compensation should stop at the unsurcharged balance");
     }
 
     /**
-     * Test that adjustment only occurs above base gas price
+     * Test that adjustment only occurs above the configured base gas price.
      */
     function test_BaseFeeAdjusterNoAdjustmentBelowBase() public {
-        uint64 baseGasPrice = 50 gwei;
-        uint96 ethToTokenPrice = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 99e16; // 0.99 = 1% max adjustment
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 1e18;
+        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // Swap B to A (ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToTokenPrice, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceInProgram(
+                balanceIn,
+                balanceOut,
+                surchargeScale,
+                50 gwei,
+                3000e18,
+                150_000
+            )
         );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        // Test at gas price below base
-        vm.fee(30 gwei); // Below base of 50 gwei
+        vm.fee(30 gwei);
+        (, uint256 outputLowGas,) = swapVM.asView().quote(order, balanceIn, exactInData);
 
-        (, uint256 outputLowGas,) = swapVM.asView().quote(
-            order,
-            3000e18,
-            exactInData
-        );
-
-        // Test at base gas price
         vm.fee(50 gwei);
+        (, uint256 outputBaseGas,) = swapVM.asView().quote(order, balanceIn, exactInData);
 
-        (, uint256 outputBaseGas,) = swapVM.asView().quote(
-            order,
-            3000e18,
-            exactInData
-        );
+        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        uint256 expectedOutput = balanceIn * balanceOut / (balanceIn + surcharge);
 
-        // Should be same - no adjustment below base
-        assertEq(outputLowGas, outputBaseGas, "No adjustment below base gas");
-        assertEq(outputLowGas, 1e18, "Should be base price");
+        assertEq(outputLowGas, outputBaseGas, "No adjustment expected at or below base gas");
+        assertEq(outputLowGas, expectedOutput, "Surcharge should remain untouched");
     }
 
     /**
-     * @notice Test exact compensation calculation for exactIn mode
-     * @dev This test would have caught the original bug where amountOut was used instead of amountIn
+     * Test exact token-out compensation through BaseFeeAdjusterBalanceOut.
      */
     function test_BaseFeeAdjusterExactCompensation() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToToken1Price = 3000e18; // 1 ETH = 3000 USDC
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 90e16; // 10% max (high to not interfere with test)
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 3e18;
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceOutProgram(
+                balanceIn,
+                balanceOut,
+                uint24(1 << 23),
+                20 gwei,
+                1e18,
+                150_000
+            )
         );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-
-        // Base case
-        vm.fee(20 gwei);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
-        (, uint256 baseOutput,) = swapVM.asView().quote(order, 3000e18, exactInData);
 
-        // High gas
+        vm.fee(20 gwei);
+        (, uint256 baseOutput,) = swapVM.asView().quote(order, balanceIn, exactInData);
+
         vm.fee(100 gwei);
-        (, uint256 adjustedOutput,) = swapVM.asView().quote(order, 3000e18, exactInData);
+        (, uint256 adjustedOutput,) = swapVM.asView().quote(order, balanceIn, exactInData);
 
-        // Expected: 0.012 ETH gas cost = 1.2% of 1 ETH = 1.2% compensation
-        uint256 expectedCompensation = 0.012e18;
-        uint256 actualCompensation = adjustedOutput - baseOutput;
-
-        assertEq(baseOutput, 1e18, "Base should be 1.0");
-        assertApproxEqAbs(actualCompensation, expectedCompensation, 0.001e18, "Should compensate ~1.2%");
+        assertEq(baseOutput, 2e18, "Unexpected surcharged output balance");
+        assertEq(adjustedOutput - baseOutput, 0.012e18, "Incorrect gas compensation");
     }
 
     /**
-     * @notice Test compensation scales inversely with swap size
+     * Test that balance adjustment applies one rate to every non-partial swap size.
      */
     function test_BaseFeeAdjusterCompensationScaling() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToToken1Price = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 90e16; // 10% max
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 1e18;
+        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceInProgram(
+                balanceIn,
+                balanceOut,
+                surchargeScale,
+                20 gwei,
+                3000e18,
+                150_000
+            )
         );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory exactInData = _signAndPackTakerData(order, true, 0);
 
-        vm.fee(20 gwei);
-        (, uint256 smallBase,) = swapVM.asView().quote(order, 300e18, exactInData);
-        (, uint256 largeBase,) = swapVM.asView().quote(order, 3000e18, exactInData);
-
         vm.fee(100 gwei);
-        (, uint256 smallAdjusted,) = swapVM.asView().quote(order, 300e18, exactInData);
-        (, uint256 largeAdjusted,) = swapVM.asView().quote(order, 3000e18, exactInData);
+        (, uint256 smallOutput,) = swapVM.asView().quote(order, 100e18, exactInData);
+        (, uint256 largeOutput,) = swapVM.asView().quote(order, 1000e18, exactInData);
 
-        uint256 smallPct = ((smallAdjusted - smallBase) * 100e18) / smallBase;
-        uint256 largePct = ((largeAdjusted - largeBase) * 100e18) / largeBase;
-
-        // Small swap (0.1 ETH): 12% theoretical → capped at 10%
-        // Large swap (1 ETH): 1.2% theoretical
-        assertEq(smallPct / 1e18, 10, "Small swap hits 10% cap");
-        assertApproxEqAbs(largePct, 1.2e18, 0.01e18, "Large swap ~1.2%");
+        assertApproxEqAbs(largeOutput, smallOutput * 10, 9, "Compensation should preserve a linear rate");
     }
 
     /**
-     * @notice Test exactOut mode provides correct discount
+     * Test exact-out mode discounts the input-token virtual balance.
      */
     function test_BaseFeeAdjusterExactOutDiscount() public {
-        uint64 baseGasPrice = 20 gwei;
-        uint96 ethToToken1Price = 3000e18;
-        uint24 gasAmount = 150_000;
-        uint64 maxPriceDecay = 90e16; // 10% max
+        uint256 balanceIn = 3000e18;
+        uint256 balanceOut = 1e18;
+        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
 
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300000e18), // 3000:1 rate (Swap B to A; ascending tokenA, tokenB)
-            LimitSwap.build(address(tokenB), address(tokenA)),
-            BaseFeeAdjuster.build(baseGasPrice, ethToToken1Price, gasAmount, 1e18 - maxPriceDecay)
+        ISwapVM.Order memory order = _createOrder(
+            _buildBalanceInProgram(
+                balanceIn,
+                balanceOut,
+                surchargeScale,
+                20 gwei,
+                3000e18,
+                150_000
+            )
         );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
         bytes memory exactOutData = _signAndPackTakerData(order, false, 0);
 
         vm.fee(20 gwei);
-        (uint256 baseInput,,) = swapVM.asView().quote(order, 1e18, exactOutData);
+        (uint256 baseInput,,) = swapVM.asView().quote(order, balanceOut, exactOutData);
 
         vm.fee(100 gwei);
-        (uint256 adjustedInput,,) = swapVM.asView().quote(order, 1e18, exactOutData);
+        (uint256 adjustedInput,,) = swapVM.asView().quote(order, balanceOut, exactOutData);
 
-        // Expected: 36 USDC discount on 3000 USDC = 1.2%
-        uint256 expectedDiscount = 36e18;
-        uint256 actualDiscount = baseInput - adjustedInput;
-
-        assertEq(baseInput, 3000e18, "Base should be 3000");
-        assertLt(adjustedInput, baseInput, "Should pay less at high gas");
-        assertApproxEqAbs(actualDiscount, expectedDiscount, 1e18, "Discount ~36 USDC");
+        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        assertEq(baseInput, balanceIn + surcharge, "Unexpected surcharged input balance");
+        assertEq(baseInput - adjustedInput, 36e18, "Incorrect input-token discount");
     }
 
-    // Helper functions
+    function _buildBalanceInProgram(
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint24 surchargeScale,
+        uint64 baseGasPrice,
+        uint96 ethPrice,
+        uint24 gasAmount
+    ) private view returns (bytes memory) {
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 1;
+        scales[0] = surchargeScale;
+        scales[1] = surchargeScale;
+
+        return bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethPrice, gasAmount),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+    }
+
+    function _buildBalanceOutProgram(
+        uint256 balanceIn,
+        uint256 balanceOut,
+        uint24 surchargeScale,
+        uint64 baseGasPrice,
+        uint96 ethPrice,
+        uint24 gasAmount
+    ) private view returns (bytes memory) {
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 1;
+        scales[0] = surchargeScale;
+        scales[1] = surchargeScale;
+
+        return bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterBalanceOut.build(baseGasPrice, ethPrice, gasAmount),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+    }
+
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
         return MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
@@ -376,7 +367,6 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
         bytes memory signature = abi.encodePacked(r, s, v);
-
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
         bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
@@ -386,7 +376,7 @@ contract BaseFeeAdjusterTest is Test, OpcodesDebug {
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
-            isAToB: false,
+            isAToB: true,
             allowPartialFill: false,
             usePermit2: false,
             threshold: thresholdData,

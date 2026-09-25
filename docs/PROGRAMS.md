@@ -60,7 +60,7 @@ You can use these invariant suites as references for testing your programs:
   - `InvalidateBit`
   - `InvalidateTokenIn` / `InvalidateTokenOut`
   - `DutchAuctionBalanceIn` / `DutchAuctionBalanceOut`
-  - `BaseFeeAdjuster`
+  - `BaseFeeAdjusterBalanceIn` / `BaseFeeAdjusterBalanceOut`
   - `RequireMinRate` / `AdjustMinRate`
 
 **Example A - One-time limit order (bitmap invalidator):**

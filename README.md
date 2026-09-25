@@ -60,9 +60,9 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Control      | `Stop`, `Revert`, `Salt`, `Jump`, `Extruction` (delegate registers to a maker-chosen contract) |
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
-| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearScaleBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
+| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearSurchargeBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `AdjustMinRate`, `OraclePriceAdjuster` (Chainlink), `BaseFeeAdjuster` (gas-aware) |
+| Rates        | `RequireMinRate`, `AdjustMinRate`, `OraclePriceAdjuster` (Chainlink), `BaseFeeAdjuster*` (gas-aware) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
@@ -75,7 +75,7 @@ A router is `SwapVM` plus an opcode set, wired together in `_dispatch`.
 | Router              | Opcode set     | Scope |
 |---------------------|----------------|-------|
 | `SwapVMRouter`      | `Opcodes`      | full instruction set |
-| `LimitSwapVMRouter` | `LimitOpcodes` | 1D strategies: `StaticBalances`, `LimitSwap*`, invalidators, epochs, whitelists, `PiecewiseLinearScale*`, `BaseFeeAdjuster`, `FeeProtocol`, `Extruction` |
+| `LimitSwapVMRouter` | `LimitOpcodes` | 1D strategies: `StaticBalances`, `LimitSwap*`, invalidators, epochs, whitelists, `PiecewiseLinearSurcharge*`, `BaseFeeAdjuster*`, `FeeProtocol`, `Extruction` |
 | `AquaSwapVMRouter`  | `AquaOpcodes`  | AMM curves, `Decay`, `FeeFlatIn`, `FeeProtocol`, guards — for Aqua-shipped strategies |
 
 `*Debug` variants add the debug opcodes. Every router also includes `Simulator` (`simulate`), `Rescuable` (`rescueFunds`, owner-only) and `OrderRegistrator`.

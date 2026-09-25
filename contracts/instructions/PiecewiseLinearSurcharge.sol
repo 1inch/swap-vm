@@ -11,21 +11,20 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { Time } from "../libs/Time.sol";
 
-/// @notice PiecewiseLinearScaleBalanceIn opcode, apply a piecewise-linear scale to the balance in (maker exact in)
-///   Applies initial scale before start and last scale after end
-/// @dev Scale formula `value * (scale + 1) / 2 ** 24`
-/// @dev To build a Dutch auction, start with 1.0 scale and decrease it over time
-///   To correctly build order based on "maker receives at least" value, initial order balance in should be calculated as
-///   `PiecewiseLinearScale.unscaleValue(minBalanceIn, lowestScale)`
+/// @notice PiecewiseLinearSurchargeBalanceIn opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
+///   Applies initial percent surcharge before start and last percent surcharge after end
+/// @dev Surcharge formula `balance * scale / 2 ** 24`
+/// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
+///   Order balance in is the "maker receive at least" value
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
-library PiecewiseLinearScaleBalanceIn {
+library PiecewiseLinearSurchargeBalanceIn {
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceIn;
+    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceIn;
 
     function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearScale.sizeOf(timestamp, durations, scales);
+        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
@@ -39,30 +38,38 @@ library PiecewiseLinearScaleBalanceIn {
         uint24[] memory scales
     ) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearScale.build(ptr, timestamp, durations, scales);
+        ptr = PiecewiseLinearSurcharge.build(ptr, timestamp, durations, scales);
         ptrStart.patchLength(ptr);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        ctx.swap.balanceIn = (ctx.swap.balanceIn * PiecewiseLinearScale.calcScaleNow(ctx, args)) >> 24;
+        uint256 scale = PiecewiseLinearSurcharge.calcScaleNow(ctx, args);
+        uint256 surcharge = (ctx.swap.balanceIn * scale) >> 24;
+
+        ctx.swap.surcharge += surcharge;
+        ctx.swap.balanceIn += surcharge;
+    }
+
+    /// @notice Scale value external helper
+    function scaleValue(uint256 value, uint24 scale) internal pure returns (uint256 scaled) {
+        scaled = (value * scale) >> 24;
     }
 }
 
-/// @notice PiecewiseLinearScaleBalanceOut opcode, apply a piecewise-linear scale to the balance out (maker exact out)
-///   Applies initial scale before start and last scale after end
-/// @dev Scale formula `value * (scale + 1) / 2 ** 24`
-/// @dev To build a Dutch auction, start with a low scale and increase it over time to 1.0
-///   To correctly build order based on "maker pays at max" value, set initial order balance to the value,
-///   it would be reached at 1.0 scale
+/// @notice PiecewiseLinearSurchargeBalanceOut opcode, apply a piecewise-linear percent surcharge to the balance out (maker exact buy)
+///   Applies initial percent surcharge before start and last percent surcharge after end
+/// @dev Surcharge formula `balance * scale / (2 ** 24 + scale)`
+/// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
+///   Order balance out is the "maker spend at most" value
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
-library PiecewiseLinearScaleBalanceOut {
+library PiecewiseLinearSurchargeBalanceOut {
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.PiecewiseLinearScaleBalanceOut;
+    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceOut;
 
     function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearScale.sizeOf(timestamp, durations, scales);
+        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
@@ -76,30 +83,38 @@ library PiecewiseLinearScaleBalanceOut {
         uint24[] memory scales
     ) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearScale.build(ptr, timestamp, durations, scales);
+        ptr = PiecewiseLinearSurcharge.build(ptr, timestamp, durations, scales);
         ptrStart.patchLength(ptr);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        ctx.swap.balanceOut = (ctx.swap.balanceOut * PiecewiseLinearScale.calcScaleNow(ctx, args)) >> 24;
+        uint256 scale = PiecewiseLinearSurcharge.calcScaleNow(ctx, args);
+        uint256 surcharge = ctx.swap.balanceOut * scale / ((1 << 24) + scale);
+
+        ctx.swap.surcharge += surcharge;
+        ctx.swap.balanceOut -= surcharge;
+    }
+
+    /// @notice Scale value external helper
+    function scaleValue(uint256 value, uint24 scale) internal pure returns (uint256 scaled) {
+        scaled = (value * scale) / ((1 << 24) + scale);
     }
 }
 
-library PiecewiseLinearScale {
+library PiecewiseLinearSurcharge {
     using InstructionArgs for bytes;
+    using PiecewiseLinearSurcharge for bytes;
 
-    using PiecewiseLinearScale for bytes;
-
-    error PiecewiseLinearScaleMismatchInputLengths();
-    error PiecewiseLinearScaleNotEnoughPointsToBuildPiece();
+    error PiecewiseLinearSurchargeMismatchInputLengths();
+    error PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece();
 
     function sizeOf(uint40, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
         return 5 + durations.length * 2 + scales.length * 3;
     }
 
     function build(MemoryPtr ptr, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (MemoryPtr) {
-        require(scales.length >= 2, PiecewiseLinearScaleNotEnoughPointsToBuildPiece());
-        require(durations.length + 1 == scales.length, PiecewiseLinearScaleMismatchInputLengths());
+        require(scales.length >= 2, PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece());
+        require(durations.length + 1 == scales.length, PiecewiseLinearSurchargeMismatchInputLengths());
 
         ptr = ptr.push(timestamp, 5).push(scales[0], 3);
         for (uint256 i; i < durations.length; i++) {
@@ -136,30 +151,18 @@ library PiecewiseLinearScale {
 
             uint256 timeLeft = block.timestamp;
 
-            if (timeLeft <= start) return uint256(args.parsePointScale(0)) + 1; // return initial scale
+            if (timeLeft <= start) return uint256(args.parsePointScale(0)); // return initial scale
             timeLeft -= start;
 
             uint256 num = 0;
             while (args.parseIntervalDuration(num) < timeLeft) {
                 timeLeft -= args.parseIntervalDuration(num);
 
-                if (++num == max) return uint256(args.parsePointScale(max)) + 1; // return last scale
+                if (++num == max) return uint256(args.parsePointScale(max)); // return last scale
             }
 
             uint256 duration = args.parseIntervalDuration(num); // durations[num] >= timeLeft > 0 -> `duration != 0`, division is safe
-            scale = (timeLeft * args.parsePointScale(num + 1) + (duration - timeLeft) * args.parsePointScale(num)) / duration + 1;
+            scale = (timeLeft * args.parsePointScale(num + 1) + (duration - timeLeft) * args.parsePointScale(num)) / duration;
         }
-    }
-
-    /// @notice Scale value external helper
-    function scaleValue(uint256 value, uint24 scale) internal pure returns (uint256 scaled) {
-        scaled = (value * (uint256(scale) + 1)) >> 24;
-    }
-
-    /// @notice Unscale value back to 1.0 scale rounding up
-    /// @dev Calculates order balances from target balance at specific scale (e.g. lowest scale)
-    /// @dev Holds `scaleValue(unscaled, scale) == value`
-    function unscaleValue(uint256 value, uint24 scale) internal pure returns (uint256 unscaled) {
-        unscaled = ((value << 24) + scale) / (uint256(scale) + 1);
     }
 }
