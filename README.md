@@ -62,7 +62,7 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
 | Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearScaleBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `AdjustMinRate`, `OraclePriceAdjuster` (Chainlink), `BaseFeeAdjuster` (gas-aware) |
+| Rates        | `RequireMinRate`, `OraclePriceAdjuster` (Chainlink), `BaseFeeAdjuster` (gas-aware) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
@@ -143,7 +143,7 @@ With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come fr
 ### Checklist
 
 - Add `Deadline`. Use `InvalidateBit` for one-shot orders, `InvalidateTokenIn` / `InvalidateTokenOut` for partial fills, `ValidateSeriesEpoch` to cancel a whole series at once.
-- Guard rates with `RequireMinRate` or `AdjustMinRate`; consider `Decay` for AMM positions.
+- Guard rates with `RequireMinRate`; consider `Decay` for AMM positions.
 - `Salt` makes otherwise identical orders hash differently.
 - Authorize the router to pull `tokenOut`: approve the router directly for ERC-20 `transferFrom`, or approve Permit2 and set `usePermit2: true`. Aqua orders use Aqua `pull`.
 

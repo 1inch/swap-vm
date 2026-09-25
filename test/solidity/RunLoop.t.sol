@@ -23,7 +23,7 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { PeggedSwap } from "../../contracts/instructions/PeggedSwap.sol";
-import { RequireMinRate, AdjustMinRate } from "../../contracts/instructions/MinRate.sol";
+import { RequireMinRate } from "../../contracts/instructions/MinRate.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Extruction } from "../../contracts/instructions/Extruction.sol";
 import { ContextLib } from "../../contracts/libs/VM.sol";
