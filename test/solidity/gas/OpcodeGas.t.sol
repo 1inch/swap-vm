@@ -19,7 +19,7 @@ import { BaseFeeAdjuster } from "../../../contracts/instructions/BaseFeeAdjuster
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
-import { RequireMinRate, AdjustMinRate } from "../../../contracts/instructions/MinRate.sol";
+import { RequireMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { PiecewiseLinearScaleBalanceIn, PiecewiseLinearScaleBalanceOut } from "../../../contracts/instructions/PiecewiseLinearScale.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
@@ -111,7 +111,6 @@ contract OpcodeGas is Test {
         _snapshot("PiecewiseLinearScaleBalanceOut", PiecewiseLinearScaleBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
         _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
-        _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjuster", BaseFeeAdjuster.build(25 gwei, 3500e18, 150_000, 0.01e18));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }

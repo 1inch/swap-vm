@@ -16,7 +16,7 @@ import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
-import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
+import { RequireMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
@@ -60,7 +60,6 @@ contract Opcodes is
         else if (opcode == LimitSwap.opcode.asU8()) LimitSwap.exec(ctx, args);
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == RequireMinRate.opcode.asU8()) RequireMinRate.exec(ctx, args);
-        else if (opcode == AdjustMinRate.opcode.asU8()) AdjustMinRate.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceIn.opcode.asU8()) DutchAuctionBalanceIn.exec(ctx, args);
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
         else if (opcode == BaseFeeAdjuster.opcode.asU8()) BaseFeeAdjuster.exec(ctx, args);
