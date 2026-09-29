@@ -11,6 +11,7 @@ import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
+import { NativeOrderHashLib } from "./NativeOrderHashLib.sol";
 import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
 import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
@@ -62,12 +63,15 @@ contract NativeOrderEscrowFactory {
     address public immutable ESCROW_IMPLEMENTATION;
     /// @notice Hash of the EIP-1167 proxy bytecode pointing at ESCROW_IMPLEMENTATION.
     bytes32 public immutable PROXY_BYTECODE_HASH;
+    /// @dev Router EIP-712 domain separator, cached to hash orders without external calls.
+    bytes32 private immutable _DOMAIN_SEPARATOR;
 
     constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 rescueDelay) {
         ROUTER = router;
         WETH = weth;
         ESCROW_IMPLEMENTATION = address(new NativeOrderEscrow(router, weth, accessToken, rescueDelay));
         PROXY_BYTECODE_HASH = ProxyHashLib.computeProxyBytecodeHash(ESCROW_IMPLEMENTATION);
+        _DOMAIN_SEPARATOR = NativeOrderHashLib.domainSeparator(address(router));
     }
 
     /// @notice Creates and funds a per-order escrow clone for a native ETH sell order.
@@ -97,8 +101,9 @@ contract NativeOrderEscrowFactory {
             NativeOrderInvalidTimelocks()
         );
 
+        bytes32 dataHash = keccak256(makerOrder.data);
         immutables = IBaseEscrow.Immutables({
-            orderHash: ROUTER.hash(makerOrder),
+            orderHash: NativeOrderHashLib.hashOrder(_DOMAIN_SEPARATOR, makerOrder.maker, makerOrder.traits, dataHash),
             hashlock: bytes32(0),
             maker: Address.wrap(uint160(msg.sender)),
             taker: Address.wrap(0),
@@ -115,12 +120,13 @@ contract NativeOrderEscrowFactory {
         require(makerOrder.traits.receiver(escrow) != escrow, NativeOrderExplicitReceiverRequired());
         NativeOrderEscrow(payable(escrow)).depositAndApprove{ value: msg.value }();
 
+        filledOrderHash = NativeOrderHashLib.hashOrder(_DOMAIN_SEPARATOR, escrow, makerOrder.traits, dataHash);
+
         ISwapVM.Order memory filledOrder = ISwapVM.Order({
             maker: escrow,
             traits: makerOrder.traits,
             data: makerOrder.data
         });
-        filledOrderHash = ROUTER.hash(filledOrder);
 
         emit NativeOrderCreated(escrow, filledOrderHash, immutables, filledOrder);
     }

@@ -17,6 +17,7 @@ import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
 import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
 import { ProxyHashLib } from "./vendor/libraries/ProxyHashLib.sol";
+import { NativeOrderHashLib } from "./NativeOrderHashLib.sol";
 
 /// @title NativeOrderEscrow
 /// @notice Per-order escrow clone that lets a maker sell native ETH through an unmodified SwapVM router.
@@ -42,6 +43,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
     error MakerOrderMismatch();
     error FilledOrderMismatch();
     error OrderExpired();
+    error InvalidSignatureEncoding();
 
     /// @notice Gas budget compensated to the resolver performing a public cancellation.
     uint256 private constant _PUBLIC_CANCEL_GAS_COST = 120_000;
@@ -58,6 +60,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
     IWETH public immutable WETH;
     /// @notice Delay after deployment when the maker may rescue stray funds.
     uint256 public immutable RESCUE_DELAY;
+    /// @dev Router EIP-712 domain separator, cached to hash orders without external calls.
+    bytes32 private immutable _DOMAIN_SEPARATOR;
 
     /// @dev Token that gates the public cancellation path to registered resolvers.
     IERC20 private immutable _ACCESS_TOKEN;
@@ -69,6 +73,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
         WETH = weth;
         _ACCESS_TOKEN = accessToken;
         RESCUE_DELAY = rescueDelay;
+        _DOMAIN_SEPARATOR = NativeOrderHashLib.domainSeparator(address(router));
     }
 
     modifier onlyCaller(address expected) {
@@ -110,15 +115,21 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
     /// @param signature abi.encode(IBaseEscrow.Immutables, ISwapVM.Order) - the pre-patch order.
     /// @return magicValue ERC-1271 magic value on success.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        (IBaseEscrow.Immutables memory immutables, ISwapVM.Order memory makerOrder) =
-            abi.decode(signature, (IBaseEscrow.Immutables, ISwapVM.Order));
+        (IBaseEscrow.Immutables calldata immutables, ISwapVM.Order calldata makerOrder) =
+            _decodeSignature(signature);
 
-        _validateImmutables(immutables.hashMem());
+        _validateImmutables(immutables.hash());
         if (block.timestamp >= immutables.timelocks.get(TimelocksLib.Stage.SrcCancellation)) revert OrderExpired();
-        if (ROUTER.hash(makerOrder) != immutables.orderHash) revert MakerOrderMismatch();
 
-        makerOrder.maker = address(this);
-        if (ROUTER.hash(makerOrder) != orderHash) revert FilledOrderMismatch();
+        // Hash `data` once from calldata; only `maker` differs between the two EIP-712 digests.
+        bytes32 dataHash = keccak256(makerOrder.data);
+        if (NativeOrderHashLib.hashOrder(_DOMAIN_SEPARATOR, makerOrder.maker, makerOrder.traits, dataHash)
+                != immutables.orderHash) {
+            revert MakerOrderMismatch();
+        }
+        if (NativeOrderHashLib.hashOrder(_DOMAIN_SEPARATOR, address(this), makerOrder.traits, dataHash) != orderHash) {
+            revert FilledOrderMismatch();
+        }
 
         return IERC1271.isValidSignature.selector;
     }
@@ -207,5 +218,34 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
     function _ethTransfer(address to, uint256 amount) internal {
         (bool success,) = to.call{ value: amount }("");
         if (!success) revert IBaseEscrow.NativeTokenSendingFailure();
+    }
+
+
+    /// @dev Points calldata structs at the two tuples inside `abi.encode(immutables, order)` without a memory copy.
+    function _decodeSignature(bytes calldata signature)
+        private
+        pure
+        returns (IBaseEscrow.Immutables calldata immutables, ISwapVM.Order calldata makerOrder)
+    {
+        if (signature.length < 0x40) revert InvalidSignatureEncoding();
+
+        uint256 immutablesOffset;
+        uint256 orderOffset;
+        assembly ("memory-safe") {
+            immutablesOffset := calldataload(signature.offset)
+            orderOffset := calldataload(add(signature.offset, 0x20))
+        }
+        // Offsets are relative to the start of the abi.encode payload and must land inside it.
+        if (
+            immutablesOffset < 0x40 || orderOffset < 0x40 || immutablesOffset > signature.length
+                || orderOffset > signature.length
+        ) {
+            revert InvalidSignatureEncoding();
+        }
+
+        assembly ("memory-safe") {
+            immutables := add(signature.offset, immutablesOffset)
+            makerOrder := add(signature.offset, orderOffset)
+        }
     }
 }
