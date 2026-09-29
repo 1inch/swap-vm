@@ -10,7 +10,6 @@ import { AddressLib, Address } from "@1inch/solidity-utils/contracts/libraries/A
 import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
-import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
@@ -20,8 +19,8 @@ import { ProxyHashLib } from "./vendor/libraries/ProxyHashLib.sol";
 /// @title NativeOrderEscrowFactory
 /// @notice Deploys per-order NativeOrderEscrow clones that hold a maker's native ETH as WETH so the order
 /// can be filled through an unmodified SwapVM router.
-/// @dev Mirrors the cross-chain-swap factory shape: the implementation is deployed in the constructor and
-/// clones are created with CREATE2 where salt = hash(IBaseEscrow.Immutables). Depositing ETH here replaces
+/// @dev The implementation is deployed in the constructor and clones are created with CREATE2
+/// where salt = hash(IBaseEscrow.Immutables). Depositing ETH here replaces
 /// the maker's EIP-712 signature: only the maker may create (funds custody implies order consent), and the
 /// clone validates fills via ERC-1271 against the immutables committed in its own address.
 ///
@@ -39,6 +38,7 @@ contract NativeOrderEscrowFactory {
     error NativeOrderOnlyMakerCanCreate();
     error NativeOrderAquaNotSupported();
     error NativeOrderExplicitReceiverRequired();
+    error NativeOrderInvalidTimelocks();
 
     /// @notice Emitted when a native order escrow is created and funded.
     /// @param escrow The deployed clone acting as `order.maker` of the filled order.
@@ -76,8 +76,8 @@ contract NativeOrderEscrowFactory {
     /// as maker, so its hash cannot be part of the salt.
     /// @param makerOrder The pre-patch order: maker = msg.sender, receiver set to the real recipient,
     /// program selling WETH.
-    /// @param timelocks Stage offsets in seconds from creation (SrcCancellation = expiry,
-    /// SrcPublicCancellation = public GC start); deployedAt is stamped by the factory.
+    /// @param timelocks Stage offsets in seconds from creation (SrcCancellation = expiry, must be non-zero;
+    /// SrcPublicCancellation = public GC start, must not precede expiry); deployedAt is stamped by the factory.
     /// @return escrow The deployed and funded clone.
     /// @return filledOrderHash Hash of the patched order takers fill.
     /// @return immutables The immutables pack needed for fills (ERC-1271 signature) and cancellations.
@@ -89,9 +89,13 @@ contract NativeOrderEscrowFactory {
         require(msg.value > 0, NativeOrderZeroDeposit());
         require(makerOrder.maker == msg.sender, NativeOrderOnlyMakerCanCreate());
         require(!makerOrder.traits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());
-        // An unset receiver defaults to `order.maker`, which is the clone after patching: the bought
-        // tokens would be paid to the escrow instead of the real maker. Demand an explicit receiver.
-        require(address(uint160(MakerTraits.unwrap(makerOrder.traits))) != address(0), NativeOrderExplicitReceiverRequired());
+
+        timelocks = timelocks.setDeployedAt(block.timestamp);
+        uint256 expiry = timelocks.get(TimelocksLib.Stage.SrcCancellation);
+        require(
+            expiry > block.timestamp && timelocks.get(TimelocksLib.Stage.SrcPublicCancellation) >= expiry,
+            NativeOrderInvalidTimelocks()
+        );
 
         immutables = IBaseEscrow.Immutables({
             orderHash: ROUTER.hash(makerOrder),
@@ -101,11 +105,14 @@ contract NativeOrderEscrowFactory {
             token: Address.wrap(uint160(address(WETH))),
             amount: msg.value,
             safetyDeposit: 0,
-            timelocks: timelocks.setDeployedAt(block.timestamp),
+            timelocks: timelocks,
             parameters: ""
         });
 
         escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(immutables.hashMem());
+        // `order.maker` is the clone and an unset receiver resolves to it: the bought
+        // tokens would be paid to the escrow instead of the real maker.
+        require(makerOrder.traits.receiver(escrow) != escrow, NativeOrderExplicitReceiverRequired());
         NativeOrderEscrow(payable(escrow)).depositAndApprove{ value: msg.value }();
 
         ISwapVM.Order memory filledOrder = ISwapVM.Order({

@@ -116,7 +116,7 @@ contract NativeOrderEscrowTest is Test {
 
         uint256 makerEthBefore = maker.balance;
         vm.prank(maker);
-        escrow.cancel(immutables);
+        escrow.cancel(immutables, filledOrderHash);
 
         assertEq(maker.balance - makerEthBefore, 0.25 ether, "Remainder refunded as native ETH");
         assertEq(weth.balanceOf(address(escrow)), 0);
@@ -133,12 +133,30 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function test_Fill_AfterProgramDeadline_Reverts() public {
-        _createEscrow(_defaultProgram());
-        uint256 deadline = block.timestamp + EXPIRY_OFFSET;
+        uint256 deadline = block.timestamp + EXPIRY_OFFSET / 2;
+        _createEscrow(_program(uint40(deadline)));
 
         vm.warp(deadline + 1);
         vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, deadline));
         router.swap(filledOrder, WETH_AMOUNT, _takerData(false, true));
+    }
+
+    function test_Fill_AfterEscrowExpiry_RevertsBadSignature() public {
+        // Program deadline outlives the escrow expiry: the escrow bound wins
+        _createEscrow(_program(uint40(block.timestamp + 2 * EXPIRY_OFFSET)));
+        bytes memory signature = abi.encode(immutables, makerOrder);
+
+        vm.warp(block.timestamp + EXPIRY_OFFSET - 1);
+        router.swap(filledOrder, 0.5 ether, _takerData(false, true));
+
+        vm.warp(block.timestamp + 1);
+        vm.expectRevert(NativeOrderEscrow.OrderExpired.selector);
+        escrow.isValidSignature(filledOrderHash, signature);
+
+        vm.expectRevert(abi.encodeWithSelector(
+            OrderRegistrator.BadSignature.selector, address(escrow), filledOrderHash, signature
+        ));
+        router.swap(filledOrder, 0.5 ether, _takerData(false, true));
     }
 
     // === Cancellation ===
@@ -148,7 +166,7 @@ contract NativeOrderEscrowTest is Test {
 
         uint256 makerEthBefore = maker.balance;
         vm.prank(maker);
-        escrow.cancel(immutables);
+        escrow.cancel(immutables, filledOrderHash);
         assertEq(maker.balance - makerEthBefore, WETH_AMOUNT, "Full deposit refunded as native ETH");
 
         // The clone has no WETH left: the router's transferFrom fails
@@ -160,7 +178,60 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(_defaultProgram());
 
         vm.expectRevert(IBaseEscrow.InvalidCaller.selector);
-        escrow.cancel(immutables);
+        escrow.cancel(immutables, filledOrderHash);
+    }
+
+    function test_Approve_ExactDeposit_DecreasesPerFill() public {
+        _createEscrow(_defaultProgram());
+        assertEq(weth.allowance(address(escrow), address(router)), WETH_AMOUNT, "Allowance equals the deposit");
+
+        router.swap(filledOrder, 0.4 ether, _takerData(false, true));
+        assertEq(weth.allowance(address(escrow), address(router)), 0.6 ether, "Fills consume the allowance");
+    }
+
+    function test_Cancel_ClosesOrderInRouter() public {
+        _createEscrow(_defaultProgram());
+        router.swap(filledOrder, 0.4 ether, _takerData(false, true));
+
+        vm.prank(maker);
+        escrow.cancel(immutables, filledOrderHash);
+
+        assertEq(weth.allowance(address(escrow), address(router)), 0, "Allowance revoked");
+        assertEq(
+            router.tokenOutInvalidators(address(escrow), filledOrderHash, address(weth)),
+            type(uint256).max,
+            "Order marked fully filled in the router"
+        );
+        assertFalse(_quoteSucceeds(), "Quote reflects the cancellation");
+
+        // WETH sent to the clone after cancellation cannot revive the order
+        _donateWeth(WETH_AMOUNT);
+        vm.expectRevert();
+        router.swap(filledOrder, 0.1 ether, _takerData(false, true));
+    }
+
+    function test_PublicCancel_ClosesOrderInRouter() public {
+        _createEscrow(_defaultProgram());
+        vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
+
+        vm.prank(resolver);
+        escrow.publicCancel(immutables, filledOrderHash, 0);
+
+        assertEq(weth.allowance(address(escrow), address(router)), 0, "Allowance revoked");
+        assertEq(router.tokenOutInvalidators(address(escrow), filledOrderHash, address(weth)), type(uint256).max);
+    }
+
+    function test_Cancel_WrongFilledHash_StillBlocksFills() public {
+        _createEscrow(_defaultProgram());
+
+        vm.prank(maker);
+        escrow.cancel(immutables, bytes32(uint256(1)));
+
+        // The real order is not invalidated in the router, but the revoked allowance still blocks fills
+        assertEq(router.tokenOutInvalidators(address(escrow), filledOrderHash, address(weth)), 0);
+        _donateWeth(WETH_AMOUNT);
+        vm.expectRevert();
+        router.swap(filledOrder, 0.1 ether, _takerData(false, true));
     }
 
     function test_PublicCancel_GatingAndReward() public {
@@ -169,13 +240,13 @@ contract NativeOrderEscrowTest is Test {
         // Too early: still in the maker-only window
         vm.prank(resolver);
         vm.expectRevert(IBaseEscrow.InvalidTime.selector);
-        escrow.publicCancel(immutables, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
 
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
 
         // Caller without the access token is rejected
         vm.expectRevert(IBaseEscrow.InvalidCaller.selector);
-        escrow.publicCancel(immutables, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
 
         // Resolver garbage-collects for a base-fee-capped reward, remainder refunds the maker
         vm.fee(10 gwei);
@@ -183,7 +254,7 @@ contract NativeOrderEscrowTest is Test {
         uint256 makerEthBefore = maker.balance;
 
         vm.prank(resolver);
-        escrow.publicCancel(immutables, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
 
         assertEq(resolver.balance, expectedReward, "Resolver reward is basefee * gas budget * premium");
         assertEq(maker.balance - makerEthBefore, WETH_AMOUNT - expectedReward, "Maker gets the remainder");
@@ -198,7 +269,7 @@ contract NativeOrderEscrowTest is Test {
 
         uint256 makerEthBefore = maker.balance;
         vm.prank(resolver);
-        escrow.publicCancel(immutables, 0);
+        escrow.publicCancel(immutables, filledOrderHash, 0);
 
         assertEq(resolver.balance, 0, "No reward requested");
         assertEq(maker.balance - makerEthBefore, WETH_AMOUNT, "Full deposit refunded");
@@ -279,6 +350,40 @@ contract NativeOrderEscrowTest is Test {
         factory.create{ value: 1 ether }(noReceiver, _defaultTimelocks());
     }
 
+    function test_Create_InvalidTimelocks_Revert() public {
+        ISwapVM.Order memory order = _buildOrder(maker, _defaultProgram());
+
+        // Zero expiry: the order would be dead on arrival
+        vm.prank(maker);
+        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTimelocks.selector);
+        factory.create{ value: 1 ether }(order, _timelocks(0, PUBLIC_CANCEL_OFFSET));
+
+        // Zero public cancellation start: resolvers could GC the order in the creation block
+        vm.prank(maker);
+        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTimelocks.selector);
+        factory.create{ value: 1 ether }(order, _timelocks(EXPIRY_OFFSET, 0));
+
+        // Public cancellation opening before expiry would race live fills
+        vm.prank(maker);
+        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTimelocks.selector);
+        factory.create{ value: 1 ether }(order, _timelocks(EXPIRY_OFFSET, EXPIRY_OFFSET - 1));
+
+        // Public cancellation may open exactly at expiry
+        vm.prank(maker);
+        factory.create{ value: 1 ether }(order, _timelocks(EXPIRY_OFFSET, EXPIRY_OFFSET));
+    }
+
+    function test_Create_DeployedAtCannotBeBackdated() public {
+        ISwapVM.Order memory order = _buildOrder(maker, _defaultProgram());
+        Timelocks forged = Timelocks.wrap(Timelocks.unwrap(_defaultTimelocks()) | (uint256(1) << 224));
+
+        vm.prank(maker);
+        (,, IBaseEscrow.Immutables memory imm) = factory.create{ value: 1 ether }(order, forged);
+
+        assertEq(Timelocks.unwrap(imm.timelocks) >> 224, block.timestamp, "Factory stamps deployedAt");
+        assertEq(TimelocksLib.get(imm.timelocks, TimelocksLib.Stage.SrcCancellation), block.timestamp + EXPIRY_OFFSET);
+    }
+
     function test_Create_DuplicateReverts_SaltDifferentiates() public {
         _createEscrow(_defaultProgram());
         address firstEscrow = address(escrow);
@@ -335,8 +440,12 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _defaultProgram() private view returns (bytes memory) {
+        return _program(uint40(block.timestamp + EXPIRY_OFFSET));
+    }
+
+    function _program(uint40 deadline) private view returns (bytes memory) {
         return bytes.concat(
-            Deadline.build(uint40(block.timestamp + EXPIRY_OFFSET)),
+            Deadline.build(deadline),
             StaticBalances.build(DAI_AMOUNT, WETH_AMOUNT),
             InvalidateTokenOut.build(),
             LimitSwap.build(address(dai), address(weth))
@@ -344,9 +453,13 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _defaultTimelocks() private pure returns (Timelocks) {
+        return _timelocks(EXPIRY_OFFSET, PUBLIC_CANCEL_OFFSET);
+    }
+
+    function _timelocks(uint32 expiryOffset, uint32 publicCancelOffset) private pure returns (Timelocks) {
         return Timelocks.wrap(
-            (uint256(EXPIRY_OFFSET) << (uint256(TimelocksLib.Stage.SrcCancellation) * 32)) |
-            (uint256(PUBLIC_CANCEL_OFFSET) << (uint256(TimelocksLib.Stage.SrcPublicCancellation) * 32))
+            (uint256(expiryOffset) << (uint256(TimelocksLib.Stage.SrcCancellation) * 32)) |
+            (uint256(publicCancelOffset) << (uint256(TimelocksLib.Stage.SrcPublicCancellation) * 32))
         );
     }
 
@@ -386,6 +499,19 @@ contract NativeOrderEscrowTest is Test {
         immutables = imm;
         filledOrder = makerOrder;
         filledOrder.maker = escrowAddr;
+    }
+
+    function _quoteSucceeds() private view returns (bool) {
+        try router.asView().quote(filledOrder, 0.1 ether, _takerData(false, true)) returns (uint256, uint256, bytes32) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function _donateWeth(uint256 amount) private {
+        weth.deposit{ value: amount }();
+        weth.transfer(address(escrow), amount);
     }
 
     function _takerData(bool isExactIn, bool allowPartialFill) private view returns (bytes memory) {
