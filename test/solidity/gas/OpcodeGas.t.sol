@@ -129,13 +129,13 @@ contract OpcodeGas is Test {
     function _measure(bytes memory program) private returns (uint256) {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            receiver: address(0),
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
-            usePermit2: false,
             allowZeroAmountIn: false,
-            receiver: address(0),
+            usePermit2: false,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
             hasPreTransferOutHook: false,

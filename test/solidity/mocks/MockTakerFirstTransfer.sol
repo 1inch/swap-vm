@@ -6,12 +6,13 @@ pragma solidity ^0.8.27;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
-import { SwapVM, ISwapVM } from "../../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 
 import { MockTaker } from "./MockTaker.sol";
 
 contract MockTakerFirstTransfer is MockTaker {
-    constructor(Aqua aqua, SwapVM swapVM, address owner_) MockTaker(aqua, swapVM, owner_) {}
+    constructor(Aqua aqua, SwapVMRouter swapVM, address owner_) MockTaker(aqua, swapVM, owner_) {}
 
     function preTransferInCallback(
         address maker,
