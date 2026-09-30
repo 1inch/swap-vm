@@ -362,6 +362,7 @@ contract MinRateTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -388,6 +389,7 @@ contract MinRateTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             hasPreTransferInCallback: false,

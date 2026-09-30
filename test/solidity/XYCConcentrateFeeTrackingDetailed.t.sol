@@ -78,6 +78,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test {
             tokenB: address(tokenUSD),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(
@@ -106,6 +107,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: sig

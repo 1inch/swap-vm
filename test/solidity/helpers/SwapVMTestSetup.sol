@@ -61,6 +61,7 @@ interface TraitsHelper {
         address tokenB;
         bool shouldUnwrapWeth;
         bool useAquaInsteadOfSignature;
+        bool usePermit2;
         bool allowZeroAmountIn;
         bytes program;
     }
@@ -73,6 +74,7 @@ interface TraitsHelper {
         bool useTransferFromAndAquaPush;
         bool isAToB;
         bool allowPartialFill;
+        bool usePermit2;
         bytes threshold;
         address to;
         bool hasPreTransferInCallback;

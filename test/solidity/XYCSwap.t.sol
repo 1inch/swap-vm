@@ -92,6 +92,7 @@ contract XYCSwapTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytecode
@@ -117,6 +118,7 @@ contract XYCSwapTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: thresholdData,
             to: taker,
             hasPreTransferInCallback: false,

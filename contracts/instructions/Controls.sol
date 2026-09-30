@@ -9,6 +9,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { Time } from "../libs/Time.sol";
 
 /// @notice Salt opcode, produce different hashes for duplicated strategies
 /// @dev Encoding: [uint64 salt] or [bytes salt]
@@ -144,8 +145,9 @@ library Deadline {
         deadline = args.at(0).asU40();
     }
 
-    function exec(Context memory, bytes calldata args) internal view {
-        uint40 deadline = parse(args);
+    function exec(Context memory ctx, bytes calldata args) internal {
+        uint40 deadline = Time.resolve(ctx, parse(args));
+
         require(block.timestamp <= deadline, DeadlineReached(deadline));
     }
 }

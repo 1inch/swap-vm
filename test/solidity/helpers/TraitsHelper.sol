@@ -17,6 +17,7 @@ contract TraitsHelper {
         address tokenB;
         bool shouldUnwrapWeth;
         bool useAquaInsteadOfSignature;
+        bool usePermit2;
         bool allowZeroAmountIn;
         bytes program;
     }
@@ -29,6 +30,7 @@ contract TraitsHelper {
         bool useTransferFromAndAquaPush;
         bool isAToB;
         bool allowPartialFill;
+        bool usePermit2;
         bytes threshold;
         address to;
         bool hasPreTransferInCallback;
@@ -44,6 +46,7 @@ contract TraitsHelper {
             shouldUnwrapWeth: args.shouldUnwrapWeth,
             useAquaInsteadOfSignature: args.useAquaInsteadOfSignature,
             allowZeroAmountIn: args.allowZeroAmountIn,
+            usePermit2: args.usePermit2,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
             hasPreTransferOutHook: false,
@@ -70,6 +73,7 @@ contract TraitsHelper {
             useTransferFromAndAquaPush: args.useTransferFromAndAquaPush,
             isAToB: args.isAToB,
             allowPartialFill: args.allowPartialFill,
+            usePermit2: args.usePermit2,
             threshold: args.threshold,
             to: args.to,
             deadline: 0,

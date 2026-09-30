@@ -12,6 +12,7 @@ import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { LimitSwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { OrderRegistrator } from "../../contracts/extensions/OrderRegistrator.sol";
+import { OrderRegistrator, OrderRegistratorLib } from "../../contracts/extensions/OrderRegistrator.sol";
 import { ERC1271MakerMock } from "./mocks/ERC1271MakerMock.sol";
 
 contract OrderRegistratorTest is Test {
@@ -89,7 +90,7 @@ contract OrderRegistratorTest is Test {
         bytes memory signature = _sign(orderHash);
         swapVM.registerOrder(order, signature);
 
-        vm.expectRevert(abi.encodeWithSelector(OrderRegistrator.OrderAlreadyRegistered.selector, orderHash));
+        vm.expectRevert(abi.encodeWithSelector(OrderRegistratorLib.OrderAlreadyRegistered.selector, orderHash));
         swapVM.registerOrder(order, signature);
     }
 
@@ -130,6 +131,7 @@ contract OrderRegistratorTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: useAqua,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: ""

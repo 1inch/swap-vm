@@ -285,6 +285,7 @@ contract AquaAccounting is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: programBytes
@@ -332,6 +333,7 @@ contract AquaAccounting is Test {
             useTransferFromAndAquaPush: false,
             isAToB: zeroForOne,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             hasPreTransferInCallback: true,

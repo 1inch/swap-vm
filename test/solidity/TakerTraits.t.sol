@@ -10,13 +10,39 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter, DeployCode } from "./helpers/SwapVMTestSetup.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { TakerTraits, TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
+import { Extruction } from "../../contracts/instructions/Extruction.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
+import { MockTakerArgsRecorder } from "./mocks/MockTakerArgsRecorder.sol";
+import { MockTakerCallbacks } from "./mocks/MockTakerCallbacks.sol";
+
+// Wrapper contract on top of TakerTraitsLib.
+contract TakerTraitsWrapper {
+    using TakerTraitsLib for TakerTraits;
+
+    function build(TakerTraitsLib.Args memory args) external pure returns (bytes memory) {
+        return TakerTraitsLib.build(args);
+    }
+
+    function parseWithCallbackData(bytes calldata packed) external pure returns (
+        TakerTraits traits, bytes memory preIn, bytes memory preOut
+    ) {
+        bytes calldata tail;
+        (traits, tail) = TakerTraitsLib.parse(packed);
+        preIn = traits.preTransferInCallbackData(tail);
+        preOut = traits.preTransferOutCallbackData(tail);
+    }
+
+    function parseUsePermit2(bytes calldata packed) external pure returns (bool) {
+        (TakerTraits traits,) = TakerTraitsLib.parse(packed);
+        return traits.usePermit2();
+    }
+}
 
 /**
  * @title TakerTraitsTest
@@ -25,6 +51,7 @@ import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
  */
 contract TakerTraitsTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -40,6 +67,7 @@ contract TakerTraitsTest is Test {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
+        orders = DeployCode.TraitsHelper();
         swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
@@ -313,6 +341,74 @@ contract TakerTraitsTest is Test {
         assertTrue(packed.length > 0, "Should build successfully");
     }
 
+    function test_Build_ThresholdLengthInvalid_Reverts() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        uint256[4] memory invalidLengths = [uint256(1), 20, 31, 33];
+
+        for (uint256 i = 0; i < invalidLengths.length; i++) {
+            TakerTraitsLib.Args memory args;
+            args.taker = taker;
+            args.threshold = new bytes(invalidLengths[i]);
+
+            vm.expectRevert(abi.encodeWithSelector(
+                TakerTraitsLib.TakerTraitsThresholdLengthInvalid.selector, args.threshold
+            ));
+            wrapper.build(args);
+        }
+    }
+
+    function test_Build_PreTransferInCallbackDataWithoutFlag_Reverts() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        TakerTraitsLib.Args memory args;
+        args.taker = taker;
+        args.preTransferInCallbackData = abi.encodePacked("PRE_IN_CB");
+
+        vm.expectRevert(TakerTraitsLib.TakerTraitsMissingHasPreTransferInFlag.selector);
+        wrapper.build(args);
+    }
+
+    function test_Build_PreTransferOutCallbackDataWithoutFlag_Reverts() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        TakerTraitsLib.Args memory args;
+        args.taker = taker;
+        args.preTransferOutCallbackData = abi.encodePacked("PRE_OUT_CALLBACK");
+
+        vm.expectRevert(TakerTraitsLib.TakerTraitsMissingHasPreTransferOutFlag.selector);
+        wrapper.build(args);
+    }
+
+    function test_Build_CallbackDataWithFlags_RoundTrips() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        bytes memory preInData = abi.encodePacked("PRE_IN_CB");
+        bytes memory preOutData = abi.encodePacked("PRE_OUT_CALLBACK");
+
+        TakerTraitsLib.Args memory args;
+        args.taker = taker;
+        args.hasPreTransferInCallback = true;
+        args.hasPreTransferOutCallback = true;
+        args.preTransferInCallbackData = preInData;
+        args.preTransferOutCallbackData = preOutData;
+
+        bytes memory packed = wrapper.build(args);
+        (TakerTraits traits, bytes memory readPreIn, bytes memory readPreOut) = wrapper.parseWithCallbackData(packed);
+
+        assertTrue(traits.hasPreTransferInCallback(), "PreTransferIn callback flag should be set");
+        assertTrue(traits.hasPreTransferOutCallback(), "PreTransferOut callback flag should be set");
+        assertEq(readPreIn, preInData, "PreTransferIn: incorrect callback data");
+        assertEq(readPreOut, preOutData, "PreTransferOut: incorrect callback data");
+    }
+
+    function test_Build_Permit2Flag_RoundTrips() public {
+        TakerTraitsWrapper wrapper = new TakerTraitsWrapper();
+        TakerTraitsLib.Args memory args;
+        args.taker = taker;
+
+        assertFalse(wrapper.parseUsePermit2(wrapper.build(args)), "Permit2 flag should default to false");
+
+        args.usePermit2 = true;
+        assertTrue(wrapper.parseUsePermit2(wrapper.build(args)), "Permit2 flag should round-trip");
+    }
+
     // ==================== Full Data Slices Test ====================
 
     function test_AllDataSlices_Populated() public {
@@ -463,6 +559,96 @@ contract TakerTraitsTest is Test {
         assertEq(lastTakerData, takerPreInData, "PreTransferIn: taker data should match");
     }
 
+    // ==================== Taker Callback Tests ====================
+
+    function test_TakerCallbackData_PassedToCallbacks() public {
+        MockMakerHooks hooksContract = new MockMakerHooks();
+        MockTakerCallbacks callbackTaker = _createCallbackTaker();
+
+        bytes memory takerPostOutHookData = abi.encodePacked("TAKER_POST_OUT_HOOK");
+        bytes memory preInCallbackData = abi.encodePacked("PRE_IN_CB");
+        bytes memory preOutCallbackData = abi.encodePacked("PRE_OUT_CALLBACK");
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithHooks(
+            0xA001, address(hooksContract), "", "", "", abi.encodePacked("MAKER_POST_OUT")
+        );
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.taker = address(callbackTaker);
+        args.postTransferOutHookData = takerPostOutHookData;
+        args.hasPreTransferInCallback = true;
+        args.hasPreTransferOutCallback = true;
+        args.preTransferInCallbackData = preInCallbackData;
+        args.preTransferOutCallbackData = preOutCallbackData;
+
+        (uint256 amountIn, uint256 amountOut) = callbackTaker.swap(order, 50e18, TakerTraitsLib.build(args));
+
+        assertEq(amountIn, 50e18);
+        assertEq(amountOut, 25e18);
+
+        assertEq(callbackTaker.preTransferInCallCount(), 1, "preTransferInCallback should be called once");
+        assertEq(callbackTaker.preTransferOutCallCount(), 1, "preTransferOutCallback should be called once");
+        assertEq(callbackTaker.lastPreTransferInData(), preInCallbackData, "PreTransferIn: incorrect callback data");
+        assertEq(callbackTaker.lastPreTransferOutData(), preOutCallbackData, "PreTransferOut: incorrect callback data");
+
+        (,,,,,,,, bytes memory lastTakerData) = hooksContract.lastPostTransferOut();
+        assertEq(lastTakerData, takerPostOutHookData, "PostTransferOut: incorrect taker data");
+    }
+
+    function test_TakerCallbackData_OnlyPreTransferOut() public {
+        MockTakerCallbacks callbackTaker = _createCallbackTaker();
+        bytes memory preOutCallbackData = abi.encodePacked("ONLY_PRE_OUT_CB");
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createLimitOrder(0xA002);
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.taker = address(callbackTaker);
+        args.hasPreTransferOutCallback = true;
+        args.preTransferOutCallbackData = preOutCallbackData;
+
+        callbackTaker.swap(order, 50e18, TakerTraitsLib.build(args));
+
+        assertEq(callbackTaker.preTransferInCallCount(), 0, "preTransferInCallback should not be called");
+        assertEq(callbackTaker.preTransferOutCallCount(), 1, "preTransferOutCallback should be called once");
+        assertEq(callbackTaker.lastPreTransferOutData(), preOutCallbackData, "PreTransferOut: incorrect callback data");
+    }
+
+    function test_TakerCallbacks_Disabled_NotCalled() public {
+        MockTakerCallbacks callbackTaker = _createCallbackTaker();
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createLimitOrder(0xA003);
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.taker = address(callbackTaker);
+
+        callbackTaker.swap(order, 50e18, TakerTraitsLib.build(args));
+
+        assertEq(callbackTaker.preTransferInCallCount(), 0, "preTransferInCallback should not be called");
+        assertEq(callbackTaker.preTransferOutCallCount(), 0, "preTransferOutCallback should not be called");
+    }
+
+    function test_TakerInstructionsArgs_PassedToInstruction() public {
+        MockTakerArgsRecorder recorder = new MockTakerArgsRecorder();
+        MockTakerCallbacks callbackTaker = _createCallbackTaker();
+
+        bytes memory instructionsArgs = abi.encodePacked("TAKER_INSTRUCTION_ARGS");
+        bytes memory preOutCallbackData = abi.encodePacked("PRE_OUT_CB");
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithExtruction(0xA004, address(recorder));
+
+        TakerTraitsLib.Args memory args = _defaultTakerArgs(signature);
+        args.taker = address(callbackTaker);
+        args.hasPreTransferOutCallback = true;
+        args.preTransferOutCallbackData = preOutCallbackData;
+        args.instructionsArgs = instructionsArgs;
+
+        callbackTaker.swap(order, 50e18, TakerTraitsLib.build(args));
+
+        assertEq(recorder.callCount(), 1, "Extruction should be called once");
+        assertEq(recorder.lastTakerArgs(), instructionsArgs, "Incorrect taker instruction args");
+        assertEq(callbackTaker.lastPreTransferOutData(), preOutCallbackData, "PreTransferOut: incorrect callback data");
+    }
+
     // ==================== Helper Functions ====================
 
     function _defaultTakerArgs(bytes memory signature) internal view returns (TakerTraitsLib.Args memory args) {
@@ -475,6 +661,7 @@ contract TakerTraitsTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: false,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             deadline: 0,
@@ -498,26 +685,15 @@ contract TakerTraitsTest is Test {
             Salt.build(salt)
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -540,31 +716,61 @@ contract TakerTraitsTest is Test {
             Salt.build(salt)
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        MakerTraitsLib.Args memory traits;
+        traits.maker = maker;
+        traits.tokenA = address(tokenA);
+        traits.tokenB = address(tokenB);
+        traits.hasPreTransferInHook = preInData.length > 0;
+        traits.hasPostTransferInHook = postInData.length > 0;
+        traits.hasPreTransferOutHook = preOutData.length > 0;
+        traits.hasPostTransferOutHook = postOutData.length > 0;
+        traits.preTransferInTarget = preInData.length > 0 ? hooksTarget : address(0);
+        traits.preTransferInData = preInData;
+        traits.postTransferInTarget = postInData.length > 0 ? hooksTarget : address(0);
+        traits.postTransferInData = postInData;
+        traits.preTransferOutTarget = preOutData.length > 0 ? hooksTarget : address(0);
+        traits.preTransferOutData = preOutData;
+        traits.postTransferOutTarget = postOutData.length > 0 ? hooksTarget : address(0);
+        traits.postTransferOutData = postOutData;
+        traits.program = programBytes;
+        order = MakerTraitsLib.build(traits);
+
+        bytes32 orderHash = swapVM.hash(order);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    function _createCallbackTaker() internal returns (MockTakerCallbacks callbackTaker) {
+        callbackTaker = new MockTakerCallbacks(swapVM);
+        tokenB.mint(address(callbackTaker), 10000e18);
+        callbackTaker.approveToken(address(tokenB));
+    }
+
+    function _createOrderWithExtruction(
+        uint64 salt,
+        address extructionTarget
+    ) internal view returns (ISwapVM.Order memory order, bytes memory signature) {
+        bytes memory programBytes = bytes.concat(
+            StaticBalances.build(MAKER_BALANCE_A, MAKER_BALANCE_B),
+            LimitSwap.build(address(tokenB), address(tokenA)),
+            Extruction.build(extructionTarget, ""),
+            Salt.build(salt)
+        );
+
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: preInData.length > 0,
-            hasPostTransferInHook: postInData.length > 0,
-            hasPreTransferOutHook: preOutData.length > 0,
-            hasPostTransferOutHook: postOutData.length > 0,
-            preTransferInTarget: preInData.length > 0 ? hooksTarget : address(0),
-            preTransferInData: preInData,
-            postTransferInTarget: postInData.length > 0 ? hooksTarget : address(0),
-            postTransferInData: postInData,
-            preTransferOutTarget: preOutData.length > 0 ? hooksTarget : address(0),
-            preTransferOutData: preOutData,
-            postTransferOutTarget: postOutData.length > 0 ? hooksTarget : address(0),
-            postTransferOutData: postOutData,
             program: programBytes
         }));
 
         bytes32 orderHash = swapVM.hash(order);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
-        signature = abi.encodePacked(r, s, v);
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(makerPrivateKey, orderHash);
+        signature = abi.encodePacked(r, s_, v);
     }
 }

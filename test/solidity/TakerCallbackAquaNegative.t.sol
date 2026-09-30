@@ -64,6 +64,7 @@ contract TakerCallbackAquaNegativeTest is AquaSwapVMTest {
             useTransferFromAndAquaPush: false,
             isAToB: false,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: ""

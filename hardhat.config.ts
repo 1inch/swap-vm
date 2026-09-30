@@ -50,6 +50,7 @@ export default defineConfig({
     splitTestsCompilation: true,
     profiles: {
       default: { compilers: [swapVmCompiler] },
+      production: { compilers: [swapVmCompiler] },
       fast: { compilers: [fastTestCompiler] },
     },
   },
@@ -59,6 +60,7 @@ export default defineConfig({
         runs: 1024,
       },
       fsPermissions: {
+        readDirectory: ["./node_modules/@1inch/solidity-utils/dist/src"],
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
       },
     },

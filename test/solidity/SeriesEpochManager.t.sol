@@ -389,6 +389,7 @@ contract SeriesEpochManagerTest is Test {
             receiver: address(0),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             program: _epochProgram(seriesId, epoch, salt)
         }));
@@ -403,6 +404,7 @@ contract SeriesEpochManagerTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             hasPreTransferInCallback: false,

@@ -122,6 +122,7 @@ contract SwapVmAccounting is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             hasPreTransferInCallback: false,
@@ -313,6 +314,7 @@ contract SwapVmAccounting is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: programBytes

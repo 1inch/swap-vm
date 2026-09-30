@@ -91,6 +91,7 @@ contract FeeTest is Test {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: programBytes
@@ -115,6 +116,7 @@ contract FeeTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: signature

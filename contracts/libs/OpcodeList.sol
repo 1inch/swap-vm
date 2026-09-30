@@ -156,7 +156,7 @@ enum Opcode {
     /* 7e */ _7e,
     /* 7f */ _7f,
     /* 80 */ FeeProtocol,
-    /* 81 */ _81,
+    /* 81 */ FeeProtocolSurplus,
     /* 82 */ _82,
     /* 83 */ _83,
     /* 84 */ _84,

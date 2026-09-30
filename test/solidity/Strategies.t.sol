@@ -204,6 +204,7 @@ contract StrategiesTest is Test {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: useAqua,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -219,6 +220,7 @@ contract StrategiesTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: true,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             hasPreTransferInCallback: false,

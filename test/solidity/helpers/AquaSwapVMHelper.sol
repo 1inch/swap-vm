@@ -37,6 +37,7 @@ contract AquaSwapVMHelper {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: programBytes

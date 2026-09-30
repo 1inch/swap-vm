@@ -12,6 +12,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { Stop, Revert, Deadline, Salt } from "../../contracts/instructions/Controls.sol";
@@ -113,6 +114,28 @@ contract ControlsTest is Test {
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, deadline));
         swapVM.swap(order, 1e18, takerData);
+    }
+
+    function test_Deadline_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        uint40 lifetime = 1 hours;
+        uint40 deadline = Time.RELATIVE_TIME_FLAG | lifetime;
+
+        bytes memory bytecode = bytes.concat(
+            Deadline.build(deadline),
+            StaticBalances.build(100e18, 100e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+
+        vm.warp(announcedAt);
+        assertEq(_executeSwap(order, address(tokenA), address(tokenB), 1e18), 1e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + lifetime + 1);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0, true);
+        vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, announcedAt + lifetime));
+        swapVM.quote(order, 1e18, takerData);
     }
 
     /**
@@ -698,6 +721,7 @@ contract ControlsTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -724,6 +748,7 @@ contract ControlsTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             hasPreTransferInCallback: false,

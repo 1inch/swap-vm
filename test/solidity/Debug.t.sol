@@ -11,8 +11,8 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
-import { SwapRegisters } from "../../contracts/libs/VM.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { SwapRegisters } from "../../contracts/libs/VM.sol";
 import { PrintSwapRegisters, PrintSwapQuery, PrintVM, PrintFreeMemoryPointer, PrintGasLeft, PrintFee, PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
@@ -82,6 +82,7 @@ contract DebugTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -100,6 +101,7 @@ contract DebugTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             deadline: 0,

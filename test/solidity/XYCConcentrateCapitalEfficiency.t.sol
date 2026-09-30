@@ -108,6 +108,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test {
             tokenB: tokenGt,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(
@@ -132,6 +133,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test {
             tokenB: tokenGt,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(
@@ -152,6 +154,7 @@ contract XYCConcentrateCapitalEfficiencyTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             hasPreTransferInCallback: false,

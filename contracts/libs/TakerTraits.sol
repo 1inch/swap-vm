@@ -42,6 +42,7 @@ library TakerTraitsLib {
     /// @param useTransferFromAndAquaPush Use transferFrom + Aqua push pattern
     /// @param isAToB True for tokenA->tokenB swap, false for tokenB->tokenA swap
     /// @param allowPartialFill Allow swaps for part of taker-specified amount
+    /// @param usePermit2 Use Permit2 for taker token transfers
     /// @param threshold Min output (exactIn) or max input (exactOut), 32 bytes or empty
     /// @param to Recipient address (zero defaults to taker)
     /// @param deadline Expiration timestamp (0 = no deadline)
@@ -64,6 +65,7 @@ library TakerTraitsLib {
         bool useTransferFromAndAquaPush;
         bool isAToB;
         bool allowPartialFill;
+        bool usePermit2;
         bytes threshold;
         address to;
         uint40 deadline;
@@ -107,6 +109,7 @@ library TakerTraitsLib {
     uint16 constant internal USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG = 0x0040;
     uint16 constant internal IS_A_TO_B_BIT_FLAG = 0x0080;
     uint16 constant internal ALLOW_PARTIAL_FILL = 0x0100;
+    uint16 constant internal USE_PERMIT2_BIT_FLAG = 0x0200;
 
     /// @notice Build taker traits and data from arguments
     /// @dev Packs traits, hooks, callbacks, and signature into single bytes
@@ -155,7 +158,8 @@ library TakerTraitsLib {
             (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0) |
             (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0) | 
-            (args.allowPartialFill ? ALLOW_PARTIAL_FILL : 0);
+            (args.allowPartialFill ? ALLOW_PARTIAL_FILL : 0) |
+            (args.usePermit2 ? USE_PERMIT2_BIT_FLAG : 0);
 
         packed = abi.encodePacked(
             slicesIndexes,
@@ -263,6 +267,10 @@ library TakerTraitsLib {
 
     function allowPartialFill(TakerTraits traits) internal pure returns (bool) {
         return (TakerTraits.unwrap(traits) & ALLOW_PARTIAL_FILL) != 0;
+    }
+
+    function usePermit2(TakerTraits traits) internal pure returns (bool) {
+        return (TakerTraits.unwrap(traits) & USE_PERMIT2_BIT_FLAG) != 0;
     }
 
     function threshold(TakerTraits traits, bytes calldata data) internal pure returns (bool hasThreshold, uint256 thresholdAmount) {

@@ -299,6 +299,7 @@ contract DecayXYCFeesInvariants is Test, CoreInvariants {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -324,6 +325,7 @@ contract DecayXYCFeesInvariants is Test, CoreInvariants {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             hasPreTransferInCallback: false,

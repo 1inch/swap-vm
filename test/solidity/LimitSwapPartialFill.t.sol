@@ -346,6 +346,7 @@ contract LimitSwapPartialFillTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -363,6 +364,7 @@ contract LimitSwapPartialFillTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: allowPartialFill,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             hasPreTransferInCallback: false,

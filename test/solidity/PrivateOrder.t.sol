@@ -86,6 +86,7 @@ contract PrivateOrderTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -101,6 +102,7 @@ contract PrivateOrderTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             hasPreTransferInCallback: false,

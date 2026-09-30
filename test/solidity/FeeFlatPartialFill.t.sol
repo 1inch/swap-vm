@@ -221,6 +221,7 @@ contract FeeFlatPartialFillTest is Test {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: true,
             receiver: address(0),
             program: program
@@ -237,6 +238,7 @@ contract FeeFlatPartialFillTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: true,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: ""

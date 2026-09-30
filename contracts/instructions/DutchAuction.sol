@@ -10,6 +10,7 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { Power } from "../libs/Power.sol";
+import { Time } from "../libs/Time.sol";
 
 /// @notice DutchAuctionBalanceIn opcode, applies exponential decay to balance in (maker exact in)
 ///   Reverts after duration passes
@@ -50,8 +51,9 @@ library DutchAuctionBalanceIn {
         decay = args.at(7).asU64();
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
+    function exec(Context memory ctx, bytes calldata args) internal {
         (uint40 start, uint16 duration, uint64 decay) = parse(args);
+        start = Time.resolve(ctx, start);
 
         require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
         uint256 elapsed = block.timestamp - start;
@@ -100,8 +102,9 @@ library DutchAuctionBalanceOut {
         decay = args.at(7).asU64();
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
+    function exec(Context memory ctx, bytes calldata args) internal {
         (uint40 start, uint16 duration, uint64 decay) = parse(args);
+        start = Time.resolve(ctx, start);
 
         require(block.timestamp <= start + duration, DutchAuctionExpired(block.timestamp, start + duration));
         uint256 elapsed = block.timestamp - start;

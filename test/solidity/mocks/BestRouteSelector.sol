@@ -93,7 +93,7 @@ contract BestRouteSelector is OpcodesDebug {
                 fee: ProtocolFee({
                     meta: FeeMetaLib.init(),
                     receivers: FeeReceiverLib.init(),
-                    feeTotal: 0
+                    surplusEstimation: 0
                 })
             });
 

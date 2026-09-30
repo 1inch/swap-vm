@@ -117,6 +117,7 @@ contract ConcentrateTest is Test {
             tokenB: address(tokenA),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(
@@ -147,6 +148,7 @@ contract ConcentrateTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
             allowPartialFill: takerSetup.isPartialFill,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: ""
@@ -163,6 +165,7 @@ contract ConcentrateTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: takerSetup.isAToB,
             allowPartialFill: takerSetup.isPartialFill,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: signature
@@ -553,6 +556,7 @@ contract ConcentrateTest is Test {
             tokenB: address(tokenA),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(
@@ -583,6 +587,7 @@ contract ConcentrateTest is Test {
             tokenB: address(tokenA),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytes.concat(

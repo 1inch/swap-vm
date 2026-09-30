@@ -387,6 +387,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -412,6 +413,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             hasPreTransferInCallback: false,
@@ -445,6 +447,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: bytecode
@@ -515,6 +518,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             hasPreTransferInCallback: false,

@@ -203,7 +203,7 @@ contract FeeProtocolPartialFillTest is Test {
         FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
         receivers[0] = FeeProtocol.ReceiverConfig({ receiver: feeRecipient, feeBps: feeBps, surplusBps: 0 });
 
-        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0), 0);
+        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0));
     }
 
     function decodeMismatch(bytes calldata reason) external pure returns (uint256 takerAmount, uint256 computedAmount) {
@@ -217,6 +217,7 @@ contract FeeProtocolPartialFillTest is Test {
             tokenB: tokenB,
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: true,
             receiver: address(0),
             program: program
@@ -233,6 +234,7 @@ contract FeeProtocolPartialFillTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: true,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: ""

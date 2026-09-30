@@ -13,6 +13,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
+import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
@@ -32,6 +33,9 @@ contract DutchAuctionTest is Test {
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
+
+    // By default foundry's `block.timestamp` returns 1. We prefer to use realistic one.
+    uint40 constant AUCTION_REALISTIC_START_TS = 0x123456;
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -88,7 +92,7 @@ contract DutchAuctionTest is Test {
      * Test Dutch auction out expiry
      */
     function test_DutchAuctionOut_Expiry() public {
-        uint40 startTime = uint40(block.timestamp);
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
         uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
 
@@ -118,7 +122,7 @@ contract DutchAuctionTest is Test {
      * Test Dutch auction in expiry
      */
     function test_DutchAuctionIn_Expiry() public {
-        uint40 startTime = uint40(block.timestamp);
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
         uint16 duration = 300; // 5 minutes
         uint64 decayFactor = 0.99e18;
 
@@ -145,10 +149,165 @@ contract DutchAuctionTest is Test {
     }
 
     /**
+     * Test DutchAuctionBalanceIn exact decay amount.
+     */
+    function test_DutchAuctionIn_ExactDecayedAmount() public {
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
+        uint16 duration = 300; // 5 minutes
+        uint64 decayFactor = 0.5e18; // 50% loss every second
+
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        uint256 amountIn;
+        uint256 amountOut;
+
+        // Execute swap in the same second when auction is created.
+        vm.warp(startTime);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
+
+        // Adjust to time 2 seconds. Price will `P = balanceOut / balanceIn` grow 4 times.
+        vm.warp(startTime + 2);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 80e18, "Invalid amountOut");
+
+        // Adjust to time 4 seconds. `balanceIn` has decayed to 6.25e18, below the 10e18 input,
+        // so LimitSwap clamps to a partial fill and the taker takes the whole `balanceOut`.
+        vm.warp(startTime + 4);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        bytes memory partialFillData = _signAndPackTakerData(order, true, 0, true);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, partialFillData);
+        vm.assertEq(amountIn, 6.25e18, "Partial fill must cap amountIn at balanceIn");
+        vm.assertEq(amountOut, 200e18, "Invalid amountOut");
+    }
+
+    /**
+     * Test DutchAuctionBalanceOut exact decay amount.
+     */
+    function test_DutchAuctionOut_ExactDecayedAmount() public {
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
+        uint16 duration = 300; // 5 minutes
+        uint64 decayFactor = 0.5e18; // 50% loss every second
+
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory exactInData = _signAndPackTakerData(order, true, 0);
+
+        uint256 amountIn;
+        uint256 amountOut;
+
+        // Execute swap in the same second when auction is created.
+        vm.warp(startTime);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 20e18, "Invalid amountOut");
+
+        // Adjust to time 2 seconds. Price will `P = balanceOut / balanceIn` grow 4 times.
+        vm.warp(startTime + 2);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 80e18, "Invalid amountOut");
+
+        // Adjust to time 4 seconds. `balanceIn` stays at 100e18, so there is no partial fill:
+        // `balanceOut` has grown to 3200e18 and the full 10e18 in buys 320e18 out.
+        vm.warp(startTime + 4);
+        TokenMock(address(tokenA)).mint(taker, 10e18);
+        (amountIn, amountOut, ) = swapVM.swap(order, 10e18, exactInData);
+        vm.assertEq(amountIn, 10e18, "Nothing must happen with amountIn");
+        vm.assertEq(amountOut, 320e18, "Invalid amountOut");
+    }
+
+    function test_DutchAuctionBalanceIn_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
+    }
+
+    function test_DutchAuctionBalanceOut_RelativeToOrderAnnouncement() public {
+        uint40 announcedAt = 1_000_000;
+        bytes memory bytecode = bytes.concat(
+            StaticBalances.build(100e18, 200e18),
+            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 300, 0.5e18),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
+        ISwapVM.Order memory order = _createOrder(bytecode);
+        bytes memory takerData = _signAndPackTakerData(order, true, 0);
+
+        vm.warp(announcedAt);
+        tokenA.mint(taker, 10e18);
+        (, uint256 amountOut,) = swapVM.swap(order, 10e18, takerData);
+        assertEq(amountOut, 20e18);
+        assertEq(swapVM.announcedAt(swapVM.hash(order)), announcedAt);
+
+        vm.warp(announcedAt + 1);
+        (, amountOut,) = swapVM.quote(order, 10e18, takerData);
+        assertEq(amountOut, 40e18);
+    }
+
+    /**
+     * Test Dutch auction build failed for decay < 1.
+     */
+    function test_Fail_DutchAuctionInvalidDecay() public {
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 300, 1e18);
+
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 300, 1e18);
+
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 300, 1e18 + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 300, 1e18 + 1);
+    }
+
+    /// @dev Simple wrapper over library function `DutchAuctionBalanceIn.build`.
+    function buildDutchAuctionBalanceIn(uint40 start, uint16 duration, uint64 decay) external pure {
+        DutchAuctionBalanceIn.build(start, duration, decay);
+    }
+
+    /// @dev Simple wrapper over library function `DutchAuctionBalanceOut.build`.
+    function buildDutchAuctionBalanceOut(uint40 start, uint16 duration, uint64 decay) external pure {
+        DutchAuctionBalanceOut.build(start, duration, decay);
+    }
+    /**
      * Helper to test Dutch auction with specific decay factor
      */
     function _testDutchAuctionWithDecay(uint64 decayFactor, bool useIn) private {
-        uint40 startTime = uint40(block.timestamp);
+        uint40 startTime = AUCTION_REALISTIC_START_TS;
         uint16 duration = 300;
 
         bytes memory bytecode = bytes.concat(
@@ -226,6 +385,7 @@ contract DutchAuctionTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
             program: program
@@ -236,6 +396,15 @@ contract DutchAuctionTest is Test {
         ISwapVM.Order memory order,
         bool isExactIn,
         uint256 threshold
+    ) private view returns (bytes memory) {
+        return _signAndPackTakerData(order, isExactIn, threshold, false);
+    }
+
+    function _signAndPackTakerData(
+        ISwapVM.Order memory order,
+        bool isExactIn,
+        uint256 threshold,
+        bool allowPartialFill
     ) private view returns (bytes memory) {
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, orderHash);
@@ -250,7 +419,8 @@ contract DutchAuctionTest is Test {
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
-            allowPartialFill: false,
+            allowPartialFill: allowPartialFill,
+            usePermit2: false,
             threshold: thresholdData,
             to: address(this),
             hasPreTransferInCallback: false,

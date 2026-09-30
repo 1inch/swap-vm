@@ -57,10 +57,11 @@ struct SwapRegisters {
 /// @dev Pending protocol fees to claim during transfers phase
 /// @param meta Packed meta information
 /// @param receivers Packed receivers array
+/// @param surplusEstimation Estimated maker spend or receive for surplus calculaiton
 struct ProtocolFee {
     FeeMeta meta;
     FeeReceiver[] receivers;
-    uint256 feeTotal;
+    uint256 surplusEstimation;
 }
 
 /// @title SwapVM context

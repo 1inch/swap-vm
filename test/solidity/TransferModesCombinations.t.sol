@@ -13,9 +13,10 @@ import { MockTaker } from "./mocks/MockTaker.sol";
 import { DirectSwapVMHelper } from "./helpers/DirectSwapVMHelper.sol";
 import { AquaSwapVMHelper } from "./helpers/AquaSwapVMHelper.sol";
 import { DirectModeTaker } from "./helpers/DirectModeTaker.sol";
+import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter, TraitsHelper, DeployCode } from "./helpers/SwapVMTestSetup.sol";
+import { AquaSwapVMRouter, SwapVMRouter, TraitsHelper, DeployCode } from "./helpers/SwapVMTestSetup.sol";
 
 /// @title Tests for all 4 combinations of Aqua and direct transfers
 /// @notice Tests: Maker(Aqua/Direct) x Taker(AquaPush/Callback/Direct)
@@ -84,6 +85,32 @@ contract TransferModesCombinationsTest is Test {
         );
 
         _verifySwapResults(amountIn, amountOut, taker, true);
+    }
+
+    function test_AquaMaker_TakerAquaPush_Permit2() public {
+        Permit2TestLib.install();
+        AquaSwapVMRouter router = aquaHelper.router();
+
+        tokenA.mint(maker, BALANCE_A);
+        tokenB.mint(maker, BALANCE_B);
+
+        ISwapVM.Order memory order = aquaHelper.createOrder(maker, tokenA, tokenB);
+        _shipAquaStrategy(order, router);
+
+        tokenB.mint(taker, SWAP_AMOUNT);
+        Permit2TestLib.approve(address(tokenB), taker, address(router), uint160(SWAP_AMOUNT), type(uint48).max);
+
+        bytes32 orderHash = router.hash(order);
+        (uint256 balanceBefore,) = aqua.rawBalances(maker, address(router), orderHash, address(tokenB));
+        bytes memory takerData = _buildTakerData(taker, true, false, true);
+
+        vm.prank(taker);
+        (uint256 amountIn, uint256 amountOut,) = router.swap(order, SWAP_AMOUNT, takerData);
+
+        (uint256 balanceAfter,) = aqua.rawBalances(maker, address(router), orderHash, address(tokenB));
+        _verifySwapResults(amountIn, amountOut, taker, true);
+        assertEq(balanceAfter - balanceBefore, amountIn, "Permit2 input was not pushed to Aqua");
+        assertEq(Permit2TestLib.allowance(taker, address(tokenB), address(router)).amount, 0, "Taker Permit2 allowance not consumed");
     }
 
     // ==================== Combination 2: Aqua Maker + Taker Callback ====================
@@ -195,6 +222,15 @@ contract TransferModesCombinationsTest is Test {
     }
 
     function _buildTakerData(address takerAddr, bool useTransferFromAndAquaPush, bool hasCallback) internal view returns (bytes memory) {
+        return _buildTakerData(takerAddr, useTransferFromAndAquaPush, hasCallback, false);
+    }
+
+    function _buildTakerData(
+        address takerAddr,
+        bool useTransferFromAndAquaPush,
+        bool hasCallback,
+        bool usePermit2
+    ) internal view returns (bytes memory) {
         return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: takerAddr,
             isExactIn: true,
@@ -204,6 +240,7 @@ contract TransferModesCombinationsTest is Test {
             useTransferFromAndAquaPush: useTransferFromAndAquaPush,
             isAToB: false,
             allowPartialFill: false,
+            usePermit2: usePermit2,
             threshold: "",
             to: address(0),
             signature: ""
@@ -220,6 +257,7 @@ contract TransferModesCombinationsTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: false,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(0),
             signature: signature

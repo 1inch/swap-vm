@@ -16,7 +16,7 @@ import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
 
 contract FeeProtocolCommissionsTest is Test {
     uint256 constant BPS = 1e7;
-    uint256 constant MAX_RECEIVERS = 10;
+    uint256 constant MAX_RECEIVERS = 9;
 
     SwapVMRouterDebug public swapVM;
 
@@ -226,7 +226,7 @@ contract FeeProtocolCommissionsTest is Test {
         for (uint256 i = 0; i < count; i++) {
             receivers[i] = FeeProtocol.ReceiverConfig({ receiver: recipients[i], feeBps: fees[i], surplusBps: 0 });
         }
-        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0), 0);
+        return FeeProtocol.build(isTokenIn, receivers, new FeeProtocol.ProviderConfig[](0));
     }
 
     function _recipientBalances(TokenMock token, uint256 count) internal view returns (uint256[] memory balances) {
@@ -249,6 +249,7 @@ contract FeeProtocolCommissionsTest is Test {
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: true,
             receiver: address(0),
             program: program
@@ -266,6 +267,7 @@ contract FeeProtocolCommissionsTest is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: true,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             hasPreTransferInCallback: false,
