@@ -5,21 +5,17 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
-
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode } from "./helpers/SwapVMTestSetup.sol";
 
 /// @dev Smoke test: Rescuable edge cases are covered in solidity-utils
-contract SwapVmRescueFundsTest is Test, OpcodesDebug {
+contract SwapVmRescueFundsTest is Test {
     SwapVMRouter public swapVM;
     TokenMock public tokenA;
 
     function setUp() public {
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
         tokenA = new TokenMock("Token I", "TKI");
     }
 
@@ -28,7 +24,7 @@ contract SwapVmRescueFundsTest is Test, OpcodesDebug {
         tokenA.mint(address(swapVM), amount);
 
         uint256 ownerBalanceBefore = tokenA.balanceOf(address(this));
-        swapVM.rescueFunds(IERC20(address(tokenA)), amount);
+        swapVM.rescueFunds(address(tokenA), amount);
         assertEq(tokenA.balanceOf(address(this)) - ownerBalanceBefore, amount);
         assertEq(tokenA.balanceOf(address(swapVM)), 0);
     }
