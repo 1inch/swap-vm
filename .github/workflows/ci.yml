@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  run-ci:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
