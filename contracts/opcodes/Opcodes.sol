@@ -19,6 +19,7 @@ import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate, AdjustMinRate } from "../instructions/MinRate.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/DutchAuction.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
+import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../instructions/FillGridAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
@@ -65,6 +66,8 @@ contract Opcodes is
         else if (opcode == DutchAuctionBalanceOut.opcode.asU8()) DutchAuctionBalanceOut.exec(ctx, args);
         else if (opcode == BaseFeeAdjusterBalanceIn.opcode.asU8()) BaseFeeAdjusterBalanceIn.exec(ctx, args);
         else if (opcode == BaseFeeAdjusterBalanceOut.opcode.asU8()) BaseFeeAdjusterBalanceOut.exec(ctx, args);
+        else if (opcode == FillGridStepwiseAdjusterBalanceIn.opcode.asU8()) FillGridStepwiseAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == FillGridStepwiseAdjusterBalanceOut.opcode.asU8()) FillGridStepwiseAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);
