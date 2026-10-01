@@ -18,7 +18,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev The extruction target is expected to be deterministic, consistent across quote / swap modes, calculations are
 ///   expected to be overflow-safe, revert conditions should be transparent, centralization and upgradability avoided
 /// @dev General safety measures:
-///   Maker min exchange rate expectations should be guarded by using RequireMinRate or AdjustMinRate before Extruction
+///   Maker min exchange rate expectations should be guarded by using RequireMinRate before Extruction
 ///   Maker max spend expectations should be guarded by using AQUA or DynamicBalances for AMM-strategies
 ///   or using StaticBalances with InvalidateTokenIn or InvalidateTokenOut before Extruction for amount-limited strategies
 ///
