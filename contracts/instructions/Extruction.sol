@@ -5,12 +5,12 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
 ///   The target may modify the swap registers, set the program counter and consume taker args
@@ -28,7 +28,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   In swap mode extruction target may update storage affecting future executions while in quote mode storage could be only read
 library Extruction {
     using CalldataCut for bytes;
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);

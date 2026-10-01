@@ -6,12 +6,12 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 
 /// @notice OraclePriceAdjuster opcode, price adjustment towards a Chainlink oracle price with price percent cap
@@ -19,7 +19,7 @@ import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 ///   maxStaleness = 0 skips the staleness check, oracleDecimals = 0 fetches decimals from the oracle
 /// @dev Supports only single direction swaps, adjustment is applied only if favorable for the taker
 library OraclePriceAdjuster {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

@@ -5,9 +5,9 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-
 import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
-import { InstructionArgs } from "./InstructionArgs.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
@@ -18,7 +18,7 @@ library MakerTraitsLib {
     using SafeCast for uint256;
 
     using CalldataCut for bytes;
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();

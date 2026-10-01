@@ -7,12 +7,13 @@ pragma solidity ^0.8.27;
 import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
+
 import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../libs/ProtocolFee.sol";
 
 /// @notice PrintSwapRegisters opcode, print internal vm state for debugging
@@ -206,7 +207,7 @@ library PrintGasLeft {
 /// @notice PatchSwapRegisters opcode, modify internal vm state for debugging
 /// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut, uint256 surcharge]
 library PatchSwapRegisters {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PatchSwapRegisters;
