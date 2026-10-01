@@ -144,7 +144,7 @@ contract NativeOrderEscrowTest is Test {
     function test_Fill_AfterEscrowExpiry_RevertsBadSignature() public {
         // Program deadline outlives the escrow expiry: the escrow bound wins
         _createEscrow(_program(uint40(block.timestamp + 2 * EXPIRY_OFFSET)));
-        bytes memory signature = abi.encode(immutables, makerOrder);
+        bytes memory signature = _signature(immutables, makerOrder);
 
         vm.warp(block.timestamp + EXPIRY_OFFSET - 1);
         router.swap(filledOrder, 0.5 ether, _takerData(false, true));
@@ -280,7 +280,7 @@ contract NativeOrderEscrowTest is Test {
     function test_IsValidSignature_AcceptsCommittedOrder() public {
         _createEscrow(_defaultProgram());
 
-        bytes4 magic = escrow.isValidSignature(filledOrderHash, abi.encode(immutables, makerOrder));
+        bytes4 magic = escrow.isValidSignature(filledOrderHash, _signature(immutables, makerOrder));
         assertTrue(magic == ERC1271_MAGIC, "ERC-1271 magic value returned");
     }
 
@@ -291,7 +291,7 @@ contract NativeOrderEscrowTest is Test {
         tampered.amount += 1;
 
         vm.expectRevert(IBaseEscrow.InvalidImmutables.selector);
-        escrow.isValidSignature(filledOrderHash, abi.encode(tampered, makerOrder));
+        escrow.isValidSignature(filledOrderHash, _signature(tampered, makerOrder));
     }
 
     function test_IsValidSignature_TamperedOrder_Reverts() public {
@@ -300,15 +300,23 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory tampered = makerOrder;
         tampered.data[tampered.data.length - 1] = tampered.data[tampered.data.length - 1] ^ bytes1(0xff);
 
+        // Signature describes a different order than the one the router executes
+        vm.expectRevert(NativeOrderEscrow.FilledOrderMismatch.selector);
+        escrow.isValidSignature(filledOrderHash, _signature(immutables, tampered));
+
+        // Attacker's own order naming the clone as maker: consistent with the router, not with the commitment
+        ISwapVM.Order memory attackerFilled = tampered;
+        attackerFilled.maker = address(escrow);
+        bytes32 attackerFilledHash = router.hash(attackerFilled);
         vm.expectRevert(NativeOrderEscrow.MakerOrderMismatch.selector);
-        escrow.isValidSignature(filledOrderHash, abi.encode(immutables, tampered));
+        escrow.isValidSignature(attackerFilledHash, _signature(immutables, tampered));
     }
 
     function test_IsValidSignature_WrongFilledHash_Reverts() public {
         _createEscrow(_defaultProgram());
 
         vm.expectRevert(NativeOrderEscrow.FilledOrderMismatch.selector);
-        escrow.isValidSignature(bytes32(uint256(1)), abi.encode(immutables, makerOrder));
+        escrow.isValidSignature(bytes32(uint256(1)), _signature(immutables, makerOrder));
     }
 
     function test_Swap_TamperedImmutables_RevertsBadSignature() public {
@@ -316,7 +324,7 @@ contract NativeOrderEscrowTest is Test {
 
         IBaseEscrow.Immutables memory tampered = immutables;
         tampered.amount += 1;
-        bytes memory signature = abi.encode(tampered, makerOrder);
+        bytes memory signature = _signature(tampered, makerOrder);
 
         vm.expectRevert(abi.encodeWithSelector(
             OrderRegistrator.BadSignature.selector, address(escrow), filledOrderHash, signature
@@ -397,6 +405,16 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(bytes.concat(Salt.build(uint64(1)), _defaultProgram()));
         assertTrue(address(escrow) != firstEscrow, "Salted order deploys a distinct clone");
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
+    }
+
+    function test_LocalOrderHash_MatchesRouter_AfterChainIdChange() public {
+        vm.chainId(block.chainid + 1);
+        _createEscrow(_defaultProgram());
+
+        assertEq(router.hash(filledOrder), filledOrderHash, "Factory rebuilds the router domain after a fork");
+        assertEq(immutables.orderHash, router.hash(makerOrder));
+        router.swap(filledOrder, WETH_AMOUNT, _takerData(false, true));
+        assertEq(weth.balanceOf(address(escrow)), 0, "Escrow validates fills after a fork");
     }
 
     function test_Create_AddressAndHashConsistency() public {
@@ -514,8 +532,12 @@ contract NativeOrderEscrowTest is Test {
         weth.transfer(address(escrow), amount);
     }
 
+    function _signature(IBaseEscrow.Immutables memory imm, ISwapVM.Order memory order) private pure returns (bytes memory) {
+        return abi.encode(imm, order.traits, keccak256(order.data));
+    }
+
     function _takerData(bool isExactIn, bool allowPartialFill) private view returns (bytes memory) {
-        return _takerData(isExactIn, allowPartialFill, abi.encode(immutables, makerOrder));
+        return _takerData(isExactIn, allowPartialFill, _signature(immutables, makerOrder));
     }
 
     function _takerDataWithSignature(bool isExactIn, bytes memory signature) private view returns (bytes memory) {

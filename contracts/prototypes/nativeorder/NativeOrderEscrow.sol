@@ -12,7 +12,9 @@ import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/librar
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
+import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
+import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
 import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
@@ -32,7 +34,7 @@ import { ProxyHashLib } from "./vendor/libraries/ProxyHashLib.sol";
 /// - amount:        ETH deposited at creation (informational; live WETH balance is authoritative)
 /// - safetyDeposit: 0 (unused)
 /// - timelocks:     SrcCancellation = order expiry, SrcPublicCancellation = public GC start, plus deployedAt
-contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
+contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     using AddressLib for Address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
@@ -64,6 +66,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
 
     constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 rescueDelay)
         OnlyWethReceiver(address(weth))
+        RouterOrderHasher(router)
     {
         ROUTER = router;
         WETH = weth;
@@ -100,25 +103,27 @@ contract NativeOrderEscrow is OnlyWethReceiver, IERC1271 {
     }
 
     /// @notice ERC-1271 validation called by the router when this clone is `order.maker`.
-    /// @dev The signature bytes carry abi.encode(immutables, prePatchOrder). Three links are verified:
+    /// @dev The signature bytes carry abi.encode(immutables, traits, keccak256(data)) of the order; the program
+    /// itself is already in the router's calldata and is never sent twice. Three links are verified:
     /// 1. immutables authenticate against this clone's CREATE2 address (binds amount, maker, timelocks);
-    /// 2. the carried pre-patch order hashes to immutables.orderHash (binds the full order content);
-    /// 3. the order patched with maker = address(this) hashes to `orderHash` being validated by the router.
+    /// 2. the order with maker = address(this) hashes to `orderHash` being validated by the router, which
+    ///    by preimage resistance pins `traits` and `dataHash` to the order actually being executed;
+    /// 3. the same order with maker = immutables.maker hashes to immutables.orderHash (binds it to the
+    ///    order committed at creation, where the factory enforced maker == immutables.maker). This is the
+    ///    check that matters: without it any order naming this clone as maker would pass.
     /// Fills are rejected from the SrcCancellation stage on, so the escrow expiry bounds the order lifetime
     /// regardless of the program's own Deadline, and public cancellation never races a live order.
     /// @param orderHash Hash of the patched order the router is executing.
-    /// @param signature abi.encode(IBaseEscrow.Immutables, ISwapVM.Order) - the pre-patch order.
+    /// @param signature abi.encode(IBaseEscrow.Immutables, MakerTraits, bytes32 dataHash).
     /// @return magicValue ERC-1271 magic value on success.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        (IBaseEscrow.Immutables memory immutables, ISwapVM.Order memory makerOrder) =
-            abi.decode(signature, (IBaseEscrow.Immutables, ISwapVM.Order));
+        (IBaseEscrow.Immutables memory immutables, MakerTraits traits, bytes32 dataHash) =
+            abi.decode(signature, (IBaseEscrow.Immutables, MakerTraits, bytes32));
 
         _validateImmutables(immutables.hashMem());
         if (block.timestamp >= immutables.timelocks.get(TimelocksLib.Stage.SrcCancellation)) revert OrderExpired();
-        if (ROUTER.hash(makerOrder) != immutables.orderHash) revert MakerOrderMismatch();
-
-        makerOrder.maker = address(this);
-        if (ROUTER.hash(makerOrder) != orderHash) revert FilledOrderMismatch();
+        if (_hashOrder(address(this), traits, dataHash) != orderHash) revert FilledOrderMismatch();
+        if (_hashOrder(immutables.maker.get(), traits, dataHash) != immutables.orderHash) revert MakerOrderMismatch();
 
         return IERC1271.isValidSignature.selector;
     }
