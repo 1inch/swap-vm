@@ -184,8 +184,8 @@ library FillGridStepwiseAdjusterBalanceOut {
                 discount = ctx.swap.surcharge - surcharge;
             } else {
                 require(
-                    ctx.swap.surcharge + ctx.swap.balanceOut >= ctx.swap.surcharge &&
-                        ctx.swap.surcharge + ctx.swap.balanceOut <= type(uint232).max,
+                    ctx.swap.surcharge + ctx.swap.balanceOut >= ctx.swap.surcharge
+                        && ctx.swap.surcharge + ctx.swap.balanceOut <= type(uint232).max,
                     FillGridStepwiseAdjusterContextOverflow()
                 );
 
