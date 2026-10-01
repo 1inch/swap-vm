@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 
 type TakerTraits is uint256;
 using TakerTraitsLib for TakerTraits global;
@@ -15,7 +15,7 @@ using TakerTraitsLib for TakerTraits global;
 library TakerTraitsLib {
     using SafeCast for uint256;
     using Math for uint256;
-    using Calldata for bytes;
+    using CalldataCut for bytes;
 
     error TakerTraitsMissingTraits();
     error TakerTraitsMissingHookData();
@@ -184,7 +184,7 @@ library TakerTraitsLib {
     /// @return traits Parsed TakerTraits configuration
     /// @return tail Remaining calldata after traits header
     function parse(bytes calldata data) internal pure returns (TakerTraits traits, bytes calldata tail) {
-        traits = TakerTraits.wrap(uint176(bytes22(data.slice(0, 22, TakerTraitsMissingTraits.selector))));
+        traits = TakerTraits.wrap(uint176(bytes22(data.trim(22, TakerTraitsMissingTraits.selector))));
         tail = data.slice(22);
     }
 

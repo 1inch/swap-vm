@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { InstructionArgs } from "./InstructionArgs.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
@@ -17,7 +17,7 @@ using MakerTraitsLib for MakerTraits global;
 library MakerTraitsLib {
     using SafeCast for uint256;
 
-    using Calldata for bytes;
+    using CalldataCut for bytes;
     using InstructionArgs for bytes;
 
     error MakerTraitsMissingHookData();
@@ -248,7 +248,7 @@ library MakerTraitsLib {
         hookData = _getDataSlice(traits, data, slice);
 
         if ((MakerTraits.unwrap(traits) & bitFlag) != 0) {
-            target = IMakerHooks(address(bytes20(hookData.slice(0, 20, MakerTraitsMissingHookTarget.selector))));
+            target = IMakerHooks(address(bytes20(hookData.trim(20, MakerTraitsMissingHookTarget.selector))));
             hookData = hookData.slice(20);
         } else {
             target = IMakerHooks(maker);

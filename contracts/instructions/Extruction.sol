@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 
 import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
@@ -27,7 +27,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Execution of the opcode multiple times in strategy flow may lead to quote / swap divergence:
 ///   In swap mode extruction target may update storage affecting future executions while in quote mode storage could be only read
 library Extruction {
-    using Calldata for bytes;
+    using CalldataCut for bytes;
     using InstructionArgs for bytes;
     using InstructionBuilder for MemoryPtr;
 
