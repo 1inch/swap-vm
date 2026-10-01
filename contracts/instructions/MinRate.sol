@@ -5,19 +5,19 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice RequireMinRate opcode, maker-favor rate guard, fails if rate is worse than specified
 ///   Validates final amounts after rest of strategy executed
 /// @dev Encoding: [uint64 rateA, uint64 rateB]
 /// @dev Supports only single direction swaps
 library RequireMinRate {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error RequireMinRateFailed(uint256 amountIn, uint256 amountOut, uint256 rateIn, uint256 rateOut);

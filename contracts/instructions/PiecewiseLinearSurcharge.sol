@@ -4,11 +4,12 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { Time } from "../libs/Time.sol";
 
 /// @notice PiecewiseLinearSurchargeBalanceIn opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
@@ -102,7 +103,7 @@ library PiecewiseLinearSurchargeBalanceOut {
 }
 
 library PiecewiseLinearSurcharge {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using PiecewiseLinearSurcharge for bytes;
 
     error PiecewiseLinearSurchargeMismatchInputLengths();

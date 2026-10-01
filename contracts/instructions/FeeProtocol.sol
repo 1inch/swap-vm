@@ -6,6 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
@@ -13,7 +14,6 @@ import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice FeeProtocol opcode, third-party fees resolved during the transfers phase
@@ -29,7 +29,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
 ///   The opcode is expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
 library FeeProtocol {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using SafeCast for uint256;
@@ -198,7 +198,7 @@ library FeeProtocol {
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
 ///   The opcode is expected to be applied before InvalidateTokenIn or InvalidateTokenOut to apply scaling properly
 library FeeProtocolSurplus {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

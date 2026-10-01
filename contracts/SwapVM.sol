@@ -9,8 +9,7 @@ import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
-import { TransientLock } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
-import { TransientLockUnsafeLib } from "@1inch/solidity-utils/contracts/libraries/TransientLockUnsafe.sol";
+import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol";
@@ -32,7 +31,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-    using TransientLockUnsafeLib for TransientLock;
+    using TransientLockLib for TransientLock;
 
     /// @dev Aqua balance insufficient after taker pushed tokens
     error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);

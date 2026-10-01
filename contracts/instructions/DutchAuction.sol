@@ -5,12 +5,12 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { Power } from "../libs/Power.sol";
 import { Time } from "../libs/Time.sol";
 
@@ -19,7 +19,7 @@ import { Time } from "../libs/Time.sol";
 /// @dev Encoding: [uint40 start, uint64 decay, uint24 surchargeBps]
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library DutchAuctionBalanceIn {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Power for uint256;
@@ -75,7 +75,7 @@ library DutchAuctionBalanceIn {
 /// @dev Encoding: [uint40 start, uint64 decay, uint24 surchargeBps]
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library DutchAuctionBalanceOut {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

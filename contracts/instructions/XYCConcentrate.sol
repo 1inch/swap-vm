@@ -5,18 +5,18 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice XYCConcentrateSwap opcode, constant-product swap curve concentrating liquidity in specified price range
 ///   Automatically reinvests accumulated maker fees
 /// @dev Encoding: [uint256 sqrtPriceMin, uint256 sqrtPriceMax]
 library XYCConcentrateSwap {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;

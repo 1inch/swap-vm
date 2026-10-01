@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { FeeMeta, FeeReceiver } from "./ProtocolFee.sol";
@@ -82,7 +82,7 @@ using ContextLib for Context global;
 /// @title ContextLib
 /// @notice Library for managing VM execution context and program execution
 library ContextLib {
-    using Calldata for bytes;
+    using CalldataCut for bytes;
     using CalldataPtrLib for CalldataPtr;
 
     /// @dev Program counter overflows program length
@@ -117,7 +117,7 @@ library ContextLib {
         bytes calldata data = ctx.vm.takerArgsPtr.toBytes();
         length = Math.min(length, data.length);
         ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length));
-        return data.slice(0, length);
+        return data.trim(length);
     }
 
     /// @notice Execute program instructions sequentially
