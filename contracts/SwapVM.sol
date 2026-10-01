@@ -151,7 +151,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount
+                amountOut: isExactIn ? 0 : amount,
+                surcharge: 0
             }),
             fee: ProtocolFee({
                 meta: FeeMetaLib.init(),
@@ -205,7 +206,8 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: isExactIn ? amount : 0,
-                amountOut: isExactIn ? 0 : amount
+                amountOut: isExactIn ? 0 : amount,
+                surcharge: 0
             }),
             fee: ProtocolFee({
                 meta: FeeMetaLib.init(),

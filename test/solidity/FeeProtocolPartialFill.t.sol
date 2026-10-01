@@ -8,15 +8,15 @@ import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouterDebug } from "../../contracts/routers/SwapVMRouterDebug.sol";
+import { SwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { SwapRegisters } from "../../contracts/libs/VM.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
 
 contract FeeProtocolPartialFillTest is Test {
     SwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     address public tokenA;
     address public tokenB;
 
@@ -26,7 +26,8 @@ contract FeeProtocolPartialFillTest is Test {
 
     function setUp() public {
         maker = vm.addr(makerPrivateKey);
-        swapVM = new SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouterDebug(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = address(new TokenMock("Token I", "TKI"));
         tokenB = address(new TokenMock("Token J", "TKJ"));
@@ -47,7 +48,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountPartial,
-                amountOut: 1e18
+                amountOut: 1e18,
+                surcharge: 0
             }))
         );
 
@@ -94,7 +96,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountIn,
-                amountOut: amountPartial
+                amountOut: amountPartial,
+                surcharge: 0
             }))
         );
 
@@ -130,7 +133,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountPartial,
-                amountOut: amountOut
+                amountOut: amountOut,
+                surcharge: 0
             }))
         );
 
@@ -166,7 +170,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: 1e18,
-                amountOut: amountPartial
+                amountOut: amountPartial,
+                surcharge: 0
             }))
         );
 
@@ -210,7 +215,7 @@ contract FeeProtocolPartialFillTest is Test {
     }
 
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: tokenA,
             tokenB: tokenB,
@@ -219,30 +224,16 @@ contract FeeProtocolPartialFillTest is Test {
             usePermit2: false,
             allowZeroAmountIn: true,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
 
     function _makeTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(this),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
@@ -250,14 +241,6 @@ contract FeeProtocolPartialFillTest is Test {
             usePermit2: false,
             threshold: "",
             to: address(0),
-            deadline: 0,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }

@@ -10,15 +10,14 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
+import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { Context, SwapRegisters } from "../../contracts/libs/VM.sol";
 import { Opcode } from "../../contracts/libs/OpcodeList.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { PiecewiseLinearScaleBalanceIn } from "../../contracts/instructions/PiecewiseLinearScale.sol";
+import { PiecewiseLinearSurchargeBalanceIn } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
 import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
@@ -29,6 +28,8 @@ contract ProtocolSurplusPartialFillTest is Test {
     uint256 constant BPS = 1e7;
 
     SwapVMRouter public swapVM;
+
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -40,7 +41,8 @@ contract ProtocolSurplusPartialFillTest is Test {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -243,21 +245,21 @@ contract ProtocolSurplusPartialFillTest is Test {
 
     /// @dev Fusion-style Dutch auction: maker sells a fixed 200e18 output (InvalidateTokenOut) with the
     ///   order priced at the auction maximum of 100e18 input, scaled down over time
-    ///   (PiecewiseLinearScaleBalanceIn, here frozen at 0.75). The maker estimates receiving the 50e18
+    ///   (PiecewiseLinearSurchargeBalanceIn, here frozen at 0.75). The maker estimates receiving the 50e18
     ///   auction minimum, so the premium above it is the surplus: each half fill pays 37.5e18 against
     ///   a 25e18 estimate share -> surplus 12.5e18, fee 1.25e18.
     function test_SurplusIn_PiecewiseLinearAuction_ProRataEstimate() public {
         uint16[] memory durations = new uint16[](1);
         durations[0] = 100;
         uint24[] memory scales = new uint24[](2);
-        scales[0] = 12582911; // (scale + 1) / 2^24 = 0.75
-        scales[1] = 12582911;
+        scales[0] = uint24(1 << 23);
+        scales[1] = uint24(1 << 23);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(100e18, 200e18),
+            StaticBalances.build(50e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 50e18),
             InvalidateTokenOut.build(),
-            PiecewiseLinearScaleBalanceIn.build(uint40(block.timestamp + 1000), durations, scales),
+            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp + 1000), durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _makeTakerData(order, false);
@@ -346,7 +348,7 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -355,18 +357,6 @@ contract ProtocolSurplusPartialFillTest is Test {
             usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -374,11 +364,10 @@ contract ProtocolSurplusPartialFillTest is Test {
     function _makeTakerData(ISwapVM.Order memory order, bool isExactIn) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
 
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
@@ -386,16 +375,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             usePermit2: false,
             threshold: "",
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: abi.encodePacked(r, s, v)
         }));
     }
@@ -447,7 +427,8 @@ contract FeeProtocolSurplusScaleTest is Test {
             balanceIn: 0,
             balanceOut: 0,
             amountIn: isTokenIn ? 0 : fill,
-            amountOut: isTokenIn ? fill : 0
+            amountOut: isTokenIn ? fill : 0,
+            surcharge: 0
         });
 
         return this.scaleExternal(

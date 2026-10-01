@@ -47,11 +47,13 @@ struct SwapQuery {
 /// @param balanceOut The current balance of the output token
 /// @param amountIn The amount of input token being swapped
 /// @param amountOut The amount of output token being swapped
+/// @param surcharge Intermediary balance in / out modification accumulator
 struct SwapRegisters {
     uint256 balanceIn;
     uint256 balanceOut;
     uint256 amountIn;
     uint256 amountOut;
+    uint256 surcharge;
 }
 
 /// @dev Pending protocol fees to claim during transfers phase

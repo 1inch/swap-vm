@@ -98,7 +98,8 @@ contract BestRouteSelector is OpcodesDebug {
             });
 
             // Execute this strategy
-            (, uint256 amountOut) = ctx.runLoop();
+            (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
+            if (amountIn < swap.amountIn) continue;
 
             // Check if this strategy is better
             if (amountOut > bestAmountOut) {
@@ -107,7 +108,8 @@ contract BestRouteSelector is OpcodesDebug {
                     balanceIn: swap.balanceIn,
                     balanceOut: swap.balanceOut,
                     amountIn: swap.amountIn,
-                    amountOut: amountOut
+                    amountOut: amountOut,
+                    surcharge: ctx.swap.surcharge
                 });
             }
         }

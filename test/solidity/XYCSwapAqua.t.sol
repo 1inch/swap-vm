@@ -268,12 +268,13 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
         if (shouldRevert) {
             // Expect revert because amountIn/amountOut equal zero due to dust trade
             // e.g. trying to swap 1 unit when balances are in millions
+            bytes memory data = takerData(swapProgram);
             if (isExactIn) {
                 vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
             } else {
                 vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
             }
-            swap(swapProgram, order);
+            swap(swapProgram, order, data);
             return (invariantBefore, invariantBefore); // Return same invariant on revert
         }
 
@@ -385,8 +386,9 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram, type(uint256).max);
         mintTokenOutToMaker(swapProgram, type(uint256).max);
 
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
-        swap(swapProgram, order); // Expect revert due to dust trade and flooring to 0
+        swap(swapProgram, order, data); // Expect revert due to dust trade and flooring to 0
 
         swapProgram.isExactIn = false; // Change to exact out
         (uint256 amountIn,) = swap(swapProgram, order); // Should succeed
@@ -594,8 +596,9 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram, type(uint256).max);
         mintTokenOutToMaker(swapProgram, type(uint256).max);
 
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(); // reverts with panic: arithmetic underflow or overflow (0x11)
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 
     function test_Aqua_XYC_ExactOut_OverflowReverts() public {
@@ -607,7 +610,8 @@ contract XYCSwapAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram, type(uint256).max);
         mintTokenOutToMaker(swapProgram, type(uint256).max);
 
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(); // reverts with panic: arithmetic underflow or overflow (0x11)
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 }

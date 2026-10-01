@@ -135,7 +135,8 @@ library InvalidateTokenIn {
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
 
         ctx.swap.balanceIn = balanceIn - filled;
-        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn;
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn; // Maker spending round down
+        ctx.swap.surcharge = ctx.swap.surcharge * ctx.swap.balanceIn / balanceIn; // Max discount round down
 
         (uint256 amountIn,) = ctx.runLoop();
 
@@ -208,7 +209,8 @@ library InvalidateTokenOut {
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
 
         ctx.swap.balanceOut = balanceOut - filled;
-        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut);
+        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut); // Maker income round up
+        ctx.swap.surcharge = ctx.swap.surcharge * ctx.swap.balanceOut / balanceOut; // Max discount round down
 
         (, uint256 amountOut) = ctx.runLoop();
 
