@@ -11,6 +11,7 @@
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.15",
     "@nomicfoundation/hardhat-ignition": "^3.1.6",
     "@nomicfoundation/hardhat-keystore": "^3.0.11",
     "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
@@ -27,6 +28,7 @@
     "test": "npx hardhat test --build-profile fast",
     "test:solidity": "npx hardhat test solidity --build-profile fast",
     "test:typescript": "npx hardhat test nodejs",
+    "test:coverage": "npx hardhat test --coverage",
     "build": "npx hardhat compile",
     "build:fast": "npx hardhat compile --build-profile fast",
     "build:production": "npx hardhat compile --build-profile production",

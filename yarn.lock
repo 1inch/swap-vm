@@ -1825,6 +1825,18 @@
     ethers "^6.14.0"
     zod "^3.23.8"
 
+"@nomicfoundation/hardhat-ethers@^4.0.15":
+  version "4.2.0"
+  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-ethers/-/hardhat-ethers-4.2.0.tgz#7156abd3310322851fc4027fc67a2daf4f7e3686"
+  integrity sha512-lymWocle6rP7StaWnoygFoA0wSh9sBncflCnGPMhEI38OH1MdJo5FMOOxap9vKbcWmu670Ejv9HUCRDEGEtg8Q==
+  dependencies:
+    "@nomicfoundation/hardhat-errors" "^3.1.0"
+    "@nomicfoundation/hardhat-utils" "^4.3.0"
+    "@nomicfoundation/hardhat-zod-utils" "^3.0.5"
+    ethereum-cryptography "^3.0.0"
+    ethers "^6.14.0"
+    zod "^3.23.8"
+
 "@nomicfoundation/hardhat-ignition-ethers@3.1.6":
   version "3.1.6"
   resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-ignition-ethers/-/hardhat-ignition-ethers-3.1.6.tgz#d020098b72672a664239fe2a41c10694c9b70564"
@@ -1931,7 +1943,7 @@
     typechain "^8.3.1"
     zod "^3.23.8"
 
-"@nomicfoundation/hardhat-utils@^4.1.2", "@nomicfoundation/hardhat-utils@^4.1.3", "@nomicfoundation/hardhat-utils@^4.1.4", "@nomicfoundation/hardhat-utils@^4.1.5", "@nomicfoundation/hardhat-utils@^4.1.6", "@nomicfoundation/hardhat-utils@^4.4.0":
+"@nomicfoundation/hardhat-utils@^4.1.2", "@nomicfoundation/hardhat-utils@^4.1.3", "@nomicfoundation/hardhat-utils@^4.1.4", "@nomicfoundation/hardhat-utils@^4.1.5", "@nomicfoundation/hardhat-utils@^4.1.6", "@nomicfoundation/hardhat-utils@^4.3.0", "@nomicfoundation/hardhat-utils@^4.4.0":
   version "4.4.0"
   resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-utils/-/hardhat-utils-4.4.0.tgz#f07a33e3c2444859860e2dc73206a89ecac14433"
   integrity sha512-fRaVVbPs+Az7K3B40x8jlPDM4o7jfgoTMpxNXjg2JrpxORKqQtf9YSv9HN9lZKFZecLIYwHT3U9RQEOrZBkAEQ==

@@ -1,4 +1,5 @@
 import { defineConfig, configVariable } from "hardhat/config";
+import hardhatEthers from "@nomicfoundation/hardhat-ethers";
 import hardhatIgnition from "@nomicfoundation/hardhat-ignition";
 import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
 import hardhatVerify from "@nomicfoundation/hardhat-verify";
@@ -41,18 +42,28 @@ const fastTestCompiler = {
 export default defineConfig({
   plugins: [
     hardhatIgnoreWarnings,
+    hardhatEthers,
     hardhatIgnition,
     hardhatKeystore,
     hardhatVerify,
     hardhatNodeTestRunner,
   ],
   solidity: {
+    npmFilesToBuild: ["@1inch/solidity-utils/contracts/mocks/TokenMock.sol"],
     splitTestsCompilation: true,
     profiles: {
       default: { compilers: [swapVmCompiler] },
       production: { compilers: [swapVmCompiler] },
       fast: { compilers: [fastTestCompiler] },
     },
+  },
+  coverage: {
+    skipFiles: [
+      "contracts/opcodes/Opcodes.sol",
+      "contracts/opcodes/*Debug.sol",
+      "contracts/routers/SwapVMRouter.sol",
+      "contracts/routers/*Debug.sol",
+    ],
   },
   test: {
     solidity: {
@@ -82,6 +93,9 @@ export default defineConfig({
       "initcode-size": "off",
     },
     "contracts/routers/*Debug.sol": {
+      "code-size": "off",
+    },
+    "contracts/routers/SwapVMRouter.sol": {
       "code-size": "off",
     },
     "npm/@1inch/solidity-utils@*/**/*": {
