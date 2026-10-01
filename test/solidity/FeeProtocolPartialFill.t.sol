@@ -48,7 +48,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountPartial,
-                amountOut: 1e18
+                amountOut: 1e18,
+                surcharge: 0
             }))
         );
 
@@ -95,7 +96,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountIn,
-                amountOut: amountPartial
+                amountOut: amountPartial,
+                surcharge: 0
             }))
         );
 
@@ -131,7 +133,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: amountPartial,
-                amountOut: amountOut
+                amountOut: amountOut,
+                surcharge: 0
             }))
         );
 
@@ -167,7 +170,8 @@ contract FeeProtocolPartialFillTest is Test {
                 balanceIn: 0,
                 balanceOut: 0,
                 amountIn: 1e18,
-                amountOut: amountPartial
+                amountOut: amountPartial,
+                surcharge: 0
             }))
         );
 

@@ -141,14 +141,14 @@ contract MinRateInvariants is Test, CoreInvariants {
      */
     function test_MinRate_DutchAuctionIn_LimitSwap() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
-        uint64 decayFactor = 0.99e18;
+        uint64 decayFactor = 0.999e18;
+        uint24 surchargeBps = 0.5e7;
         uint64 rateA = 1e18;
         uint64 rateB = 1.8e18; // Cap at 1:1.8 rate
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 2500e18),  // Start with 1:2.5 rate
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -186,14 +186,14 @@ contract MinRateInvariants is Test, CoreInvariants {
      */
     function test_MinRate_DutchAuctionOut_LimitSwap() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.99e18;
+        uint24 surchargeBps = 0.1e7;
         uint64 rateA = 1e18;
         uint64 rateB = 2.5e18; // Cap at 1:2.5 rate
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3000e18),  // Start with 1:3 rate
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             AdjustMinRate.build(rateA, rateB),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -365,8 +365,8 @@ contract MinRateInvariants is Test, CoreInvariants {
      */
     function test_MinRate_DutchAuction_LimitSwap_Fees() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.995e18;
+        uint24 surchargeBps = 0.5e7;
         uint64 rateA = 1e18;
         uint64 rateB = 1.7e18; // Cap at 1:1.7 rate
         uint24 flatFeeBps = 0.005e7; // 0.5% flat fee on input
@@ -374,7 +374,7 @@ contract MinRateInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 7000e18),  // 1:7 base rate (very generous)
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeOut(protocolFeeBps, protocolFeeCollector),
             AdjustMinRate.build(rateA, rateB),

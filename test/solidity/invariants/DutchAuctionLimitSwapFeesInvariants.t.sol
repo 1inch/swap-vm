@@ -92,13 +92,13 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
      */
     function test_DutchAuctionIn_FlatFeeIn() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.99e18;
+        uint24 surchargeBps = 0.5e7;
         uint24 feeBps = 0.01e7; // 1% fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -111,13 +111,13 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
      */
     function test_DutchAuctionOut_FlatFeeOut() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.98e18;
+        uint24 surchargeBps = 0.5e7;
         uint24 feeBps = 0.02e7; // 2% fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -130,13 +130,13 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
      */
     function test_DutchAuctionIn_ProtocolFee() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.97e18;
+        uint24 surchargeBps = 0.5e7;
         uint24 feeBps = 0.015e7; // 1.5% protocol fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -150,14 +150,14 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
      */
     function test_DutchAuctionOut_MultipleFees() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.96e18;
+        uint24 surchargeBps = 0.5e7;
         uint24 flatFeeBps = 0.005e7; // 0.5% flat fee
         uint24 protocolFeeBps = 0.0025e7; // 0.25% protocol fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
             // Multiple fees
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeCollector),
@@ -172,13 +172,13 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
      */
     function test_DutchAuctionIn_HighFees() public {
         uint40 startTime = uint40(block.timestamp);
-        uint16 duration = 300;
         uint64 decayFactor = 0.99e18;
+        uint24 surchargeBps = 0.5e7;
         uint24 feeBps = 0.1e7; // 10% fee
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, duration, decayFactor),
+            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -205,8 +205,8 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         uint256[] memory timeOffsets = new uint256[](3);
         timeOffsets[0] = 0;     // Start
-        timeOffsets[1] = 150;   // Mid-auction
-        timeOffsets[2] = 280;   // Near end
+        timeOffsets[1] = 150;
+        timeOffsets[2] = 280;
 
         for (uint256 i = 0; i < timeOffsets.length; i++) {
             // Save snapshot before time manipulation

@@ -355,7 +355,8 @@ contract NativePaymentTest is Test {
             balanceIn: 0,
             balanceOut: 0,
             amountIn: 0,
-            amountOut: amountOut
+            amountOut: amountOut,
+            surcharge: 0
         }));
 
         (ISwapVM.Order memory order, bytes memory signature) = _buildOrder(false, address(0), true, programBytes);
