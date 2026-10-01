@@ -1,0 +1,11 @@
+{
+  "swap_exactOut": "107099",
+  "swap_exactIn": "107067",
+  "referenceEoaSwap_exactOut": "105074",
+  "referenceEoaSwap_exactIn": "105042",
+  "quote_exactOut": "17419",
+  "quote_exactIn": "17382",
+  "publicCancel": "92080",
+  "create": "147084",
+  "cancel": "53749"
+}
