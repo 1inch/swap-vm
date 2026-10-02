@@ -215,7 +215,7 @@ enum Opcode {
     /* b5 */ BaseFeeAdjusterBalanceOut,
     /* b6 */ FillGridStepwiseAdjusterBalanceIn,
     /* b7 */ FillGridStepwiseAdjusterBalanceOut,
-    /* b8 */ _b8,
+    /* b8 */ FillGridPiecewiseAdjusterBalanceIn,
     /* b9 */ _b9,
     /* ba */ _ba,
     /* bb */ _bb,
