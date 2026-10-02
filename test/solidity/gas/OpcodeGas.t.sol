@@ -16,7 +16,7 @@ import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../c
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
-import { FillGridPiecewiseAdjusterBalanceIn } from "../../../contracts/instructions/FillGridPiecewiseAdjuster.sol";
+import { FillGridPiecewiseAdjusterBalanceIn, FillGridPiecewiseAdjusterBalanceOut } from "../../../contracts/instructions/FillGridPiecewiseAdjuster.sol";
 import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../../../contracts/instructions/FillGridAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
@@ -115,9 +115,10 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        _snapshot("FillGridPiecewiseAdjusterBalanceIn", FillGridPiecewiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
-        _snapshot("FillGridStepwiseAdjusterBalanceIn", FillGridStepwiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
-        _snapshot("FillGridStepwiseAdjusterBalanceOut", FillGridStepwiseAdjusterBalanceOut.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
+        _snapshot("FillGridPiecewiseAdjusterBalanceIn", FillGridPiecewiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 9);
+        _snapshot("FillGridPiecewiseAdjusterBalanceOut", FillGridPiecewiseAdjusterBalanceOut.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 9);
+        _snapshot("FillGridStepwiseAdjusterBalanceIn", FillGridStepwiseAdjusterBalanceIn.build(dynamic([uint24(0.1e7), 0.2e7, 0.3e7, 0.4e7, 0.5e7, 0.6e7, 0.7e7, 0.8e7, 0.9e7]), dynamic([uint24(0.99e7), 0.98e7, 0.97e7, 0.96e7, 0.95e7, 0.94e7, 0.93e7, 0.92e7, 0.9e7])), AMOUNT / 9);
+        _snapshot("FillGridStepwiseAdjusterBalanceOut", FillGridStepwiseAdjusterBalanceOut.build(dynamic([uint24(0.1e7), 0.2e7, 0.3e7, 0.4e7, 0.5e7, 0.6e7, 0.7e7, 0.8e7, 0.9e7]), dynamic([uint24(0.99e7), 0.98e7, 0.97e7, 0.96e7, 0.95e7, 0.94e7, 0.93e7, 0.92e7, 0.9e7])), AMOUNT / 9);
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 

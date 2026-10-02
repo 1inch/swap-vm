@@ -4,6 +4,8 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+// dynamic(uint24[1..9]) => uint24[]
+
 function dynamic(uint24[1] memory arr) pure returns (uint24[] memory res) {
     res = new uint24[](1);
     for (uint256 i = 0; i < arr.length; i++) {
@@ -32,6 +34,43 @@ function dynamic(uint24[4] memory arr) pure returns (uint24[] memory res) {
     }
 }
 
+function dynamic(uint24[5] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](5);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[6] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](6);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[7] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](7);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[8] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](8);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[9] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](9);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+// dynamic(uint16[1..4]) => uint16[]
+
 function dynamic(uint16[1] memory arr) pure returns (uint16[] memory res) {
     res = new uint16[](1);
     for (uint256 i = 0; i < arr.length; i++) {
@@ -59,6 +98,8 @@ function dynamic(uint16[4] memory arr) pure returns (uint16[] memory res) {
         res[i] = arr[i];
     }
 }
+
+// dynamic(uint256[1..8]) => uint256[]
 
 function dynamic(uint256[1] memory arr) pure returns (uint256[] memory res) {
     res = new uint256[](1);
