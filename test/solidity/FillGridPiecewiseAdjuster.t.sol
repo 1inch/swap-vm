@@ -16,10 +16,23 @@ import {
     PiecewiseLinearSurchargeBalanceIn,
     PiecewiseLinearSurchargeBalanceOut
 } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../../contracts/instructions/FillGridAdjuster.sol";
+import {
+    FillGridPiecewiseAdjusterBalanceIn,
+    FillGridPiecewiseAdjusterBalanceOut
+} from "../../contracts/instructions/FillGridPiecewiseAdjuster.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
-contract FillGridAdjusterTest is Test {
+contract GridBuildHelper {
+    function buildIn(uint24[] memory fillBps, uint24[] memory adjustBps) external pure returns (bytes memory) {
+        return FillGridPiecewiseAdjusterBalanceIn.build(fillBps, adjustBps);
+    }
+
+    function buildOut(uint24[] memory fillBps, uint24[] memory adjustBps) external pure returns (bytes memory) {
+        return FillGridPiecewiseAdjusterBalanceOut.build(fillBps, adjustBps);
+    }
+}
+
+contract FillGridPiecewiseAdjusterTest is Test {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
     TraitsHelper internal orders;
@@ -57,31 +70,31 @@ contract FillGridAdjusterTest is Test {
         tokenB.approve(address(swapVM), type(uint256).max);
     }
 
-    function test_FillGridStepwiseAdjusterBalanceIn_ExactOut_Basic() public view {
+    function test_FillGridPiecewiseAdjusterBalanceIn_ExactOut_Basic() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, false);
 
         (uint256 amountIn95,,) = swapVM.quote(order, 950e18, takerData);
         (uint256 amountIn5,,) = swapVM.quote(order, 50e18, takerData);
 
-        assertEq(amountIn95, 1377.5e18);
-        assertEq(amountIn5, 75e18);
+        assertEq(amountIn95, 1379.875e18);
+        assertEq(amountIn5, 74.875e18);
     }
 
-    function test_FillGridStepwiseAdjusterBalanceOut_ExactIn_Basic() public view {
+    function test_FillGridPiecewiseAdjusterBalanceOut_ExactIn_Basic() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, true);
 
         (, uint256 amountOut95,) = swapVM.quote(order, 950e18, takerData);
         (, uint256 amountOut5,) = swapVM.quote(order, 50e18, takerData);
 
-        assertEq(amountOut95, 997.5e18);
-        assertEq(amountOut5, 50e18);
+        assertEq(amountOut95, 995.125e18);
+        assertEq(amountOut5, 50.125e18);
     }
 
-    function test_FillGridStepwiseAdjusterBalanceIn_ExactOut_PointBoundaries() public view {
-        uint256[5] memory amountsOut = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
-        uint256[5] memory expectedAmountsIn = [uint256(149e18), 444e18, 735e18, 1022e18, 1305e18];
+    function test_FillGridPiecewiseAdjusterBalanceIn_ExactOut_GridPoints() public view {
+        uint256[4] memory amountsOut = [uint256(200e18), 500e18, 800e18, 1000e18];
+        uint256[4] memory expectedAmountsIn = [uint256(298e18), 737.5e18, 1168e18, 1450e18];
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, false);
@@ -92,9 +105,9 @@ contract FillGridAdjusterTest is Test {
         }
     }
 
-    function test_FillGridStepwiseAdjusterBalanceIn_ExactIn_PointBoundaries() public view {
-        uint256[5] memory amountsIn = [uint256(149e18), 444e18, 735e18, 1022e18, 1305e18];
-        uint256[5] memory expectedAmountsOut = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
+    function test_FillGridPiecewiseAdjusterBalanceIn_ExactIn_GridPoints() public view {
+        uint256[4] memory amountsIn = [uint256(298e18), 737.5e18, 1168e18, 1450e18];
+        uint256[4] memory expectedAmountsOut = [uint256(200e18), 500e18, 800e18, 1000e18];
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, true);
@@ -105,9 +118,9 @@ contract FillGridAdjusterTest is Test {
         }
     }
 
-    function test_FillGridStepwiseAdjusterBalanceOut_ExactIn_PointBoundaries() public view {
-        uint256[5] memory amountsIn = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
-        uint256[5] memory expectedAmountsOut = [uint256(101e18), 306e18, 515e18, 728e18, 945e18];
+    function test_FillGridPiecewiseAdjusterBalanceOut_ExactIn_GridPoints() public view {
+        uint256[4] memory amountsIn = [uint256(200e18), 500e18, 800e18, 1000e18];
+        uint256[4] memory expectedAmountsOut = [uint256(202e18), 512.5e18, 832e18, 1050e18];
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, true);
@@ -118,9 +131,9 @@ contract FillGridAdjusterTest is Test {
         }
     }
 
-    function test_FillGridStepwiseAdjusterBalanceOut_ExactOut_PointBoundaries() public view {
-        uint256[5] memory amountsOut = [uint256(101e18), 306e18, 515e18, 728e18, 945e18];
-        uint256[5] memory expectedAmountsIn = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
+    function test_FillGridPiecewiseAdjusterBalanceOut_ExactOut_GridPoints() public view {
+        uint256[4] memory amountsOut = [uint256(202e18), 512.5e18, 832e18, 1050e18];
+        uint256[4] memory expectedAmountsIn = [uint256(200e18), 500e18, 800e18, 1000e18];
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
         bytes memory takerData = _buildTakerData(order, false);
@@ -131,10 +144,24 @@ contract FillGridAdjusterTest is Test {
         }
     }
 
-    function test_FillGridStepwiseAdjuster_ZeroAdjustment() public view {
+    function test_FillGridPiecewiseAdjusterBalanceIn_ExactOut_Midpoint() public view {
+        // 350 out = 35% fill between 20% (0.98) and 50% (0.95): adjust 0.965, surcharge 482.5, balance 1482.5
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
+        (uint256 amountIn,,) = swapVM.quote(order, 350e18, _buildTakerData(order, false));
+        assertEq(amountIn, 518.875e18);
+    }
+
+    function test_FillGridPiecewiseAdjusterBalanceOut_ExactIn_Midpoint() public view {
+        // 350 in = 35% fill: balanceOut 1017.5, out 356.125
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
+        (, uint256 amountOut,) = swapVM.quote(order, 350e18, _buildTakerData(order, true));
+        assertEq(amountOut, 356.125e18);
+    }
+
+    function test_FillGridPiecewiseAdjuster_ZeroAdjustment() public view {
         uint256 balanceIn = 100e18;
         uint256 balanceOut = 100e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
+        uint24 surchargeScale = 0;
 
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
@@ -142,14 +169,16 @@ contract FillGridAdjusterTest is Test {
         scales[0] = surchargeScale;
         scales[1] = surchargeScale;
 
-        uint24[] memory fillBps = new uint24[](1);
-        uint24[] memory adjustBps = new uint24[](1);
+        uint24[] memory fillBps = new uint24[](2);
+        uint24[] memory adjustBps = new uint24[](2);
+        fillBps[0] = 0; adjustBps[0] = 1e7;
+        fillBps[1] = 1e7; adjustBps[1] = 1e7;
 
         ISwapVM.Order memory balanceInOrder = _buildOrder(
             bytes.concat(
                 StaticBalances.build(balanceIn, balanceOut),
                 PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
-                FillGridStepwiseAdjusterBalanceIn.build(fillBps, adjustBps),
+                FillGridPiecewiseAdjusterBalanceIn.build(fillBps, adjustBps),
                 LimitSwap.build(address(tokenA), address(tokenB))
             )
         );
@@ -157,7 +186,7 @@ contract FillGridAdjusterTest is Test {
             bytes.concat(
                 StaticBalances.build(balanceIn, balanceOut),
                 PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales),
-                FillGridStepwiseAdjusterBalanceOut.build(fillBps, adjustBps),
+                FillGridPiecewiseAdjusterBalanceOut.build(fillBps, adjustBps),
                 LimitSwap.build(address(tokenA), address(tokenB))
             )
         );
@@ -169,44 +198,92 @@ contract FillGridAdjusterTest is Test {
         assertEq(quotedOut, 50e18);
     }
 
-    function test_FillGridStepwiseAdjuster_NoMatchingPoint() public view {
-        ISwapVM.Order memory balanceInOrder = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
-        ISwapVM.Order memory balanceOutOrder = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
+    function test_FillGridPiecewiseAdjuster_Build_Reverts() public {
+        GridBuildHelper helper = new GridBuildHelper();
 
-        (, uint256 quotedOut,) = swapVM.quote(balanceInOrder, 75e18, _buildTakerData(balanceInOrder, true));
-        (uint256 quotedIn,,) = swapVM.quote(balanceOutOrder, 50e18, _buildTakerData(balanceOutOrder, false));
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterNoPoints.selector);
+        helper.buildIn(new uint24[](0), new uint24[](0));
 
-        assertEq(quotedOut, 50e18);
-        assertEq(quotedIn, 50e18);
+        uint24[] memory fillBps = new uint24[](2);
+        uint24[] memory adjustBps = new uint24[](1);
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterMismatchInputLengths.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps = new uint24[](2);
+        adjustBps = new uint24[](2);
+        fillBps[0] = 0.1e7; adjustBps[0] = 1e7;
+        fillBps[1] = 1e7; adjustBps[1] = 0.9e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterInvalidEndpoints.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps[0] = 0; adjustBps[0] = 0.9e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterInvalidEndpoints.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps[0] = 0; adjustBps[0] = 1e7;
+        fillBps[1] = 0.9e7; adjustBps[1] = 0.9e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterInvalidEndpoints.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps = new uint24[](4);
+        adjustBps = new uint24[](4);
+        fillBps[0] = 0; adjustBps[0] = 1e7;
+        fillBps[1] = 0.5e7; adjustBps[1] = 0.95e7;
+        fillBps[2] = 0.5e7; adjustBps[2] = 0.9e7;
+        fillBps[3] = 1e7; adjustBps[3] = 0.9e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterNonAscendingFillBps.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps[2] = 0.8e7; adjustBps[2] = 0.96e7;
+        fillBps[3] = 1e7; adjustBps[3] = 0.96e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterIncreasingAdjustBps.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps = new uint24[](3);
+        adjustBps = new uint24[](3);
+        fillBps[0] = 0; adjustBps[0] = 1e7;
+        fillBps[1] = 0.5e7; adjustBps[1] = 0.95e7;
+        fillBps[2] = 1e7; adjustBps[2] = 0.5e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceIn.FillGridPiecewiseAdjusterDecreasingFillCapacity.selector);
+        helper.buildIn(fillBps, adjustBps);
+
+        fillBps = new uint24[](1);
+        adjustBps = new uint24[](1);
+        fillBps[0] = 0.1e7; adjustBps[0] = 0.9e7;
+        vm.expectRevert(FillGridPiecewiseAdjusterBalanceOut.FillGridPiecewiseAdjusterInvalidEndpoints.selector);
+        helper.buildOut(fillBps, adjustBps);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceIn_ExactIn_MatchesReference(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceIn_ExactIn_MatchesReference(
         uint256 amountSeed,
         uint8 pointSeed
     ) public view {
-        uint256[5] memory minAmountsIn = [uint256(149e18), 444e18, 735e18, 1022e18, 1305e18];
-        uint256[5] memory upperBounds = [uint256(444e18), 735e18, 1022e18, 1305e18, 1450e18];
-        uint256[5] memory referenceBalancesIn = [uint256(1490e18), 1480e18, 1470e18, 1460e18, 1450e18];
-        uint256 point = bound(pointSeed, 0, 4);
+        uint256[4] memory minAmountsIn = [uint256(2), 298e18, 737.5e18, 1168e18];
+        uint256[4] memory upperBounds = [uint256(298e18), 737.5e18, 1168e18, 1450e18];
+        uint256[4] memory referenceBalancesIn = [uint256(1500e18), 1490e18, 1475e18, 1460e18];
+        uint256 point = bound(pointSeed, 0, 3);
         uint256 amountIn = minAmountsIn[point] + amountSeed % (upperBounds[point] - minAmountsIn[point]);
 
-        ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
-        ISwapVM.Order memory referenceOrder = _buildOrder(_buildReferenceProgram(referenceBalancesIn[point], 1000e18));
+        ISwapVM.Order memory order =
+            _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
+        ISwapVM.Order memory referenceOrder =
+            _buildOrder(_buildReferenceProgram(referenceBalancesIn[point], 1000e18));
 
         (, uint256 amountOut,) = swapVM.quote(order, amountIn, _buildTakerData(order, true));
         (, uint256 referenceAmountOut,) = swapVM.quote(referenceOrder, amountIn, _buildTakerData(referenceOrder, true));
 
-        assertEq(amountOut, referenceAmountOut);
+        if (amountIn == upperBounds[point]) assertEq(amountOut, referenceAmountOut);
+        else assertGe(amountOut, referenceAmountOut);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceIn_ExactOut_MatchesReference(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceIn_ExactOut_MatchesReference(
         uint256 amountSeed,
         uint8 pointSeed
     ) public view {
-        uint256[5] memory minAmountsOut = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
-        uint256[5] memory upperBounds = [uint256(300e18), 500e18, 700e18, 900e18, 1000e18];
-        uint256[5] memory referenceBalancesIn = [uint256(1490e18), 1480e18, 1470e18, 1460e18, 1450e18];
-        uint256 point = bound(pointSeed, 0, 4);
+        uint256[4] memory minAmountsOut = [uint256(1), 200e18, 500e18, 800e18];
+        uint256[4] memory upperBounds = [uint256(200e18), 500e18, 800e18, 1000e18];
+        uint256[4] memory referenceBalancesIn = [uint256(1500e18), 1490e18, 1475e18, 1460e18];
+        uint256 point = bound(pointSeed, 0, 3);
         uint256 amountOut = minAmountsOut[point] + amountSeed % (upperBounds[point] - minAmountsOut[point]);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, 1 << 23, true, InvalidationScope.Total));
@@ -215,17 +292,18 @@ contract FillGridAdjusterTest is Test {
         (uint256 amountIn,,) = swapVM.quote(order, amountOut, _buildTakerData(order, false));
         (uint256 referenceAmountIn,,) = swapVM.quote(referenceOrder, amountOut, _buildTakerData(referenceOrder, false));
 
-        assertEq(amountIn, referenceAmountIn);
+        if (amountOut == upperBounds[point]) assertEq(amountIn, referenceAmountIn);
+        else assertLe(amountIn, referenceAmountIn);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceOut_ExactIn_MatchesReference(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceOut_ExactIn_MatchesReference(
         uint256 amountSeed,
         uint8 pointSeed
     ) public view {
-        uint256[5] memory minAmountsIn = [uint256(100e18), 300e18, 500e18, 700e18, 900e18];
-        uint256[5] memory upperBounds = [uint256(300e18), 500e18, 700e18, 900e18, 1000e18];
-        uint256[5] memory referenceBalancesOut = [uint256(1010e18), 1020e18, 1030e18, 1040e18, 1050e18];
-        uint256 point = bound(pointSeed, 0, 4);
+        uint256[4] memory minAmountsIn = [uint256(1), 200e18, 500e18, 800e18];
+        uint256[4] memory upperBounds = [uint256(200e18), 500e18, 800e18, 1000e18];
+        uint256[4] memory referenceBalancesOut = [uint256(1010e18), 1025e18, 1040e18, 1050e18];
+        uint256 point = bound(pointSeed, 0, 3);
         uint256 amountIn = minAmountsIn[point] + amountSeed % (upperBounds[point] - minAmountsIn[point]);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
@@ -234,17 +312,18 @@ contract FillGridAdjusterTest is Test {
         (, uint256 amountOut,) = swapVM.quote(order, amountIn, _buildTakerData(order, true));
         (, uint256 referenceAmountOut,) = swapVM.quote(referenceOrder, amountIn, _buildTakerData(referenceOrder, true));
 
-        assertEq(amountOut, referenceAmountOut);
+        if (amountIn == upperBounds[point]) assertEq(amountOut, referenceAmountOut);
+        else assertLe(amountOut, referenceAmountOut);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceOut_ExactOut_MatchesReference(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceOut_ExactOut_MatchesReference(
         uint256 amountSeed,
         uint8 pointSeed
     ) public view {
-        uint256[5] memory minAmountsOut = [uint256(101e18), 306e18, 515e18, 728e18, 945e18];
-        uint256[5] memory upperBounds = [uint256(306e18), 515e18, 728e18, 945e18, 1050e18];
-        uint256[5] memory referenceBalancesOut = [uint256(1010e18), 1020e18, 1030e18, 1040e18, 1050e18];
-        uint256 point = bound(pointSeed, 0, 4);
+        uint256[4] memory minAmountsOut = [uint256(1), 202e18, 512.5e18, 832e18];
+        uint256[4] memory upperBounds = [uint256(202e18), 512.5e18, 832e18, 1050e18];
+        uint256[4] memory referenceBalancesOut = [uint256(1010e18), 1025e18, 1040e18, 1050e18];
+        uint256 point = bound(pointSeed, 0, 3);
         uint256 amountOut = minAmountsOut[point] + amountSeed % (upperBounds[point] - minAmountsOut[point]);
 
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1500e18, 1 << 23, false, InvalidationScope.Total));
@@ -253,10 +332,11 @@ contract FillGridAdjusterTest is Test {
         (uint256 amountIn,,) = swapVM.quote(order, amountOut, _buildTakerData(order, false));
         (uint256 referenceAmountIn,,) = swapVM.quote(referenceOrder, amountOut, _buildTakerData(referenceOrder, false));
 
-        assertEq(amountIn, referenceAmountIn);
+        if (amountOut == upperBounds[point]) assertEq(amountIn, referenceAmountIn);
+        else assertGe(amountIn, referenceAmountIn);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceIn_TotalVsRemainingVolume(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceIn_TotalVsRemainingVolume(
         uint24 surchargeScaleSeed,
         uint8 firstFillPercentSeed
     ) public {
@@ -288,7 +368,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(remainingOrder), address(tokenB)), firstAmountOut);
     }
 
-    function testFuzz_FillGridStepwiseAdjusterBalanceOut_TotalVsRemainingVolume(
+    function testFuzz_FillGridPiecewiseAdjusterBalanceOut_TotalVsRemainingVolume(
         uint24 surchargeScaleSeed,
         uint8 firstFillPercentSeed
     ) public {
@@ -320,35 +400,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(swapVM.tokenInInvalidators(maker, swapVM.hash(remainingOrder), address(tokenA)), firstAmountIn);
     }
 
-    function test_FillGridStepwiseAdjusterBalanceIn_ContextOverflow() public {
-        uint256 max = type(uint232).max;
-
-        ISwapVM.Order memory exactInOrder = _buildOrder(_buildProgram(max + 1, 100e18, 0, true, InvalidationScope.Total));
-        bytes memory exactInData = _buildTakerData(exactInOrder, true);
-        vm.expectRevert(FillGridStepwiseAdjusterBalanceIn.FillGridStepwiseAdjusterContextOverflow.selector);
-        swapVM.quote(exactInOrder, 1, exactInData);
-
-        ISwapVM.Order memory exactOutOrder = _buildOrder(_buildProgram(100e18, max + 1, 0, true, InvalidationScope.Total));
-        bytes memory exactOutData = _buildTakerData(exactOutOrder, false);
-        vm.expectRevert(FillGridStepwiseAdjusterBalanceIn.FillGridStepwiseAdjusterContextOverflow.selector);
-        swapVM.quote(exactOutOrder, 1, exactOutData);
-    }
-
-    function test_FillGridStepwiseAdjusterBalanceOut_ContextOverflow() public {
-        uint256 max = type(uint232).max;
-
-        ISwapVM.Order memory exactInOrder = _buildOrder(_buildProgram(max + 1, 100e18, 0, false, InvalidationScope.Total));
-        bytes memory exactInData = _buildTakerData(exactInOrder, true);
-        vm.expectRevert(FillGridStepwiseAdjusterBalanceOut.FillGridStepwiseAdjusterContextOverflow.selector);
-        swapVM.quote(exactInOrder, 1, exactInData);
-
-        ISwapVM.Order memory exactOutOrder = _buildOrder(_buildProgram(100e18, max + 1, 0, false, InvalidationScope.Total));
-        bytes memory exactOutData = _buildTakerData(exactOutOrder, false);
-        vm.expectRevert(FillGridStepwiseAdjusterBalanceOut.FillGridStepwiseAdjusterContextOverflow.selector);
-        swapVM.quote(exactOutOrder, 1, exactOutData);
-    }
-
-    function testFuzz_FillGridStepwise_InAndOutQuotesMatch(uint256 balanceSeed) public view {
+    function testFuzz_FillGridPiecewise_InAndOutQuotesMatch(uint256 balanceSeed) public view {
         // Single balance on both sides avoids partial-fill regime; BalanceIn (discount) vs BalanceOut (boost)
         // apply the same grid asymmetrically, so parity holds within ~2% (vs wei-level for surcharge-only).
         uint256 balance = bound(balanceSeed, 1e18, 1e21);
@@ -374,11 +426,11 @@ contract FillGridAdjusterTest is Test {
     function _grid() private pure returns (uint24[] memory fillBps, uint24[] memory adjustBps) {
         fillBps = new uint24[](5);
         adjustBps = new uint24[](5);
-        fillBps[0] = 0.1e7; adjustBps[0] = 0.98e7;
-        fillBps[1] = 0.3e7; adjustBps[1] = 0.96e7;
-        fillBps[2] = 0.5e7; adjustBps[2] = 0.94e7;
-        fillBps[3] = 0.7e7; adjustBps[3] = 0.92e7;
-        fillBps[4] = 0.9e7; adjustBps[4] = 0.90e7;
+        fillBps[0] = 0; adjustBps[0] = 1e7;
+        fillBps[1] = 0.2e7; adjustBps[1] = 0.98e7;
+        fillBps[2] = 0.5e7; adjustBps[2] = 0.95e7;
+        fillBps[3] = 0.8e7; adjustBps[3] = 0.92e7;
+        fillBps[4] = 1e7; adjustBps[4] = 0.90e7;
     }
 
     function _buildProgram(
@@ -400,13 +452,17 @@ contract FillGridAdjusterTest is Test {
             ? PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales)
             : PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales);
         bytes memory adjuster = scaleIn
-            ? FillGridStepwiseAdjusterBalanceIn.build(fillBps, adjustBps)
-            : FillGridStepwiseAdjusterBalanceOut.build(fillBps, adjustBps);
+            ? FillGridPiecewiseAdjusterBalanceIn.build(fillBps, adjustBps)
+            : FillGridPiecewiseAdjusterBalanceOut.build(fillBps, adjustBps);
         bytes memory invalidator = scaleIn ? InvalidateTokenOut.build() : InvalidateTokenIn.build();
         bytes memory swap = LimitSwap.build(address(tokenA), address(tokenB));
 
         if (scope == InvalidationScope.Total) return bytes.concat(balances, surcharge, adjuster, invalidator, swap);
         return bytes.concat(balances, surcharge, invalidator, adjuster, swap);
+    }
+
+    function _buildReferenceProgram(uint256 balanceIn, uint256 balanceOut) private view returns (bytes memory) {
+        return bytes.concat(StaticBalances.build(balanceIn, balanceOut), LimitSwap.build(address(tokenA), address(tokenB)));
     }
 
     function _buildOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
@@ -421,10 +477,6 @@ contract FillGridAdjusterTest is Test {
             allowZeroAmountIn: true,
             program: program
         }));
-    }
-
-    function _buildReferenceProgram(uint256 balanceIn, uint256 balanceOut) private view returns (bytes memory) {
-        return bytes.concat(StaticBalances.build(balanceIn, balanceOut), LimitSwap.build(address(tokenA), address(tokenB)));
     }
 
     function _buildTakerData(ISwapVM.Order memory order, bool exactIn) private view returns (bytes memory) {
