@@ -16,6 +16,8 @@ import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../c
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { FillGridPiecewiseAdjusterBalanceIn } from "../../../contracts/instructions/FillGridPiecewiseAdjuster.sol";
+import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../../../contracts/instructions/FillGridAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
@@ -76,8 +78,8 @@ contract OpcodeGas is Test {
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         // Cold Just, then hot Just — opcode runs are hot too.
-        _measure(just);
-        justExec = _measure(just);
+        _measure(just, AMOUNT);
+        justExec = _measure(just, AMOUNT);
 
         _snapshot("Stop", Stop.build());
         _snapshot("Salt", Salt.build(uint64(42)));
@@ -114,11 +116,18 @@ contract OpcodeGas is Test {
         _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
+        _snapshot("FillGridPiecewiseAdjusterBalanceIn", FillGridPiecewiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
+        _snapshot("FillGridStepwiseAdjusterBalanceIn", FillGridStepwiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
+        _snapshot("FillGridStepwiseAdjusterBalanceOut", FillGridStepwiseAdjusterBalanceOut.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
     function _snapshot(string memory name, bytes memory opcode) private {
-        uint256 opExecGas = _measure(bytes.concat(just, opcode));
+        _snapshot(name, opcode, AMOUNT);
+    }
+
+    function _snapshot(string memory name, bytes memory opcode, uint256 amount) private {
+        uint256 opExecGas = _measure(bytes.concat(just, opcode), amount);
         uint256 calldataGas;
         for (uint256 i; i < opcode.length; i++) {
             calldataGas += opcode[i] == 0 ? 4 : 16;
@@ -126,7 +135,7 @@ contract OpcodeGas is Test {
         vm.snapshotValue("OpcodeGas", name, opExecGas - justExec + calldataGas);
     }
 
-    function _measure(bytes memory program) private returns (uint256) {
+    function _measure(bytes memory program, uint256 amount) private returns (uint256) {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             tokenA: address(tokenA),
@@ -177,7 +186,7 @@ contract OpcodeGas is Test {
             signature: abi.encodePacked(r, s, v)
         }));
 
-        swapVM.swap(order, AMOUNT, takerData);
+        swapVM.swap(order, amount, takerData);
         return uint256(vm.lastCallGas().gasTotalUsed);
     }
 }
