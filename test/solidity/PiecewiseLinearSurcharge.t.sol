@@ -11,13 +11,10 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouterDebug } from "../../contracts/routers/LimitSwapVMRouterDebug.sol";
-import { LimitOpcodesDebug } from "../../contracts/opcodes/LimitOpcodesDebug.sol";
+import { LimitSwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { Time } from "../../contracts/libs/Time.sol";
-import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
+import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import {
     PiecewiseLinearSurcharge,
     PiecewiseLinearSurchargeBalanceIn,
@@ -26,11 +23,12 @@ import {
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
 /// @title PiecewiseLinearSurcharge tests
-contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
+contract PiecewiseLinearSurchargeTest is Test {
     using Math for uint256;
 
     Aqua public immutable aqua;
     LimitSwapVMRouterDebug public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
     address public maker = address(0xBEEF);
@@ -41,7 +39,8 @@ contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
     uint256 internal constant MAKER_PRIVATE_KEY = 0xBEEF;
 
     function setUp() public {
-        swapVM = new LimitSwapVMRouterDebug(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.LimitSwapVMRouterDebug(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
@@ -855,7 +854,7 @@ contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
     }
 
     function _buildOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -864,28 +863,15 @@ contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
             useAquaInsteadOfSignature: false,
             usePermit2: false,
             allowZeroAmountIn: true,
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
 
     function _buildTakerData(bool exactIn) internal view returns (bytes memory) {
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(this),
             isExactIn: exactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
@@ -893,16 +879,7 @@ contract PiecewiseLinearSurchargeTest is Test, LimitOpcodesDebug {
             usePermit2: false,
             threshold: "",
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: ""
         }));
     }

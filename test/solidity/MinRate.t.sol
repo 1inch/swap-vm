@@ -10,14 +10,10 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { RequireMinRate, AdjustMinRate } from "../../contracts/instructions/MinRate.sol";
+import { RequireMinRate } from "../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol";
 
 /**
@@ -25,9 +21,10 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
  * @notice Functional tests for MinRate instruction
  * @dev Tests minimum rate enforcement and adjustment mechanics
  */
-contract MinRateTest is Test, OpcodesDebug {
+contract MinRateTest is Test {
     Aqua public immutable aqua;
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -38,7 +35,8 @@ contract MinRateTest is Test, OpcodesDebug {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -118,223 +116,9 @@ contract MinRateTest is Test, OpcodesDebug {
         );
     }
 
-    /**
-     * Test adjustMinRate caps output when rate is too good
-     */
-    function test_AdjustMinRateCapsOutput() public {
-        // Setup: 1 tokenA = 3 tokenB base rate
-        // MinRate adjust: cap at most 1 tokenA = 2 tokenB (protect maker)
-        uint64 rateA = 1e18;
-        uint64 rateB = 2e18;
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0, true);
-
-        // Execute swap - output should be capped to protect maker
-        uint256 amountOut = _executeSwap(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            exactInData
-        );
-
-        assertEq(amountOut, 2e18, "Should cap output at min rate");
-    }
-
-    /**
-     * Test adjustMinRate with exactOut mode
-     */
-    function test_AdjustMinRateExactOut() public {
-        // Setup: 1 tokenA = 3 tokenB base rate
-        // MinRate adjust: cap at most 1 tokenA = 2 tokenB (protect maker)
-        uint64 rateA = 1e18;
-        uint64 rateB = 2e18;
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 300e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactOutData = _signAndPackTakerData(order, false, 10e18, true); // Want 10 tokenB
-
-        // Quote required input
-        (uint256 quotedIn,,) = swapVM.asView().quote(
-            order,
-            10e18,
-            exactOutData
-        );
-
-        // Should require more input due to min rate cap
-        assertEq(quotedIn, 5e18, "Should require exactly 5 tokenA for 10 tokenB");
-    }
-
-    /**
-     * Test MinRate with fees
-     */
-    function test_MinRateWithFees() public {
-        // Base rate: 1 tokenA = 2 tokenB
-        // Fee: 1% on output
-        // MinRate: cap at 1:1.9 (protect maker from giving too much after fees)
-        uint64 rateA = 1e18;
-        uint64 rateB = 1.9e18;
-        uint24 feeBps = 0.01e7; // 1% fee
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 200e18),
-            FeeFlatOut.build(feeBps),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0, true);
-
-        uint256 amountOut = _executeSwap(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            exactInData
-        );
-
-        // Should get capped rate after fees
-        // Base would give 2e18, minus 1% fee = 1.98e18
-        // But MinRate caps at 1.9e18, minus 1% fee = 1.881e18
-        assertEq(amountOut, 1.881e18, "Should get min rate minus fee");
-    }
-
-    /**
-     * Test MinRate doesn't affect worse rates
-     */
-    function test_MinRateNoEffectOnWorseRates() public {
-        // Setup: 1 tokenA = 1.5 tokenB base rate (worse than min)
-        // MinRate: cap at most 1 tokenA = 2 tokenB
-        uint64 rateA = 1e18;
-        uint64 rateB = 2e18;
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 150e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0, true);
-
-        uint256 amountOut = _executeSwap(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            exactInData
-        );
-
-        // Should get base rate (1.5:1) as it's worse than min rate (2:1)
-        assertEq(amountOut, 1.5e18, "Should get base rate when worse than min");
-    }
-
-    /**
-     * Test MinRate with different token orderings
-     */
-    function test_MinRateTokenOrdering() public {
-        // Test both A->B and B->A with same min rate
-        // MinRate: 2 tokenA = 1 tokenB (cap rate to protect maker)
-        uint64 rateA = 2e18;
-        uint64 rateB = 1e18;
-
-        // First test A -> B
-        // Base rate: 1 tokenA = 0.5 tokenB (200:100)
-        // This equals the min rate, so no adjustment
-        bytes memory bytecodeAtoB = bytes.concat(
-            StaticBalances.build(200e18, 100e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory orderAtoB = _createOrder(bytecodeAtoB);
-        bytes memory exactInDataAtoB = _signAndPackTakerData(orderAtoB, true, 0, true);
-
-        uint256 amountOutAtoB = _executeSwap(
-            swapVM,
-            orderAtoB,
-            address(tokenA),
-            address(tokenB),
-            2e18, // 2 tokenA
-            exactInDataAtoB
-        );
-
-        assertEq(amountOutAtoB, 1e18, "Should get 1 tokenB for 2 tokenA");
-
-        // Now test B -> A with same balances
-        // Base rate: 1 tokenB = 2 tokenA
-        // This equals the inverse of min rate, so no adjustment
-        bytes memory bytecodeBtoA = bytes.concat(
-            StaticBalances.build(200e18, 100e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenB), address(tokenA))
-        );
-
-        ISwapVM.Order memory orderBtoA = _createOrder(bytecodeBtoA);
-        bytes memory exactInDataBtoA = _signAndPackTakerData(orderBtoA, true, 0, false);
-
-        uint256 amountOutBtoA = _executeSwap(
-            swapVM,
-            orderBtoA,
-            address(tokenB),
-            address(tokenA),
-            1e18, // 1 tokenB
-            exactInDataBtoA
-        );
-
-        assertEq(amountOutBtoA, 2e18, "Should get 2 tokenA for 1 tokenB");
-    }
-
-    /**
-     * Test extreme min rates
-     */
-    function test_MinRateExtreme() public {
-        // Very high cap: at most 1 tokenA = 1000 tokenB
-        // Base rate: 1 tokenA = 10000 tokenB (would be too generous)
-        uint64 rateA = 1e9;
-        uint64 rateB = 1000e9;
-
-        bytes memory bytecode = bytes.concat(
-            StaticBalances.build(100e18, 1000000e18),
-            AdjustMinRate.build(rateA, rateB),
-            LimitSwap.build(address(tokenA), address(tokenB))
-        );
-
-        ISwapVM.Order memory order = _createOrder(bytecode);
-        bytes memory exactInData = _signAndPackTakerData(order, true, 0, true);
-
-        uint256 amountOut = _executeSwap(
-            swapVM,
-            order,
-            address(tokenA),
-            address(tokenB),
-            1e18,
-            exactInData
-        );
-
-        // Should be capped at min rate
-        assertEq(amountOut, 1000e18, "Should cap at extreme min rate");
-    }
-
     // Helper functions
     function _executeSwap(
-        SwapVM _swapVM,
+        SwapVMRouter _swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -358,7 +142,7 @@ contract MinRateTest is Test, OpcodesDebug {
     }
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -367,18 +151,6 @@ contract MinRateTest is Test, OpcodesDebug {
             usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -395,11 +167,10 @@ contract MinRateTest is Test, OpcodesDebug {
 
         bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        bytes memory takerTraits = TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: isAToB,
@@ -407,19 +178,8 @@ contract MinRateTest is Test, OpcodesDebug {
             usePermit2: false,
             threshold: thresholdData,
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: signature
         }));
-
-        return abi.encodePacked(takerTraits);
     }
 }

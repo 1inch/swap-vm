@@ -9,11 +9,10 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraits, TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
@@ -50,8 +49,9 @@ contract TakerTraitsWrapper {
  * @notice Integration tests for TakerTraits functionality with LimitSwap
  * @dev Tests deadline, threshold, to, isExactIn, strictThreshold features
  */
-contract TakerTraitsTest is Test, OpcodesDebug {
+contract TakerTraitsTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -67,7 +67,8 @@ contract TakerTraitsTest is Test, OpcodesDebug {
         makerPrivateKey = 0x1234;
         maker = vm.addr(makerPrivateKey);
 
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -684,7 +685,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             Salt.build(salt)
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -693,18 +694,6 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -727,29 +716,24 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             Salt.build(salt)
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
-            maker: maker,
-            tokenA: address(tokenA),
-            tokenB: address(tokenB),
-            shouldUnwrapWeth: false,
-            useAquaInsteadOfSignature: false,
-            usePermit2: false,
-            allowZeroAmountIn: false,
-            receiver: address(0),
-            hasPreTransferInHook: preInData.length > 0,
-            hasPostTransferInHook: postInData.length > 0,
-            hasPreTransferOutHook: preOutData.length > 0,
-            hasPostTransferOutHook: postOutData.length > 0,
-            preTransferInTarget: preInData.length > 0 ? hooksTarget : address(0),
-            preTransferInData: preInData,
-            postTransferInTarget: postInData.length > 0 ? hooksTarget : address(0),
-            postTransferInData: postInData,
-            preTransferOutTarget: preOutData.length > 0 ? hooksTarget : address(0),
-            preTransferOutData: preOutData,
-            postTransferOutTarget: postOutData.length > 0 ? hooksTarget : address(0),
-            postTransferOutData: postOutData,
-            program: programBytes
-        }));
+        MakerTraitsLib.Args memory traits;
+        traits.maker = maker;
+        traits.tokenA = address(tokenA);
+        traits.tokenB = address(tokenB);
+        traits.hasPreTransferInHook = preInData.length > 0;
+        traits.hasPostTransferInHook = postInData.length > 0;
+        traits.hasPreTransferOutHook = preOutData.length > 0;
+        traits.hasPostTransferOutHook = postOutData.length > 0;
+        traits.preTransferInTarget = preInData.length > 0 ? hooksTarget : address(0);
+        traits.preTransferInData = preInData;
+        traits.postTransferInTarget = postInData.length > 0 ? hooksTarget : address(0);
+        traits.postTransferInData = postInData;
+        traits.preTransferOutTarget = preOutData.length > 0 ? hooksTarget : address(0);
+        traits.preTransferOutData = preOutData;
+        traits.postTransferOutTarget = postOutData.length > 0 ? hooksTarget : address(0);
+        traits.postTransferOutData = postOutData;
+        traits.program = programBytes;
+        order = MakerTraitsLib.build(traits);
 
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPrivateKey, orderHash);
@@ -773,7 +757,7 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             Salt.build(salt)
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -782,18 +766,6 @@ contract TakerTraitsTest is Test, OpcodesDebug {
             usePermit2: false,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 

@@ -7,12 +7,8 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 
-
-
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTxOriginTokenBalanceNonZero } from "../../contracts/instructions/TokenValidators.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
@@ -88,13 +84,14 @@ contract ControlsAquaTest is AquaSwapVMTest {
         // Try to execute after deadline (should revert)
         vm.warp(block.timestamp + 101); // Move time forward to exceed deadline
 
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Deadline.DeadlineReached.selector,
                 deadline
             )
         );
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
 
         // Verify final balances
         (uint256 takerBalanceA, uint256 takerBalanceB) = getTakerBalances(taker);
@@ -126,13 +123,14 @@ contract ControlsAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
 
         // Should revert immediately because deadline has already passed
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(
             abi.encodeWithSelector(
                 Deadline.DeadlineReached.selector,
                 deadline
             )
         );
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 
     function _createStrategyForCheckNft() internal view returns (ISwapVM.Order memory) {
@@ -210,6 +208,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
 
         // Execute swap - should fail because taker doesn't have the NFT
+        bytes memory data = takerData(swapProgram);
         vm.expectRevert(
             abi.encodeWithSelector(
                 OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector,
@@ -217,7 +216,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
                 address(nftGate)
             )
         );
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
 
         // Verify NFT balance is zero
         assertEq(nftGate.balanceOf(address(taker)), 0, "Taker should not have the NFT");
@@ -266,8 +265,9 @@ contract ControlsAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
 
         // Execute swap with trader as tx.origin while taker contract is the actual taker
+        bytes memory data = takerData(swapProgram);
         vm.prank(address(this), trader);
-        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order);
+        (uint256 amountIn, uint256 amountOut) = swap(swapProgram, order, data);
 
         // Verify swap succeeded
         assertEq(amountIn, 50e18, "Incorrect amountIn");
@@ -305,6 +305,7 @@ contract ControlsAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
 
         // Execute swap - should fail because tx.origin doesn't hold the NFT
+        bytes memory data = takerData(swapProgram);
         vm.prank(address(this), trader);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -313,6 +314,6 @@ contract ControlsAquaTest is AquaSwapVMTest {
                 address(nftGate)
             )
         );
-        swap(swapProgram, order);
+        swap(swapProgram, order, data);
     }
 }

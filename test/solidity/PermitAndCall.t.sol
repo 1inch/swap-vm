@@ -9,7 +9,6 @@ import { IPermit2 } from "@1inch/solidity-utils/contracts/interfaces/IPermit2.so
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
@@ -17,6 +16,7 @@ import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
 import { ERC20PermitMock } from "./mocks/ERC20PermitMock.sol";
 import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
+import { DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 
 contract PermitAndCallTest is Test, OpcodesDebug {
     bytes32 private constant PERMIT_TYPEHASH =
@@ -36,6 +36,7 @@ contract PermitAndCallTest is Test, OpcodesDebug {
     uint256 private constant AMOUNT_OUT = 25e18;
 
     SwapVMRouter private swapVM;
+    TraitsHelper private orders;
     ERC20PermitMock private tokenA;
     ERC20PermitMock private tokenB;
     address private maker;
@@ -44,6 +45,7 @@ contract PermitAndCallTest is Test, OpcodesDebug {
     function setUp() public {
         maker = vm.addr(MAKER_PRIVATE_KEY);
         taker = vm.addr(TAKER_PRIVATE_KEY);
+        orders = DeployCode.TraitsHelper();
         swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new ERC20PermitMock("Token A", "TKA");
@@ -118,27 +120,38 @@ contract PermitAndCallTest is Test, OpcodesDebug {
     }
 
     function _buildSwap(bool usePermit2) private view returns (ISwapVM.Order memory order, bytes memory takerData) {
-        MakerTraitsLib.Args memory makerArgs;
-        makerArgs.maker = maker;
-        makerArgs.tokenA = address(tokenA);
-        makerArgs.tokenB = address(tokenB);
-        makerArgs.program = bytes.concat(
-            StaticBalances.build(100e18, 200e18),
-            LimitSwap.build(address(tokenB), address(tokenA))
-        );
-        order = MakerTraitsLib.build(makerArgs);
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: false,
+            usePermit2: false,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            program: bytes.concat(
+                StaticBalances.build(100e18, 200e18),
+                LimitSwap.build(address(tokenB), address(tokenA))
+            )
+        }));
 
         bytes32 orderHash = swapVM.hash(order);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PRIVATE_KEY, orderHash);
 
-        TakerTraitsLib.Args memory takerArgs;
-        takerArgs.taker = taker;
-        takerArgs.isExactIn = true;
-        takerArgs.isFirstTransferFromTaker = true;
-        takerArgs.isAToB = false;
-        takerArgs.usePermit2 = usePermit2;
-        takerArgs.signature = abi.encodePacked(r, s, v);
-        takerData = TakerTraitsLib.build(takerArgs);
+        takerData = orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+            taker: taker,
+            isExactIn: true,
+            shouldUnwrapWeth: false,
+            isFirstTransferFromTaker: true,
+            useTransferFromAndAquaPush: false,
+            isAToB: false,
+            allowPartialFill: false,
+            usePermit2: usePermit2,
+            threshold: "",
+            to: address(0),
+            hasPreTransferInCallback: false,
+            signature: abi.encodePacked(r, s, v)
+        }));
     }
 
     function _eip2612Permit(uint256 amount, uint256 deadline) private view returns (bytes memory) {

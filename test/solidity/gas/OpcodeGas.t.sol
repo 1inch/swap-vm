@@ -21,7 +21,7 @@ import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut }
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
-import { RequireMinRate, AdjustMinRate } from "../../../contracts/instructions/MinRate.sol";
+import { RequireMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
@@ -113,7 +113,6 @@ contract OpcodeGas is Test {
         _snapshot("PiecewiseLinearSurchargeBalanceOut", PiecewiseLinearSurchargeBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
         _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
-        _snapshot("AdjustMinRate", AdjustMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
         _snapshot("FillGridPiecewiseAdjusterBalanceIn", FillGridPiecewiseAdjusterBalanceIn.build(dynamic([uint24(0), 0.5e7, 1e7]), dynamic([uint24(1e7), 0.95e7, 0.9e7])), AMOUNT / 3);
@@ -138,13 +137,13 @@ contract OpcodeGas is Test {
     function _measure(bytes memory program, uint256 amount) private returns (uint256) {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            receiver: address(0),
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
-            usePermit2: false,
             allowZeroAmountIn: false,
-            receiver: address(0),
+            usePermit2: false,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
             hasPreTransferOutHook: false,

@@ -12,21 +12,20 @@ import { IPermit2 } from "@1inch/solidity-utils/contracts/interfaces/IPermit2.so
 
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
-import { SwapVM, ISwapVM } from "../../contracts/SwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
-import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib, TakerTraits } from "../../contracts/libs/TakerTraits.sol";
-import { OpcodesDebug } from "../../contracts/opcodes/OpcodesDebug.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
+import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
 
-contract SwapVMTest is Test, OpcodesDebug {
+contract SwapVMTest is Test {
     address private constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
@@ -67,7 +66,8 @@ contract SwapVMTest is Test, OpcodesDebug {
         maker = vm.addr(makerPrivateKey);
 
         // Deploy custom SwapVM router with Invalidators
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         // Deploy mock tokens
         tokenA = new TokenMock("Token I", "TKI");
@@ -94,7 +94,7 @@ contract SwapVMTest is Test, OpcodesDebug {
             setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 
-        order = MakerTraitsLib.build(MakerTraitsLib.Args({
+        order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
@@ -103,18 +103,6 @@ contract SwapVMTest is Test, OpcodesDebug {
             usePermit2: setup.usePermit2,
             allowZeroAmountIn: false,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: programBytes
         }));
 
@@ -138,21 +126,25 @@ contract SwapVMTest is Test, OpcodesDebug {
         bool isExactIn,
         bool isFirstTransferFromTaker
     ) internal view returns (bytes memory) {
-        // Build taker data step by step to avoid stack too deep
-        TakerTraitsLib.Args memory args;
-        args.taker = taker;
-        args.isExactIn = isExactIn;
-        args.usePermit2 = usePermit2;
-        args.isAToB = false;
-        args.isFirstTransferFromTaker = isFirstTransferFromTaker;
-        args.threshold = threshold > 0 ? abi.encodePacked(threshold) : bytes("");
-        args.signature = signature;
+        bytes memory thresholdData = threshold > 0 ? abi.encodePacked(bytes32(threshold)) : bytes("");
 
-        // All other fields remain default (false/0/empty)
-        return TakerTraitsLib.build(args);
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
+            taker: taker,
+            isExactIn: isExactIn,
+            shouldUnwrapWeth: false,
+            isFirstTransferFromTaker: isFirstTransferFromTaker,
+            useTransferFromAndAquaPush: false,
+            isAToB: false,
+            allowPartialFill: false,
+            usePermit2: usePermit2,
+            threshold: thresholdData,
+            to: address(0),
+            hasPreTransferInCallback: false,
+            signature: signature
+        }));
     }
 
-    /// @notice Sets up expectation that SwapVM contract will emit Swapped event with these parameters
+    /// @notice Sets up expectation that SwapVMRouter contract will emit Swapped event with these parameters
     /// @dev The emit here is NOT broadcasting - it's Foundry's syntax to specify expected event values.
     ///      Test fails if contract doesn't emit matching event on next call.
     function _expectSwappedEvent(
@@ -165,7 +157,7 @@ contract SwapVMTest is Test, OpcodesDebug {
         bytes32 orderHash = swapVM.hash(order);
         vm.expectEmit(true, true, true, true, address(swapVM));
         // Specify expected event parameters (Foundry will verify contract emits this)
-        emit SwapVM.Swapped(
+        emit SwapVMRouter.Swapped(
             orderHash,
             maker,
             taker,
@@ -485,10 +477,11 @@ contract SwapVMTest is Test, OpcodesDebug {
             salt: 0x777A
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes memory takerData = _buildTakerData(25e18, signature, true);
 
         vm.prank(taker);
         vm.expectRevert(SafeERC20.SafeTransferFromFailed.selector);
-        swapVM.swap(order, 50e18, _buildTakerData(25e18, signature, true));
+        swapVM.swap(order, 50e18, takerData);
     }
 
     function test_MakerExpiredInternalAllowance_Permit2_Reverts() public {
@@ -509,10 +502,11 @@ contract SwapVMTest is Test, OpcodesDebug {
             salt: 0x777B
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes memory takerData = _buildTakerData(25e18, signature);
 
         vm.prank(taker);
         vm.expectRevert(SafeERC20.SafeTransferFromFailed.selector);
-        swapVM.swap(order, 50e18, _buildTakerData(25e18, signature));
+        swapVM.swap(order, 50e18, takerData);
     }
 
     function test_AllowanceExpiringNow_Permit2_Succeeds() public {
@@ -555,10 +549,11 @@ contract SwapVMTest is Test, OpcodesDebug {
             salt: 0x777D
         });
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes memory takerData = _buildTakerData(0, signature, true);
 
         vm.prank(taker);
         vm.expectRevert(SafeERC20.Permit2TransferAmountTooHigh.selector);
-        swapVM.swap(order, amount, _buildTakerData(0, signature, true));
+        swapVM.swap(order, amount, takerData);
     }
 
     function test_TakerInternalAllowanceConsumed_Permit2_Reverts() public {
@@ -618,19 +613,18 @@ contract SwapVMTest is Test, OpcodesDebug {
     }
 
     function test_MakerTraits_Permit2WithAqua_RevertsInBuilder() public {
-        MakerTraitsLib.Args memory args;
-        args.maker = maker;
-        args.tokenA = address(tokenA);
-        args.tokenB = address(tokenB);
-        args.useAquaInsteadOfSignature = true;
-        args.usePermit2 = true;
-
         vm.expectRevert(MakerTraitsLib.MakerTraitsPermit2IsIncompatibleWithAqua.selector);
-        this.buildOrder(args);
-    }
-
-    function buildOrder(MakerTraitsLib.Args memory args) external pure returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(args);
+        orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
+            maker: maker,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            shouldUnwrapWeth: false,
+            useAquaInsteadOfSignature: true,
+            usePermit2: true,
+            allowZeroAmountIn: false,
+            receiver: address(0),
+            program: ""
+        }));
     }
 
     function _installPermit2() private {
@@ -654,7 +648,7 @@ contract SwapVMTest is Test, OpcodesDebug {
 
         // === Verify Event Parameters ===
         vm.expectEmit(true, true, true, true, address(swapVM));
-        emit SwapVM.Swapped(
+        emit SwapVMRouter.Swapped(
             expectedOrderHash,
             maker,
             taker,
