@@ -107,9 +107,9 @@ library FillGridPiecewiseAdjusterBalanceIn {
         } else {
             while (pointIndex > 0 && ctx.swap.amountOut < ctx.swap.balanceOut * fillBps / BPS) {
                 (fillBps, adjustBps) = parsePoint(args, --pointIndex);
-                surcharge = ctx.swap.surcharge * adjustBps / BPS;
             }
 
+            surcharge = ctx.swap.surcharge * adjustBps / BPS;
             if (pointIndex < lastPointIndex) {
                 (uint24 upperFillBps, uint24 upperAdjustBps) = parsePoint(args, pointIndex + 1);
                 uint256 upperSurcharge = ctx.swap.surcharge * upperAdjustBps / BPS;
@@ -222,9 +222,9 @@ library FillGridPiecewiseAdjusterBalanceOut {
         if (ctx.query.isExactIn) {
             while (pointIndex > 0 && ctx.swap.amountIn < ctx.swap.balanceIn * fillBps / BPS) {
                 (fillBps, adjustBps) = parsePoint(args, --pointIndex);
-                surcharge = ctx.swap.surcharge * adjustBps / BPS;
             }
 
+            surcharge = ctx.swap.surcharge * adjustBps / BPS;
             if (pointIndex < lastPointIndex) {
                 (uint24 upperFillBps, uint24 upperAdjustBps) = parsePoint(args, pointIndex + 1);
                 uint256 upperSurcharge = ctx.swap.surcharge * upperAdjustBps / BPS;

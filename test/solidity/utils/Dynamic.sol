@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-// dynamic(uint24[1..9]) => uint24[]
+// dynamic(uint24[1..11, 28]) => uint24[]
 
 function dynamic(uint24[1] memory arr) pure returns (uint24[] memory res) {
     res = new uint24[](1);
@@ -64,6 +64,27 @@ function dynamic(uint24[8] memory arr) pure returns (uint24[] memory res) {
 
 function dynamic(uint24[9] memory arr) pure returns (uint24[] memory res) {
     res = new uint24[](9);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[10] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](10);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[11] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](11);
+    for (uint256 i = 0; i < arr.length; i++) {
+        res[i] = arr[i];
+    }
+}
+
+function dynamic(uint24[28] memory arr) pure returns (uint24[] memory res) {
+    res = new uint24[](28);
     for (uint256 i = 0; i < arr.length; i++) {
         res[i] = arr[i];
     }
