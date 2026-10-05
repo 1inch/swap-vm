@@ -83,7 +83,6 @@ using ContextLib for Context global;
 /// @notice Library for managing VM execution context and program execution
 library ContextLib {
     using CalldataCut for bytes;
-    using CalldataPtrLib for CalldataPtr;
 
     /// @dev Program counter overflows program length
     error RunLoopExceedProgramLength(uint256 pc, uint256 programLength);

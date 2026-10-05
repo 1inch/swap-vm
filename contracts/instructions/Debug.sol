@@ -8,7 +8,7 @@ import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
-import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
+import { CalldataPtr } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
@@ -82,7 +82,6 @@ library PrintSwapQuery {
 /// @notice PrintVM opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintVM {
-    using CalldataPtrLib for CalldataPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintVM;

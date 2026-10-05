@@ -21,10 +21,7 @@ import { Context, VM, SwapQuery, SwapRegisters } from "../../contracts/libs/VM.s
  * @dev Tests FeeIn/FeeOut with different swap formulas to show consistent behavior
  */
 contract FeeIndifferencyToSwap is Test {
-    using CalldataPtrLib for CalldataPtr;
-
     uint256 constant ONE = 1e18;
-
     uint256 private _formulaPtr;
 
     /// @dev Test-only dispatcher: runs fee opcodes or the formula stashed in {_formulaPtr}
