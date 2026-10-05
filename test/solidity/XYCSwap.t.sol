@@ -11,6 +11,8 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
 
+import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
@@ -19,22 +21,14 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
 
 import { RoundingInvariants } from "./invariants/RoundingInvariants.sol";
 
-contract MockToken is ERC20 {
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
-
 contract XYCSwapTest is Test {
     constructor() {}
 
     SwapVMRouter public swapVM;
 
     TraitsHelper internal orders;
-    MockToken public tokenA;
-    MockToken public tokenB;
+    TokenMock public tokenA;
+    TokenMock public tokenB;
 
     address public maker;
     uint256 public makerPrivateKey;
@@ -47,8 +41,8 @@ contract XYCSwapTest is Test {
         orders = DeployCode.TraitsHelper();
         swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
-        tokenA = new MockToken("Token I", "TKI");
-        tokenB = new MockToken("Token J", "TKJ");
+        tokenA = new TokenMock("Token I", "TKI");
+        tokenB = new TokenMock("Token J", "TKJ");
         if (address(tokenA) > address(tokenB)) (tokenA, tokenB) = (tokenB, tokenA);
 
         tokenA.mint(maker, 1000000e18);

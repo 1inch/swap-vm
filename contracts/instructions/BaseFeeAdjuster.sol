@@ -4,19 +4,19 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice BaseFeeAdjusterBalanceIn opcode, price adjustment based on network gas costs
 /// @dev Encoding: [uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount]
 /// @dev Supports only single direction swaps, eth price specified in token in
 /// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenOut opcode
 library BaseFeeAdjusterBalanceIn {
-    using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
+    using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
@@ -68,8 +68,7 @@ library BaseFeeAdjusterBalanceIn {
 /// @dev Supports only single direction swaps, eth price specified in token out
 /// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenIn opcode
 library BaseFeeAdjusterBalanceOut {
-    using InstructionArgs for bytes;
-    using InstructionArgs for bytes32;
+    using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;

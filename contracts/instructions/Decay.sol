@@ -5,13 +5,13 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Decay prevents the reverse-swap price from updating immediately
 ///   It spreads the swap amount over `period`, releasing liquidity to market over time
@@ -23,7 +23,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   the price from before that A → B, not the price at which A → B filled.
 ///   This can defend against front-running and sandwich attacks.
 library Decay {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using SafeCast for uint256;

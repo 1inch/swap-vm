@@ -4,8 +4,9 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { StaticBalances } from "../instructions/Balances.sol";
 import { LimitSwap } from "../instructions/LimitSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
@@ -23,7 +24,7 @@ import { ValidateSeriesEpoch } from "../instructions/SeriesEpochManager.sol";
 ///   Prefixes does not impact amounts calculation, so arbitrary allowed
 ///   Proposed strategies holds some invariants such as maker min/max swap rate
 library Strategies {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
 
     error PrefixInvalidLength(uint256 length, uint256 expected);
     error PrefixUnregistered(uint8 opcode);
