@@ -10,14 +10,14 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { PeggedSwapMath } from "../libs/PeggedSwapMath.sol";
 
 /// @notice PeggedSwap opcode, swap curve for pegged assets
 /// @dev Encoding: [uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB]
 library PeggedSwap {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error PeggedSwapInvalidLinearWidth(uint256 linearWidth);
     error PeggedSwapInvalidInitialBalances(uint256 x0, uint256 y0);
@@ -25,8 +25,8 @@ library PeggedSwap {
 
     Opcode constant opcode = Opcode.PeggedSwap;
 
-    function sizeOf(uint256, uint256, uint256, uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
     /// @param x0 Initial X reserve (normalization factor) = initial_balance_X * rateA (or rateB)
@@ -43,14 +43,8 @@ library PeggedSwap {
     /// @dev Example for 1000 USDC (6 dec) and 1000 DAI (18 dec), USDC < DAI:
     ///   rateA = 1e12, rateB = 1
     ///   x0 = 1000e6 * 1e12 = 1000e18, y0 = 1000e18 * 1 = 1000e18
-    function build(
-        uint256 x0,
-        uint256 y0,
-        uint256 linearWidth,
-        uint256 rateA,
-        uint256 rateB
-    ) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(x0, y0, linearWidth, rateA, rateB)), x0, y0, linearWidth, rateA, rateB).resolve();
+    function build(uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf()), x0, y0, linearWidth, rateA, rateB).resolve();
     }
 
     function build(
@@ -108,11 +102,9 @@ library PeggedSwap {
     // ║      over time without a moving anchor.                                   ║
     // ╚═══════════════════════════════════════════════════════════════════════════╝
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint256 x0_init;
-        uint256 y0_init;
-        uint256 linearWidth;
-        uint256 rateIn;
-        uint256 rateOut;
+        InstructionHeader.exactLength(sizeOf(), args);
+
+        uint256 x0_init; uint256 y0_init; uint256 linearWidth; uint256 rateIn; uint256 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (x0_init, y0_init, linearWidth, rateIn, rateOut) = parse(args);
         else (y0_init, x0_init, linearWidth, rateOut, rateIn) = parse(args);
 

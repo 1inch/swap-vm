@@ -8,8 +8,9 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { Encode } from "../libs/Encode.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice Jump opcode, jump to specified program location
 /// @dev Encoding: [uint16 nextPC]
@@ -17,16 +18,16 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @dev Next PC is limited to 2 bytes
 library Jump {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.Jump;
 
-    function sizeOf(uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 2;
     }
 
     function build(uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(nextPC)), nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -36,7 +37,7 @@ library Jump {
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf()).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf()).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (uint16 nextPC) {
@@ -44,6 +45,8 @@ library Jump {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         uint16 nextPC = parse(args);
         ctx.setNextPC(nextPC);
     }
@@ -55,31 +58,31 @@ library Jump {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfDirection {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.JumpIfDirection;
 
-    function sizeOf(bool, uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + 2;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 1 + 2;
     }
 
     function build(address tokenIn, address tokenOut, uint16 nextPC) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction, nextPC).resolve();
     }
 
     function build(bool direction, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0)).push(nextPC, 2);
+        ptr = ptr.push(Encode.bit(direction, 0)).push(nextPC, 2);
         ptrStart.patchLength(ptr);
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf() + 1).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf() + 1).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (bool direction, uint16 nextPC) {
@@ -88,6 +91,8 @@ library JumpIfDirection {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (bool direction, uint16 nextPC) = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         if (direction == swapDirection) {
@@ -102,16 +107,16 @@ library JumpIfDirection {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenIn {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.JumpIfTokenIn;
 
-    function sizeOf(address, uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 2;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20 + 2;
     }
 
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -121,7 +126,7 @@ library JumpIfTokenIn {
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf() + 20).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf() + 20).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint16 nextPC) {
@@ -130,6 +135,8 @@ library JumpIfTokenIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (address token, uint16 nextPC) = parse(args);
         if (token == ctx.query.tokenIn) {
             ctx.setNextPC(nextPC);
@@ -143,16 +150,16 @@ library JumpIfTokenIn {
 /// @dev Next PC is limited to 2 bytes
 library JumpIfTokenOut {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.JumpIfTokenOut;
 
-    function sizeOf(address, uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 2;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20 + 2;
     }
 
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -162,7 +169,7 @@ library JumpIfTokenOut {
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf() + 20).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf() + 20).patch(nextPC, 2);
     }
 
     function parse(bytes calldata args) internal pure returns (address token, uint16 nextPC) {
@@ -171,6 +178,8 @@ library JumpIfTokenOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (address token, uint16 nextPC) = parse(args);
         if (token == ctx.query.tokenOut) {
             ctx.setNextPC(nextPC);

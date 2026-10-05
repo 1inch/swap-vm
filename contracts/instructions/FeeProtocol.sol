@@ -12,8 +12,9 @@ import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { Encode } from "../libs/Encode.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice FeeProtocol opcode, third-party fees resolved during the transfers phase
@@ -30,7 +31,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 ///   The opcode is expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
 library FeeProtocol {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using SafeCast for uint256;
 
@@ -53,12 +54,12 @@ library FeeProtocol {
         bool takeSurplusFee;
     }
 
-    function sizeOf(bool, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + receivers.length * (1 + 20 + 6) + providers.length * (1 + 20);
+    function sizeOf(uint256 receiversLength, uint256 providersLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 1 + receiversLength * (1 + 20 + 6) + providersLength * (1 + 20);
     }
 
     function build(bool isTokenIn, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, receivers, providers)), isTokenIn, receivers, providers).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(receivers.length, providers.length)), isTokenIn, receivers, providers).resolve();
     }
 
     function build(
@@ -71,17 +72,15 @@ library FeeProtocol {
         require(count <= 0x0f, FeeProtocolExceedMaxCount());
 
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0) | uint8(count));
+        ptr = ptr.push(Encode.bit(isTokenIn, 0) | uint8(count));
 
         for (uint256 i; i < providers.length; i++) {
-            uint8 flags = InstructionBuilder.encodeBool(true, 0) |
-                InstructionBuilder.encodeBool(providers[i].takeFlatFee, 1) |
-                InstructionBuilder.encodeBool(providers[i].takeSurplusFee, 2);
+            uint8 flags = Encode.bit(true, 0) | Encode.bit(providers[i].takeFlatFee, 1) | Encode.bit(providers[i].takeSurplusFee, 2);
             ptr = ptr.push(flags).push(providers[i].provider);
         }
 
         for (uint256 i; i < receivers.length; i++) {
-            ptr = ptr.push(InstructionBuilder.encodeBool(false, 0)).push(receivers[i].receiver);
+            ptr = ptr.push(Encode.bit(false, 0)).push(receivers[i].receiver);
             ptr = ptr.push(receivers[i].feeBps, 3).push(receivers[i].surplusBps, 3);
         }
 
@@ -158,6 +157,7 @@ library FeeProtocol {
             }
         }
 
+        unchecked { InstructionHeader.exactLength(shift + InstructionHeader.sizeOf(), args); }
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
 
         // Protocol fees rounded down
@@ -199,23 +199,23 @@ library FeeProtocol {
 ///   The opcode is expected to be applied before InvalidateTokenIn or InvalidateTokenOut to apply scaling properly
 library FeeProtocolSurplus {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
     Opcode constant opcode = Opcode.FeeProtocolSurplus;
 
-    function sizeOf(bool, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 1 + 32;
     }
 
     function build(bool isTokenIn, uint256 estimated) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, estimated)), isTokenIn, estimated).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), isTokenIn, estimated).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool isTokenIn, uint256 estimated) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0)).push(estimated, 32);
+        ptr = ptr.push(Encode.bit(isTokenIn, 0)).push(estimated, 32);
         ptrStart.patchLength(ptr);
     }
 
@@ -225,6 +225,7 @@ library FeeProtocolSurplus {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
         (bool isTokenIn, uint256 estimated) = parse(args);
 
         if (isTokenIn) {

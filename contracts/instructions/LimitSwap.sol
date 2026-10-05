@@ -9,14 +9,15 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { Encode } from "../libs/Encode.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice LimitSwap opcode, linear swap in specified direction
 /// @dev Encoding: [bool direction]
 library LimitSwap {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
@@ -24,22 +25,22 @@ library LimitSwap {
 
     Opcode constant opcode = Opcode.LimitSwap;
 
-    function sizeOf(bool) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 1;
     }
 
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(bool direction) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0));
+        ptr = ptr.push(Encode.bit(direction, 0));
         ptrStart.patchLength(ptr);
     }
 
@@ -48,6 +49,8 @@ library LimitSwap {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         bool direction = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         require(direction == swapDirection, LimitSwapDirectionMismatch());
@@ -78,29 +81,29 @@ library LimitSwap {
 /// @dev Encoding: [bool direction]
 library LimitSwapFullAmount {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error LimitSwapDirectionMismatch();
     error LimitSwapAmountShouldCoverBalance(uint256 amount, uint256 balance);
 
     Opcode constant opcode = Opcode.LimitSwapFullAmount;
 
-    function sizeOf(bool) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 1;
     }
 
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(bool direction) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(direction, 0));
+        ptr = ptr.push(Encode.bit(direction, 0));
         ptrStart.patchLength(ptr);
     }
 
@@ -109,6 +112,8 @@ library LimitSwapFullAmount {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         bool direction = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         require(direction == swapDirection, LimitSwapDirectionMismatch());

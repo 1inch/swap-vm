@@ -7,9 +7,11 @@ pragma solidity ^0.8.27;
 import { Opcode } from "./OpcodeList.sol";
 import { MemoryPtr } from "./MemoryPtr.sol";
 
-library InstructionBuilder {
-    error InstructionBuilderArgsLengthExceeded(uint256 length);
-    error InstructionBuilderBitExceedsByte(uint256 bit);
+/// @notice Instruction args builder helpers
+/// @dev Encoding: [uint8 opcode, uint8 argsLength, bytes args], `args.length == argsLength`
+library InstructionHeader {
+    error InstructionHeaderArgsLengthExceeded(uint256 length);
+    error InstructionHeaderArgsLengthMismatch();
 
     function sizeOf() internal pure returns (uint256) {
         return 2;
@@ -21,12 +23,12 @@ library InstructionBuilder {
 
     function patchLength(MemoryPtr ptr, MemoryPtr end) internal pure {
         uint256 length = end.sub(ptr) - sizeOf();
-        require(length < 256, InstructionBuilderArgsLengthExceeded(length));
+        require(length < 256, InstructionHeaderArgsLengthExceeded(length));
         ptr.skip(1).patch(uint8(length));
     }
 
-    function encodeBool(bool value, uint8 bit) internal pure returns (uint8 res) {
-        require(bit < 8, InstructionBuilderBitExceedsByte(bit));
-        if (value) res = uint8(128 >> bit);
+    function exactLength(uint256 size, bytes calldata args) internal pure {
+        // Believe `size` is `Opcode.sizeOf()` which includes `InstructionHeader.sizeof()`
+        unchecked { require(size - sizeOf() == args.length, InstructionHeaderArgsLengthMismatch()); }
     }
 }

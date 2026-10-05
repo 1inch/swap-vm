@@ -10,7 +10,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { Power } from "../libs/Power.sol";
 import { Time } from "../libs/Time.sol";
 
@@ -20,7 +20,7 @@ import { Time } from "../libs/Time.sol";
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library DutchAuctionBalanceIn {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Power for uint256;
 
@@ -32,12 +32,12 @@ library DutchAuctionBalanceIn {
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint40, uint64, uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5 + 8 + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 5 + 8 + 3;
     }
 
     function build(uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(start, decay, surchargeBps)), start, decay, surchargeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), start, decay, surchargeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (MemoryPtr ptr) {
@@ -56,6 +56,8 @@ library DutchAuctionBalanceIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (uint40 start, uint64 decay, uint24 surchargeBps) = parse(args);
         start = Time.resolve(ctx, start);
 
@@ -76,7 +78,7 @@ library DutchAuctionBalanceIn {
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library DutchAuctionBalanceOut {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
     using Power for uint256;
@@ -89,12 +91,12 @@ library DutchAuctionBalanceOut {
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint40, uint64, uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5 + 8 + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 5 + 8 + 3;
     }
 
     function build(uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(start, decay, surchargeBps)), start, decay, surchargeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), start, decay, surchargeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (MemoryPtr ptr) {
@@ -113,6 +115,8 @@ library DutchAuctionBalanceOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (uint40 start, uint64 decay, uint24 surchargeBps) = parse(args);
         start = Time.resolve(ctx, start);
 

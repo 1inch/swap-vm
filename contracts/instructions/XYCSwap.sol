@@ -9,19 +9,19 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice XYCSwap opcode, constant-product swap curve
 /// @dev Encoding: []
 library XYCSwap {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
     Opcode constant opcode = Opcode.XYCSwap;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -33,7 +33,9 @@ library XYCSwap {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal pure {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         if (ctx.query.isExactIn) {
             // Floor division for tokenOut favors maker
             ctx.swap.amountOut = ctx.swap.amountIn * ctx.swap.balanceOut / (ctx.swap.balanceIn + ctx.swap.amountIn);

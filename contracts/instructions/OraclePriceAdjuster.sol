@@ -11,7 +11,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 
 /// @notice OraclePriceAdjuster opcode, price adjustment towards a Chainlink oracle price with price percent cap
@@ -20,7 +20,7 @@ import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 /// @dev Supports only single direction swaps, adjustment is applied only if favorable for the taker
 library OraclePriceAdjuster {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
     using SafeCast for int256;
@@ -33,8 +33,8 @@ library OraclePriceAdjuster {
     uint256 constant ONE = 1e18;
     uint8 constant DECIMALS = 18;
 
-    function sizeOf(uint64, uint16, uint8, address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8 + 2 + 1 + 20;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 8 + 2 + 1 + 20;
     }
 
     function build(
@@ -43,10 +43,7 @@ library OraclePriceAdjuster {
         uint8 oracleDecimals,
         address oracleAddress
     ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress)),
-            maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress
-        ).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), maxPriceDecay, maxStaleness, oracleDecimals, oracleAddress).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) internal pure returns (MemoryPtr ptr) {
@@ -65,6 +62,7 @@ library OraclePriceAdjuster {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
         (uint64 maxPriceDecay, uint16 maxStaleness, uint8 oracleDecimals, address oracleAddress) = parse(args);
 
         // Get latest price data from Chainlink

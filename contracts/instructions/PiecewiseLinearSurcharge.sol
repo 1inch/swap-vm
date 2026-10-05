@@ -9,7 +9,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { Time } from "../libs/Time.sol";
 
 /// @notice PiecewiseLinearSurchargeBalanceIn opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
@@ -20,16 +20,16 @@ import { Time } from "../libs/Time.sol";
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
 library PiecewiseLinearSurchargeBalanceIn {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceIn;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
+    function sizeOf(uint256 durationsLength) internal pure returns (uint256) {
+        return PiecewiseLinearSurcharge.sizeOf(durationsLength);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(durations.length)), timestamp, durations, scales).resolve();
     }
 
     function build(
@@ -65,16 +65,16 @@ library PiecewiseLinearSurchargeBalanceIn {
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
 /// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
 library PiecewiseLinearSurchargeBalanceOut {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceOut;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
+    function sizeOf(uint256 durationsLength) internal pure returns (uint256) {
+        return PiecewiseLinearSurcharge.sizeOf(durationsLength);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(durations.length)), timestamp, durations, scales).resolve();
     }
 
     function build(
@@ -109,8 +109,8 @@ library PiecewiseLinearSurcharge {
     error PiecewiseLinearSurchargeMismatchInputLengths();
     error PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece();
 
-    function sizeOf(uint40, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return 5 + durations.length * 2 + scales.length * 3;
+    function sizeOf(uint256 durationsLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 5 + 3 + durationsLength * (2 + 3);
     }
 
     function build(MemoryPtr ptr, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (MemoryPtr) {
@@ -149,6 +149,7 @@ library PiecewiseLinearSurcharge {
         unchecked {
             uint40 start = Time.resolve(ctx, args.parseStartTimestamp());
             uint256 max = args.parseIntervalsCount(); // max == durations.length == scales.length - 1
+            InstructionHeader.exactLength(sizeOf(max), args);
 
             uint256 timeLeft = block.timestamp;
 

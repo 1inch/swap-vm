@@ -11,24 +11,24 @@ import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 /// @dev Encoding: [uint32 bitIndex]
 library InvalidateBit {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
 
     Opcode constant opcode = Opcode.InvalidateBit;
 
-    function sizeOf(uint32) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 4;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 4;
     }
 
     function build(uint32 bitIndex) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(bitIndex)), bitIndex).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), bitIndex).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint32 bitIndex) internal pure returns (MemoryPtr ptr) {
@@ -51,6 +51,8 @@ library InvalidateBit {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
         uint32 bitIndex = parse(args);
         uint256 slot = bitIndex >> 8;
@@ -100,14 +102,14 @@ contract InvalidateBitExternal {
 /// @dev The opcode supposes exact buy intention, fees should be taken in token out
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
 
     Opcode constant opcode = Opcode.InvalidateTokenIn;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -128,7 +130,9 @@ library InvalidateTokenIn {
         assembly ("memory-safe") { $.slot := slot }
     }
 
-    function exec(Context memory ctx, bytes calldata) internal {
+    function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
 
         uint256 balanceIn = ctx.swap.balanceIn;
@@ -172,7 +176,7 @@ contract InvalidateTokenInExternal {
 /// @dev The opcode supposes exact sell intention, fees should be taken in token in
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
@@ -181,7 +185,7 @@ library InvalidateTokenOut {
     Opcode constant opcode = Opcode.InvalidateTokenOut;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -202,7 +206,8 @@ library InvalidateTokenOut {
         assembly ("memory-safe") { $.slot := slot }
     }
 
-    function exec(Context memory ctx, bytes calldata) internal {
+    function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
         Storage storage $ = store();
 
         uint256 balanceOut = ctx.swap.balanceOut;
