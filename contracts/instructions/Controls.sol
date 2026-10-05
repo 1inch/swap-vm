@@ -9,22 +9,22 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { Time } from "../libs/Time.sol";
 
 /// @notice Salt opcode, produce different hashes for duplicated strategies
 /// @dev Encoding: [uint64 salt] or [bytes salt]
 library Salt {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.Salt;
 
-    function sizeOf(uint64) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8;
+    function sizeOf(uint256 saltLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + saltLength;
     }
 
     function build(uint64 salt) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(salt)), salt).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(8)), salt).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint64 salt) internal pure returns (MemoryPtr ptr) {
@@ -33,12 +33,8 @@ library Salt {
         ptrStart.patchLength(ptr);
     }
 
-    function sizeOf(bytes memory salt) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + salt.length;
-    }
-
     function build(bytes memory salt) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(salt)), salt).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(salt.length)), salt).resolve();
     }
 
     function build(MemoryPtr ptrStart, bytes memory salt) internal pure returns (MemoryPtr ptr) {
@@ -47,24 +43,26 @@ library Salt {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory, bytes calldata) internal pure { }
+    function exec(Context memory, bytes calldata) internal pure {
+        // Arbitrary args consumed, no length check needed
+    }
 }
 
 /// @notice Revert opcode, fail with hardcoded exception if reached
 /// @dev Encoding: [bytes4 exception] or [bytes exception]
 library Revert {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error InstructionRevert(bytes exception);
 
     Opcode constant opcode = Opcode.Revert;
 
-    function sizeOf(bytes4) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 4;
+    function sizeOf(uint256 exceptionLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + exceptionLength;
     }
 
     function build(bytes4 exception) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(exception)), exception).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(4)), exception).resolve();
     }
 
     function build(MemoryPtr ptrStart, bytes4 exception) internal pure returns (MemoryPtr ptr) {
@@ -73,12 +71,8 @@ library Revert {
         ptrStart.patchLength(ptr);
     }
 
-    function sizeOf(bytes memory exception) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + exception.length;
-    }
-
     function build(bytes memory exception) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(exception)), exception).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(exception.length)), exception).resolve();
     }
 
     function build(MemoryPtr ptrStart, bytes memory exception) internal pure returns (MemoryPtr ptr) {
@@ -88,6 +82,8 @@ library Revert {
     }
 
     function exec(Context memory, bytes calldata args) internal pure {
+        // Arbitrary args consumed, no length check needed
+
         revert InstructionRevert(args);
     }
 }
@@ -95,12 +91,12 @@ library Revert {
 /// @notice Stop opcode, successfully ends program execution
 /// @dev Encoding: []
 library Stop {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.Stop;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -112,7 +108,9 @@ library Stop {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal pure {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         // Nothing to do out of program bytecode
         ctx.setNextPC(type(uint256).max);
     }
@@ -122,18 +120,18 @@ library Stop {
 /// @dev Encoding: [uint40 deadline]
 library Deadline {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error DeadlineReached(uint256 deadline);
 
     Opcode constant opcode = Opcode.Deadline;
 
-    function sizeOf(uint40) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 5;
     }
 
     function build(uint40 deadline) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(deadline)), deadline).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), deadline).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 deadline) internal pure returns (MemoryPtr ptr) {
@@ -147,8 +145,9 @@ library Deadline {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint40 deadline = Time.resolve(ctx, parse(args));
+        InstructionHeader.exactLength(sizeOf(), args);
 
+        uint40 deadline = Time.resolve(ctx, parse(args));
         require(block.timestamp <= deadline, DeadlineReached(deadline));
     }
 }

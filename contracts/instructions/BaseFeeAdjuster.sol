@@ -9,7 +9,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice BaseFeeAdjusterBalanceIn opcode, price adjustment based on network gas costs
 /// @dev Encoding: [uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount]
@@ -19,18 +19,18 @@ library BaseFeeAdjusterBalanceIn {
     using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.BaseFeeAdjusterBalanceIn;
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint64, uint96, uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8 + 12 + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 8 + 12 + 3;
     }
 
     function build(uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(baseGasPrice, ethPrice, gasAmount)), baseGasPrice, ethPrice, gasAmount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), baseGasPrice, ethPrice, gasAmount).resolve();
     }
 
     function build(
@@ -51,8 +51,9 @@ library BaseFeeAdjusterBalanceIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
-        (uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) = parse(args);
+        InstructionHeader.exactLength(sizeOf(), args);
 
+        (uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) = parse(args);
         if (block.basefee <= baseGasPrice) return;
 
         uint256 tokenInDiscount = (block.basefee - baseGasPrice) * gasAmount * ethPrice / ONE;
@@ -71,18 +72,18 @@ library BaseFeeAdjusterBalanceOut {
     using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.BaseFeeAdjusterBalanceOut;
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint64, uint96, uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8 + 12 + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 8 + 12 + 3;
     }
 
     function build(uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(baseGasPrice, ethPrice, gasAmount)), baseGasPrice, ethPrice, gasAmount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), baseGasPrice, ethPrice, gasAmount).resolve();
     }
 
     function build(
@@ -103,8 +104,9 @@ library BaseFeeAdjusterBalanceOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
-        (uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) = parse(args);
+        InstructionHeader.exactLength(sizeOf(), args);
 
+        (uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) = parse(args);
         if (block.basefee <= baseGasPrice) return;
 
         uint256 tokenOutPremium = (block.basefee - baseGasPrice) * gasAmount * ethPrice / ONE;

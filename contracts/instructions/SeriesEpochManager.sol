@@ -10,7 +10,7 @@ import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice ValidateSeriesEpoch opcode, requires the maker's current epoch for the series to match the epoch specified in the order
 ///   Each maker keeps an independent, monotonically increasing epoch per seriesId, advancing a series epoch cancels the whole batch
@@ -18,18 +18,18 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @dev Encoding: [uint32 seriesId, uint32 epoch]
 library ValidateSeriesEpoch {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
 
     Opcode constant opcode = Opcode.ValidateSeriesEpoch;
 
-    function sizeOf(uint32, uint32) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 4 + 4;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 4 + 4;
     }
 
     function build(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(seriesId, epoch)), seriesId, epoch).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), seriesId, epoch).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint32 seriesId, uint32 epoch) internal pure returns (MemoryPtr ptr) {
@@ -53,6 +53,8 @@ library ValidateSeriesEpoch {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
         (uint32 seriesId, uint32 expectedEpoch) = parse(args);
 

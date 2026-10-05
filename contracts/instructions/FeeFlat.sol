@@ -10,13 +10,13 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice FeeFlatIn opcode, token in liquidity provider flat percent fee
 /// @dev Encoding: [uint24 feeBps]
 library FeeFlatIn {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
@@ -26,12 +26,12 @@ library FeeFlatIn {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 3;
     }
 
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), feeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {
@@ -47,6 +47,7 @@ library FeeFlatIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
         uint24 feeBps = parse(args);
 
         if (ctx.query.isExactIn) {
@@ -72,7 +73,7 @@ library FeeFlatIn {
 ///   Fees are deposited against swap direction causing a price rollback effect `swap(a) + swap(b) > swap(c)`
 library FeeFlatOut {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
@@ -82,12 +83,12 @@ library FeeFlatOut {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 3;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 3;
     }
 
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), feeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {
@@ -103,6 +104,7 @@ library FeeFlatOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
         uint24 feeBps = parse(args);
 
         if (!ctx.query.isExactIn) ctx.swap.amountOut += (ctx.swap.amountOut * feeBps).ceilDiv(BPS - feeBps);

@@ -11,7 +11,7 @@ import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice Decay prevents the reverse-swap price from updating immediately
 ///   It spreads the swap amount over `period`, releasing liquidity to market over time
@@ -24,7 +24,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 ///   This can defend against front-running and sandwich attacks.
 library Decay {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using SafeCast for uint256;
 
@@ -32,12 +32,12 @@ library Decay {
 
     error DecayPeriodMustBeNonZero();
 
-    function sizeOf(uint16) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 2;
     }
 
     function build(uint16 period) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(period)), period).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), period).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
@@ -67,6 +67,8 @@ library Decay {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
         uint16 period = parse(args);
 

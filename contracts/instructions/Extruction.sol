@@ -10,7 +10,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
 ///   The target may modify the swap registers, set the program counter and consume taker args
@@ -29,18 +29,18 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 library Extruction {
     using CalldataCut for bytes;
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);
 
     Opcode constant opcode = Opcode.Extruction;
 
-    function sizeOf(address, bytes memory extructionArgs) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + extructionArgs.length;
+    function sizeOf(uint256 extructionArgsLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20 + extructionArgsLength;
     }
 
     function build(address target, bytes memory extructionArgs) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(target, extructionArgs)), target, extructionArgs).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(extructionArgs.length)), target, extructionArgs).resolve();
     }
 
     function build(MemoryPtr ptrStart, address target, bytes memory extructionArgs) internal pure returns (MemoryPtr ptr) {
@@ -56,6 +56,8 @@ library Extruction {
 
     function exec(Context memory ctx, bytes calldata args) internal {
         (address target, bytes calldata extructionArgs) = parse(args);
+        InstructionHeader.exactLength(sizeOf(extructionArgs.length), args);
+
         uint256 choppedLength;
 
         if (ctx.vm.isStaticContext) {

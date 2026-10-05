@@ -10,23 +10,23 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 
 /// @notice StaticBalances opcode, set context token balances to specified values
 /// @dev Encoding: [uint256 balanceA, uint256 balanceB]
 library StaticBalances {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.StaticBalances;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 32 + 32;
     }
 
     function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), balanceA, balanceB).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {
@@ -41,8 +41,9 @@ library StaticBalances {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint256 balanceIn;
-        uint256 balanceOut;
+        InstructionHeader.exactLength(sizeOf(), args);
+
+        uint256 balanceIn; uint256 balanceOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
         else (balanceOut, balanceIn) = parse(args);
 
@@ -56,18 +57,18 @@ library StaticBalances {
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library DynamicBalances {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error DynamicBalancesReachZero();
 
     Opcode constant opcode = Opcode.DynamicBalances;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 32 + 32;
     }
 
     function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), balanceA, balanceB).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {
@@ -91,6 +92,7 @@ library DynamicBalances {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
         Storage storage $ = store();
 
         uint256 balanceIn = $.balance[ctx.query.orderHash][ctx.query.tokenIn];

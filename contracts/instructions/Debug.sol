@@ -13,18 +13,18 @@ import { CalldataPtr } from "@1inch/solidity-utils/contracts/libraries/CalldataP
 import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../libs/ProtocolFee.sol";
 
 /// @notice PrintSwapRegisters opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapRegisters {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintSwapRegisters;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -36,7 +36,9 @@ library PrintSwapRegisters {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal pure {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         console.log("ctx.swap => SwapRegisters {");
         console.log("    balanceIn: ", ctx.swap.balanceIn);
         console.log("    balanceOut:", ctx.swap.balanceOut);
@@ -50,12 +52,12 @@ library PrintSwapRegisters {
 /// @notice PrintSwapQuery opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintSwapQuery {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintSwapQuery;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -67,7 +69,9 @@ library PrintSwapQuery {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal pure {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         console.log("ctx.query => SwapQuery {");
         console.log("    orderHash:", toHexString(ctx.query.orderHash));
         console.log("    maker:    ", ctx.query.maker);
@@ -82,12 +86,12 @@ library PrintSwapQuery {
 /// @notice PrintVM opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintVM {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintVM;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -99,7 +103,9 @@ library PrintVM {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal pure {
+    function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         console.log("Context {");
         console.log("    isStaticContext:", ctx.vm.isStaticContext);
         console.log("    nextPC:         ", ctx.vm.nextPC);
@@ -114,12 +120,12 @@ library PrintVM {
 /// @dev FeeProtocol opcode updates registries after strategy execution
 ///   The PrintFee opcode should be included before FeeProtocol to trigger delayed registries print
 library PrintFee {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintFee;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -131,9 +137,10 @@ library PrintFee {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory ctx, bytes calldata) internal {
-        ctx.runLoop();
+    function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionHeader.exactLength(sizeOf(), args);
 
+        ctx.runLoop();
         uint8 count = FeeMetaLib.decodeCount(ctx.fee.meta);
 
         console.log("ProtocolFee {");
@@ -154,12 +161,12 @@ library PrintFee {
 /// @notice PrintFreeMemoryPointer opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintFreeMemoryPointer {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintFreeMemoryPointer;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -171,7 +178,9 @@ library PrintFreeMemoryPointer {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory, bytes calldata) internal pure {
+    function exec(Context memory, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         uint256 ptr;
         assembly ("memory-safe") { ptr := mload(0x40) }
         console.log("Free memory pointer:", ptr);
@@ -181,12 +190,12 @@ library PrintFreeMemoryPointer {
 /// @notice PrintGasLeft opcode, print internal execution details for debugging
 /// @dev Encoding: []
 library PrintGasLeft {
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintGasLeft;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf();
+        return InstructionHeader.sizeOf();
     }
 
     function build() internal pure returns (bytes memory) {
@@ -198,7 +207,9 @@ library PrintGasLeft {
         ptrStart.patchLength(ptr);
     }
 
-    function exec(Context memory, bytes calldata) internal view {
+    function exec(Context memory, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         console.log("Gas left:", gasleft());
     }
 }
@@ -207,16 +218,16 @@ library PrintGasLeft {
 /// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut, uint256 surcharge]
 library PatchSwapRegisters {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     Opcode constant opcode = Opcode.PatchSwapRegisters;
 
-    function sizeOf(SwapRegisters memory) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
     function build(SwapRegisters memory swap) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(swap)), swap).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), swap).resolve();
     }
 
     function build(MemoryPtr ptrStart, SwapRegisters memory swap) internal pure returns (MemoryPtr ptr) {
@@ -241,6 +252,8 @@ library PatchSwapRegisters {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         ctx.swap = parse(args);
     }
 }

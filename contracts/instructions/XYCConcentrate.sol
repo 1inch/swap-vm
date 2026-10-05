@@ -10,14 +10,14 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice XYCConcentrateSwap opcode, constant-product swap curve concentrating liquidity in specified price range
 ///   Automatically reinvests accumulated maker fees
 /// @dev Encoding: [uint256 sqrtPriceMin, uint256 sqrtPriceMax]
 library XYCConcentrateSwap {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     using Math for uint256;
 
@@ -28,12 +28,12 @@ library XYCConcentrateSwap {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 32 + 32;
     }
 
     function build(uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(sqrtPriceMin, sqrtPriceMax)), sqrtPriceMin, sqrtPriceMax).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), sqrtPriceMin, sqrtPriceMax).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (MemoryPtr ptr) {
@@ -50,6 +50,7 @@ library XYCConcentrateSwap {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionHeader.exactLength(sizeOf(), args);
         (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = parse(args);
 
         bool direction = ctx.query.tokenIn < ctx.query.tokenOut;

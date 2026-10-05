@@ -10,7 +10,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 
 /// @notice OnlyTakerTokenBalanceNonZero opcode, fail if taker token balance is zero (NFT-compatible)
 /// @dev Encoding: [address token]
@@ -18,18 +18,18 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 ///   authorization given even by soulbound NFT with other users
 library OnlyTakerTokenBalanceNonZero {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error TakerTokenBalanceIsZero(address taker, address token);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceNonZero;
 
-    function sizeOf(address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20;
     }
 
     function build(address token) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
@@ -43,6 +43,8 @@ library OnlyTakerTokenBalanceNonZero {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
@@ -56,18 +58,18 @@ library OnlyTakerTokenBalanceNonZero {
 ///   interception: any contract executing tx originated from tx.origin can pass the validation
 library OnlyTxOriginTokenBalanceNonZero {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error TxOriginTokenBalanceIsZero(address txOrigin, address token);
 
     Opcode constant opcode = Opcode.OnlyTxOriginTokenBalanceNonZero;
 
-    function sizeOf(address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20;
     }
 
     function build(address token) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
@@ -81,6 +83,8 @@ library OnlyTxOriginTokenBalanceNonZero {
     }
 
     function exec(Context memory, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(tx.origin);
         require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
@@ -91,18 +95,18 @@ library OnlyTxOriginTokenBalanceNonZero {
 /// @dev Encoding: [address token, uint256 amount]
 library OnlyTakerTokenBalanceGte {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 amount);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceGte;
 
-    function sizeOf(address, uint256) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 32;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20 + 32;
     }
 
     function build(address token, uint256 amount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, amount)), token, amount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, amount).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint256 amount) internal pure returns (MemoryPtr ptr) {
@@ -117,6 +121,8 @@ library OnlyTakerTokenBalanceGte {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (address token, uint256 amount) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance >= amount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, amount));
@@ -127,7 +133,7 @@ library OnlyTakerTokenBalanceGte {
 /// @dev Encoding: [address token, uint64 share]
 library OnlyTakerTokenSupplyShareGte {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error TakerTokenBalanceSupplyShareWrongShare(uint64 share);
     error TakerTokenBalanceSupplyShareIsLessThanRequired(
@@ -138,12 +144,12 @@ library OnlyTakerTokenSupplyShareGte {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(address, uint64) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 8;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 20 + 8;
     }
 
     function build(address token, uint64 share) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, share)), token, share).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, share).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint64 share) internal pure returns (MemoryPtr ptr) {
@@ -160,6 +166,8 @@ library OnlyTakerTokenSupplyShareGte {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionHeader.exactLength(sizeOf(), args);
+
         (address token, uint64 share) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();

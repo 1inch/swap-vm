@@ -72,8 +72,8 @@ library Strategies {
     ) internal pure returns (bytes memory) {
         MemoryPtr ptr = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
-            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
-            LimitSwap.sizeOf(args.direction)
+            StaticBalances.sizeOf() +
+            LimitSwap.sizeOf()
         );
 
         for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
@@ -89,8 +89,8 @@ library Strategies {
     ) internal pure returns (bytes memory) {
         MemoryPtr ptr = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
-            FeeFlatIn.sizeOf(args.feeBps) +
-            XYCConcentrateSwap.sizeOf(args.sqrtPriceMin, args.sqrtPriceMax)
+            FeeFlatIn.sizeOf() +
+            XYCConcentrateSwap.sizeOf()
         );
 
         for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);

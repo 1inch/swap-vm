@@ -4,21 +4,23 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-/// @dev Allocated memory pointer: [uint48, uint80 current, uint64 end, uint64 start]
-///   start -> slice start pointer, leaves first word for slice length
-///   current -> write pointer, initialized with start + 32
-///   end -> allocation end pointer, start + 32 + length
-/// @dev Allocated with `alloc`, returns slice at `resolve` checking allocation is not exceeded
-///   Due to lazy write bounds check, every pointer should be resolved with `resolve`, `resolveShrink` or `patch`
-/// @dev Memory written with `push` returning pointer with updated `current` value
-/// @dev Memory patched with `patch` at specified byte reached with `skip`
-/// @dev Any pointer reflecting allocated space fit uint64 due to 2 ** 64 bytes allocation costs 1e32 Gas
-///   Consecutive additions of uint24 to uint64 would not exceed uint80 due to this requires 7e16 operations
-///   It is safe to increase `current` unchecked for uint24 values or while this reflects real memory write length
-
+/// @notice Allocated memory pointer
+/// @dev Encoding: [uint48 _, uint80 current, uint64 end, uint64 start]
+///   start: slice start pointer, leaves first word for slice length
+///   end: allocation end pointer, `start + 32 + length`
+///   current: write pointer, initialized with `start + 32`
 type MemoryPtr is uint256;
 using MemoryPtrLib for MemoryPtr global;
 
+/// @dev Allocate memory with `alloc`, get slice with `resolve` or `resolveShrink`
+///   Due to lazy write bounds check, every pointer should be resolved with `resolve`, `resolveShrink` or `patch`
+/// @dev Write with `push`, returns pointer with updated `current` value
+/// @dev Patch value with `patch` at specified byte reached with `skip`
+/// @dev Track pointer wrote length since checkpoint with `sub`
+/// @dev Chosen `start`, `end`, `current` type size reasoning
+///   Any pointer reflecting allocated space fit uint64 due to 2 ** 64 bytes allocation costs 1e32 Gas
+///   Consecutive additions of uint24 to uint64 would not exceed uint80 due to this requires 7e16 operations
+///   It is safe to increase `current` unchecked for uint24 values or while this reflects real memory write length
 library MemoryPtrLib {
     error MemoryPtrWriteOutOfBounds(uint256 end, uint256 current);
     error MemoryPtrStrictResolveFailed(uint256 end, uint256 current);
@@ -85,6 +87,7 @@ library MemoryPtrLib {
     }
 
     function _push(MemoryPtr ptr, bytes32 value, uint8 size) private pure returns (MemoryPtr) {
+        // Potentially touches 1 more word over `end`
         assembly ("memory-safe") { mstore(shr(128, ptr), value) } // memory[current:+size) = value
         return _move(ptr, size);
     }
@@ -95,6 +98,7 @@ library MemoryPtrLib {
     }
 
     function _patch(MemoryPtr ptr, bytes32 value, uint8 size) private pure {
+        // Requires right bits of value over `size * 8` to be zero
         assembly ("memory-safe") { // memory[current:+32) = value | memory[current+size:+32-size)
             mstore(shr(128, ptr), or(value, and(mload(shr(128, ptr)), shr(shl(3, size), not(0)))))
         }

@@ -8,8 +8,9 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
+import { Encode } from "../libs/Encode.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
-import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { InstructionHeader } from "../libs/InstructionHeader.sol";
 import { Time } from "../libs/Time.sol";
 
 /// @notice PrivateOrder opcode, allows the order to be executed only by the specified taker
@@ -19,23 +20,23 @@ import { Time } from "../libs/Time.sol";
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library PrivateOrder {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error PrivateOrderInvalidTaker();
 
     Opcode constant opcode = Opcode.PrivateOrder;
 
-    function sizeOf(address) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 10;
+    function sizeOf() internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 10;
     }
 
     function build(address allowedTaker) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(allowedTaker)), allowedTaker).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), allowedTaker).resolve();
     }
 
     function build(MemoryPtr ptrStart, address allowedTaker) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(uint80(uint160(allowedTaker)), 10);
+        ptr = ptr.push(Encode.halfAddress(allowedTaker), 10);
         ptrStart.patchLength(ptr);
     }
 
@@ -44,7 +45,9 @@ library PrivateOrder {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint80 sender = uint80(uint160(ctx.query.taker));
+        InstructionHeader.exactLength(sizeOf(), args);
+
+        uint80 sender = Encode.halfAddress(ctx.query.taker);
         require(sender == parse(args), PrivateOrderInvalidTaker());
     }
 }
@@ -58,18 +61,18 @@ library PrivateOrder {
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistCoequal {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error WhitelistCoequalEmptyList();
 
     Opcode constant opcode = Opcode.WhitelistCoequal;
 
-    function sizeOf(uint16, address[] memory allowedTakers) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2 + allowedTakers.length * 10;
+    function sizeOf(uint256 allowedTakersLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 2 + allowedTakersLength * 10;
     }
 
     function build(uint16 nextPC, address[] memory allowedTakers) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(nextPC, allowedTakers)), nextPC, allowedTakers).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(allowedTakers.length)), nextPC, allowedTakers).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 nextPC, address[] memory allowedTakers) internal pure returns (MemoryPtr ptr) {
@@ -78,13 +81,13 @@ library WhitelistCoequal {
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(nextPC, 2);
         for (uint256 i; i < allowedTakers.length; i++) {
-            ptr = ptr.push(uint80(uint160(allowedTakers[i])), 10);
+            ptr = ptr.push(Encode.halfAddress(allowedTakers[i]), 10);
         }
         ptrStart.patchLength(ptr);
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf()).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf()).patch(nextPC, 2);
     }
 
     function parseNextPC(bytes calldata args) internal pure returns (uint16 nextPC) {
@@ -100,9 +103,11 @@ library WhitelistCoequal {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint80 sender = uint80(uint160(ctx.query.taker));
-
         uint256 count = parseTakersCount(args);
+        InstructionHeader.exactLength(sizeOf(count), args);
+
+        uint80 sender = Encode.halfAddress(ctx.query.taker);
+
         for (uint256 i; i < count; i++) {
             if (sender == parseTaker(args, i)) {
                 ctx.setNextPC(parseNextPC(args));
@@ -122,7 +127,7 @@ library WhitelistCoequal {
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistSequential {
     using CalldataParse for bytes;
-    using InstructionBuilder for MemoryPtr;
+    using InstructionHeader for MemoryPtr;
 
     error WhitelistSequentialEmptyList();
     error WhitelistSequentialLengthMismatch();
@@ -130,8 +135,8 @@ library WhitelistSequential {
 
     Opcode constant opcode = Opcode.WhitelistSequential;
 
-    function sizeOf(uint40, uint16, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5 + 2 + durations.length * 2 + allowedTakers.length * 10;
+    function sizeOf(uint256 allowedTakersLength) internal pure returns (uint256) {
+        return InstructionHeader.sizeOf() + 5 + 2 + allowedTakersLength * (10 + 2);
     }
 
     function build(
@@ -140,10 +145,7 @@ library WhitelistSequential {
         address[] memory allowedTakers,
         uint16[] memory durations
     ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(start, nextPC, allowedTakers, durations)),
-            start, nextPC, allowedTakers, durations
-        ).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(allowedTakers.length)), start, nextPC, allowedTakers, durations).resolve();
     }
 
     function build(
@@ -159,13 +161,13 @@ library WhitelistSequential {
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(start, 5).push(nextPC, 2);
         for (uint256 i; i < allowedTakers.length; i++) {
-            ptr = ptr.push(durations[i], 2).push(uint80(uint160(allowedTakers[i])), 10);
+            ptr = ptr.push(durations[i], 2).push(Encode.halfAddress(allowedTakers[i]), 10);
         }
         ptrStart.patchLength(ptr);
     }
 
     function patchNextPC(MemoryPtr ptrStart, uint16 nextPC) internal pure {
-        ptrStart.skip(InstructionBuilder.sizeOf() + 5).patch(nextPC, 2);
+        ptrStart.skip(InstructionHeader.sizeOf() + 5).patch(nextPC, 2);
     }
 
     function parseStart(bytes calldata args) internal pure returns (uint40 start) {
@@ -191,14 +193,16 @@ library WhitelistSequential {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint80 sender = uint80(uint160(ctx.query.taker));
+        uint256 count = parseTakersCount(args);
+        InstructionHeader.exactLength(sizeOf(count), args);
+
+        uint80 sender = Encode.halfAddress(ctx.query.taker);
 
         uint256 timeLeft = block.timestamp;
         uint40 start = Time.resolve(ctx, parseStart(args));
         require(timeLeft >= start, WhitelistSequentialTimeViolation());
         unchecked { timeLeft -= start; }
 
-        uint256 count = parseTakersCount(args);
         for (uint256 i; i < count; i++) {
             (uint16 duration, uint80 allowedTaker) = parseTaker(args, i);
 
