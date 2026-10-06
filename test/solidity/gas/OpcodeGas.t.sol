@@ -27,7 +27,28 @@ import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
+import { OraclePriceAdjusterBalanceIn } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
+
+contract PriceOracleGasMock {
+    int256 private _answer;
+    uint256 private _updatedAt;
+
+    constructor(int256 answer) {
+        _answer = answer;
+        _updatedAt = block.timestamp;
+    }
+
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    ) {
+        return (1, _answer, _updatedAt, _updatedAt, 1);
+    }
+}
 
 /// @title OpcodeGas
 /// @notice Per-opcode gas on prod `SwapVMRouter`.
@@ -42,6 +63,7 @@ contract OpcodeGas is Test {
     SwapVMRouter internal swapVM;
     TokenMock internal tokenA;
     TokenMock internal tokenB;
+    PriceOracleGasMock[6] internal oracles;
     address internal maker;
     address internal taker;
     uint256 internal justExec;
@@ -55,6 +77,12 @@ contract OpcodeGas is Test {
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (address(tokenA) > address(tokenB)) (tokenA, tokenB) = (tokenB, tokenA);
+        oracles[0] = new PriceOracleGasMock(2e8);
+        oracles[1] = new PriceOracleGasMock(2e8);
+        oracles[2] = new PriceOracleGasMock(1e8);
+        oracles[3] = new PriceOracleGasMock(2e8);
+        oracles[4] = new PriceOracleGasMock(2e8);
+        oracles[5] = new PriceOracleGasMock(1e8);
 
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 1e30);
@@ -113,6 +141,10 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
+        _snapshot("OraclePriceAdjusterBalanceInOneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _encodeOracleFeed(oracles[0], false)));
+        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, bytes.concat(_encodeOracleFeed(oracles[1], false), _encodeOracleFeed(oracles[2], false))));
+        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _encodeOracleFeed(oracles[3], true)));
+        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, bytes.concat(_encodeOracleFeed(oracles[4], true), _encodeOracleFeed(oracles[5], true))));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
@@ -178,5 +210,10 @@ contract OpcodeGas is Test {
 
         swapVM.swap(order, AMOUNT, takerData);
         return uint256(vm.lastCallGas().gasTotalUsed);
+    }
+
+
+    function _encodeOracleFeed(PriceOracleGasMock oracle, bool isDenominator) private pure returns (bytes memory) {
+        return abi.encodePacked(uint8(8 | (isDenominator ? 1 << 7 : 0)), type(uint24).max, address(oracle));
     }
 }

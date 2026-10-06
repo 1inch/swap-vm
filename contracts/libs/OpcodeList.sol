@@ -209,8 +209,8 @@ enum Opcode {
     // 0xb0-0xcf | Rates tuning: exchange-rate constraints and price adjustment
     /* b0 */ RequireMinRate,
     /* b1 */ _b1,
-    /* b2 */ OraclePriceAdjuster,
-    /* b3 */ _b3,
+    /* b2 */ OraclePriceAdjusterBalanceIn,
+    /* b3 */ OraclePriceAdjusterBalanceOut,
     /* b4 */ BaseFeeAdjusterBalanceIn,
     /* b5 */ BaseFeeAdjusterBalanceOut,
     /* b6 */ _b6,

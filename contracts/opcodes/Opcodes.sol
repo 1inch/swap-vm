@@ -26,7 +26,7 @@ import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../instructions/PiecewiseLinearSurcharge.sol";
-import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
+import { OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../instructions/OraclePriceAdjuster.sol";
 
 contract Opcodes is
     DynamicBalancesExternal,
@@ -78,7 +78,8 @@ contract Opcodes is
         else if (opcode == PiecewiseLinearSurchargeBalanceOut.opcode.asU8()) PiecewiseLinearSurchargeBalanceOut.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
-        else if (opcode == OraclePriceAdjuster.opcode.asU8()) OraclePriceAdjuster.exec(ctx, args);
+        else if (opcode == OraclePriceAdjusterBalanceIn.opcode.asU8()) OraclePriceAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == OraclePriceAdjusterBalanceOut.opcode.asU8()) OraclePriceAdjusterBalanceOut.exec(ctx, args);
         else revert UnknownOpcode(opcode);
     }
 }
