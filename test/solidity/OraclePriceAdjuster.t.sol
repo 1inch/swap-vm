@@ -13,7 +13,8 @@ import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetu
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import {
-    PiecewiseLinearSurchargeBalanceIn
+    PiecewiseLinearSurchargeBalanceIn,
+    PiecewiseLinearSurchargeBalanceOut
 } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { BaseFeeAdjusterBalanceIn } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 import {
@@ -154,7 +155,7 @@ contract OraclePriceAdjusterTest is Test {
         assertEq(amountIn, 2600e6);
     }
 
-    function test_OraclePriceAdjuster_DoesNotAdjustBelowMarketPrice() public {
+    function test_OraclePriceAdjuster_DoesNotAdjustBelowMarketWithoutSurcharge() public {
         PriceOracleMock oracle = new PriceOracleMock(2400e8, block.timestamp);
         bytes memory feed = _feed(oracle, 8, false);
 
@@ -178,6 +179,70 @@ contract OraclePriceAdjusterTest is Test {
 
         assertEq(amountIn, 2600e6);
         assertEq(amountOut, 1e18);
+    }
+
+    function test_OraclePriceAdjuster_ConsumesBalanceInSurchargeWhenPriceFalls() public {
+        PriceOracleMock oracle = new PriceOracleMock(2400e8, block.timestamp);
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 1;
+        scales[0] = uint24(1 << 23);
+        scales[1] = uint24(1 << 23);
+
+        ISwapVM.Order memory order = _buildOrder(bytes.concat(
+            StaticBalances.build(2000e6, 1e18),
+            PiecewiseLinearSurchargeBalanceIn.build(
+                uint40(block.timestamp),
+                durations,
+                scales
+            ),
+            OraclePriceAdjusterBalanceIn.build(
+                2500e18,
+                6,
+                18,
+                _feed(oracle, 8, false)
+            ),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+
+        (uint256 amountIn,,) = swapVM.quote(order, 1e18, _buildTakerData(order, false));
+        assertEq(amountIn, 2900e6);
+
+        oracle.setRoundData(1000e8, block.timestamp);
+        (amountIn,,) = swapVM.quote(order, 1e18, _buildTakerData(order, false));
+        assertEq(amountIn, 2000e6);
+    }
+
+    function test_OraclePriceAdjuster_ConsumesBalanceOutSurchargeWhenPriceFalls() public {
+        PriceOracleMock oracle = new PriceOracleMock(2400e8, block.timestamp);
+        uint16[] memory durations = new uint16[](1);
+        uint24[] memory scales = new uint24[](2);
+        durations[0] = 1;
+        scales[0] = uint24(1 << 23);
+        scales[1] = uint24(1 << 23);
+
+        ISwapVM.Order memory order = _buildOrder(bytes.concat(
+            StaticBalances.build(2500e6, 1.5e18),
+            PiecewiseLinearSurchargeBalanceOut.build(
+                uint40(block.timestamp),
+                durations,
+                scales
+            ),
+            OraclePriceAdjusterBalanceOut.build(
+                2500e18,
+                6,
+                18,
+                _feed(oracle, 8, false)
+            ),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+
+        (, uint256 amountOut,) = swapVM.quote(order, 2500e6, _buildTakerData(order, true));
+        assertEq(amountOut, 1.041666666666666666e18);
+
+        oracle.setRoundData(1000e8, block.timestamp);
+        (, amountOut,) = swapVM.quote(order, 2500e6, _buildTakerData(order, true));
+        assertEq(amountOut, 1.5e18);
     }
 
     function test_OraclePriceAdjuster_MultiFeedAndReverseTokenDecimals() public {

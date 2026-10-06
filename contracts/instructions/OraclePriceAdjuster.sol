@@ -18,6 +18,7 @@ import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 ///   [uint8 config, uint24 maxStaleness, address oracle] packedFeeds[1..2]]
 ///   decimalsConfig: highest bit is scaleDown, lower 7 bits are the token decimals difference
 ///   config: highest bit is isDenominator, lower 7 bits are oracleDecimals
+/// @dev An upward market shift increases surcharge, a downward shift consumes existing surcharge
 /// @dev Should be applied after balance-in surcharge discounts and before the swap curve
 library OraclePriceAdjusterBalanceIn {
     using InstructionBuilder for MemoryPtr;
@@ -56,17 +57,36 @@ library OraclePriceAdjusterBalanceIn {
     function exec(Context memory ctx, bytes calldata args) internal view {
         (uint128 marketPrice, uint8 decimalsConfig) = OraclePriceAdjuster.parse(args);
         uint256 oraclePrice = OraclePriceAdjuster.read(args);
-        if (oraclePrice <= marketPrice) return;
+        if (oraclePrice == marketPrice) return;
 
-        uint256 priceDelta = OraclePriceAdjuster.scalePrice(oraclePrice - marketPrice, decimalsConfig);
-        uint256 balanceDelta = ctx.swap.balanceOut.mulDiv(
-            priceDelta,
-            OraclePriceAdjuster.ONE,
-            Math.Rounding.Ceil
-        );
-
-        ctx.swap.surcharge += balanceDelta;
-        ctx.swap.balanceIn += balanceDelta;
+        uint256 priceDelta;
+        uint256 balanceDelta;
+        if (oraclePrice > marketPrice) {
+            priceDelta = OraclePriceAdjuster.scalePrice(
+                oraclePrice - marketPrice,
+                decimalsConfig,
+                Math.Rounding.Ceil
+            );
+            balanceDelta = ctx.swap.balanceOut.mulDiv(
+                priceDelta,
+                OraclePriceAdjuster.ONE,
+                Math.Rounding.Ceil
+            );
+            ctx.swap.surcharge += balanceDelta;
+            ctx.swap.balanceIn += balanceDelta;
+        } else {
+            priceDelta = OraclePriceAdjuster.scalePrice(
+                marketPrice - oraclePrice,
+                decimalsConfig,
+                Math.Rounding.Floor
+            );
+            balanceDelta = Math.min(
+                ctx.swap.balanceOut.mulDiv(priceDelta, OraclePriceAdjuster.ONE),
+                ctx.swap.surcharge
+            );
+            ctx.swap.surcharge -= balanceDelta;
+            ctx.swap.balanceIn -= balanceDelta;
+        }
     }
 }
 
@@ -75,6 +95,7 @@ library OraclePriceAdjusterBalanceIn {
 ///   [uint8 config, uint24 maxStaleness, address oracle] packedFeeds[1..2]]
 ///   decimalsConfig: highest bit is scaleDown, lower 7 bits are the token decimals difference
 ///   config: highest bit is isDenominator, lower 7 bits are oracleDecimals
+/// @dev An upward market shift increases surcharge, a downward shift consumes existing surcharge
 /// @dev Should be applied after balance-out surcharge discounts and before the swap curve
 library OraclePriceAdjusterBalanceOut {
     using InstructionBuilder for MemoryPtr;
@@ -113,21 +134,46 @@ library OraclePriceAdjusterBalanceOut {
     function exec(Context memory ctx, bytes calldata args) internal view {
         (uint128 marketPrice, uint8 decimalsConfig) = OraclePriceAdjuster.parse(args);
         uint256 oraclePrice = OraclePriceAdjuster.read(args);
-        if (oraclePrice <= marketPrice || ctx.swap.balanceOut == 0) return;
+        if (oraclePrice == marketPrice || ctx.swap.balanceOut == 0) return;
 
-        uint256 priceDelta = OraclePriceAdjuster.scalePrice(oraclePrice - marketPrice, decimalsConfig);
         uint256 currentPrice = ctx.swap.balanceIn.mulDiv(
             OraclePriceAdjuster.ONE,
             ctx.swap.balanceOut,
             Math.Rounding.Ceil
         );
-        uint256 balanceOut = ctx.swap.balanceIn.mulDiv(
-            OraclePriceAdjuster.ONE,
-            currentPrice + priceDelta
-        );
-
-        ctx.swap.surcharge += ctx.swap.balanceOut - balanceOut;
-        ctx.swap.balanceOut = balanceOut;
+        uint256 priceDelta;
+        uint256 balanceDelta;
+        if (oraclePrice > marketPrice) {
+            priceDelta = OraclePriceAdjuster.scalePrice(
+                oraclePrice - marketPrice,
+                decimalsConfig,
+                Math.Rounding.Ceil
+            );
+            uint256 balanceOut = ctx.swap.balanceIn.mulDiv(
+                OraclePriceAdjuster.ONE,
+                currentPrice + priceDelta
+            );
+            balanceDelta = ctx.swap.balanceOut - balanceOut;
+            ctx.swap.surcharge += balanceDelta;
+            ctx.swap.balanceOut = balanceOut;
+        } else {
+            priceDelta = OraclePriceAdjuster.scalePrice(
+                marketPrice - oraclePrice,
+                decimalsConfig,
+                Math.Rounding.Floor
+            );
+            balanceDelta = ctx.swap.surcharge;
+            if (priceDelta < currentPrice) {
+                uint256 balanceOut = ctx.swap.balanceIn.mulDiv(
+                    OraclePriceAdjuster.ONE,
+                    currentPrice - priceDelta
+                );
+                if (balanceOut <= ctx.swap.balanceOut) return;
+                balanceDelta = Math.min(balanceOut - ctx.swap.balanceOut, balanceDelta);
+            }
+            ctx.swap.surcharge -= balanceDelta;
+            ctx.swap.balanceOut += balanceDelta;
+        }
     }
 }
 
@@ -198,9 +244,14 @@ library OraclePriceAdjuster {
         decimalsConfig = uint8(fixedArgs);
     }
 
-    function scalePrice(uint256 price, uint8 decimalsConfig) internal pure returns (uint256) {
+    function scalePrice(
+        uint256 price,
+        uint8 decimalsConfig,
+        Math.Rounding rounding
+    ) internal pure returns (uint256) {
         uint256 scale = 10 ** (decimalsConfig & DECIMALS_MASK);
-        return decimalsConfig & SCALE_DOWN_FLAG == 0 ? price * scale : price.ceilDiv(scale);
+        if (decimalsConfig & SCALE_DOWN_FLAG == 0) return price * scale;
+        return rounding == Math.Rounding.Ceil ? price.ceilDiv(scale) : price / scale;
     }
 
     function readFeed(uint192 feed) internal view returns (uint256 feedPrice, bool isDenominator) {
