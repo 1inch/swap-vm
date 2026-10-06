@@ -21,6 +21,7 @@ import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../instructions/D
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
 import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../instructions/FillGridAdjuster.sol";
 import { FillGridPiecewiseAdjusterBalanceIn, FillGridPiecewiseAdjusterBalanceOut } from "../instructions/FillGridPiecewiseAdjuster.sol";
+import { FillGridHyperwiseAdjusterBalanceIn, FillGridHyperwiseAdjusterBalanceOut } from "../instructions/FillGridHyperwiseAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../instructions/FeeFlat.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
@@ -70,6 +71,8 @@ contract Opcodes is
         else if (opcode == FillGridStepwiseAdjusterBalanceOut.opcode.asU8()) FillGridStepwiseAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == FillGridPiecewiseAdjusterBalanceIn.opcode.asU8()) FillGridPiecewiseAdjusterBalanceIn.exec(ctx, args);
         else if (opcode == FillGridPiecewiseAdjusterBalanceOut.opcode.asU8()) FillGridPiecewiseAdjusterBalanceOut.exec(ctx, args);
+        else if (opcode == FillGridHyperwiseAdjusterBalanceIn.opcode.asU8()) FillGridHyperwiseAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == FillGridHyperwiseAdjusterBalanceOut.opcode.asU8()) FillGridHyperwiseAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeFlatIn.opcode.asU8()) FeeFlatIn.exec(ctx, args);

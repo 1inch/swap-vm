@@ -16,6 +16,7 @@ import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
 import { FillGridStepwiseAdjusterBalanceIn, FillGridStepwiseAdjusterBalanceOut } from "../instructions/FillGridAdjuster.sol";
 import { FillGridPiecewiseAdjusterBalanceIn, FillGridPiecewiseAdjusterBalanceOut } from "../instructions/FillGridPiecewiseAdjuster.sol";
+import { FillGridHyperwiseAdjusterBalanceIn, FillGridHyperwiseAdjusterBalanceOut } from "../instructions/FillGridHyperwiseAdjuster.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
@@ -60,6 +61,8 @@ contract LimitOpcodes is
         else if (opcode == WhitelistCoequal.opcode.asU8()) WhitelistCoequal.exec(ctx, args);
         else if (opcode == PiecewiseLinearSurchargeBalanceIn.opcode.asU8()) PiecewiseLinearSurchargeBalanceIn.exec(ctx, args);
         else if (opcode == PiecewiseLinearSurchargeBalanceOut.opcode.asU8()) PiecewiseLinearSurchargeBalanceOut.exec(ctx, args);
+        else if (opcode == FillGridHyperwiseAdjusterBalanceIn.opcode.asU8()) FillGridHyperwiseAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == FillGridHyperwiseAdjusterBalanceOut.opcode.asU8()) FillGridHyperwiseAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == OnlyTxOriginTokenBalanceNonZero.opcode.asU8()) OnlyTxOriginTokenBalanceNonZero.exec(ctx, args);
         else if (opcode == WhitelistSequential.opcode.asU8()) WhitelistSequential.exec(ctx, args);
         else revert UnknownOpcode(opcode);
