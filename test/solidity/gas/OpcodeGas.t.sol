@@ -27,7 +27,7 @@ import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { OraclePriceAdjusterBalanceIn } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
+import { OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 contract PriceOracleGasMock {
@@ -59,11 +59,12 @@ contract PriceOracleGasMock {
 contract OpcodeGas is Test {
     uint256 constant AMOUNT = 1e18;
     uint256 constant MAKER_PK = 0x1234;
+    uint24 constant MAX_ORACLE_STALENESS = (1 << 23) - 1;
 
     SwapVMRouter internal swapVM;
     TokenMock internal tokenA;
     TokenMock internal tokenB;
-    PriceOracleGasMock[6] internal oracles;
+    PriceOracleGasMock[12] internal oracles;
     address internal maker;
     address internal taker;
     uint256 internal justExec;
@@ -77,12 +78,9 @@ contract OpcodeGas is Test {
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (address(tokenA) > address(tokenB)) (tokenA, tokenB) = (tokenB, tokenA);
-        oracles[0] = new PriceOracleGasMock(2e8);
-        oracles[1] = new PriceOracleGasMock(2e8);
-        oracles[2] = new PriceOracleGasMock(1e8);
-        oracles[3] = new PriceOracleGasMock(2e8);
-        oracles[4] = new PriceOracleGasMock(2e8);
-        oracles[5] = new PriceOracleGasMock(1e8);
+        for (uint256 i; i < oracles.length; i++) {
+            oracles[i] = new PriceOracleGasMock(i % 3 == 2 ? int256(1e8) : int256(2e8));
+        }
 
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 1e30);
@@ -141,10 +139,14 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        _snapshot("OraclePriceAdjusterBalanceInOneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _encodeOracleFeed(oracles[0], false)));
-        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, bytes.concat(_encodeOracleFeed(oracles[1], false), _encodeOracleFeed(oracles[2], false))));
-        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _encodeOracleFeed(oracles[3], true)));
-        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, bytes.concat(_encodeOracleFeed(oracles[4], true), _encodeOracleFeed(oracles[5], true))));
+        _snapshot("OraclePriceAdjusterBalanceInOneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[0])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[1]), 8, false, MAX_ORACLE_STALENESS, address(oracles[2])));
+        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[3])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[4]), 8, true, MAX_ORACLE_STALENESS, address(oracles[5])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneFeed", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[6])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[7]), 8, false, MAX_ORACLE_STALENESS, address(oracles[8])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[9])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[10]), 8, true, MAX_ORACLE_STALENESS, address(oracles[11])));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
@@ -213,7 +215,4 @@ contract OpcodeGas is Test {
     }
 
 
-    function _encodeOracleFeed(PriceOracleGasMock oracle, bool isDenominator) private pure returns (bytes memory) {
-        return abi.encodePacked(uint8(8 | (isDenominator ? 1 << 7 : 0)), type(uint24).max, address(oracle));
-    }
 }
