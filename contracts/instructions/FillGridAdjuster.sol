@@ -14,8 +14,8 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
 /// @notice FillGridAdjusterBalanceIn opcode, balance in surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
-/// @dev Placement before or after InvalidateTokenOut selects total-volume or remaining-volume eligibility
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
+/// @dev The opcode is expected to be applied after InvalidateTokenOut, amount > balance exit branch relies on balance is final
 library FillGridAdjusterBalanceIn {
     using Math for uint256;
 
@@ -126,8 +126,8 @@ library FillGridAdjusterBalanceIn {
 
 /// @notice FillGridAdjusterBalanceOut opcode, balance out surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
-/// @dev Placement before or after InvalidateTokenIn selects total-volume or remaining-volume eligibility
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
+/// @dev The opcode is expected to be applied after InvalidateTokenIn, amount > balance exit branch relies on balance is final
 library FillGridAdjusterBalanceOut {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
