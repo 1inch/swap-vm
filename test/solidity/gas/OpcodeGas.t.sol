@@ -27,7 +27,6 @@ import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
 contract PriceOracleGasMock {
@@ -59,7 +58,6 @@ contract PriceOracleGasMock {
 contract OpcodeGas is Test {
     uint256 constant AMOUNT = 1e18;
     uint256 constant MAKER_PK = 0x1234;
-    uint24 constant MAX_ORACLE_STALENESS = (1 << 23) - 1;
 
     SwapVMRouter internal swapVM;
     TokenMock internal tokenA;
@@ -139,14 +137,15 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        _snapshot("OraclePriceAdjusterBalanceInOneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[0])));
-        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[1]), 8, false, MAX_ORACLE_STALENESS, address(oracles[2])));
-        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[3])));
-        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[4]), 8, true, MAX_ORACLE_STALENESS, address(oracles[5])));
-        _snapshot("OraclePriceAdjusterBalanceOutOneFeed", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[6])));
-        _snapshot("OraclePriceAdjusterBalanceOutTwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, 8, false, MAX_ORACLE_STALENESS, address(oracles[7]), 8, false, MAX_ORACLE_STALENESS, address(oracles[8])));
-        _snapshot("OraclePriceAdjusterBalanceOutOneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[9])));
-        _snapshot("OraclePriceAdjusterBalanceOutTwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, 8, true, MAX_ORACLE_STALENESS, address(oracles[10]), 8, true, MAX_ORACLE_STALENESS, address(oracles[11])));
+        // [opcode | len | marketValue:20 | decimals:1 | (maxStaleness<<1 | isDenominator):3 | oracle:20]
+        _snapshot("OraclePriceAdjusterBalanceInOneFeed", abi.encodePacked(hex"b22c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[0])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", abi.encodePacked(hex"b2430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[1]), hex"fffffe", address(oracles[2])));
+        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", abi.encodePacked(hex"b22c000000000000000000000000058d15e17628000088ffffff", address(oracles[3])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", abi.encodePacked(hex"b243000000000000000000000000058d15e17628000090ffffff", address(oracles[4]), hex"ffffff", address(oracles[5])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneFeed", abi.encodePacked(hex"b32c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[6])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoFeeds", abi.encodePacked(hex"b3430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[7]), hex"fffffe", address(oracles[8])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneInverseFeed", abi.encodePacked(hex"b32c000000000000000000000000058d15e17628000088ffffff", address(oracles[9])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoInverseFeeds", abi.encodePacked(hex"b343000000000000000000000000058d15e17628000090ffffff", address(oracles[10]), hex"ffffff", address(oracles[11])));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
