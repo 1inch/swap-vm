@@ -49,7 +49,9 @@ library FillGridAdjusterBalanceIn {
 
         for (uint256 i = 1; i < fillBps.length; i++) {
             require(fillBps[i - 1] < fillBps[i] && adjustBps[i - 1] >= adjustBps[i], FillGridAdjusterNotMonotonic());
+            require(uint256(fillBps[i - 1]) * (BPS + adjustBps[i - 1]) < fillBps[i] * BPS, FillGridAdjusterNotMonotonic());
         }
+        require(uint256(fillBps[fillBps.length - 1]) * (BPS + adjustBps[fillBps.length - 1]) < BPS * BPS, FillGridAdjusterNotMonotonic());
 
         for (uint256 i; i < fillBps.length; i++) {
             require(fillBps[i] < BPS && adjustBps[i] <= BPS, FillGridAdjusterBpsOutOfRange());
@@ -74,15 +76,14 @@ library FillGridAdjusterBalanceIn {
 
         uint256 balanceInR = ctx.swap.balanceIn;
         uint256 amountInR = balanceInR * BPS;
-
         (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
-
-        uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
-        uint256 amountInL = fillBps * balanceInL;
 
         uint256 balance;
         if (ctx.query.isExactIn) {
             if (ctx.swap.amountIn >= ctx.swap.balanceIn) return;
+
+            uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+            uint256 amountInL = fillBps * balanceInL;
             uint256 amountIn = ctx.swap.amountIn * BPS;
 
             while (amountIn < amountInL) {
@@ -96,6 +97,9 @@ library FillGridAdjusterBalanceIn {
             balance = ((amountIn - amountInL) * balanceInR + (amountInR - amountIn) * balanceInL).ceilDiv(amountInR - amountInL);
         } else {
             if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
+
+            uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+            uint256 amountInL = fillBps * balanceInL;
             uint256 amountOut = ctx.swap.amountOut * BPS;
 
             while (amountOut < fillBps * ctx.swap.balanceOut) {
@@ -180,17 +184,16 @@ library FillGridAdjusterBalanceOut {
 
         uint256 balanceOutR = ctx.swap.balanceOut;
         uint256 amountInR = ctx.swap.balanceIn * BPS;
-
         (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
-
-        // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-        uint256 balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
-            / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
-        uint256 amountInL = fillBps * ctx.swap.balanceIn;
 
         uint256 balance;
         if (ctx.query.isExactIn) {
-            if (ctx.swap.amountIn >= ctx.swap.balanceIn) return;
+            if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.balanceOut == 0) return;
+
+            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
+            uint256 balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
+                / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
+            uint256 amountInL = fillBps * ctx.swap.balanceIn;
             uint256 amountIn = ctx.swap.amountIn * BPS;
 
             while (amountIn < amountInL) {
@@ -210,6 +213,11 @@ library FillGridAdjusterBalanceOut {
             );
         } else {
             if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
+
+            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
+            uint256 balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
+                / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
+            uint256 amountInL = fillBps * ctx.swap.balanceIn;
             uint256 amountOut = ctx.swap.amountOut * BPS;
 
             while (amountOut < fillBps * balanceOutL) {

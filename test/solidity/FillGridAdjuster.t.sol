@@ -35,6 +35,34 @@ contract FillGridAdjusterTest is Test {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
+    function test_FillGridAdjusterBalanceIn_BuildRejectsPotentialAmountInInversion() public {
+        uint24[] memory fillBps = new uint24[](3);
+        uint24[] memory adjustBps = new uint24[](3);
+
+        fillBps[0] = 0;
+        fillBps[1] = 0.3e7;
+        fillBps[2] = 0.35e7;
+        adjustBps[0] = 1e7;
+        adjustBps[1] = 1e7;
+        adjustBps[2] = 0.5e7;
+
+        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
+        this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
+    }
+
+    function test_FillGridAdjusterBalanceIn_BuildRejectsPotentialEndpointCollision() public {
+        uint24[] memory fillBps = new uint24[](2);
+        uint24[] memory adjustBps = new uint24[](2);
+
+        fillBps[0] = 0;
+        fillBps[1] = 0.5e7;
+        adjustBps[0] = 1e7;
+        adjustBps[1] = 1e7;
+
+        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
+        this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
+    }
+
     function test_FillGridAdjusterBalanceIn_ExactIn_QuotesAmountwiseInterpolation() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, true));
 
@@ -223,6 +251,13 @@ contract FillGridAdjusterTest is Test {
             balanceOutCurveAmount * balanceInCurveOutput,
             balanceInCurveAmount + balanceOutCurveAmount
         );
+    }
+
+    function buildFillGridAdjusterBalanceIn(
+        uint24[] memory fillBps,
+        uint24[] memory adjustBps
+    ) external pure returns (bytes memory) {
+        return FillGridAdjusterBalanceIn.build(fillBps, adjustBps);
     }
 
     function _buildProgram(uint256 balanceIn, uint256 balanceOut, bool adjustBalanceIn) private view returns (bytes memory) {
