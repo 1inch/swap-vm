@@ -189,9 +189,9 @@ library FillGridAdjusterBalanceOut {
         uint256 count = parsePointsCount(args);
 
         // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-        // Node balance out is kept unrounded as `numerator / denominator`, all nodes share the numerator
+        // Node balance out is kept unrounded as `numerator * BPS / denominator`, all nodes share the numerator
         uint256 base = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
-        uint256 numerator = ctx.swap.balanceOut * base;
+        uint256 numerator = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
         uint256 denominatorR = base;
         uint256 amountInR = ctx.swap.balanceIn * BPS;
         (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
@@ -213,18 +213,18 @@ library FillGridAdjusterBalanceOut {
 
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
+            // The denominator is linear by amountIn, rounding it up keeps balance in favor of maker
             balance = Math.mulDiv(
                 numerator,
-                amountInR - amountInL,
-                (amountIn - amountInL) * denominatorR + (amountInR - amountIn) * denominatorL
+                BPS,
+                denominatorL - Math.mulDiv(denominatorL - denominatorR, amountIn - amountInL, amountInR - amountInL)
             );
         } else {
             if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
 
             uint256 fillR = BPS;
-            uint256 amountOut = ctx.swap.amountOut * BPS;
 
-            while (amountOut * denominatorL < fillBps * numerator) {
+            while (ctx.swap.amountOut * denominatorL < fillBps * numerator) {
                 (denominatorR, fillR) = (denominatorL, fillBps);
                 (fillBps, adjustBps) = parsePoint(args, --count);
                 denominatorL = base + ctx.swap.surcharge * adjustBps;
@@ -233,8 +233,11 @@ library FillGridAdjusterBalanceOut {
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
             // Consider `amountIn = amountOut * balanceIn / balance`, then balance is linear by amountOut and rounded once
-            balance = (numerator * (fillR - fillBps) + amountOut * (denominatorL - denominatorR))
-                / (fillR * denominatorL - fillBps * denominatorR);
+            balance = Math.mulDiv(
+                numerator * (fillR - fillBps) + ctx.swap.amountOut * (denominatorL - denominatorR),
+                BPS,
+                fillR * denominatorL - fillBps * denominatorR
+            );
         }
 
         ctx.swap.surcharge += ctx.swap.balanceOut - balance;
