@@ -159,6 +159,12 @@ library FillGridAdjusterBalanceOut {
 
         for (uint256 i = 1; i < fillBps.length; i++) {
             require(fillBps[i - 1] < fillBps[i] && adjustBps[i - 1] >= adjustBps[i], FillGridAdjusterNotMonotonic());
+            // Balance out may grow by at most one per unit of amount out for any surcharge, otherwise its rounding breaks exactOut monotonicity
+            require(
+                (uint256(adjustBps[i - 1]) + fillBps[i - 1]) * BPS + uint256(adjustBps[i]) * fillBps[i - 1]
+                    <= (uint256(adjustBps[i]) + fillBps[i]) * BPS + uint256(adjustBps[i - 1]) * fillBps[i],
+                FillGridAdjusterNotMonotonic()
+            );
         }
 
         for (uint256 i; i < fillBps.length; i++) {
@@ -215,28 +221,25 @@ library FillGridAdjusterBalanceOut {
             if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
 
             // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-            uint256 balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
-                / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
-            uint256 amountInL = fillBps * ctx.swap.balanceIn;
+            // Node balance out is kept unrounded as `numerator / denominator`, all nodes share the numerator
+            uint256 base = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
+            uint256 numerator = ctx.swap.balanceOut * base;
+            uint256 denominatorR = base;
+            uint256 denominatorL = base + ctx.swap.surcharge * adjustBps;
+            uint256 fillR = BPS;
             uint256 amountOut = ctx.swap.amountOut * BPS;
 
-            while (amountOut < fillBps * balanceOutL) {
-                (balanceOutR, amountInR) = (balanceOutL, amountInL);
+            while (amountOut * denominatorL < fillBps * numerator) {
+                (denominatorR, fillR) = (denominatorL, fillBps);
                 (fillBps, adjustBps) = parsePoint(args, --count);
-                balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
-                    / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
-                amountInL = fillBps * ctx.swap.balanceIn;
+                denominatorL = base + ctx.swap.surcharge * adjustBps;
             }
 
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
-            // Consider `amountIn = amountOut * balanceIn / balance`
-            // Consider avoiding triple balance multiplication by calculating delta since balanceOutL only
-            balance = balanceOutL + Math.mulDiv(
-                balanceOutR - balanceOutL,
-                amountOut * ctx.swap.balanceIn - amountInL * balanceOutL,
-                amountInR * balanceOutR - amountInL * balanceOutL
-            );
+            // Consider `amountIn = amountOut * balanceIn / balance`, then balance is linear by amountOut and rounded once
+            balance = (numerator * (fillR - fillBps) + amountOut * (denominatorL - denominatorR))
+                / (fillR * denominatorL - fillBps * denominatorR);
         }
 
         ctx.swap.surcharge += ctx.swap.balanceOut - balance;
