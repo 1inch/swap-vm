@@ -188,44 +188,39 @@ library FillGridAdjusterBalanceOut {
     function exec(Context memory ctx, bytes calldata args) internal pure {
         uint256 count = parsePointsCount(args);
 
-        uint256 balanceOutR = ctx.swap.balanceOut;
+        // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
+        // Node balance out is kept unrounded as `numerator / denominator`, all nodes share the numerator
+        uint256 base = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
+        uint256 numerator = ctx.swap.balanceOut * base;
+        uint256 denominatorR = base;
         uint256 amountInR = ctx.swap.balanceIn * BPS;
         (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
+        uint256 denominatorL = base + ctx.swap.surcharge * adjustBps;
 
         uint256 balance;
         if (ctx.query.isExactIn) {
             if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.balanceOut == 0) return;
 
-            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-            uint256 balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
-                / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
             uint256 amountInL = fillBps * ctx.swap.balanceIn;
             uint256 amountIn = ctx.swap.amountIn * BPS;
 
             while (amountIn < amountInL) {
-                (balanceOutR, amountInR) = (balanceOutL, amountInL);
+                (denominatorR, amountInR) = (denominatorL, amountInL);
                 (fillBps, adjustBps) = parsePoint(args, --count);
-                balanceOutL = ctx.swap.balanceOut - ctx.swap.balanceOut * ctx.swap.surcharge * adjustBps
-                    / (ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps));
+                denominatorL = base + ctx.swap.surcharge * adjustBps;
                 amountInL = fillBps * ctx.swap.balanceIn;
             }
 
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
             balance = Math.mulDiv(
-                balanceOutL * balanceOutR,
+                numerator,
                 amountInR - amountInL,
-                (amountIn - amountInL) * balanceOutL + (amountInR - amountIn) * balanceOutR
+                (amountIn - amountInL) * denominatorR + (amountInR - amountIn) * denominatorL
             );
         } else {
             if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
 
-            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-            // Node balance out is kept unrounded as `numerator / denominator`, all nodes share the numerator
-            uint256 base = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
-            uint256 numerator = ctx.swap.balanceOut * base;
-            uint256 denominatorR = base;
-            uint256 denominatorL = base + ctx.swap.surcharge * adjustBps;
             uint256 fillR = BPS;
             uint256 amountOut = ctx.swap.amountOut * BPS;
 
