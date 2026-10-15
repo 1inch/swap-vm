@@ -185,6 +185,9 @@ library FillGridAdjusterBalanceOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        // Without surcharge every node equals balanceOut, there is nothing to rescale
+        if (ctx.swap.surcharge == 0) return;
+
         uint256 count = parsePointsCount(args);
 
         // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
@@ -198,7 +201,7 @@ library FillGridAdjusterBalanceOut {
 
         uint256 balance;
         if (ctx.query.isExactIn) {
-            if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.balanceOut == 0) return;
+            if (ctx.swap.amountIn >= ctx.swap.balanceIn) return;
 
             uint256 amountInL = fillBps * ctx.swap.balanceIn;
             uint256 amountIn = ctx.swap.amountIn * BPS;
