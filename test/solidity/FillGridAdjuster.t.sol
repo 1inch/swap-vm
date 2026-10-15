@@ -115,6 +115,13 @@ contract FillGridAdjusterTest is Test {
         uint256 expectedPrice = ((amountIn - amountInL) * priceR + (amountInR - amountIn) * priceL) / (amountInR - amountInL);
 
         assertApproxEqAbs(price, expectedPrice, 2);
+
+        (uint256 exactOutAmountIn,,) = swapVM.quote(order, amountOut, _buildTakerData(order, false));
+        uint256 exactOutPrice = exactOutAmountIn * ONE / amountOut;
+        uint256 expectedExactOutPrice =
+            ((exactOutAmountIn - amountInL) * priceR + (amountInR - exactOutAmountIn) * priceL) / (amountInR - amountInL);
+
+        assertApproxEqAbs(exactOutPrice, expectedExactOutPrice, 2);
     }
 
     function testFuzz_FillGridAdjusterBalanceOut_PriceIsLinearByAmountIn(uint256 amountIn) public view {
@@ -133,6 +140,13 @@ contract FillGridAdjusterTest is Test {
         uint256 expectedPrice = ((amountIn - amountInL) * priceR + (amountInR - amountIn) * priceL) / (amountInR - amountInL);
 
         assertApproxEqAbs(price, expectedPrice, 2);
+
+        (uint256 exactOutAmountIn,,) = swapVM.quote(order, amountOut, _buildTakerData(order, false));
+        uint256 exactOutPrice = exactOutAmountIn * ONE / amountOut;
+        uint256 expectedExactOutPrice =
+            ((exactOutAmountIn - amountInL) * priceR + (amountInR - exactOutAmountIn) * priceL) / (amountInR - amountInL);
+
+        assertApproxEqAbs(exactOutPrice, expectedExactOutPrice, 2);
     }
 
     function testFuzz_FillGridAdjusterBalanceIn_ExactInAndExactOutQuotesMatch(
