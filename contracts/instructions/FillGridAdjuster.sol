@@ -49,7 +49,7 @@ library FillGridAdjusterBalanceIn {
 
         for (uint256 i = 1; i < fillBps.length; i++) {
             require(fillBps[i - 1] < fillBps[i] && adjustBps[i - 1] >= adjustBps[i], FillGridAdjusterNotMonotonic());
-            require(uint256(fillBps[i - 1]) * (BPS + adjustBps[i - 1]) < fillBps[i] * BPS, FillGridAdjusterNotMonotonic());
+            require((BPS + adjustBps[i - 1]) * fillBps[i - 1] < BPS * fillBps[i], FillGridAdjusterNotMonotonic());
         }
         require(uint256(fillBps[fillBps.length - 1]) * (BPS + adjustBps[fillBps.length - 1]) < BPS * BPS, FillGridAdjusterNotMonotonic());
 
@@ -159,10 +159,9 @@ library FillGridAdjusterBalanceOut {
 
         for (uint256 i = 1; i < fillBps.length; i++) {
             require(fillBps[i - 1] < fillBps[i] && adjustBps[i - 1] >= adjustBps[i], FillGridAdjusterNotMonotonic());
-            // Balance out may grow by at most one per unit of amount out for any surcharge, otherwise its rounding breaks exactOut monotonicity
             require(
-                (uint256(adjustBps[i - 1]) + fillBps[i - 1]) * BPS + uint256(adjustBps[i]) * fillBps[i - 1]
-                    <= (uint256(adjustBps[i]) + fillBps[i]) * BPS + uint256(adjustBps[i - 1]) * fillBps[i],
+                BPS * adjustBps[i - 1] + BPS * fillBps[i - 1] + uint256(adjustBps[i]) * fillBps[i - 1]
+                    <= BPS * adjustBps[i] + BPS * fillBps[i] + uint256(adjustBps[i - 1]) * fillBps[i],
                 FillGridAdjusterNotMonotonic()
             );
         }
