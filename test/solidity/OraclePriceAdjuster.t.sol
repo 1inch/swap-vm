@@ -142,6 +142,31 @@ contract OraclePriceAdjusterTest is Test {
         assertEq(amountIn, 2600e6);
     }
 
+    function test_OraclePriceAdjusterBalanceOut_CapsDecreaseAtBalanceOut() public {
+        PriceOracleMock oracle = new PriceOracleMock(1e18, block.timestamp);
+        ISwapVM.Order memory order = _buildOrder(bytes.concat(
+            StaticBalances.build(1e18, 1e18),
+            _buildBalanceOut(
+                3e18,
+                18,
+                18,
+                _feed(oracle, 18, false)
+            ),
+            // Restore part of the capped balance through the surcharge so the quote stays non-zero.
+            _buildBalanceOut(
+                0.5e18,
+                18,
+                18,
+                _feed(oracle, 18, false)
+            ),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+
+        (, uint256 amountOut,) = swapVM.quote(order, 1e18, _buildTakerData(order, true));
+
+        assertEq(amountOut, 0.5e18);
+    }
+
     function test_OraclePriceAdjuster_DoesNotAdjustBelowMarketWithoutSurcharge() public {
         PriceOracleMock oracle = new PriceOracleMock(2400e8, block.timestamp);
         bytes memory feed = _feed(oracle, 8, false);
@@ -468,6 +493,26 @@ contract OraclePriceAdjusterTest is Test {
         vm.expectRevert(abi.encodeWithSelector(
             OraclePriceAdjusterInvalidOraclePrice.selector,
             int256(-1)
+        ));
+        swapVM.quote(order, 1e18, takerData);
+    }
+
+    function test_OraclePriceAdjuster_RevertsOnZeroOraclePrice() public {
+        PriceOracleMock oracle = new PriceOracleMock(0, block.timestamp);
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(
+            true,
+            2600e6,
+            1e18,
+            2500e18,
+            6,
+            18,
+            _feed(oracle, 8, false)
+        ));
+        bytes memory takerData = _buildTakerData(order, false);
+
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidOraclePrice.selector,
+            int256(0)
         ));
         swapVM.quote(order, 1e18, takerData);
     }
