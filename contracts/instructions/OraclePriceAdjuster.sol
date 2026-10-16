@@ -121,7 +121,7 @@ library OraclePriceAdjusterBalanceIn {
             (, int256 answer, , uint256 updatedAt, ) = IPriceOracle(oracle).latestRoundData();
 
             require(answer > 0, OraclePriceAdjusterInvalidOraclePrice(answer));
-            require(block.timestamp <= updatedAt + maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
+            require(block.timestamp - updatedAt <= maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
 
             if (isDenominator) denominator *= uint256(answer);
             else numerator *= uint256(answer);
@@ -239,7 +239,7 @@ library OraclePriceAdjusterBalanceOut {
             (, int256 answer, , uint256 updatedAt, ) = IPriceOracle(oracle).latestRoundData();
 
             require(answer > 0, OraclePriceAdjusterInvalidOraclePrice(answer));
-            require(block.timestamp <= updatedAt + maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
+            require(block.timestamp - updatedAt <= maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
 
             if (isDenominator) denominator *= uint256(answer);
             else numerator *= uint256(answer);
