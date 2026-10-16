@@ -37,6 +37,8 @@ contract OpcodeEnumCheckTest is Test {
         assertEq(uint8(Opcode.Decay), 0x9c);
         // Rates tuning bank (0xb0-0xcf)
         assertEq(uint8(Opcode.RequireMinRate), 0xb0);
+        assertEq(uint8(Opcode.OraclePriceAdjusterBalanceIn), 0xb2);
+        assertEq(uint8(Opcode.OraclePriceAdjusterBalanceOut), 0xb3);
         assertEq(uint8(Opcode.BaseFeeAdjusterBalanceIn), 0xb4);
         assertEq(uint8(Opcode.BaseFeeAdjusterBalanceOut), 0xb5);
         // Reserved bank tail (0xf0-0xff)

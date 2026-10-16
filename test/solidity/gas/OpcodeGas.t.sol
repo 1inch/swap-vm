@@ -30,6 +30,26 @@ import { Decay } from "../../../contracts/instructions/Decay.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 
+contract PriceOracleGasMock {
+    int256 private _answer;
+    uint256 private _updatedAt;
+
+    constructor(int256 answer) {
+        _answer = answer;
+        _updatedAt = block.timestamp;
+    }
+
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    ) {
+        return (1, _answer, _updatedAt, _updatedAt, 1);
+    }
+}
+
 /// @title OpcodeGas
 /// @notice Per-opcode gas on prod `SwapVMRouter`.
 /// @dev Just is StaticBalances + LimitSwap — a 1:1 fill used as the baseline.
@@ -43,6 +63,7 @@ contract OpcodeGas is Test {
     SwapVMRouter internal swapVM;
     TokenMock internal tokenA;
     TokenMock internal tokenB;
+    PriceOracleGasMock[12] internal oracles;
     address internal maker;
     address internal taker;
     uint256 internal justExec;
@@ -56,6 +77,9 @@ contract OpcodeGas is Test {
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (address(tokenA) > address(tokenB)) (tokenA, tokenB) = (tokenB, tokenA);
+        for (uint256 i; i < oracles.length; i++) {
+            oracles[i] = new PriceOracleGasMock(i % 3 == 2 ? int256(1e8) : int256(2e8));
+        }
 
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 1e30);
@@ -116,6 +140,15 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
+        // [opcode | len | marketValue:20 | decimals:1 | (maxStaleness<<1 | isDenominator):3 | oracle:20]
+        _snapshot("OraclePriceAdjusterBalanceInOneFeed", abi.encodePacked(hex"b22c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[0])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", abi.encodePacked(hex"b2430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[1]), hex"fffffe", address(oracles[2])));
+        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", abi.encodePacked(hex"b22c000000000000000000000000058d15e17628000088ffffff", address(oracles[3])));
+        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", abi.encodePacked(hex"b243000000000000000000000000058d15e17628000090ffffff", address(oracles[4]), hex"ffffff", address(oracles[5])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneFeed", abi.encodePacked(hex"b32c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[6])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoFeeds", abi.encodePacked(hex"b3430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[7]), hex"fffffe", address(oracles[8])));
+        _snapshot("OraclePriceAdjusterBalanceOutOneInverseFeed", abi.encodePacked(hex"b32c000000000000000000000000058d15e17628000088ffffff", address(oracles[9])));
+        _snapshot("OraclePriceAdjusterBalanceOutTwoInverseFeeds", abi.encodePacked(hex"b343000000000000000000000000058d15e17628000090ffffff", address(oracles[10]), hex"ffffff", address(oracles[11])));
         _snapshot("FillGridAdjusterBalanceIn_eIn", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
         _snapshot("FillGridAdjusterBalanceOut_eIn", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
         _snapshot("FillGridAdjusterBalanceIn_eOut", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
@@ -190,4 +223,6 @@ contract OpcodeGas is Test {
         swapVM.swap(order, amount, takerData);
         return uint256(vm.lastCallGas().gasTotalUsed);
     }
+
+
 }
