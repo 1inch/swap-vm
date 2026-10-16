@@ -15,7 +15,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @notice FillGridAdjusterBalanceIn opcode, balance in surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
-/// @dev The opcode is expected to be applied after InvalidateTokenOut, amount > balance exit branch relies on balance is final
+/// @dev The opcode is expected to be applied after InvalidateTokenOut; amount >= balance exit branch relies on balance being final
 library FillGridAdjusterBalanceIn {
     using Math for uint256;
 
@@ -74,17 +74,17 @@ library FillGridAdjusterBalanceIn {
     function exec(Context memory ctx, bytes calldata args) internal pure {
         uint256 count = parsePointsCount(args);
 
-        uint256 balanceInR = ctx.swap.balanceIn;
-        uint256 amountInR = balanceInR * BPS;
-        (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
-
         uint256 balance;
         if (ctx.query.isExactIn) {
-            if (ctx.swap.amountIn >= ctx.swap.balanceIn) return;
+            if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.surcharge == 0) return;
+            (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
+            uint256 balanceInR = ctx.swap.balanceIn;
             uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
-            uint256 amountInL = fillBps * balanceInL;
+
             uint256 amountIn = ctx.swap.amountIn * BPS;
+            uint256 amountInR = balanceInR * BPS;
+            uint256 amountInL = fillBps * balanceInL;
 
             while (amountIn < amountInL) {
                 (balanceInR, amountInR) = (balanceInL, amountInL);
@@ -96,25 +96,29 @@ library FillGridAdjusterBalanceIn {
             // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
             balance = ((amountIn - amountInL) * balanceInR + (amountInR - amountIn) * balanceInL).ceilDiv(amountInR - amountInL);
         } else {
-            if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
+            if (ctx.swap.amountOut >= ctx.swap.balanceOut || ctx.swap.surcharge == 0) return;
+            uint256 fillBpsR = BPS;
+            (uint256 fillBpsL, uint256 adjustBps) = parsePoint(args, --count);
 
+            // Known precision loss in balanceInL calculations leading to exactOut(x) > exactOut(x+1) for dust
+            uint256 balanceInR = ctx.swap.balanceIn;
             uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
-            uint256 amountInL = fillBps * balanceInL;
+
             uint256 amountOut = ctx.swap.amountOut * BPS;
 
-            while (amountOut < fillBps * ctx.swap.balanceOut) {
-                (balanceInR, amountInR) = (balanceInL, amountInL);
-                (fillBps, adjustBps) = parsePoint(args, --count);
+            while (amountOut < fillBpsL * ctx.swap.balanceOut) {
+                (balanceInR, fillBpsR) = (balanceInL, fillBpsL);
+                (fillBpsL, adjustBps) = parsePoint(args, --count);
                 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
-                amountInL = fillBps * balanceInL;
             }
 
             // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
+            // Consider `amountInL/R = fillBpsL/R * balanceInL/R`
             // Consider `amountIn = amountOut * balance / balanceOut`
             balance = Math.mulDiv(
-                amountInR * balanceInL - amountInL * balanceInR,
-                ctx.swap.balanceOut,
-                (amountInR - amountInL) * ctx.swap.balanceOut + amountOut * (balanceInL - balanceInR),
+                balanceInL * balanceInR,
+                ctx.swap.balanceOut * (fillBpsR - fillBpsL),
+                (fillBpsR * balanceInR - fillBpsL * balanceInL) * ctx.swap.balanceOut + amountOut * (balanceInL - balanceInR),
                 Math.Rounding.Ceil
             );
         }
@@ -127,7 +131,7 @@ library FillGridAdjusterBalanceIn {
 /// @notice FillGridAdjusterBalanceOut opcode, balance out surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
-/// @dev The opcode is expected to be applied after InvalidateTokenIn, amount > balance exit branch relies on balance is final
+/// @dev The opcode is expected to be applied after InvalidateTokenIn; amount >= balance exit branch relies on balance being final
 library FillGridAdjusterBalanceOut {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -185,60 +189,62 @@ library FillGridAdjusterBalanceOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        // Without surcharge every node equals balanceOut, there is nothing to rescale
-        if (ctx.swap.surcharge == 0) return;
-
         uint256 count = parsePointsCount(args);
-
-        // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-        // Node balance out is kept unrounded as `numerator * BPS / denominator`, all nodes share the numerator
-        uint256 base = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
-        uint256 numerator = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
-        uint256 denominatorR = base;
-        uint256 amountInR = ctx.swap.balanceIn * BPS;
-        (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
-        uint256 denominatorL = base + ctx.swap.surcharge * adjustBps;
 
         uint256 balance;
         if (ctx.query.isExactIn) {
-            if (ctx.swap.amountIn >= ctx.swap.balanceIn) return;
+            if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.surcharge == 0) return;
+            (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
-            uint256 amountInL = fillBps * ctx.swap.balanceIn;
+            // balanceOutR = rational(balanceOutNum * BPS, balanceOutDenomR)
+            uint256 balanceOutNum = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
+            uint256 balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
+
+            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
+            uint256 balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+
             uint256 amountIn = ctx.swap.amountIn * BPS;
+            uint256 amountInR = ctx.swap.balanceIn * BPS;
+            uint256 amountInL = fillBps * ctx.swap.balanceIn;
 
             while (amountIn < amountInL) {
-                (denominatorR, amountInR) = (denominatorL, amountInL);
+                (balanceOutDenomR, amountInR) = (balanceOutDenomL, amountInL);
                 (fillBps, adjustBps) = parsePoint(args, --count);
-                denominatorL = base + ctx.swap.surcharge * adjustBps;
+                balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
                 amountInL = fillBps * ctx.swap.balanceIn;
             }
 
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
             // The denominator is linear by amountIn, rounding it up keeps balance in favor of maker
-            balance = Math.mulDiv(
-                numerator,
-                BPS,
-                denominatorL - Math.mulDiv(denominatorL - denominatorR, amountIn - amountInL, amountInR - amountInL)
-            );
+            balance = balanceOutNum * BPS
+                / (balanceOutDenomL - Math.mulDiv(balanceOutDenomL - balanceOutDenomR, amountIn - amountInL, amountInR - amountInL));
         } else {
-            if (ctx.swap.amountOut >= ctx.swap.balanceOut) return;
+            if (ctx.swap.amountOut >= ctx.swap.balanceOut || ctx.swap.surcharge == 0) return;
+            uint256 fillBpsR = BPS;
+            (uint256 fillBpsL, uint256 adjustBps) = parsePoint(args, --count);
 
-            uint256 fillR = BPS;
+            // balanceOutR = rational(balanceOutNum * BPS, balanceOutDenomR)
+            uint256 balanceOutNum = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
+            uint256 balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
 
-            while (ctx.swap.amountOut * denominatorL < fillBps * numerator) {
-                (denominatorR, fillR) = (denominatorL, fillBps);
-                (fillBps, adjustBps) = parsePoint(args, --count);
-                denominatorL = base + ctx.swap.surcharge * adjustBps;
+            // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
+            uint256 balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+
+            while (ctx.swap.amountOut * balanceOutDenomL < fillBpsL * balanceOutNum) {
+                (balanceOutDenomR, fillBpsR) = (balanceOutDenomL, fillBpsL);
+                (fillBpsL, adjustBps) = parsePoint(args, --count);
+                balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
             }
 
             // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
             // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
-            // Consider `amountIn = amountOut * balanceIn / balance`, then balance is linear by amountOut and rounded once
+            // Consider `amountInL/R = fillBpsL/R * balanceIn`
+            // Consider `amountIn = amountOut * balanceIn / balance`
             balance = Math.mulDiv(
-                numerator * (fillR - fillBps) + ctx.swap.amountOut * (denominatorL - denominatorR),
+                balanceOutNum * (fillBpsR - fillBpsL) + ctx.swap.amountOut * (balanceOutDenomL - balanceOutDenomR),
                 BPS,
-                fillR * denominatorL - fillBps * denominatorR
+                fillBpsR * balanceOutDenomL - fillBpsL * balanceOutDenomR
             );
         }
 

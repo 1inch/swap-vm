@@ -74,6 +74,8 @@ contract OpcodeGas is Test {
     function test_gas() public {
         just = bytes.concat(
             StaticBalances.build(AMOUNT, AMOUNT),
+            DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7),
+            StaticBalances.build(AMOUNT, AMOUNT),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         // Cold Just, then hot Just — opcode runs are hot too.
