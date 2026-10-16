@@ -32,8 +32,8 @@
     "build": "npx hardhat compile",
     "build:fast": "npx hardhat compile --build-profile fast",
     "build:production": "npx hardhat compile --build-profile production",
-    "snapshot": "npx hardhat test solidity --snapshot ./test/solidity/gas/*",
-    "snapshot:check": "npx hardhat test solidity --snapshot-check ./test/solidity/gas/*"
+    "snapshot": "npx hardhat clean && npx hardhat test solidity --snapshot ./test/solidity/gas/*",
+    "snapshot:check": "npx hardhat clean && npx hardhat test solidity --snapshot-check ./test/solidity/gas/*"
   },
   "repository": {
     "type": "git",

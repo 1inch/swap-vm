@@ -12,7 +12,6 @@ const swapVmCompiler = {
     optimizer: { enabled: true, runs: 700 },
     viaIR: true,
   },
-  isolated: true,
   preferWasm: false,
 };
 
@@ -35,7 +34,6 @@ const fastTestCompiler = {
       },
     },
   },
-  isolated: false,
   preferWasm: false,
 };
 
@@ -52,9 +50,9 @@ export default defineConfig({
     npmFilesToBuild: ["@1inch/solidity-utils/contracts/mocks/TokenMock.sol"],
     splitTestsCompilation: true,
     profiles: {
-      default: { compilers: [swapVmCompiler] },
-      production: { compilers: [swapVmCompiler] },
-      fast: { compilers: [fastTestCompiler] },
+      default: { isolated: true, compilers: [swapVmCompiler] },
+      production: { isolated: true, compilers: [swapVmCompiler] },
+      fast: { isolated: true, compilers: [fastTestCompiler] },
     },
   },
   coverage: {
