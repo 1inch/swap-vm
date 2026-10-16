@@ -24,6 +24,7 @@ import {
     OraclePriceAdjusterBalanceOut,
     OraclePriceAdjusterInvalidDecimalsExponent,
     OraclePriceAdjusterInvalidFeedCount,
+    OraclePriceAdjusterInvalidMaxStaleness,
     OraclePriceAdjusterInvalidMarketValue,
     OraclePriceAdjusterInvalidOraclePrice,
     OraclePriceAdjusterOraclePriceStale
@@ -580,24 +581,31 @@ contract OraclePriceAdjusterTest is Test {
             46
         );
 
-        assertEq(
-            this.buildBalanceIn(
-                2500e6,
-                6,
-                18,
-                _feed(oracle, 8, false, type(uint24).max)
-            ).length,
-            46
+        Feed[] memory invalidSingleFeed = _toFeeds(_feed(oracle, 8, false, type(uint24).max));
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceIn(2500e6, 6, 18, invalidSingleFeed);
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceOut(2500e6, 6, 18, invalidSingleFeed);
+
+        Feed[] memory invalidSecondFeed = _toFeeds(
+            bytes.concat(validFeed, _feed(oracle, 8, false, type(uint24).max))
         );
-        assertEq(
-            this.buildBalanceIn(
-                2500e6,
-                6,
-                18,
-                bytes.concat(validFeed, _feed(oracle, 8, false, type(uint24).max))
-            ).length,
-            69
-        );
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceIn(2500e6, 6, 18, invalidSecondFeed);
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceOut(2500e6, 6, 18, invalidSecondFeed);
     }
 
     function _assertBalanceInTwoFeeds(
