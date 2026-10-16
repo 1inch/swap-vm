@@ -14,6 +14,7 @@ import { StaticBalances } from "../instructions/Balances.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../instructions/FillGridAdjuster.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { ValidateSeriesEpoch, ValidateSeriesEpochExternal } from "../instructions/SeriesEpochManager.sol";
@@ -45,6 +46,8 @@ contract LimitOpcodes is
         else if (opcode == LimitSwapFullAmount.opcode.asU8()) LimitSwapFullAmount.exec(ctx, args);
         else if (opcode == BaseFeeAdjusterBalanceIn.opcode.asU8()) BaseFeeAdjusterBalanceIn.exec(ctx, args);
         else if (opcode == BaseFeeAdjusterBalanceOut.opcode.asU8()) BaseFeeAdjusterBalanceOut.exec(ctx, args);
+        else if (opcode == FillGridAdjusterBalanceIn.opcode.asU8()) FillGridAdjusterBalanceIn.exec(ctx, args);
+        else if (opcode == FillGridAdjusterBalanceOut.opcode.asU8()) FillGridAdjusterBalanceOut.exec(ctx, args);
         else if (opcode == Extruction.opcode.asU8()) Extruction.exec(ctx, args);
         else if (opcode == Salt.opcode.asU8()) Salt.exec(ctx, args);
         else if (opcode == FeeProtocolSurplus.opcode.asU8()) FeeProtocolSurplus.exec(ctx, args);
