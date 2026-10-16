@@ -16,6 +16,7 @@ import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../c
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
 import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../../../contracts/instructions/FillGridAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
@@ -80,11 +81,13 @@ contract OpcodeGas is Test {
     function test_gas() public {
         just = bytes.concat(
             StaticBalances.build(AMOUNT, AMOUNT),
+            DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7),
+            StaticBalances.build(AMOUNT, AMOUNT),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         // Cold Just, then hot Just — opcode runs are hot too.
-        _measure(just);
-        justExec = _measure(just);
+        _measure(just, AMOUNT, true);
+        justExec = _measure(just, AMOUNT, true);
 
         oracles[0].latestRoundData();
         oracles[1].latestRoundData();
@@ -131,6 +134,10 @@ contract OpcodeGas is Test {
         _snapshot("OraclePriceAdjusterBalanceOut_TwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feeds(false, false)));
         _snapshot("OraclePriceAdjusterBalanceOut_OneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feed(true)));
         _snapshot("OraclePriceAdjusterBalanceOut_TwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("FillGridAdjusterBalanceIn_eIn", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterBalanceOut_eIn", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterBalanceIn_eOut", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
+        _snapshot("FillGridAdjusterBalanceOut_eOut", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
@@ -146,7 +153,11 @@ contract OpcodeGas is Test {
     }
 
     function _snapshot(string memory name, bytes memory opcode) private {
-        uint256 opExecGas = _measure(bytes.concat(just, opcode));
+        _snapshot(name, opcode, AMOUNT, true);
+    }
+
+    function _snapshot(string memory name, bytes memory opcode, uint256 amount, bool exactIn) private {
+        uint256 opExecGas = _measure(bytes.concat(just, opcode), amount, exactIn);
         uint256 calldataGas;
         for (uint256 i; i < opcode.length; i++) {
             calldataGas += opcode[i] == 0 ? 4 : 16;
@@ -154,7 +165,7 @@ contract OpcodeGas is Test {
         vm.snapshotValue("OpcodeGas", name, opExecGas - justExec + calldataGas);
     }
 
-    function _measure(bytes memory program) private returns (uint256) {
+    function _measure(bytes memory program, uint256 amount, bool exactIn) private returns (uint256) {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
             receiver: address(0),
@@ -182,7 +193,7 @@ contract OpcodeGas is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(MAKER_PK, swapVM.hash(order));
         bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
             taker: address(0),
-            isExactIn: true,
+            isExactIn: exactIn,
             shouldUnwrapWeth: false,
             isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
@@ -205,7 +216,7 @@ contract OpcodeGas is Test {
             signature: abi.encodePacked(r, s, v)
         }));
 
-        swapVM.swap(order, AMOUNT, takerData);
+        swapVM.swap(order, amount, takerData);
         return uint256(vm.lastCallGas().gasTotalUsed);
     }
 }
