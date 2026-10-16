@@ -28,30 +28,7 @@ import {
     OraclePriceAdjusterInvalidOraclePrice,
     OraclePriceAdjusterOraclePriceStale
 } from "../../contracts/instructions/OraclePriceAdjuster.sol";
-
-contract PriceOracleMock {
-    int256 private _answer;
-    uint256 private _updatedAt;
-
-    constructor(int256 answer_, uint256 updatedAt_) {
-        setRoundData(answer_, updatedAt_);
-    }
-
-    function setRoundData(int256 answer_, uint256 updatedAt_) public {
-        _answer = answer_;
-        _updatedAt = updatedAt_;
-    }
-
-    function latestRoundData() external view returns (
-        uint80 roundId,
-        int256 answer,
-        uint256 startedAt,
-        uint256 updatedAt,
-        uint80 answeredInRound
-    ) {
-        return (1, _answer, _updatedAt, _updatedAt, 1);
-    }
-}
+import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
 
 contract OraclePriceAdjusterTest is Test {
     using Math for uint256;

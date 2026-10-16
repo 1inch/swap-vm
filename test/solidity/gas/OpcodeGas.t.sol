@@ -27,27 +27,9 @@ import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
 import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
+import { Feed, OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
-
-contract PriceOracleGasMock {
-    int256 private _answer;
-    uint256 private _updatedAt;
-
-    constructor(int256 answer) {
-        _answer = answer;
-        _updatedAt = block.timestamp;
-    }
-
-    function latestRoundData() external view returns (
-        uint80 roundId,
-        int256 answer,
-        uint256 startedAt,
-        uint256 updatedAt,
-        uint80 answeredInRound
-    ) {
-        return (1, _answer, _updatedAt, _updatedAt, 1);
-    }
-}
+import { PriceOracleMock } from "../mocks/PriceOracleMock.sol";
 
 /// @title OpcodeGas
 /// @notice Per-opcode gas on prod `SwapVMRouter`.
@@ -62,7 +44,8 @@ contract OpcodeGas is Test {
     SwapVMRouter internal swapVM;
     TokenMock internal tokenA;
     TokenMock internal tokenB;
-    PriceOracleGasMock[12] internal oracles;
+    PriceOracleMock[2] internal oracles;
+
     address internal maker;
     address internal taker;
     uint256 internal justExec;
@@ -76,9 +59,9 @@ contract OpcodeGas is Test {
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
         if (address(tokenA) > address(tokenB)) (tokenA, tokenB) = (tokenB, tokenA);
-        for (uint256 i; i < oracles.length; i++) {
-            oracles[i] = new PriceOracleGasMock(i % 3 == 2 ? int256(1e8) : int256(2e8));
-        }
+
+        oracles[0] = new PriceOracleMock(1e8, block.timestamp);
+        oracles[1] = new PriceOracleMock(2e8, block.timestamp);
 
         tokenA.mint(maker, 1e30);
         tokenB.mint(maker, 1e30);
@@ -102,6 +85,9 @@ contract OpcodeGas is Test {
         // Cold Just, then hot Just — opcode runs are hot too.
         _measure(just);
         justExec = _measure(just);
+
+        oracles[0].latestRoundData();
+        oracles[1].latestRoundData();
 
         _snapshot("Stop", Stop.build());
         _snapshot("Salt", Salt.build(uint64(42)));
@@ -137,16 +123,26 @@ contract OpcodeGas is Test {
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
         _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
         _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        // [opcode | len | marketValue:20 | decimals:1 | (maxStaleness<<1 | isDenominator):3 | oracle:20]
-        _snapshot("OraclePriceAdjusterBalanceInOneFeed", abi.encodePacked(hex"b22c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[0])));
-        _snapshot("OraclePriceAdjusterBalanceInTwoFeeds", abi.encodePacked(hex"b2430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[1]), hex"fffffe", address(oracles[2])));
-        _snapshot("OraclePriceAdjusterBalanceInOneInverseFeed", abi.encodePacked(hex"b22c000000000000000000000000058d15e17628000088ffffff", address(oracles[3])));
-        _snapshot("OraclePriceAdjusterBalanceInTwoInverseFeeds", abi.encodePacked(hex"b243000000000000000000000000058d15e17628000090ffffff", address(oracles[4]), hex"ffffff", address(oracles[5])));
-        _snapshot("OraclePriceAdjusterBalanceOutOneFeed", abi.encodePacked(hex"b32c0000000000000000000000000de0b6b3a764000008fffffe", address(oracles[6])));
-        _snapshot("OraclePriceAdjusterBalanceOutTwoFeeds", abi.encodePacked(hex"b3430000000000000000000000000de0b6b3a764000010fffffe", address(oracles[7]), hex"fffffe", address(oracles[8])));
-        _snapshot("OraclePriceAdjusterBalanceOutOneInverseFeed", abi.encodePacked(hex"b32c000000000000000000000000058d15e17628000088ffffff", address(oracles[9])));
-        _snapshot("OraclePriceAdjusterBalanceOutTwoInverseFeeds", abi.encodePacked(hex"b343000000000000000000000000058d15e17628000090ffffff", address(oracles[10]), hex"ffffff", address(oracles[11])));
+        _snapshot("OraclePriceAdjusterBalanceIn_OneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterBalanceIn_TwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterBalanceIn_OneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterBalanceIn_TwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("OraclePriceAdjusterBalanceOut_OneFeed", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterBalanceOut_TwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterBalanceOut_OneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterBalanceOut_TwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feeds(true, true)));
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
+    }
+
+    function _feed(bool isDenominator) private view returns (Feed[] memory feeds) {
+        feeds = new Feed[](1);
+        feeds[0] = Feed(8, isDenominator, type(uint24).max >> 1, address(oracles[0]));
+    }
+
+    function _feeds(bool isDenominatorA, bool isDenominatorB) private view returns (Feed[] memory feeds) {
+        feeds = new Feed[](2);
+        feeds[0] = Feed(8, isDenominatorA, type(uint24).max >> 1, address(oracles[0]));
+        feeds[1] = Feed(7, isDenominatorB, type(uint24).max >> 1, address(oracles[1]));
     }
 
     function _snapshot(string memory name, bytes memory opcode) private {
@@ -212,6 +208,4 @@ contract OpcodeGas is Test {
         swapVM.swap(order, AMOUNT, takerData);
         return uint256(vm.lastCallGas().gasTotalUsed);
     }
-
-
 }
