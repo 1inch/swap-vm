@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 
 import { FeeMeta, FeeReceiver } from "./ProtocolFee.sol";
@@ -47,20 +47,23 @@ struct SwapQuery {
 /// @param balanceOut The current balance of the output token
 /// @param amountIn The amount of input token being swapped
 /// @param amountOut The amount of output token being swapped
+/// @param surcharge Intermediary balance in / out modification accumulator
 struct SwapRegisters {
     uint256 balanceIn;
     uint256 balanceOut;
     uint256 amountIn;
     uint256 amountOut;
+    uint256 surcharge;
 }
 
 /// @dev Pending protocol fees to claim during transfers phase
 /// @param meta Packed meta information
 /// @param receivers Packed receivers array
+/// @param surplusEstimation Estimated maker spend or receive for surplus calculaiton
 struct ProtocolFee {
     FeeMeta meta;
     FeeReceiver[] receivers;
-    uint256 feeTotal;
+    uint256 surplusEstimation;
 }
 
 /// @title SwapVM context
@@ -79,8 +82,7 @@ using ContextLib for Context global;
 /// @title ContextLib
 /// @notice Library for managing VM execution context and program execution
 library ContextLib {
-    using Calldata for bytes;
-    using CalldataPtrLib for CalldataPtr;
+    using CalldataCut for bytes;
 
     /// @dev Program counter overflows program length
     error RunLoopExceedProgramLength(uint256 pc, uint256 programLength);
@@ -114,7 +116,7 @@ library ContextLib {
         bytes calldata data = ctx.vm.takerArgsPtr.toBytes();
         length = Math.min(length, data.length);
         ctx.vm.takerArgsPtr = CalldataPtrLib.from(data.slice(length));
-        return data.slice(0, length);
+        return data.trim(length);
     }
 
     /// @notice Execute program instructions sequentially

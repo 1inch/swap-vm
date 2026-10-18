@@ -5,18 +5,18 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 
 /// @notice StaticBalances opcode, set context token balances to specified values
 /// @dev Encoding: [uint256 balanceA, uint256 balanceB]
 library StaticBalances {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.StaticBalances;
@@ -55,7 +55,7 @@ library StaticBalances {
 /// @dev Encoding: [uint256 balanceA, uint256 balanceB]
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library DynamicBalances {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error DynamicBalancesReachZero();

@@ -7,12 +7,13 @@ pragma solidity ^0.8.27;
 import { console } from "forge-std/console.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
-import { CalldataPtr, CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+import { CalldataPtr } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
+
 import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../libs/ProtocolFee.sol";
 
 /// @notice PrintSwapRegisters opcode, print internal vm state for debugging
@@ -41,6 +42,7 @@ library PrintSwapRegisters {
         console.log("    balanceOut:", ctx.swap.balanceOut);
         console.log("    amountIn:  ", ctx.swap.amountIn);
         console.log("    amountOut: ", ctx.swap.amountOut);
+        console.log("    surcharge: ", ctx.swap.surcharge);
         console.log("}");
     }
 }
@@ -80,7 +82,6 @@ library PrintSwapQuery {
 /// @notice PrintVM opcode, print internal vm state for debugging
 /// @dev Encoding: []
 library PrintVM {
-    using CalldataPtrLib for CalldataPtr;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PrintVM;
@@ -136,10 +137,11 @@ library PrintFee {
         uint8 count = FeeMetaLib.decodeCount(ctx.fee.meta);
 
         console.log("ProtocolFee {");
-        console.log("    count:    ", count);
-        console.log("    isTokenIn:", FeeMetaLib.decodeIsTokenIn(ctx.fee.meta));
-        console.log("    totalBps: ", FeeMetaLib.decodeTotalBps(ctx.fee.meta));
-        console.log("    estimated:", FeeMetaLib.decodeSurplusEstimate(ctx.fee.meta));
+        console.log("    count:            ", count);
+        console.log("    isTokenIn:        ", FeeMetaLib.decodeIsTokenIn(ctx.fee.meta));
+        console.log("    totalFeeBps:      ", FeeMetaLib.decodeTotalFeeBps(ctx.fee.meta));
+        console.log("    totalFeeAmount:   ", FeeMetaLib.decodeTotalFeeAmount(ctx.fee.meta));
+        console.log("    surplusEstimation:", ctx.fee.surplusEstimation);
         for (uint256 i; i < count; i++) {
             console.log(string.concat("    receiver[", toHexString(i), "]:  "), FeeReceiverLib.decodeReceiver(ctx.fee.receivers[i]));
             console.log(string.concat("    feeBps[", toHexString(i), "]:    "), FeeReceiverLib.decodeFeeBps(ctx.fee.receivers[i]));
@@ -202,15 +204,15 @@ library PrintGasLeft {
 }
 
 /// @notice PatchSwapRegisters opcode, modify internal vm state for debugging
-/// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut]
+/// @dev Encoding: [uint256 balanceIn, uint256 balanceOut, uint256 amountIn, uint256 amountOut, uint256 surcharge]
 library PatchSwapRegisters {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     Opcode constant opcode = Opcode.PatchSwapRegisters;
 
     function sizeOf(SwapRegisters memory) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32;
+        return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
     function build(SwapRegisters memory swap) internal pure returns (bytes memory) {
@@ -219,7 +221,12 @@ library PatchSwapRegisters {
 
     function build(MemoryPtr ptrStart, SwapRegisters memory swap) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(swap.balanceIn, 32).push(swap.balanceOut, 32).push(swap.amountIn, 32).push(swap.amountOut, 32);
+        ptr = ptr
+            .push(swap.balanceIn, 32)
+            .push(swap.balanceOut, 32)
+            .push(swap.amountIn, 32)
+            .push(swap.amountOut, 32)
+            .push(swap.surcharge, 32);
         ptrStart.patchLength(ptr);
     }
 
@@ -228,7 +235,8 @@ library PatchSwapRegisters {
             balanceIn: args.at(0).asU256(),
             balanceOut: args.at(32).asU256(),
             amountIn: args.at(64).asU256(),
-            amountOut: args.at(96).asU256()
+            amountOut: args.at(96).asU256(),
+            surcharge: args.at(128).asU256()
         });
     }
 

@@ -4,19 +4,20 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice ValidateSeriesEpoch opcode, requires the maker's current epoch for the series to match the epoch specified in the order
 ///   Each maker keeps an independent, monotonically increasing epoch per seriesId, advancing a series epoch cancels the whole batch
 ///   of orders pinned to it, orders can be planned for future epochs
 /// @dev Encoding: [uint32 seriesId, uint32 epoch]
 library ValidateSeriesEpoch {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);

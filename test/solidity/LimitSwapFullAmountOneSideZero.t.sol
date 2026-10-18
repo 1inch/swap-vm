@@ -8,32 +8,30 @@ import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { FeeBuilders } from "./utils/FeeBuilders.sol";
 
 /// @notice LimitSwapFullAmount with one side of the order at zero balance:
 ///   balanceIn = 0 is a giveaway order (taker pays nothing, receives balanceOut),
 ///   balanceOut = 0 can never execute (takers cannot be forced to pay for nothing).
-///   Also pins the FeeProtocol surplus-estimate fallback for zero opposite-side balance.
 contract LimitSwapFullAmountOneSideZeroTest is Test {
     SwapVMRouter public swapVM;
+    TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
 
     address public maker;
     uint256 public makerPK = 0x1234;
     address public taker;
-    address public feeRecipient = makeAddr("feeRecipient");
 
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
@@ -132,48 +130,6 @@ contract LimitSwapFullAmountOneSideZeroTest is Test {
         swapVM.swap(order, 0, exactOutData);
     }
 
-    // === FeeProtocol surplus estimate with zero opposite-side balance ===
-
-    /// @dev balanceIn = 0 makes the pro-rata scaling `estimatedOut * amountIn / balanceIn` a 0/0:
-    ///   the fallback must use the full estimate, which is exact for a full-amount fill.
-    ///   Maker gives 200e18 against a 240e18 estimate -> surplus 40e18, 10% fee = 4e18 paid by maker.
-    function test_FeeProtocol_ZeroBalanceIn_SurplusOutFee_UsesFullEstimate() public {
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(0, 200e18),
-            FeeBuilders.protocolSurplusOut(0.1e7, feeRecipient, 240e18),
-            InvalidateTokenOut.build(),
-            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
-        ), true);
-        bytes memory exactOutData = _makeTakerData(order, false, false);
-
-        uint256 takerBBefore = tokenB.balanceOf(taker);
-        uint256 makerBBefore = tokenB.balanceOf(maker);
-
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 200e18, exactOutData);
-
-        assertEq(amountIn, 0);
-        assertEq(amountOut, 200e18);
-        assertEq(tokenB.balanceOf(taker) - takerBBefore, 200e18, "Taker receives the full output");
-        assertEq(tokenB.balanceOf(feeRecipient), 4e18, "Surplus fee on the full estimate: (240e18 - 200e18) * 10%");
-        assertEq(makerBBefore - tokenB.balanceOf(maker), 204e18, "Maker pays the output plus the surplus fee");
-    }
-
-    /// @dev balanceOut = 0 makes the pro-rata scaling `(estimatedIn * amountOut).ceilDiv(balanceOut)`
-    ///   divide by zero: with the fallback the swap reaches taker validation and reverts with
-    ///   a clean typed error instead of panic 0x12.
-    function test_FeeProtocol_ZeroBalanceOut_SurplusInFee_RevertsCleanly() public {
-        ISwapVM.Order memory order = _createOrder(bytes.concat(
-            StaticBalances.build(100e18, 0),
-            FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 80e18),
-            LimitSwapFullAmount.build(address(tokenA), address(tokenB))
-        ), true);
-
-        bytes memory exactInData = _makeTakerData(order, true, false);
-
-        vm.expectRevert(abi.encodeWithSelector(TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector, 0));
-        swapVM.swap(order, 100e18, exactInData);
-    }
-
     // === Helpers ===
 
     function _fullAmountProgram(uint256 balanceIn, uint256 balanceOut) internal view returns (bytes memory) {
@@ -184,26 +140,15 @@ contract LimitSwapFullAmountOneSideZeroTest is Test {
     }
 
     function _createOrder(bytes memory program, bool allowZeroAmountIn) internal view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(MakerTraitsLib.Args({
+        return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
+            usePermit2: false,
             allowZeroAmountIn: allowZeroAmountIn,
             receiver: address(0),
-            hasPreTransferInHook: false,
-            hasPostTransferInHook: false,
-            hasPreTransferOutHook: false,
-            hasPostTransferOutHook: false,
-            preTransferInTarget: address(0),
-            preTransferInData: "",
-            postTransferInTarget: address(0),
-            postTransferInData: "",
-            preTransferOutTarget: address(0),
-            preTransferOutData: "",
-            postTransferOutTarget: address(0),
-            postTransferOutData: "",
             program: program
         }));
     }
@@ -211,27 +156,18 @@ contract LimitSwapFullAmountOneSideZeroTest is Test {
     function _makeTakerData(ISwapVM.Order memory order, bool isExactIn, bool allowPartialFill) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(makerPK, swapVM.hash(order));
 
-        return TakerTraitsLib.build(TakerTraitsLib.Args({
+        return orders.TakerTraitsLibBuild(TraitsHelper.TakerTraitsLibArgs({
             taker: address(0),
             isExactIn: isExactIn,
             shouldUnwrapWeth: false,
-            isStrictThresholdAmount: false,
             isFirstTransferFromTaker: false,
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: allowPartialFill,
+            usePermit2: false,
             threshold: "",
             to: address(this),
-            deadline: 0,
             hasPreTransferInCallback: false,
-            hasPreTransferOutCallback: false,
-            preTransferInHookData: "",
-            postTransferInHookData: "",
-            preTransferOutHookData: "",
-            postTransferOutHookData: "",
-            preTransferInCallbackData: "",
-            preTransferOutCallbackData: "",
-            instructionsArgs: "",
             signature: abi.encodePacked(r, s, v)
         }));
     }

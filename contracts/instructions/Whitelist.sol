@@ -4,11 +4,13 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
+import { Time } from "../libs/Time.sol";
 
 /// @notice PrivateOrder opcode, allows the order to be executed only by the specified taker
 /// @dev Encoding: [uint80 allowedTaker]
@@ -16,7 +18,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 ///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library PrivateOrder {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error PrivateOrderInvalidTaker();
@@ -55,7 +57,7 @@ library PrivateOrder {
 ///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistCoequal {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error WhitelistCoequalEmptyList();
@@ -119,7 +121,7 @@ library WhitelistCoequal {
 ///   Mining 80 bits of an address takes millions of GPU-years, still avoid "free money" orders for long-known accounts
 ///   Birthday attack 80-bit collisions are feasible, however both accounts are controlled by a single attacker, not a bypass
 library WhitelistSequential {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error WhitelistSequentialEmptyList();
@@ -188,11 +190,11 @@ library WhitelistSequential {
         unchecked { count = (args.length - (5 + 2)) / 12; }
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
+    function exec(Context memory ctx, bytes calldata args) internal {
         uint80 sender = uint80(uint160(ctx.query.taker));
 
         uint256 timeLeft = block.timestamp;
-        uint40 start = parseStart(args);
+        uint40 start = Time.resolve(ctx, parseStart(args));
         require(timeLeft >= start, WhitelistSequentialTimeViolation());
         unchecked { timeLeft -= start; }
 

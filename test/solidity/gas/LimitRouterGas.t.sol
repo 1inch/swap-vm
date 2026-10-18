@@ -276,12 +276,13 @@ contract LimitRouterGas is Test {
     function buildOrder(bytes memory program, bool isExactIn) internal view returns (ISwapVM.Order memory, bytes memory) {
         ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            receiver: address(0),
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: false,
             allowZeroAmountIn: false,
-            receiver: address(0),
+            usePermit2: false,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
             hasPreTransferOutHook: false,
@@ -309,6 +310,7 @@ contract LimitRouterGas is Test {
             useTransferFromAndAquaPush: false,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             deadline: 0,

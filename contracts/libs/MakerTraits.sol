@@ -5,9 +5,9 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
-import { InstructionArgs } from "./InstructionArgs.sol";
 import { IMakerHooks } from "../interfaces/IMakerHooks.sol";
 import { ISwapVM } from "../interfaces/ISwapVM.sol";
 
@@ -17,8 +17,8 @@ using MakerTraitsLib for MakerTraits global;
 library MakerTraitsLib {
     using SafeCast for uint256;
 
-    using Calldata for bytes;
-    using InstructionArgs for bytes;
+    using CalldataCut for bytes;
+    using CalldataParse for bytes;
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
@@ -26,6 +26,7 @@ library MakerTraitsLib {
     error MakerTraitsMissingHasPostTransferInFlag();
     error MakerTraitsMissingHasPreTransferOutFlag();
     error MakerTraitsMissingHasPostTransferOutFlag();
+    error MakerTraitsPermit2IsIncompatibleWithAqua();
     error MakerTraitsTokensNotSorted();
     error MakerTraitsZeroAmountInNotAllowed();
 
@@ -40,6 +41,7 @@ library MakerTraitsLib {
     uint256 constant internal POST_TRANSFER_IN_HOOK_HAS_TARGET = 1 << 247;
     uint256 constant internal PRE_TRANSFER_OUT_HOOK_HAS_TARGET = 1 << 246;
     uint256 constant internal POST_TRANSFER_OUT_HOOK_HAS_TARGET = 1 << 245;
+    uint256 constant internal USE_PERMIT2_BIT_FLAG = 1 << 244;
 
     uint256 constant internal ORDER_DATA_SLICES_INDEXES_BIT_OFFSET = 160;
     uint256 constant internal ORDER_DATA_SLICES_INDEX_BIT_MASK = type(uint16).max;
@@ -61,6 +63,7 @@ library MakerTraitsLib {
     /// @param shouldUnwrapWeth Whether to unwrap WETH to ETH when receiving
     /// @param useAquaInsteadOfSignature Use Aqua balances instead of signature verification
     /// @param allowZeroAmountIn Allow zero input amount swaps
+    /// @param usePermit2 Use Permit2 for maker token transfers
     /// @param hasPreTransferInHook Enable pre-transfer-in hook
     /// @param hasPostTransferInHook Enable post-transfer-in hook
     /// @param hasPreTransferOutHook Enable pre-transfer-out hook
@@ -84,6 +87,7 @@ library MakerTraitsLib {
         bool shouldUnwrapWeth;
         bool useAquaInsteadOfSignature;
         bool allowZeroAmountIn;
+        bool usePermit2;
         bool hasPreTransferInHook;
         bool hasPostTransferInHook;
         bool hasPreTransferOutHook;
@@ -106,6 +110,7 @@ library MakerTraitsLib {
     /// @return order Complete Order ready for execution or signing
     function build(Args memory args) internal pure returns (ISwapVM.Order memory order) {
         require(args.tokenA < args.tokenB, MakerTraitsTokensNotSorted());
+        require(!args.useAquaInsteadOfSignature || !args.usePermit2, MakerTraitsPermit2IsIncompatibleWithAqua());
 
         bool preTransferInHasTarget = args.preTransferInTarget != args.maker && args.preTransferInTarget != address(0);
         bool postTransferInHasTarget = args.postTransferInTarget != args.maker && args.postTransferInTarget != address(0);
@@ -142,6 +147,7 @@ library MakerTraitsLib {
                 (args.shouldUnwrapWeth ? SHOULD_UNWRAP_BIT_FLAG : 0) |
                 (args.useAquaInsteadOfSignature ? USE_AQUA_INSTEAD_OF_SIGNATURE_BIT_FLAG : 0) |
                 (args.allowZeroAmountIn ? ALLOW_ZERO_AMOUNT_IN : 0) |
+                (args.usePermit2 ? USE_PERMIT2_BIT_FLAG : 0) |
                 (args.hasPreTransferInHook ? HAS_PRE_TRANSFER_IN_HOOK_BIT_FLAG : 0) |
                 (args.hasPostTransferInHook ? HAS_POST_TRANSFER_IN_HOOK_BIT_FLAG : 0) |
                 (args.hasPreTransferOutHook ? HAS_PRE_TRANSFER_OUT_HOOK_BIT_FLAG : 0) |
@@ -182,6 +188,10 @@ library MakerTraitsLib {
 
     function allowZeroAmountIn(MakerTraits traits) internal pure returns (bool) {
         return (MakerTraits.unwrap(traits) & ALLOW_ZERO_AMOUNT_IN) != 0;
+    }
+
+    function usePermit2(MakerTraits traits) internal pure returns (bool) {
+        return (MakerTraits.unwrap(traits) & USE_PERMIT2_BIT_FLAG) != 0;
     }
 
     function hasPreTransferInHook(MakerTraits traits) internal pure returns (bool) {
@@ -238,7 +248,7 @@ library MakerTraitsLib {
         hookData = _getDataSlice(traits, data, slice);
 
         if ((MakerTraits.unwrap(traits) & bitFlag) != 0) {
-            target = IMakerHooks(address(bytes20(hookData.slice(0, 20, MakerTraitsMissingHookTarget.selector))));
+            target = IMakerHooks(address(bytes20(hookData.trim(20, MakerTraitsMissingHookTarget.selector))));
             hookData = hookData.slice(20);
         } else {
             target = IMakerHooks(maker);

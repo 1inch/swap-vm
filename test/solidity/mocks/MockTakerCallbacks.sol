@@ -8,18 +8,17 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ITakerCallbacks} from "../../../contracts/interfaces/ITakerCallbacks.sol";
 import {ISwapVM} from "../../../contracts/interfaces/ISwapVM.sol";
-import {SwapVMRouter} from "../../../contracts/routers/SwapVMRouter.sol";
 
 /// @notice Taker callbacks for SwapVM. Just save data used in callbacks.
 contract MockTakerCallbacks is ITakerCallbacks {
-    SwapVMRouter public immutable SWAPVM;
+    ISwapVM public immutable SWAPVM;
 
     bytes public lastPreTransferInData;
     bytes public lastPreTransferOutData;
     uint256 public preTransferInCallCount;
     uint256 public preTransferOutCallCount;
 
-    constructor(SwapVMRouter swapVM) {
+    constructor(ISwapVM swapVM) {
         SWAPVM = swapVM;
     }
 

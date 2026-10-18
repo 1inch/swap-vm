@@ -5,19 +5,18 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
-import { FeeMeta, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 /// @dev Encoding: [uint32 bitIndex]
 library InvalidateBit {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error InvalidateBitAlreadySet(address maker, uint256 bitIndex, uint256 bitmap);
@@ -98,11 +97,10 @@ contract InvalidateBitExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
 /// @dev Encoding: []
-/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
+/// @dev The opcode supposes exact buy intention, fees should be taken in token out
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
     using InstructionBuilder for MemoryPtr;
-    using FeeMetaLib for FeeMeta;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
 
@@ -137,13 +135,13 @@ library InvalidateTokenIn {
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
 
         ctx.swap.balanceIn = balanceIn - filled;
-        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn;
+        ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn; // Maker spending round down
+        ctx.swap.surcharge = ctx.swap.surcharge * ctx.swap.balanceIn / balanceIn; // Max discount round down
 
         (uint256 amountIn,) = ctx.runLoop();
 
         filled += amountIn;
         require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
-        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountIn, balanceIn);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
@@ -171,12 +169,11 @@ contract InvalidateTokenInExternal {
 ///   Reduces balance registries according to the filled portion
 ///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
 /// @dev Encoding: []
-/// @dev The opcode should be applied before any amount modification opcodes e.g. FeeProtocol to consume the final amount for invalidation
+/// @dev The opcode supposes exact sell intention, fees should be taken in token in
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using InstructionBuilder for MemoryPtr;
 
-    using FeeMetaLib for FeeMeta;
     using Math for uint256;
 
     error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
@@ -212,13 +209,13 @@ library InvalidateTokenOut {
         uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
 
         ctx.swap.balanceOut = balanceOut - filled;
-        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut);
+        ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut); // Maker income round up
+        ctx.swap.surcharge = ctx.swap.surcharge * ctx.swap.balanceOut / balanceOut; // Max discount round down
 
         (, uint256 amountOut) = ctx.runLoop();
 
         filled += amountOut;
         require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
-        ctx.fee.meta = ctx.fee.meta.scaleSurplusEstimate(ctx.swap.amountOut, balanceOut);
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;

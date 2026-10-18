@@ -8,11 +8,12 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ITakerCallbacks } from "../../../contracts/interfaces/ITakerCallbacks.sol";
-import { SwapVM, ISwapVM } from "../../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 
 contract MockTaker is ITakerCallbacks {
     Aqua public immutable AQUA;
-    SwapVM public immutable SWAPVM;
+    SwapVMRouter public immutable SWAPVM;
     address public immutable owner;
 
     modifier onlyOwner() {
@@ -25,7 +26,7 @@ contract MockTaker is ITakerCallbacks {
         _;
     }
 
-    constructor(Aqua aqua, SwapVM swapVM, address owner_) {
+    constructor(Aqua aqua, SwapVMRouter swapVM, address owner_) {
         AQUA = aqua;
         SWAPVM = swapVM;
         owner = owner_;

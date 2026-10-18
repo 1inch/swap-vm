@@ -325,12 +325,13 @@ contract AquaRouterGas is Test {
     ) internal returns (ISwapVM.Order memory order, bytes memory takerData) {
         order = MakerTraitsLib.build(MakerTraitsLib.Args({
             maker: maker,
+            receiver: address(0),
             tokenA: address(tokenA),
             tokenB: address(tokenB),
             shouldUnwrapWeth: false,
             useAquaInsteadOfSignature: true,
             allowZeroAmountIn: false,
-            receiver: address(0),
+            usePermit2: false,
             hasPreTransferInHook: false,
             hasPostTransferInHook: false,
             hasPreTransferOutHook: false,
@@ -365,6 +366,7 @@ contract AquaRouterGas is Test {
             useTransferFromAndAquaPush: true,
             isAToB: true,
             allowPartialFill: false,
+            usePermit2: false,
             threshold: "",
             to: address(this),
             deadline: 0,

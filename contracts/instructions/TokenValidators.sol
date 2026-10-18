@@ -5,19 +5,19 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice OnlyTakerTokenBalanceNonZero opcode, fail if taker token balance is zero (NFT-compatible)
 /// @dev Encoding: [address token]
 /// @dev Since EIP-7702, user may delegate it's account to certain code, potentially sharing
 ///   authorization given even by soulbound NFT with other users
 library OnlyTakerTokenBalanceNonZero {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceIsZero(address taker, address token);
@@ -55,7 +55,7 @@ library OnlyTakerTokenBalanceNonZero {
 /// @dev Validations through tx.origin are considered weak due to possible transaction flow
 ///   interception: any contract executing tx originated from tx.origin can pass the validation
 library OnlyTxOriginTokenBalanceNonZero {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error TxOriginTokenBalanceIsZero(address txOrigin, address token);
@@ -90,7 +90,7 @@ library OnlyTxOriginTokenBalanceNonZero {
 /// @notice OnlyTakerTokenBalanceGte opcode, fail if taker token balance is below expected value
 /// @dev Encoding: [address token, uint256 amount]
 library OnlyTakerTokenBalanceGte {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 amount);
@@ -126,7 +126,7 @@ library OnlyTakerTokenBalanceGte {
 /// @notice OnlyTakerTokenSupplyShareGte opcode, fail if taker token share is below expected share
 /// @dev Encoding: [address token, uint64 share]
 library OnlyTakerTokenSupplyShareGte {
-    using InstructionArgs for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceSupplyShareWrongShare(uint64 share);

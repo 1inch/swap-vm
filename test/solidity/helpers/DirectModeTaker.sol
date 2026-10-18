@@ -4,11 +4,12 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { SwapVM, ISwapVM } from "../../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter } from "./SwapVMTestSetup.sol";
 
 /// @title Simple taker contract for direct mode that doesn't interact with Aqua
 contract DirectModeTaker {
-    SwapVM public immutable SWAPVM;
+    SwapVMRouter public immutable SWAPVM;
     address public immutable owner;
 
     modifier onlyOwner() {
@@ -21,7 +22,7 @@ contract DirectModeTaker {
         _;
     }
 
-    constructor(SwapVM swapVM, address owner_) {
+    constructor(SwapVMRouter swapVM, address owner_) {
         SWAPVM = swapVM;
         owner = owner_;
     }

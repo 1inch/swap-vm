@@ -4,9 +4,12 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { SwapVM, ISwapVM } from "../../../contracts/SwapVM.sol";
+import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 
 contract OrderHasher {
+    bytes32 private constant ORDER_TYPEHASH = keccak256(
+        "Order(address maker,uint256 traits,bytes data)"
+    );
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
@@ -22,7 +25,7 @@ contract OrderHasher {
 
     function orderTypedData(ISwapVM.Order calldata order) public view returns (bytes memory) {
         bytes32 hash = keccak256(abi.encode(
-            SwapVM(payable(swapVM)).ORDER_TYPEHASH(),
+            ORDER_TYPEHASH,
             order.maker,
             order.traits,
             keccak256(order.data)

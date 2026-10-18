@@ -4,13 +4,13 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
+import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { InstructionArgs } from "../libs/InstructionArgs.sol";
 
 /// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
 ///   The target may modify the swap registers, set the program counter and consume taker args
@@ -18,7 +18,7 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev The extruction target is expected to be deterministic, consistent across quote / swap modes, calculations are
 ///   expected to be overflow-safe, revert conditions should be transparent, centralization and upgradability avoided
 /// @dev General safety measures:
-///   Maker min exchange rate expectations should be guarded by using RequireMinRate or AdjustMinRate before Extruction
+///   Maker min exchange rate expectations should be guarded by using RequireMinRate before Extruction
 ///   Maker max spend expectations should be guarded by using AQUA or DynamicBalances for AMM-strategies
 ///   or using StaticBalances with InvalidateTokenIn or InvalidateTokenOut before Extruction for amount-limited strategies
 ///
@@ -27,8 +27,8 @@ import { InstructionArgs } from "../libs/InstructionArgs.sol";
 /// @dev Execution of the opcode multiple times in strategy flow may lead to quote / swap divergence:
 ///   In swap mode extruction target may update storage affecting future executions while in quote mode storage could be only read
 library Extruction {
-    using Calldata for bytes;
-    using InstructionArgs for bytes;
+    using CalldataCut for bytes;
+    using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);

@@ -13,16 +13,16 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVM } from "../../../contracts/SwapVM.sol";
+import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 import { ExactInOutSymmetry } from "./ExactInOutSymmetry.t.sol";
 
 /**
  * @title CoreInvariants
- * @notice Abstract base contract providing invariant validation methods for SwapVM tests
+ * @notice Abstract base contract providing invariant validation methods for SwapVMRouter tests
  * @dev Inherit from this contract to get access to all invariant assertions
  *
  * This is an abstract contract meant to be inherited by other test contracts.
- * It provides reusable assertion methods to verify that SwapVM instructions
+ * It provides reusable assertion methods to verify that SwapVMRouter instructions
  * maintain the core invariants.
  *
  * Usage:
@@ -45,7 +45,7 @@ abstract contract CoreInvariants is Test {
     /**
      * @notice Execute a real swap - must be implemented by inheriting contracts
      * @dev This function should handle token minting, approvals, and actual swap execution
-     * @param swapVM The SwapVM instance
+     * @param swapVM The SwapVMRouter instance
      * @param order The order to execute
      * @param tokenIn Input token address
      * @param tokenOut Output token address
@@ -55,7 +55,7 @@ abstract contract CoreInvariants is Test {
      * @return amountOut The amount of output tokens received
      */
     function _executeSwap(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -81,13 +81,13 @@ abstract contract CoreInvariants is Test {
 
     /**
      * @notice Assert all core invariants for an order
-     * @param swapVM The SwapVM instance to test against
+     * @param swapVM The SwapVMRouter instance to test against
      * @param order The order to validate
      * @param tokenIn Input token address
      * @param tokenOut Output token address
      */
     function assertAllInvariants(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut
@@ -105,7 +105,7 @@ abstract contract CoreInvariants is Test {
      * @notice Assert all core invariants with custom configuration
      */
     function assertAllInvariantsWithConfig(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -222,7 +222,7 @@ abstract contract CoreInvariants is Test {
      * @dev If exactIn(X) → Y, then exactOut(Y) → X (within tolerance)
      */
     function assertSymmetryInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -268,7 +268,7 @@ abstract contract CoreInvariants is Test {
      * @param tolerance Max allowed rounding error (in output tokens) for the invariant
      */
     function assertAdditivityInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -334,7 +334,7 @@ abstract contract CoreInvariants is Test {
      * @dev quote() and swap() must return identical amounts
      */
     function assertQuoteSwapConsistencyInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -372,7 +372,7 @@ abstract contract CoreInvariants is Test {
      * @param toleranceBps Allow larger trade to have better price up to this bps (for dust rounding)
      */
     function assertMonotonicityInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -424,7 +424,7 @@ abstract contract CoreInvariants is Test {
      *      Uses token decimals for proper scaling
      */
     function assertRoundingFavorsMakerInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -514,7 +514,7 @@ abstract contract CoreInvariants is Test {
      * @dev Must revert if computed amountOut > balanceOut
      */
     function assertBalanceSufficiencyInvariant(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
@@ -537,14 +537,14 @@ abstract contract CoreInvariants is Test {
 
     /**
      * @notice Batch validate multiple invariants efficiently
-     * @param swapVM The SwapVM instance
+     * @param swapVM The SwapVMRouter instance
      * @param order The order to test
      * @param tokenIn Input token
      * @param tokenOut Output token
      * @param testAmounts Array of amounts to test with
      */
     function assertBatchInvariants(
-        SwapVM swapVM,
+        SwapVMRouter swapVM,
         ISwapVM.Order memory order,
         address tokenIn,
         address tokenOut,
