@@ -15,6 +15,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { IPriceOracle } from "./interfaces/IPriceOracle.sol";
 
 error OraclePriceAdjusterInvalidMarketValue(uint160 marketValue);
+error OraclePriceAdjusterInvalidMaxStaleness(uint24 maxStaleness);
 error OraclePriceAdjusterInvalidOraclePrice(int256 oraclePrice);
 error OraclePriceAdjusterOraclePriceStale(uint256 currentTime, uint256 updatedAt, uint24 maxStaleness);
 error OraclePriceAdjusterInvalidDecimalsExponent(uint256 decimalsExponent);
@@ -31,15 +32,15 @@ struct Feed {
 }
 
 /// @notice OraclePriceAdjusterBalanceIn opcode, shifts an exact-sell auction by the market price movement
-/// @dev Arguments: [marketValue:160 | decimalsConfig:8 | packedFeed[1..2]]
-///   decimalsConfig = [scaleNumerator:1 | decimalsExponent:7]
-///   packedFeed = [maxStaleness:23 | isDenominator:1 | oracle:160]
+/// @dev Encoding: [uint160 marketValue, bytes1 decimalsConfig, bytes23 packedFeed[1..2]]
+///   decimalsConfig = [bit1 scaleNumerator, uint7 decimalsExponent]
+///   packedFeed = [uint23 maxStaleness, bit1 isDenominator, address oracle]
 ///   scaleNumerator selects which ratio side is multiplied by 10 ** decimalsExponent
 ///   maxStaleness is in seconds; isDenominator places the raw oracle answer in the ratio denominator
-///   marketValue is the reference raw tokenIn value of balanceOut
-/// @dev If the oracle value rises above marketValue, the delta increases balanceIn and surcharge;
+///   marketValue is the reference raw token in value of balance out
+/// @dev If the oracle value rises above `marketValue`, the delta increases balance in and surcharge;
 ///   otherwise the delta consumes at most the existing surcharge
-/// @dev Should be applied after balance-in surcharge discounts and before the swap curve
+/// @dev Should be applied after balance in surcharge applied and before InvalidateTokenOut opcode
 library OraclePriceAdjusterBalanceIn {
     using CalldataParse for bytes;
     using CalldataCut for bytes;
@@ -59,7 +60,9 @@ library OraclePriceAdjusterBalanceIn {
         Feed[] memory feeds
     ) internal pure returns (bytes memory) {
         return build(
-            MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)), marketValue, tokenInDecimals, tokenOutDecimals, feeds).resolve();
+            MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)),
+            marketValue, tokenInDecimals, tokenOutDecimals, feeds
+        ).resolve();
     }
 
     function build(
@@ -86,21 +89,22 @@ library OraclePriceAdjusterBalanceIn {
         ptr = ptr.push(marketValue, 20);
         ptr = ptr.push(InstructionBuilder.encodeBool(scaleNumerator, 0) | uint8(decimalsExponent));
         for (uint256 i; i < feeds.length; i++) {
+            require(feeds[i].maxStaleness & 0x800000 == 0, OraclePriceAdjusterInvalidMaxStaleness(feeds[i].maxStaleness));
             ptr = ptr.push((uint24(feeds[i].maxStaleness) << 1) | InstructionBuilder.encodeBool(feeds[i].isDenominator, 7), 3);
             ptr = ptr.push(feeds[i].oracle);
         }
         ptrStart.patchLength(ptr);
     }
 
+    /// @dev Decodes [uint160 marketValue, bytes1 decimalsConfig]; the tail is packedFeed[1..2]
     function parse(bytes calldata args) internal pure returns (uint160 marketValue, bool scaleNumerator, uint8 decimalsExponent, bytes calldata feeds) {
         marketValue = args.at(0).asU160();
         scaleNumerator = args.at(20).asBool(0);
         decimalsExponent = args.at(20).asU8() & 0x7f;
-        // Prefix is [marketValue:20 | decimalsConfig:1]. The tail is packedFeed[1..2].
         feeds = args.slice(21);
     }
 
-    /// @dev Decodes [maxStaleness:23 | isDenominator:1 | oracle:160]
+    /// @dev Decodes [uint23 maxStaleness, bit1 isDenominator, address oracle]
     function parseFeed(bytes calldata feed) internal pure returns (bool isDenominator, uint24 maxStaleness, address oracle) {
         isDenominator = feed.at(0).asBool(23);
         maxStaleness = feed.at(0).asU24() >> 1;
@@ -117,7 +121,7 @@ library OraclePriceAdjusterBalanceIn {
             (, int256 answer, , uint256 updatedAt, ) = IPriceOracle(oracle).latestRoundData();
 
             require(answer > 0, OraclePriceAdjusterInvalidOraclePrice(answer));
-            require(block.timestamp <= updatedAt + maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
+            require(block.timestamp - updatedAt <= maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
 
             if (isDenominator) denominator *= uint256(answer);
             else numerator *= uint256(answer);
@@ -130,11 +134,7 @@ library OraclePriceAdjusterBalanceIn {
         if (scaleNumerator) numerator *= scale;
         else denominator *= scale;
 
-        uint256 oracleValue = ctx.swap.balanceOut.mulDiv(
-            numerator,
-            denominator,
-            Math.Rounding.Ceil
-        );
+        uint256 oracleValue = ctx.swap.balanceOut.mulDiv(numerator, denominator, Math.Rounding.Ceil);
 
         uint256 balanceDelta;
         if (oracleValue > marketValue) {
@@ -142,10 +142,7 @@ library OraclePriceAdjusterBalanceIn {
             ctx.swap.surcharge += balanceDelta;
             ctx.swap.balanceIn += balanceDelta;
         } else {
-            balanceDelta = Math.min(
-                marketValue - oracleValue,
-                ctx.swap.surcharge
-            );
+            balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.surcharge);
             ctx.swap.surcharge -= balanceDelta;
             ctx.swap.balanceIn -= balanceDelta;
         }
@@ -153,15 +150,15 @@ library OraclePriceAdjusterBalanceIn {
 }
 
 /// @notice OraclePriceAdjusterBalanceOut opcode, shifts an exact-buy auction by the market price movement
-/// @dev Arguments: [marketValue:160 | decimalsConfig:8 | packedFeed[1..2]]
-///   decimalsConfig = [scaleNumerator:1 | decimalsExponent:7]
-///   packedFeed = [maxStaleness:23 | isDenominator:1 | oracle:160]
+/// @dev Encoding: [uint160 marketValue, bytes1 decimalsConfig, bytes23 packedFeed[1..2]]
+///   decimalsConfig = [bit1 scaleNumerator, uint7 decimalsExponent]
+///   packedFeed = [uint23 maxStaleness, bit1 isDenominator, address oracle]
 ///   scaleNumerator selects which ratio side is multiplied by 10 ** decimalsExponent
 ///   maxStaleness is in seconds; isDenominator places the raw oracle answer in the ratio denominator
-///   marketValue is the reference raw tokenOut value of balanceIn
-/// @dev If the oracle value falls below marketValue, the delta decreases balanceOut and increases surcharge;
+///   marketValue is the reference raw token out value of balance in
+/// @dev If the oracle value falls below `marketValue`, the delta decreases balance out and increases surcharge;
 ///   otherwise the delta consumes at most the existing surcharge
-/// @dev Should be applied after balance-out surcharge discounts and before the swap curve
+/// @dev Should be applied after balance out surcharge applied and before InvalidateTokenIn opcode
 library OraclePriceAdjusterBalanceOut {
     using CalldataParse for bytes;
     using CalldataCut for bytes;
@@ -180,7 +177,10 @@ library OraclePriceAdjusterBalanceOut {
         uint8 tokenOutDecimals,
         Feed[] memory feeds
     ) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)), marketValue, tokenInDecimals, tokenOutDecimals, feeds).resolve();
+        return build(
+            MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)),
+            marketValue, tokenInDecimals, tokenOutDecimals, feeds
+        ).resolve();
     }
 
     function build(
@@ -207,27 +207,22 @@ library OraclePriceAdjusterBalanceOut {
         ptr = ptr.push(marketValue, 20);
         ptr = ptr.push(InstructionBuilder.encodeBool(scaleNumerator, 0) | uint8(decimalsExponent));
         for (uint256 i; i < feeds.length; i++) {
-            // [maxStaleness:23 | isDenominator:1 | oracle:160]
+            require(feeds[i].maxStaleness & 0x800000 == 0, OraclePriceAdjusterInvalidMaxStaleness(feeds[i].maxStaleness));
             ptr = ptr.push((uint24(feeds[i].maxStaleness) << 1) | InstructionBuilder.encodeBool(feeds[i].isDenominator, 7), 3);
             ptr = ptr.push(feeds[i].oracle);
         }
         ptrStart.patchLength(ptr);
     }
 
-    function parse(bytes calldata args) internal pure returns (
-        uint160 marketValue,
-        bool scaleNumerator,
-        uint8 decimalsExponent,
-        bytes calldata feeds
-    ) {
+    /// @dev Decodes [uint160 marketValue, bytes1 decimalsConfig]; the tail is packedFeed[1..2]
+    function parse(bytes calldata args) internal pure returns (uint160 marketValue, bool scaleNumerator, uint8 decimalsExponent, bytes calldata feeds) {
         marketValue = args.at(0).asU160();
         scaleNumerator = args.at(20).asBool(0);
         decimalsExponent = args.at(20).asU8() & 0x7f;
-        // Prefix is [marketValue:20 | decimalsConfig:1]. The tail is packedFeed[1..2].
         feeds = args.slice(21);
     }
 
-    /// @dev Decodes [maxStaleness:23 | isDenominator:1 | oracle:160]
+    /// @dev Decodes [uint23 maxStaleness, bit1 isDenominator, address oracle]
     function parseFeed(bytes calldata feed) internal pure returns (bool isDenominator, uint24 maxStaleness, address oracle) {
         isDenominator = feed.at(0).asBool(23);
         maxStaleness = feed.at(0).asU24() >> 1;
@@ -241,11 +236,10 @@ library OraclePriceAdjusterBalanceOut {
         uint256 denominator = 1;
         while (true) {
             (bool isDenominator, uint24 maxStaleness, address oracle) = parseFeed(feeds);
-
             (, int256 answer, , uint256 updatedAt, ) = IPriceOracle(oracle).latestRoundData();
 
             require(answer > 0, OraclePriceAdjusterInvalidOraclePrice(answer));
-            require(block.timestamp <= updatedAt + maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
+            require(block.timestamp - updatedAt <= maxStaleness, OraclePriceAdjusterOraclePriceStale(block.timestamp, updatedAt, maxStaleness));
 
             if (isDenominator) denominator *= uint256(answer);
             else numerator *= uint256(answer);
@@ -258,24 +252,14 @@ library OraclePriceAdjusterBalanceOut {
         if (scaleNumerator) numerator *= scale;
         else denominator *= scale;
 
-        uint256 oracleValue = ctx.swap.balanceIn.mulDiv(
-            denominator,
-            numerator
-        );
+        uint256 oracleValue = ctx.swap.balanceIn.mulDiv(denominator, numerator);
 
-        uint256 balanceDelta;
         if (oracleValue < marketValue) {
-            balanceDelta = Math.min(
-                marketValue - oracleValue,
-                ctx.swap.balanceOut
-            );
+            uint256 balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.balanceOut);
             ctx.swap.surcharge += balanceDelta;
             ctx.swap.balanceOut -= balanceDelta;
         } else {
-            balanceDelta = Math.min(
-                oracleValue - marketValue,
-                ctx.swap.surcharge
-            );
+            uint256 balanceDelta = Math.min(oracleValue - marketValue, ctx.swap.surcharge);
             ctx.swap.surcharge -= balanceDelta;
             ctx.swap.balanceOut += balanceDelta;
         }

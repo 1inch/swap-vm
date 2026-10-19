@@ -24,34 +24,12 @@ import {
     OraclePriceAdjusterBalanceOut,
     OraclePriceAdjusterInvalidDecimalsExponent,
     OraclePriceAdjusterInvalidFeedCount,
+    OraclePriceAdjusterInvalidMaxStaleness,
     OraclePriceAdjusterInvalidMarketValue,
     OraclePriceAdjusterInvalidOraclePrice,
     OraclePriceAdjusterOraclePriceStale
 } from "../../contracts/instructions/OraclePriceAdjuster.sol";
-
-contract PriceOracleMock {
-    int256 private _answer;
-    uint256 private _updatedAt;
-
-    constructor(int256 answer_, uint256 updatedAt_) {
-        setRoundData(answer_, updatedAt_);
-    }
-
-    function setRoundData(int256 answer_, uint256 updatedAt_) public {
-        _answer = answer_;
-        _updatedAt = updatedAt_;
-    }
-
-    function latestRoundData() external view returns (
-        uint80 roundId,
-        int256 answer,
-        uint256 startedAt,
-        uint256 updatedAt,
-        uint80 answeredInRound
-    ) {
-        return (1, _answer, _updatedAt, _updatedAt, 1);
-    }
-}
+import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
 
 contract OraclePriceAdjusterTest is Test {
     using Math for uint256;
@@ -163,6 +141,31 @@ contract OraclePriceAdjusterTest is Test {
 
         assertEq(amountOut, expectedBalanceOut);
         assertEq(amountIn, 2600e6);
+    }
+
+    function test_OraclePriceAdjusterBalanceOut_CapsDecreaseAtBalanceOut() public {
+        PriceOracleMock oracle = new PriceOracleMock(1e18, block.timestamp);
+        ISwapVM.Order memory order = _buildOrder(bytes.concat(
+            StaticBalances.build(1e18, 1e18),
+            _buildBalanceOut(
+                3e18,
+                18,
+                18,
+                _feed(oracle, 18, false)
+            ),
+            // Restore part of the capped balance through the surcharge so the quote stays non-zero.
+            _buildBalanceOut(
+                0.5e18,
+                18,
+                18,
+                _feed(oracle, 18, false)
+            ),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        ));
+
+        (, uint256 amountOut,) = swapVM.quote(order, 1e18, _buildTakerData(order, true));
+
+        assertEq(amountOut, 0.5e18);
     }
 
     function test_OraclePriceAdjuster_DoesNotAdjustBelowMarketWithoutSurcharge() public {
@@ -495,6 +498,26 @@ contract OraclePriceAdjusterTest is Test {
         swapVM.quote(order, 1e18, takerData);
     }
 
+    function test_OraclePriceAdjuster_RevertsOnZeroOraclePrice() public {
+        PriceOracleMock oracle = new PriceOracleMock(0, block.timestamp);
+        ISwapVM.Order memory order = _buildOrder(_buildProgram(
+            true,
+            2600e6,
+            1e18,
+            2500e18,
+            6,
+            18,
+            _feed(oracle, 8, false)
+        ));
+        bytes memory takerData = _buildTakerData(order, false);
+
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidOraclePrice.selector,
+            int256(0)
+        ));
+        swapVM.quote(order, 1e18, takerData);
+    }
+
     function test_OraclePriceAdjuster_BuildValidation() public {
         PriceOracleMock oracle = new PriceOracleMock(2550e8, block.timestamp);
         bytes memory validFeed = _feed(oracle, 8, false);
@@ -558,24 +581,31 @@ contract OraclePriceAdjusterTest is Test {
             46
         );
 
-        assertEq(
-            this.buildBalanceIn(
-                2500e6,
-                6,
-                18,
-                _feed(oracle, 8, false, type(uint24).max)
-            ).length,
-            46
+        Feed[] memory invalidSingleFeed = _toFeeds(_feed(oracle, 8, false, type(uint24).max));
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceIn(2500e6, 6, 18, invalidSingleFeed);
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceOut(2500e6, 6, 18, invalidSingleFeed);
+
+        Feed[] memory invalidSecondFeed = _toFeeds(
+            bytes.concat(validFeed, _feed(oracle, 8, false, type(uint24).max))
         );
-        assertEq(
-            this.buildBalanceIn(
-                2500e6,
-                6,
-                18,
-                bytes.concat(validFeed, _feed(oracle, 8, false, type(uint24).max))
-            ).length,
-            69
-        );
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceIn(2500e6, 6, 18, invalidSecondFeed);
+        vm.expectRevert(abi.encodeWithSelector(
+            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            type(uint24).max
+        ));
+        this.buildBalanceOut(2500e6, 6, 18, invalidSecondFeed);
     }
 
     function _assertBalanceInTwoFeeds(
