@@ -62,7 +62,7 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
 | Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearSurchargeBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `OraclePriceAdjuster` (Chainlink), `BaseFeeAdjuster*` (gas-aware) |
+| Rates        | `RequireMinRate`, `OraclePriceAdjusterBalanceIn` / `Out` (one or two Chainlink feeds), `BaseFeeAdjuster*` (gas-aware) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
