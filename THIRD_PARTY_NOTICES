@@ -31,6 +31,15 @@ License: /LICENSES/MIT-1inch.txt
 
 ================================================================================
 
+Component: @1inch/limit-order-protocol-contract
+Repo: https://github.com/1inch/limit-order-protocol
+Version: v4.3.4
+License: MIT
+Copyright: © 2019, 1inch
+License: /LICENSES/MIT-1inch.txt
+
+================================================================================
+
 Component: @1inch/aqua
 Repo: https://github.com/1inch/aqua
 Version: v1.0.0

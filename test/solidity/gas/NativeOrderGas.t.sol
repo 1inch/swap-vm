@@ -19,10 +19,10 @@ import { Deadline } from "../../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
 import { WETHMock } from "../mocks/WETHMock.sol";
 
-import { NativeOrderEscrow } from "../../../contracts/prototypes/nativeorder/NativeOrderEscrow.sol";
-import { NativeOrderEscrowFactory } from "../../../contracts/prototypes/nativeorder/NativeOrderEscrowFactory.sol";
-import { IBaseEscrow } from "../../../contracts/prototypes/nativeorder/vendor/interfaces/IBaseEscrow.sol";
-import { Timelocks, TimelocksLib } from "../../../contracts/prototypes/nativeorder/vendor/libraries/TimelocksLib.sol";
+import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
+import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
+import { IBaseEscrow } from "../../../contracts/extensions/nativeorder/vendor/interfaces/IBaseEscrow.sol";
+import { Timelocks, TimelocksLib } from "../../../contracts/extensions/nativeorder/vendor/libraries/TimelocksLib.sol";
 
 /// @title NativeOrderGas
 /// @notice Native ETH order (escrow clone) gas benchmarks: lifecycle calls of the escrow flow, plus the same
@@ -116,11 +116,8 @@ contract NativeOrderGas is Test {
         _createEscrow();
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(resolver);
-        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
-        _snapshot(
-            "publicCancel",
-            abi.encodeCall(NativeOrderEscrow.publicCancel, (immutables, filledOrderHash, type(uint256).max))
-        );
+        escrow.publicCancel(immutables, filledOrderHash);
+        _snapshot("publicCancel", abi.encodeCall(NativeOrderEscrow.publicCancel, (immutables, filledOrderHash)));
     }
 
     // === Reference: same program as a plain EOA-signed WETH order ===

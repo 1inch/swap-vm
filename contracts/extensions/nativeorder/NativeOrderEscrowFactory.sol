@@ -11,7 +11,7 @@ import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
-import { RouterOrderHasher } from "./RouterOrderHasher.sol";
+import { RouterOrderHasher } from "./vendor/RouterOrderHasher.sol";
 import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
 import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";

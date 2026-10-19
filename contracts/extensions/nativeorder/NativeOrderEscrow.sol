@@ -10,11 +10,12 @@ import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { AddressLib, Address } from "@1inch/solidity-utils/contracts/libraries/AddressLib.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
+import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
-import { RouterOrderHasher } from "./RouterOrderHasher.sol";
+import { RouterOrderHasher } from "./vendor/RouterOrderHasher.sol";
 import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
 import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
 import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
@@ -40,7 +41,9 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     using SafeERC20 for IWETH;
     using TimelocksLib for Timelocks;
     using ImmutablesLib for IBaseEscrow.Immutables;
+    using CalldataParse for bytes;
 
+    error BadSignature();
     error MakerOrderMismatch();
     error FilledOrderMismatch();
     error OrderExpired();
@@ -79,8 +82,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         _;
     }
 
-    modifier onlyValidImmutables(IBaseEscrow.Immutables calldata immutables) {
-        _validateImmutables(immutables.hash());
+    modifier onlyValidImmutables(bytes32 immutablesHash) {
+        _validateImmutables(immutablesHash);
         _;
     }
 
@@ -117,10 +120,10 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// @param signature abi.encode(IBaseEscrow.Immutables, MakerTraits, bytes32 dataHash).
     /// @return magicValue ERC-1271 magic value on success.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        (IBaseEscrow.Immutables memory immutables, MakerTraits traits, bytes32 dataHash) =
-            abi.decode(signature, (IBaseEscrow.Immutables, MakerTraits, bytes32));
+        (IBaseEscrow.Immutables calldata immutables, MakerTraits traits, bytes32 dataHash) = _decode(signature);
 
-        _validateImmutables(immutables.hashMem());
+        _validateImmutables(immutables.hash());
+
         if (block.timestamp >= immutables.timelocks.get(TimelocksLib.Stage.SrcCancellation)) revert OrderExpired();
         if (_hashOrder(address(this), traits, dataHash) != orderHash) revert FilledOrderMismatch();
         if (_hashOrder(immutables.maker.get(), traits, dataHash) != immutables.orderHash) revert MakerOrderMismatch();
@@ -136,7 +139,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     function cancel(IBaseEscrow.Immutables calldata immutables, bytes32 filledOrderHash)
         external
         onlyCaller(immutables.maker.get())
-        onlyValidImmutables(immutables)
+        onlyValidImmutables(immutables.hash())
     {
         _closeOrder(filledOrderHash);
         WETH.safeWithdraw(WETH.balanceOf(address(this)));
@@ -148,20 +151,16 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// garbage-collect an abandoned order for a base-fee-capped reward; the remainder refunds the maker.
     /// @param immutables The escrow immutables (validated against the clone address).
     /// @param filledOrderHash Hash of the patched order (from NativeOrderCreated), see _closeOrder.
-    /// @param rewardLimit Upper bound on the reward the caller accepts (0 = altruistic cancel).
-    function publicCancel(IBaseEscrow.Immutables calldata immutables, bytes32 filledOrderHash, uint256 rewardLimit)
+    function publicCancel(IBaseEscrow.Immutables calldata immutables, bytes32 filledOrderHash)
         external
         onlyAccessTokenHolder
-        onlyValidImmutables(immutables)
+        onlyValidImmutables(immutables.hash())
         onlyAfter(immutables.timelocks.get(TimelocksLib.Stage.SrcPublicCancellation))
     {
         _closeOrder(filledOrderHash);
         WETH.safeWithdraw(WETH.balanceOf(address(this)));
         uint256 balance = address(this).balance;
-        uint256 reward = Math.min(
-            Math.min(rewardLimit, balance),
-            block.basefee * _PUBLIC_CANCEL_GAS_COST * _PUBLIC_CANCEL_REWARD_PREMIUM / 100
-        );
+        uint256 reward = Math.min(balance, block.basefee * _PUBLIC_CANCEL_GAS_COST * _PUBLIC_CANCEL_REWARD_PREMIUM / 100);
         _ethTransfer(immutables.maker.get(), balance - reward);
         if (reward > 0) _ethTransfer(msg.sender, reward);
         emit IBaseEscrow.EscrowCancelled();
@@ -175,11 +174,29 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     function rescueFunds(address token, uint256 amount, IBaseEscrow.Immutables calldata immutables)
         external
         onlyCaller(immutables.maker.get())
-        onlyValidImmutables(immutables)
+        onlyValidImmutables(immutables.hash())
         onlyAfter(immutables.timelocks.rescueStart(RESCUE_DELAY))
     {
         _uniTransfer(token, msg.sender, amount);
         emit IBaseEscrow.FundsRescued(token, amount);
+    }
+
+    /// @dev Reads abi.encode(Immutables, MakerTraits, bytes32 dataHash) in place: 3-word head
+    /// (immutables offset, traits, dataHash), then the 9-word immutables head and the `parameters` length.
+    /// Only the length is checked; a wrong immutables image fails later in `immutables.hash()`.
+    function _decode(bytes calldata signature)
+        private
+        pure
+        returns (IBaseEscrow.Immutables calldata immutables, MakerTraits traits, bytes32 dataHash)
+    {
+        // 96 (offset, traits, dataHash) + 288 (immutables head) + 32 (parameters length)
+        if (signature.length < 416) revert BadSignature();
+
+        traits = MakerTraits.wrap(signature.at(32).asU256());
+        dataHash = signature.at(64).asBytes32();
+        assembly ("memory-safe") {
+            immutables := add(signature.offset, 96)
+        }
     }
 
     /// @dev Verifies that the immutables(hash is the salt) match the CREATE2 address of this contract.

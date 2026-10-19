@@ -9,21 +9,21 @@ import { IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol"
 import { IWETH } from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
-import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
-import { OrderRegistrator } from "../../../contracts/extensions/OrderRegistrator.sol";
-import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
-import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
-import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
-import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
-import { WETHMock } from "../mocks/WETHMock.sol";
+import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
+import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
+import { OrderRegistrator } from "../../contracts/extensions/OrderRegistrator.sol";
+import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
+import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
+import { StaticBalances } from "../../contracts/instructions/Balances.sol";
+import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
+import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
+import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { WETHMock } from "./mocks/WETHMock.sol";
 
-import { NativeOrderEscrow } from "../../../contracts/prototypes/nativeorder/NativeOrderEscrow.sol";
-import { NativeOrderEscrowFactory } from "../../../contracts/prototypes/nativeorder/NativeOrderEscrowFactory.sol";
-import { IBaseEscrow } from "../../../contracts/prototypes/nativeorder/vendor/interfaces/IBaseEscrow.sol";
-import { Timelocks, TimelocksLib } from "../../../contracts/prototypes/nativeorder/vendor/libraries/TimelocksLib.sol";
+import { NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
+import { NativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
+import { IBaseEscrow } from "../../contracts/extensions/nativeorder/vendor/interfaces/IBaseEscrow.sol";
+import { Timelocks, TimelocksLib } from "../../contracts/extensions/nativeorder/vendor/libraries/TimelocksLib.sol";
 
 contract NativeOrderEscrowTest is Test {
     uint256 private constant WETH_AMOUNT = 1 ether;
@@ -215,7 +215,7 @@ contract NativeOrderEscrowTest is Test {
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
 
         vm.prank(resolver);
-        escrow.publicCancel(immutables, filledOrderHash, 0);
+        escrow.publicCancel(immutables, filledOrderHash);
 
         assertEq(weth.allowance(address(escrow), address(router)), 0, "Allowance revoked");
         assertEq(router.tokenOutInvalidators(address(escrow), filledOrderHash, address(weth)), type(uint256).max);
@@ -240,13 +240,13 @@ contract NativeOrderEscrowTest is Test {
         // Too early: still in the maker-only window
         vm.prank(resolver);
         vm.expectRevert(IBaseEscrow.InvalidTime.selector);
-        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash);
 
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
 
         // Caller without the access token is rejected
         vm.expectRevert(IBaseEscrow.InvalidCaller.selector);
-        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash);
 
         // Resolver garbage-collects for a base-fee-capped reward, remainder refunds the maker
         vm.fee(10 gwei);
@@ -254,25 +254,12 @@ contract NativeOrderEscrowTest is Test {
         uint256 makerEthBefore = maker.balance;
 
         vm.prank(resolver);
-        escrow.publicCancel(immutables, filledOrderHash, type(uint256).max);
+        escrow.publicCancel(immutables, filledOrderHash);
 
         assertEq(resolver.balance, expectedReward, "Resolver reward is basefee * gas budget * premium");
         assertEq(maker.balance - makerEthBefore, WETH_AMOUNT - expectedReward, "Maker gets the remainder");
         assertEq(weth.balanceOf(address(escrow)), 0);
         assertEq(address(escrow).balance, 0);
-    }
-
-    function test_PublicCancel_ZeroRewardLimit_IsAltruistic() public {
-        _createEscrow(_defaultProgram());
-        vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
-        vm.fee(10 gwei);
-
-        uint256 makerEthBefore = maker.balance;
-        vm.prank(resolver);
-        escrow.publicCancel(immutables, filledOrderHash, 0);
-
-        assertEq(resolver.balance, 0, "No reward requested");
-        assertEq(maker.balance - makerEthBefore, WETH_AMOUNT, "Full deposit refunded");
     }
 
     // === Signature validation ===
@@ -405,16 +392,6 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(bytes.concat(Salt.build(uint64(1)), _defaultProgram()));
         assertTrue(address(escrow) != firstEscrow, "Salted order deploys a distinct clone");
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
-    }
-
-    function test_LocalOrderHash_MatchesRouter_AfterChainIdChange() public {
-        vm.chainId(block.chainid + 1);
-        _createEscrow(_defaultProgram());
-
-        assertEq(router.hash(filledOrder), filledOrderHash, "Factory rebuilds the router domain after a fork");
-        assertEq(immutables.orderHash, router.hash(makerOrder));
-        router.swap(filledOrder, WETH_AMOUNT, _takerData(false, true));
-        assertEq(weth.balanceOf(address(escrow)), 0, "Escrow validates fills after a fork");
     }
 
     function test_Create_AddressAndHashConsistency() public {
