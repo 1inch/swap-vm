@@ -100,7 +100,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
 
     /// @notice ERC-1271 validation called by the router when this clone is the order's maker.
     /// @dev The signature is abi.encode(NativeOrder); the program is supplied only once, to the router.
-    /// Valid only if the terms are committed in this clone's address, the order has not expired, its hash
+    /// Valid only on the deployment chain, so a fork with a new chain ID cannot fill copies of the order,
+    /// and only if the terms are committed in this clone's address, the order has not expired, its hash
     /// with maker = this clone equals `orderHash`, and router allowance remains.
     /// @param orderHash Hash of the order the router is executing.
     /// @param signature abi.encode(NativeOrder), exactly 224 bytes.
@@ -110,7 +111,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         if (signature.length != 7 * 32) return bytes4(0);
         NativeOrder memory order = abi.decode(signature, (NativeOrder));
         if (
-            !_isValidOrder(order) || block.timestamp >= order.expiration ||
+            !_isDeploymentChain() || !_isValidOrder(order) || block.timestamp >= order.expiration ||
             _hashOrder(address(this), order.traits, order.dataHash) != orderHash ||
             WETH.allowance(address(this), address(ROUTER)) == 0
         ) return bytes4(0);

@@ -150,8 +150,10 @@ filledOrder.maker = escrow;
 `NativeOrder` commits the original maker, traits, program data hash, deposit, expiration, public
 cancellation time and factory-stamped rescue time in the escrow's CREATE2 address. Its ERC-1271
 signature is 224 bytes and does not duplicate the program. Fills require the matching router-domain
-order hash, `block.timestamp < expiration` and a nonzero remaining allowance. These structural terms
-also allow the maker to recover funds after a chain ID change; fills use the router's current domain.
+order hash, `block.timestamp < expiration` and a nonzero remaining allowance. Fills and `create` work
+only on the chain the factory was deployed on, so after a fork with a new chain ID copies of existing
+orders cannot be filled there. Cancellation and rescue do not depend on the chain ID, so the maker can
+recover funds on both sides of a fork.
 
 The original maker calls `escrow.cancel(nativeOrder)` to revoke the allowance, invalidate WETH output
 for `filledOrderHash`, unwrap the remainder and receive native ETH. Cancellation is permanent even

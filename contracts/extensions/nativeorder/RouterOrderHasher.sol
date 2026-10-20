@@ -54,6 +54,11 @@ abstract contract RouterOrderHasher {
         return _typedOrderHash(_routerDomainSeparator(), maker, traits, dataHash);
     }
 
+    /// @dev Immutables keep the deployment chain ID in a fork, so this is false on a fork with a new chain ID.
+    function _isDeploymentChain() internal view returns (bool) {
+        return block.chainid == _CACHED_CHAIN_ID;
+    }
+
     function _typedOrderHash(bytes32 domainSeparator, address maker, MakerTraits traits, bytes32 dataHash)
         private
         pure

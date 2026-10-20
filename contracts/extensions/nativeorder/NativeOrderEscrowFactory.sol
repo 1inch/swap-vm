@@ -29,6 +29,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     error NativeOrderExplicitHookTargetRequired();
     error NativeOrderInvalidTokens();
     error NativeOrderInvalidTime();
+    error NativeOrderWrongChain();
 
     /// @notice Emitted when a native order escrow is created and funded.
     /// @param escrow Clone that acts as the maker of the filled order.
@@ -61,9 +62,10 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     }
 
     /// @notice Creates and funds an escrow that sells the attached native ETH through the router.
-    /// @dev Depositing replaces the maker's signature, so only the maker may create. Rejects Aqua orders,
-    /// token pairs that are unsorted or lack WETH, a receiver that is the escrow or the factory, and hook
-    /// targets that would resolve to the escrow.
+    /// @dev Depositing replaces the maker's signature, so only the maker may create. Only works on the
+    /// deployment chain, the one chain where escrows accept fills. Rejects Aqua orders, token pairs that are
+    /// unsorted or lack WETH, a receiver that is the escrow or the factory, and hook targets that would
+    /// resolve to the escrow.
     /// @param makerOrder Original order, with maker = msg.sender and an explicit receiver and hook targets.
     /// @param expiration Absolute timestamp bounding fills, independently of the program's Deadline.
     /// @param publicCancellation Absolute timestamp at or after expiration when resolver cancellation opens.
@@ -74,6 +76,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
+        require(_isDeploymentChain(), NativeOrderWrongChain());
         require(msg.value > 0, NativeOrderZeroDeposit());
         require(makerOrder.maker == msg.sender, NativeOrderOnlyMakerCanCreate());
         require(!makerOrder.traits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());

@@ -601,7 +601,7 @@ contract NativeOrderEscrowTest is Test {
 
     // Chain changes affect the typed order hash, without locking away refunds.
 
-    function test_ChainIdChange_AfterCreationStillFillsAndCancels() public {
+    function test_ChainIdChange_AfterCreationBlocksFillsButCancels() public {
         _createEscrow(_defaultProgram());
         bytes32 oldHash = filledOrderHash;
         vm.chainId(block.chainid + 1);
@@ -609,21 +609,23 @@ contract NativeOrderEscrowTest is Test {
         assertTrue(filledOrderHash != oldHash);
         assertEq(factory.addressOfEscrow(nativeOrder), address(escrow));
         assertEq(escrow.isValidSignature(oldHash, _signature()), bytes4(0));
-        assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
-        router.swap(filledOrder, 0.4 ether, _takerData(false));
+        assertEq(escrow.isValidSignature(filledOrderHash, _signature()), bytes4(0));
+        bytes memory signature = _signature();
+        _expectBadSignature(signature);
+        router.swap(filledOrder, 0.4 ether, _takerData(false, signature));
         uint256 makerBefore = maker.balance;
         vm.prank(maker);
         escrow.cancel(nativeOrder);
-        assertEq(maker.balance - makerBefore, 0.6 ether);
+        assertEq(maker.balance - makerBefore, WETH_AMOUNT);
         _assertClosed();
     }
 
-    function test_ChainIdChange_BeforeCreationMatchesRouter() public {
+    function test_ChainIdChange_CreateRejectedOnOtherChain() public {
+        ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.chainId(block.chainid + 1);
-        _createEscrow(_defaultProgram());
-        assertEq(router.hash(filledOrder), filledOrderHash);
-        router.swap(filledOrder, WETH_AMOUNT, _takerData(false));
-        assertEq(weth.balanceOf(address(escrow)), 0);
+        vm.prank(maker);
+        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderWrongChain.selector);
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), _publicCancellation());
     }
 
     function test_ChainIdChange_AfterCreationRescueStillWorks() public {
