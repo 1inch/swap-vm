@@ -36,11 +36,13 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// @param filledOrderHash Hash of the filled order that takers fill and quote against.
     /// @param nativeOrder Terms committed in the escrow's address. abi.encode(nativeOrder) is the ERC-1271
     /// signature takers supply, and the maker passes it to cancel and rescueFunds.
+    /// @param amount Native ETH deposited, held as WETH and approved to the router.
     /// @param filledOrder Order to submit to the router: the maker's order with maker set to the escrow.
     event NativeOrderCreated(
         address indexed escrow,
         bytes32 indexed filledOrderHash,
         NativeOrder nativeOrder,
+        uint256 amount,
         ISwapVM.Order filledOrder
     );
 
@@ -92,7 +94,6 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
             maker: msg.sender,
             traits: makerOrder.traits,
             dataHash: keccak256(makerOrder.data),
-            amount: msg.value,
             expiration: expiration,
             publicCancellation: publicCancellation,
             rescueAfter: (block.timestamp + RESCUE_DELAY).toUint40()
@@ -105,7 +106,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
 
         filledOrderHash = _hashOrder(escrow, makerOrder.traits, nativeOrder.dataHash);
         emit NativeOrderCreated(
-            escrow, filledOrderHash, nativeOrder,
+            escrow, filledOrderHash, nativeOrder, msg.value,
             ISwapVM.Order({ maker: escrow, traits: makerOrder.traits, data: makerOrder.data })
         );
     }

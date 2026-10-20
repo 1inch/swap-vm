@@ -17,11 +17,11 @@ import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @notice Terms committed in the escrow's CREATE2 address; all times are absolute Unix timestamps.
 /// @dev Does not contain an EIP-712 hash, so authentication for refunds survives chain ID changes.
+/// The deposit is not a term: the program prices the order and the exact router allowance caps it.
 /// Fields:
 /// - maker:              original maker; the only caller of cancel and rescueFunds, receives all refunds
 /// - traits:             traits shared by the maker's order and the filled order
 /// - dataHash:           keccak256 of the order data, which takers pass to the router in full
-/// - amount:             native ETH deposited at creation, held as WETH and approved to the router
 /// - expiration:         fills are rejected from this time on
 /// - publicCancellation: access-token holders may cancel from this time on
 /// - rescueAfter:        the maker may rescue stray funds from this time on; stamped by the factory
@@ -29,7 +29,6 @@ struct NativeOrder {
     address maker;
     MakerTraits traits;
     bytes32 dataHash;
-    uint256 amount;
     uint40 expiration;
     uint40 publicCancellation;
     uint40 rescueAfter;
@@ -101,19 +100,19 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// @notice ERC-1271 validation called by the router when this clone is the order's maker.
     /// @dev The signature is abi.encode(NativeOrder); the program is supplied only once, to the router.
     /// Valid only on the deployment chain, so a fork with a new chain ID cannot fill copies of the order,
-    /// and only if the terms are committed in this clone's address, the order has not expired, its hash
-    /// with maker = this clone equals `orderHash`, and router allowance remains.
+    /// and only if the terms are committed in this clone's address, the order has not expired and its hash
+    /// with maker = this clone equals `orderHash`. The allowance is not read here: a closed order keeps a
+    /// valid signature until expiration, but its fills revert because the router allowance is zero.
     /// @param orderHash Hash of the order the router is executing.
-    /// @param signature abi.encode(NativeOrder), exactly 224 bytes.
+    /// @param signature abi.encode(NativeOrder), exactly 192 bytes.
     /// @return magicValue `IERC1271.isValidSignature.selector` if all checks pass, otherwise zero. A
     /// non-canonical encoding may revert in ABI decoding instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        if (signature.length != 7 * 32) return bytes4(0);
+        if (signature.length != 6 * 32) return bytes4(0);
         NativeOrder memory order = abi.decode(signature, (NativeOrder));
         if (
             !_isDeploymentChain() || !_isValidOrder(order) || block.timestamp >= order.expiration ||
-            _hashOrder(address(this), order.traits, order.dataHash) != orderHash ||
-            WETH.allowance(address(this), address(ROUTER)) == 0
+            _hashOrder(address(this), order.traits, order.dataHash) != orderHash
         ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
     }

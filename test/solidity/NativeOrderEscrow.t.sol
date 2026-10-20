@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Test } from "forge-std/Test.sol";
+import { Test, stdError } from "forge-std/Test.sol";
 import { Errors } from "@openzeppelin/contracts/utils/Errors.sol";
 import { IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IWETH } from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
@@ -80,7 +80,6 @@ contract NativeOrderEscrowTest is Test {
         assertEq(weth.balanceOf(address(escrow)), 0);
         assertEq(dai.balanceOf(address(escrow)), 0);
         assertEq(weth.allowance(address(escrow), address(router)), 0);
-        _assertSignatureInvalid();
     }
 
     function test_FullFill_ExactIn() public {
@@ -193,7 +192,8 @@ contract NativeOrderEscrowTest is Test {
         assertEq(maker.balance - makerBefore, WETH_AMOUNT);
         _assertClosed();
         assertFalse(_quoteSucceeds());
-        _expectBadSignature(_signature());
+        // The signature stays valid; InvalidateTokenOut underflows on the full-fill mark set by closing.
+        vm.expectRevert(stdError.arithmeticError);
         router.swap(filledOrder, WETH_AMOUNT, _takerData(false));
     }
 
@@ -211,8 +211,7 @@ contract NativeOrderEscrowTest is Test {
         escrow.cancel(nativeOrder);
         _donateWeth(0.3 ether);
         vm.deal(address(escrow), 0.2 ether); // Forced ETH bypasses the receive function.
-        _assertSignatureInvalid();
-        _expectBadSignature(_signature());
+        vm.expectRevert(stdError.arithmeticError);
         router.swap(filledOrder, 0.1 ether, _takerData(false));
         uint256 makerBefore = maker.balance;
         vm.prank(maker);
@@ -225,8 +224,7 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(_defaultProgram());
         router.swap(filledOrder, WETH_AMOUNT, _takerData(false));
         _donateWeth(0.3 ether);
-        _assertSignatureInvalid();
-        _expectBadSignature(_signature());
+        vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
         router.swap(filledOrder, 0.1 ether, _takerData(false));
         vm.warp(nativeOrder.publicCancellation);
         vm.prank(resolver);
@@ -407,7 +405,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AcceptsCommittedOrder() public {
         _createEscrow(_defaultProgram());
-        assertEq(_signature().length, 224);
+        assertEq(_signature().length, 192);
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
@@ -418,19 +416,19 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AllCommittedFieldsAreAuthenticated() public {
         _createEscrow(_defaultProgram());
-        for (uint8 field = 0; field < 7; ++field) _assertInvalidOrder(_tamper(field, 0));
+        for (uint8 field = 0; field < 6; ++field) _assertInvalidOrder(_tamper(field, 0));
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
     function testFuzz_IsValidSignature_TamperedCommitment(uint8 field, uint256 bit) public {
         _createEscrow(_defaultProgram());
-        _assertInvalidOrder(_tamper(uint8(bound(field, 0, 6)), bit));
+        _assertInvalidOrder(_tamper(uint8(bound(field, 0, 5)), bit));
     }
 
     function testFuzz_IsValidSignature_MalformedLength(uint16 length) public {
         _createEscrow(_defaultProgram());
         length = uint16(bound(length, 0, 512));
-        if (length == 224) ++length;
+        if (length == 192) ++length;
         assertEq(escrow.isValidSignature(filledOrderHash, new bytes(length)), bytes4(0));
     }
 
@@ -590,7 +588,7 @@ contract NativeOrderEscrowTest is Test {
         assertEq(nativeOrder.maker, maker);
         assertEq(MakerTraits.unwrap(nativeOrder.traits), MakerTraits.unwrap(makerOrder.traits));
         assertEq(nativeOrder.dataHash, keccak256(makerOrder.data));
-        assertEq(nativeOrder.amount, WETH_AMOUNT);
+        assertEq(weth.allowance(address(escrow), address(router)), WETH_AMOUNT);
         assertEq(nativeOrder.expiration, createdAt + EXPIRY_OFFSET);
         assertEq(nativeOrder.publicCancellation, createdAt + PUBLIC_CANCEL_OFFSET);
         assertEq(nativeOrder.rescueAfter, createdAt + RESCUE_DELAY);
@@ -664,9 +662,8 @@ contract NativeOrderEscrowTest is Test {
         assertEq(weth.balanceOf(maker), 0.25 ether);
         assertEq(weth.allowance(address(escrow), address(router)), 0);
         _donateWeth(WETH_AMOUNT);
-        _assertSignatureInvalid();
         assertFalse(_quoteSucceeds());
-        _expectBadSignature(_signature());
+        vm.expectRevert(stdError.arithmeticError);
         router.swap(filledOrder, 0.1 ether, _takerData(false));
         uint256 makerBefore = maker.balance;
         vm.prank(maker);
@@ -915,7 +912,6 @@ contract NativeOrderEscrowTest is Test {
         assertEq(weth.balanceOf(address(escrow)), 0);
         assertEq(address(escrow).balance, 0);
         assertEq(router.tokenOutInvalidators(address(escrow), filledOrderHash, address(weth)), type(uint256).max);
-        _assertSignatureInvalid();
     }
 
     function _assertCancellationRolledBack() private view {
@@ -930,9 +926,8 @@ contract NativeOrderEscrowTest is Test {
         if (field == 0) tampered.maker = address(uint160(tampered.maker) ^ uint160(uint256(1) << (bit % 160)));
         else if (field == 1) tampered.traits = MakerTraits.wrap(MakerTraits.unwrap(tampered.traits) ^ (uint256(1) << (bit % 256)));
         else if (field == 2) tampered.dataHash ^= bytes32(uint256(1) << (bit % 256));
-        else if (field == 3) tampered.amount ^= uint256(1) << (bit % 256);
-        else if (field == 4) tampered.expiration ^= uint40(uint256(1) << (bit % 40));
-        else if (field == 5) tampered.publicCancellation ^= uint40(uint256(1) << (bit % 40));
+        else if (field == 3) tampered.expiration ^= uint40(uint256(1) << (bit % 40));
+        else if (field == 4) tampered.publicCancellation ^= uint40(uint256(1) << (bit % 40));
         else tampered.rescueAfter ^= uint40(uint256(1) << (bit % 40));
     }
 
