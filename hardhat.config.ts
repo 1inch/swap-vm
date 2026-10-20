@@ -89,6 +89,13 @@ export default defineConfig({
   warnings: {
     "test/solidity/**/*": {
       "initcode-size": "off",
+      "func-mutability": "off",
+      "unused-param": "off",
+      "unused-var": "off",
+      "unused-call-retval": "off",
+    },
+    "test/solidity/helpers/SwapVMTestSetup.sol": {
+      "shadowing": "off",
     },
     "contracts/routers/*Debug.sol": {
       "code-size": "off",
