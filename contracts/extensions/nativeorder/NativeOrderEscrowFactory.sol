@@ -71,10 +71,11 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// @param makerOrder Original order, with maker = msg.sender and an explicit receiver and hook targets.
     /// @param expiration Absolute timestamp bounding fills, independently of the program's Deadline. Public
     /// cancellation and rescue open at the implementation's fixed delays after it.
+    /// @param maxReward Most native ETH the maker agrees to pay a public canceller; zero offers no reward.
     /// @return escrow The deployed and funded clone.
     /// @return filledOrderHash Hash of the filled order that takers fill and quote against.
     /// @return nativeOrder Terms committed in the escrow's address, needed for fills and cancellations.
-    function create(ISwapVM.Order calldata makerOrder, uint40 expiration)
+    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint128 maxReward)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
@@ -94,7 +95,8 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
             maker: msg.sender,
             traits: makerOrder.traits,
             dataHash: keccak256(makerOrder.data),
-            expiration: expiration
+            expiration: expiration,
+            maxReward: maxReward
         });
         escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(keccak256(abi.encode(nativeOrder)));
         address receiver = makerOrder.traits.receiver(escrow);

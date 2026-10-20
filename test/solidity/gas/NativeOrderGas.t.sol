@@ -32,6 +32,7 @@ contract NativeOrderGas is Test {
     uint32 private constant PUBLIC_CANCEL_OFFSET = 1 days + 1 hours;
     uint32 private constant PUBLIC_CANCEL_DELAY = PUBLIC_CANCEL_OFFSET - EXPIRY_OFFSET;
     uint32 private constant RESCUE_DELAY = 7 days;
+    uint128 private constant MAX_REWARD = 0.001 ether;
 
     LimitSwapVMRouter public swapVM;
     WETHMock public weth;
@@ -81,8 +82,8 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration);
-        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration)));
+        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration, MAX_REWARD);
+        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration, MAX_REWARD)));
     }
 
     function test_gas_NativeOrder_swap_exactIn() public {
@@ -163,7 +164,7 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         vm.prank(maker);
         (address escrowAddr, bytes32 fHash, NativeOrder memory terms) =
-            factory.create{ value: WETH_AMOUNT }(makerOrder, uint40(block.timestamp + EXPIRY_OFFSET));
+            factory.create{ value: WETH_AMOUNT }(makerOrder, uint40(block.timestamp + EXPIRY_OFFSET), MAX_REWARD);
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
         filledOrderHash = fHash;

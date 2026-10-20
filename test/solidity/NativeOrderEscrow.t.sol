@@ -31,6 +31,7 @@ contract NativeOrderEscrowTest is Test {
     uint40 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_DELAY = 1 hours;
     uint32 private constant RESCUE_DELAY = 7 days;
+    uint128 private constant MAX_REWARD = type(uint128).max;
     bytes4 private constant ERC1271_MAGIC = 0x1626ba7e;
 
     SwapVMRouter public router;
@@ -314,6 +315,26 @@ contract NativeOrderEscrowTest is Test {
         assertEq(maker.balance - makerBefore, WETH_AMOUNT);
     }
 
+    function test_PublicCancel_RewardCappedByMakerMaxReward() public {
+        _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), 0.0005 ether);
+        vm.warp(_publicCancelStart());
+        vm.fee(100 gwei);
+        uint256 makerBefore = maker.balance;
+        vm.prank(resolver);
+        escrow.publicCancel(nativeOrder, type(uint256).max);
+        assertEq(resolver.balance, 0.0005 ether);
+        assertEq(maker.balance - makerBefore, WETH_AMOUNT - 0.0005 ether);
+
+        // A maker offering no reward still gets the whole deposit back.
+        _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), 0);
+        vm.warp(_publicCancelStart());
+        makerBefore = maker.balance;
+        vm.prank(resolver);
+        escrow.publicCancel(nativeOrder, type(uint256).max);
+        assertEq(resolver.balance, 0.0005 ether);
+        assertEq(maker.balance - makerBefore, WETH_AMOUNT);
+    }
+
     function test_PublicCancel_ZeroBaseFee() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
@@ -405,7 +426,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AcceptsCommittedOrder() public {
         _createEscrow(_defaultProgram());
-        assertEq(_signature().length, 128);
+        assertEq(_signature().length, 160);
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
@@ -416,19 +437,19 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AllCommittedFieldsAreAuthenticated() public {
         _createEscrow(_defaultProgram());
-        for (uint8 field = 0; field < 4; ++field) _assertInvalidOrder(_tamper(field, 0));
+        for (uint8 field = 0; field < 5; ++field) _assertInvalidOrder(_tamper(field, 0));
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
     function testFuzz_IsValidSignature_TamperedCommitment(uint8 field, uint256 bit) public {
         _createEscrow(_defaultProgram());
-        _assertInvalidOrder(_tamper(uint8(bound(field, 0, 3)), bit));
+        _assertInvalidOrder(_tamper(uint8(bound(field, 0, 4)), bit));
     }
 
     function testFuzz_IsValidSignature_MalformedLength(uint16 length) public {
         _createEscrow(_defaultProgram());
         length = uint16(bound(length, 0, 512));
-        if (length == 128) ++length;
+        if (length == 160) ++length;
         assertEq(escrow.isValidSignature(filledOrderHash, new bytes(length)), bytes4(0));
     }
 
@@ -473,9 +494,9 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderZeroDeposit.selector);
-        factory.create(order, _expiration());
+        factory.create(order, _expiration(), MAX_REWARD);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderOnlyMakerCanCreate.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
     function test_Create_AquaRejected() public {
@@ -484,7 +505,7 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderAquaNotSupported.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
     function test_Create_ExplicitReceiverRequired() public {
@@ -493,12 +514,12 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
         args.receiver = address(factory);
         order = MakerTraitsLib.build(args);
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
     function test_Create_TokensMustContainWethAndBeSorted() public {
@@ -517,7 +538,7 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTime.selector);
-        factory.create{ value: WETH_AMOUNT }(order, uint40(block.timestamp));
+        factory.create{ value: WETH_AMOUNT }(order, uint40(block.timestamp), MAX_REWARD);
         // Public cancellation opens a fixed delay after signatures expire.
         _createOrder(order, WETH_AMOUNT, _expiration());
         vm.warp(nativeOrder.expiration);
@@ -538,7 +559,7 @@ contract NativeOrderEscrowTest is Test {
             ISwapVM.Order memory order = MakerTraitsLib.build(args);
             vm.prank(maker);
             vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitHookTargetRequired.selector);
-            factory.create{ value: WETH_AMOUNT }(order, _expiration());
+            factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
         }
         assertEq(address(factory).balance, 0);
     }
@@ -572,7 +593,7 @@ contract NativeOrderEscrowTest is Test {
         address first = address(escrow);
         vm.prank(maker);
         vm.expectRevert(Errors.FailedDeployment.selector);
-        factory.create{ value: WETH_AMOUNT }(makerOrder, _expiration());
+        factory.create{ value: WETH_AMOUNT }(makerOrder, _expiration(), MAX_REWARD);
         _createEscrow(bytes.concat(Salt.build(uint64(1)), _defaultProgram()));
         assertTrue(address(escrow) != first);
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
@@ -588,6 +609,7 @@ contract NativeOrderEscrowTest is Test {
         assertEq(nativeOrder.dataHash, keccak256(makerOrder.data));
         assertEq(weth.allowance(address(escrow), address(router)), WETH_AMOUNT);
         assertEq(nativeOrder.expiration, createdAt + EXPIRY_OFFSET);
+        assertEq(nativeOrder.maxReward, MAX_REWARD);
         assertEq(escrow.PUBLIC_CANCELLATION_DELAY(), PUBLIC_CANCEL_DELAY);
         assertEq(escrow.RESCUE_DELAY(), RESCUE_DELAY);
         assertEq(address(escrow.ROUTER()), address(router));
@@ -621,7 +643,7 @@ contract NativeOrderEscrowTest is Test {
         vm.chainId(block.chainid + 1);
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderWrongChain.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
     function test_ChainIdChange_AfterCreationRescueStillWorks() public {
@@ -845,10 +867,14 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _createOrder(ISwapVM.Order memory order, uint256 amount, uint40 expiration) private {
+        _createOrder(order, amount, expiration, MAX_REWARD);
+    }
+
+    function _createOrder(ISwapVM.Order memory order, uint256 amount, uint40 expiration, uint128 maxReward) private {
         makerOrder = order;
         vm.prank(order.maker);
         (address escrowAddress, bytes32 orderHash, NativeOrder memory terms) =
-            factory.create{ value: amount }(order, expiration);
+            factory.create{ value: amount }(order, expiration, maxReward);
         escrow = NativeOrderEscrow(payable(escrowAddress));
         filledOrderHash = orderHash;
         nativeOrder = terms;
@@ -903,7 +929,7 @@ contract NativeOrderEscrowTest is Test {
     function _expectInvalidTokens(ISwapVM.Order memory order) private {
         vm.prank(maker);
         vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTokens.selector);
-        factory.create{ value: WETH_AMOUNT }(order, _expiration());
+        factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
     function _assertSignatureInvalid() private view {
@@ -929,7 +955,8 @@ contract NativeOrderEscrowTest is Test {
         if (field == 0) tampered.maker = address(uint160(tampered.maker) ^ uint160(uint256(1) << (bit % 160)));
         else if (field == 1) tampered.traits = MakerTraits.wrap(MakerTraits.unwrap(tampered.traits) ^ (uint256(1) << (bit % 256)));
         else if (field == 2) tampered.dataHash ^= bytes32(uint256(1) << (bit % 256));
-        else tampered.expiration ^= uint40(uint256(1) << (bit % 40));
+        else if (field == 3) tampered.expiration ^= uint40(uint256(1) << (bit % 40));
+        else tampered.maxReward ^= uint128(uint256(1) << (bit % 128));
     }
 
     function _assertInvalidOrder(NativeOrder memory tampered) private {

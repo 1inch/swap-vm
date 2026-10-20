@@ -137,9 +137,10 @@ must encode explicit targets: default targets would become the escrow when the m
 Aqua orders are rejected.
 
 ```solidity
-// Called by makerOrder.maker. expiration is an absolute Unix timestamp.
+// Called by makerOrder.maker. expiration is an absolute Unix timestamp; maxReward caps the reward
+// a public canceller can take from the deposit.
 (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder) =
-    factory.create{ value: 0.5 ether }(makerOrder, expiration);
+    factory.create{ value: 0.5 ether }(makerOrder, expiration, maxReward);
 
 ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
@@ -147,11 +148,12 @@ filledOrder.maker = escrow;
 // They can receive WETH or request the router's ordinary taker-side native ETH unwrap.
 ```
 
-`NativeOrder` commits the original maker, traits, program data hash and expiration in the escrow's
-CREATE2 address. The deposit is not a term: the program prices the order, the exact router allowance
-caps it, and `NativeOrderCreated` reports it. Public cancellation and rescue open at fixed delays after
-expiration, set when the factory is deployed (`PUBLIC_CANCELLATION_DELAY` and `RESCUE_DELAY` on the
-escrow implementation). Its ERC-1271 signature is 128 bytes and does not duplicate the program. Fills
+`NativeOrder` commits the original maker, traits, program data hash, expiration and the maker's maximum
+public cancellation reward in the escrow's CREATE2 address. The deposit is not a term: the program
+prices the order, the exact router allowance caps it, and `NativeOrderCreated` reports it. Public
+cancellation and rescue open at fixed delays after expiration, set when the factory is deployed
+(`PUBLIC_CANCELLATION_DELAY` and `RESCUE_DELAY` on the escrow implementation). Its ERC-1271 signature
+is 160 bytes, is read in place from calldata and does not duplicate the program. Fills
 require the matching router-domain order hash, `block.timestamp < expiration` and a nonzero remaining
 allowance. The signature check does not read the allowance, so a closed order keeps a valid signature
 until expiration while its fills revert. Fills and `create` work only on the chain the factory was
@@ -166,8 +168,9 @@ ETH. From `RESCUE_DELAY` after expiration, `rescueFunds(nativeOrder, token, amou
 tokens to the maker; rescuing WETH also closes the order. A zero token address means native ETH.
 
 An access-token holder may call `publicCancel(nativeOrder, rewardLimit)` from
-`PUBLIC_CANCELLATION_DELAY` after expiration. The reward is the minimum of the caller's limit, remaining
-allowance, WETH balance and `block.basefee * 120_000 * 110 / 100`. Forced ETH is returned to the maker.
+`PUBLIC_CANCELLATION_DELAY` after expiration. The reward is the minimum of the caller's limit, the
+order's `maxReward`, remaining allowance, WETH balance and `block.basefee * 120_000 * 110 / 100`. Forced
+ETH is returned to the maker.
 Fully filled and already cancelled orders cannot pay another cleanup reward. A failed ETH payment
 reverts the entire cancellation; contract makers that reject ETH can recover WETH via `rescueFunds`.
 
