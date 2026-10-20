@@ -30,6 +30,7 @@ contract NativeOrderGas is Test {
     uint256 private constant DAI_AMOUNT = 3000e18;
     uint32 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_OFFSET = 1 days + 1 hours;
+    uint32 private constant PUBLIC_CANCEL_DELAY = PUBLIC_CANCEL_OFFSET - EXPIRY_OFFSET;
     uint32 private constant RESCUE_DELAY = 7 days;
 
     LimitSwapVMRouter public swapVM;
@@ -60,6 +61,7 @@ contract NativeOrderGas is Test {
             ISwapVM(address(swapVM)),
             IWETH(address(weth)),
             IERC20(address(accessToken)),
+            PUBLIC_CANCEL_DELAY,
             RESCUE_DELAY
         );
 
@@ -78,10 +80,9 @@ contract NativeOrderGas is Test {
     function test_gas_NativeOrder_create() public {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
-        uint40 publicCancellation = uint40(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration, publicCancellation);
-        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration, publicCancellation)));
+        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration);
+        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration)));
     }
 
     function test_gas_NativeOrder_swap_exactIn() public {
@@ -161,9 +162,8 @@ contract NativeOrderGas is Test {
     function _createEscrow() internal {
         makerOrder = _buildOrder();
         vm.prank(maker);
-        (address escrowAddr, bytes32 fHash, NativeOrder memory terms) = factory.create{ value: WETH_AMOUNT }(
-            makerOrder, uint40(block.timestamp + EXPIRY_OFFSET), uint40(block.timestamp + PUBLIC_CANCEL_OFFSET)
-        );
+        (address escrowAddr, bytes32 fHash, NativeOrder memory terms) =
+            factory.create{ value: WETH_AMOUNT }(makerOrder, uint40(block.timestamp + EXPIRY_OFFSET));
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
         filledOrderHash = fHash;

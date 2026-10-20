@@ -5,7 +5,6 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
@@ -20,7 +19,6 @@ import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 /// @custom:security-contact security@1inch.io
 contract NativeOrderEscrowFactory is RouterOrderHasher {
     using Clones for address;
-    using SafeCast for uint256;
 
     error NativeOrderZeroDeposit();
     error NativeOrderOnlyMakerCanCreate();
@@ -48,19 +46,21 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
 
     /// @notice Wrapped native token deposits are held in.
     IWETH public immutable WETH;
-    /// @notice NativeOrderEscrow implementation all clones delegate to.
+    /// @notice NativeOrderEscrow implementation all clones delegate to; it also exposes both delays.
     address public immutable ESCROW_IMPLEMENTATION;
-    /// @notice Seconds after creation before the maker may rescue stray funds from an escrow.
-    uint32 public immutable RESCUE_DELAY;
 
     /// @param router SwapVM router that fills the orders; deployment fails if its order hashing differs.
     /// @param weth Wrapped native token deposits are held in.
     /// @param accessToken Token whose holders may publicly cancel expired orders.
-    /// @param rescueDelay Seconds after creation before the maker may rescue stray funds.
-    constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 rescueDelay) RouterOrderHasher(router) {
+    /// @param publicCancellationDelay Seconds after expiration before access-token holders may publicly cancel.
+    /// @param rescueDelay Seconds after expiration before the maker may rescue stray funds.
+    constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 publicCancellationDelay, uint32 rescueDelay)
+        RouterOrderHasher(router)
+    {
         WETH = weth;
-        RESCUE_DELAY = rescueDelay;
-        ESCROW_IMPLEMENTATION = address(new NativeOrderEscrow(router, weth, accessToken));
+        ESCROW_IMPLEMENTATION = address(
+            new NativeOrderEscrow(router, weth, accessToken, publicCancellationDelay, rescueDelay)
+        );
     }
 
     /// @notice Creates and funds an escrow that sells the attached native ETH through the router.
@@ -69,12 +69,12 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// unsorted or lack WETH, a receiver that is the escrow or the factory, and hook targets that would
     /// resolve to the escrow.
     /// @param makerOrder Original order, with maker = msg.sender and an explicit receiver and hook targets.
-    /// @param expiration Absolute timestamp bounding fills, independently of the program's Deadline.
-    /// @param publicCancellation Absolute timestamp at or after expiration when resolver cancellation opens.
+    /// @param expiration Absolute timestamp bounding fills, independently of the program's Deadline. Public
+    /// cancellation and rescue open at the implementation's fixed delays after it.
     /// @return escrow The deployed and funded clone.
     /// @return filledOrderHash Hash of the filled order that takers fill and quote against.
     /// @return nativeOrder Terms committed in the escrow's address, needed for fills and cancellations.
-    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint40 publicCancellation)
+    function create(ISwapVM.Order calldata makerOrder, uint40 expiration)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
@@ -82,7 +82,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
         require(msg.value > 0, NativeOrderZeroDeposit());
         require(makerOrder.maker == msg.sender, NativeOrderOnlyMakerCanCreate());
         require(!makerOrder.traits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());
-        require(expiration > block.timestamp && publicCancellation >= expiration, NativeOrderInvalidTime());
+        require(expiration > block.timestamp, NativeOrderInvalidTime());
 
         (address tokenA, address tokenB) = makerOrder.traits.tokens(makerOrder.data);
         require(
@@ -94,9 +94,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
             maker: msg.sender,
             traits: makerOrder.traits,
             dataHash: keccak256(makerOrder.data),
-            expiration: expiration,
-            publicCancellation: publicCancellation,
-            rescueAfter: (block.timestamp + RESCUE_DELAY).toUint40()
+            expiration: expiration
         });
         escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(keccak256(abi.encode(nativeOrder)));
         address receiver = makerOrder.traits.receiver(escrow);
