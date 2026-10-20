@@ -6,6 +6,8 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IPermit2 } from "@1inch/solidity-utils/contracts/interfaces/IPermit2.sol";
@@ -629,6 +631,56 @@ contract SwapVMTest is Test {
 
     function _installPermit2() private {
         Permit2TestLib.install();
+    }
+
+    function test_PauseAndUnpause() public {
+        assertFalse(swapVM.paused());
+
+        vm.expectEmit(true, false, false, true, address(swapVM));
+        emit Pausable.Paused(address(this));
+        swapVM.pause();
+        assertTrue(swapVM.paused());
+
+        vm.expectEmit(true, false, false, true, address(swapVM));
+        emit Pausable.Unpaused(address(this));
+        swapVM.unpause();
+        assertFalse(swapVM.paused());
+    }
+
+    function test_PauseAndUnpause_OnlyOwner() public {
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, taker));
+        swapVM.pause();
+
+        swapVM.pause();
+
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, taker));
+        swapVM.unpause();
+    }
+
+    function test_RevertsWhenPaused() public {
+        MakerSetup memory setup = MakerSetup({
+            balanceA: 100e18,
+            balanceB: 200e18,
+            tokenIn: address(tokenB),
+            tokenOut: address(tokenA),
+            usePermit2: false,
+            useInvalidator: false,
+            salt: 0
+        });
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrder(setup);
+        bytes memory takerData = _buildTakerData(25e18, signature);
+
+        swapVM.pause();
+
+        vm.prank(taker);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        swapVM.swap(order, 50e18, takerData);
+
+        vm.prank(taker);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        swapVM.quote(order, 50e18, takerData);
     }
 
     function test_SwappedEvent_EmitsCorrectParameters() public {
