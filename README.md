@@ -124,6 +124,53 @@ ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
 bytes32 orderHash = router.hash(order); // EIP-712 digest, sign off-chain
 ```
 
+### Native ETH sell order
+
+[`NativeOrderEscrowFactory`](contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol) lets makers
+deposit native ETH for a signature-mode order. It deploys a CREATE2 escrow, wraps the deposit into WETH,
+and grants the router exactly that amount of allowance. The escrow acts as the order's maker and
+authenticates fills through ERC-1271; the router requires no changes.
+
+Build the order with the original maker, an **explicit receiver**, and a sorted pair containing WETH.
+The program must sell WETH and account for the intended deposit and any output fees. Enabled hooks
+must encode explicit targets: default targets would become the escrow when the maker is replaced.
+Aqua orders are rejected.
+
+```solidity
+// Called by makerOrder.maker. Both cancellation times are absolute Unix timestamps.
+(address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder) =
+    factory.create{ value: 0.5 ether }(makerOrder, expiration, publicCancellation);
+
+ISwapVM.Order memory filledOrder = makerOrder;
+filledOrder.maker = escrow;
+// Takers use filledOrder and set TakerTraitsLib.Args.signature = abi.encode(nativeOrder).
+// They can receive WETH or request the router's ordinary taker-side native ETH unwrap.
+```
+
+`NativeOrder` commits the original maker, traits, program data hash, deposit, expiration, public
+cancellation time and factory-stamped rescue time in the escrow's CREATE2 address. Its ERC-1271
+signature is 224 bytes and does not duplicate the program. Fills require the matching router-domain
+order hash, `block.timestamp < expiration` and a nonzero remaining allowance. These structural terms
+also allow the maker to recover funds after a chain ID change; fills use the router's current domain.
+
+The original maker calls `escrow.cancel(nativeOrder)` to revoke the allowance, invalidate WETH output
+for `filledOrderHash`, unwrap the remainder and receive native ETH. Cancellation is permanent even
+if someone later sends WETH to the escrow. The maker can call it again to sweep later WETH or forced
+ETH. After `nativeOrder.rescueAfter`, `rescueFunds(nativeOrder, token, amount)` recovers stray tokens
+to the maker; rescuing WETH also closes the order. A zero token address means native ETH.
+
+An access-token holder may call `publicCancel(nativeOrder, rewardLimit)` from `publicCancellation`,
+which must be at or after expiration. The reward is the minimum of the caller's limit, remaining
+allowance, WETH balance and `block.basefee * 120_000 * 110 / 100`. Forced ETH is returned to the maker.
+Fully filled and already cancelled orders cannot pay another cleanup reward. A failed ETH payment
+reverts the entire cancellation; contract makers that reject ETH can recover WETH via `rescueFunds`.
+
+Maker-scoped instructions and hook arguments use the escrow address. The original maker's epoch or
+bitmap invalidations therefore do not cancel these orders; use the escrow's cancellation methods.
+`quote()` does not validate ERC-1271, expiry or allowance. Include `Deadline` and `InvalidateTokenOut`
+in the program if quotes should reflect its deadline and cancellation; otherwise a positive quote
+can still describe an unfillable order. Programs must still implement their own pricing and fill limits.
+
 ### AMM position
 
 ```solidity

@@ -5,135 +5,132 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
-import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
-import { AddressLib, Address } from "@1inch/solidity-utils/contracts/libraries/AddressLib.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
-import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
-import { RouterOrderHasher } from "./vendor/RouterOrderHasher.sol";
-import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
-import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
-import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
-import { ProxyHashLib } from "./vendor/libraries/ProxyHashLib.sol";
+import { IMakerHooks } from "../../interfaces/IMakerHooks.sol";
+import { NativeOrder, NativeOrderEscrow } from "./NativeOrderEscrow.sol";
+import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @title NativeOrderEscrowFactory
-/// @notice Deploys per-order NativeOrderEscrow clones that hold a maker's native ETH as WETH so the order
-/// can be filled through an unmodified SwapVM router.
-/// @dev The implementation is deployed in the constructor and clones are created with CREATE2
-/// where salt = hash(IBaseEscrow.Immutables). Depositing ETH here replaces
-/// the maker's EIP-712 signature: only the maker may create (funds custody implies order consent), and the
-/// clone validates fills via ERC-1271 against the immutables committed in its own address.
-///
-/// The factory cannot verify program semantics (which token the program actually sells lives inside
-/// instruction args): an order whose program does not sell WETH is simply unfillable, and the deposit
-/// always remains recoverable through NativeOrderEscrow.cancel.
+/// @notice Deploys a deterministic WETH escrow for each maker-funded native ETH order.
+/// @dev Depositing ETH authenticates the maker; takers use the returned NativeOrder as the ERC-1271
+/// signature and submit the same SwapVM order with maker replaced by the escrow address.
 /// @custom:security-contact security@1inch.io
 contract NativeOrderEscrowFactory is RouterOrderHasher {
-    using AddressLib for Address;
     using Clones for address;
-    using TimelocksLib for Timelocks;
-    using ImmutablesLib for IBaseEscrow.Immutables;
+    using SafeCast for uint256;
 
     error NativeOrderZeroDeposit();
     error NativeOrderOnlyMakerCanCreate();
     error NativeOrderAquaNotSupported();
     error NativeOrderExplicitReceiverRequired();
-    error NativeOrderInvalidTimelocks();
+    error NativeOrderExplicitHookTargetRequired();
+    error NativeOrderInvalidTokens();
+    error NativeOrderInvalidTime();
 
     /// @notice Emitted when a native order escrow is created and funded.
-    /// @param escrow The deployed clone acting as `order.maker` of the filled order.
-    /// @param filledOrderHash Hash of the patched order (maker = escrow) that takers fill and quote against.
-    /// @param immutables The full immutables pack: hash(immutables) is the CREATE2 salt of `escrow`,
-    /// and abi.encode(immutables, filledOrder.traits, keccak256(filledOrder.data)) is the ERC-1271
-    /// signature takers must supply.
-    /// @param filledOrder The patched order to submit to the router (pre-patch order = same order with
-    /// maker = immutables.maker).
+    /// @param escrow Clone that acts as the maker of the filled order.
+    /// @param filledOrderHash Hash of the filled order that takers fill and quote against.
+    /// @param nativeOrder Terms committed in the escrow's address. abi.encode(nativeOrder) is the ERC-1271
+    /// signature takers supply, and the maker passes it to cancel and rescueFunds.
+    /// @param filledOrder Order to submit to the router: the maker's order with maker set to the escrow.
     event NativeOrderCreated(
         address indexed escrow,
         bytes32 indexed filledOrderHash,
-        IBaseEscrow.Immutables immutables,
+        NativeOrder nativeOrder,
         ISwapVM.Order filledOrder
     );
 
-    /// @notice SwapVM router orders are validated against and filled through.
-    ISwapVM public immutable ROUTER;
     /// @notice Wrapped native token deposits are held in.
     IWETH public immutable WETH;
     /// @notice NativeOrderEscrow implementation all clones delegate to.
     address public immutable ESCROW_IMPLEMENTATION;
-    /// @notice Hash of the EIP-1167 proxy bytecode pointing at ESCROW_IMPLEMENTATION.
-    bytes32 public immutable PROXY_BYTECODE_HASH;
+    /// @notice Seconds after creation before the maker may rescue stray funds from an escrow.
+    uint32 public immutable RESCUE_DELAY;
 
+    /// @param router SwapVM router that fills the orders; deployment fails if its order hashing differs.
+    /// @param weth Wrapped native token deposits are held in.
+    /// @param accessToken Token whose holders may publicly cancel expired orders.
+    /// @param rescueDelay Seconds after creation before the maker may rescue stray funds.
     constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 rescueDelay) RouterOrderHasher(router) {
-        ROUTER = router;
         WETH = weth;
-        ESCROW_IMPLEMENTATION = address(new NativeOrderEscrow(router, weth, accessToken, rescueDelay));
-        PROXY_BYTECODE_HASH = ProxyHashLib.computeProxyBytecodeHash(ESCROW_IMPLEMENTATION);
+        RESCUE_DELAY = rescueDelay;
+        ESCROW_IMPLEMENTATION = address(new NativeOrderEscrow(router, weth, accessToken));
     }
 
-    /// @notice Creates and funds a per-order escrow clone for a native ETH sell order.
-    /// @dev The order must be passed in its pre-patch form (maker = msg.sender). The clone address commits
-    /// to the pre-patch order hash, resolving the CREATE2 circularity: the filled order references the clone
-    /// as maker, so its hash cannot be part of the salt.
-    /// @param makerOrder The pre-patch order: maker = msg.sender, receiver set to the real recipient,
-    /// program selling WETH.
-    /// @param timelocks Stage offsets in seconds from creation (SrcCancellation = expiry, must be non-zero;
-    /// SrcPublicCancellation = public GC start, must not precede expiry); deployedAt is stamped by the factory.
+    /// @notice Creates and funds an escrow that sells the attached native ETH through the router.
+    /// @dev Depositing replaces the maker's signature, so only the maker may create. Rejects Aqua orders,
+    /// token pairs that are unsorted or lack WETH, a receiver that is the escrow or the factory, and hook
+    /// targets that would resolve to the escrow.
+    /// @param makerOrder Original order, with maker = msg.sender and an explicit receiver and hook targets.
+    /// @param expiration Absolute timestamp bounding fills, independently of the program's Deadline.
+    /// @param publicCancellation Absolute timestamp at or after expiration when resolver cancellation opens.
     /// @return escrow The deployed and funded clone.
-    /// @return filledOrderHash Hash of the patched order takers fill.
-    /// @return immutables The immutables pack needed for fills (ERC-1271 signature) and cancellations.
-    function create(ISwapVM.Order calldata makerOrder, Timelocks timelocks)
-        external
-        payable
-        returns (address escrow, bytes32 filledOrderHash, IBaseEscrow.Immutables memory immutables)
+    /// @return filledOrderHash Hash of the filled order that takers fill and quote against.
+    /// @return nativeOrder Terms committed in the escrow's address, needed for fills and cancellations.
+    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint40 publicCancellation)
+        external payable
+        returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
         require(msg.value > 0, NativeOrderZeroDeposit());
         require(makerOrder.maker == msg.sender, NativeOrderOnlyMakerCanCreate());
-        // Native ETH orders with Aqua are not wokring(no "approve" for ETH)
         require(!makerOrder.traits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());
+        require(expiration > block.timestamp && publicCancellation >= expiration, NativeOrderInvalidTime());
 
-        timelocks = timelocks.setDeployedAt(block.timestamp);
-        uint256 expiry = timelocks.get(TimelocksLib.Stage.SrcCancellation);
+        (address tokenA, address tokenB) = makerOrder.traits.tokens(makerOrder.data);
         require(
-            expiry > block.timestamp && timelocks.get(TimelocksLib.Stage.SrcPublicCancellation) >= expiry,
-            NativeOrderInvalidTimelocks()
+            makerOrder.data.length >= 40 && tokenA < tokenB && (tokenA == address(WETH) || tokenB == address(WETH)),
+            NativeOrderInvalidTokens()
         );
 
-        bytes32 dataHash = keccak256(makerOrder.data);
-        immutables = IBaseEscrow.Immutables({
-            // possible to do "orderHash: ROUTER.hash(makerOrder)", but in-place hashing is much cheaper
-            orderHash: _hashOrder(msg.sender, makerOrder.traits, dataHash),
-            hashlock: bytes32(0),
-            maker: Address.wrap(uint160(msg.sender)),
-            taker: Address.wrap(0),
-            token: Address.wrap(uint160(address(WETH))),
+        nativeOrder = NativeOrder({
+            maker: msg.sender,
+            traits: makerOrder.traits,
+            dataHash: keccak256(makerOrder.data),
             amount: msg.value,
-            safetyDeposit: 0,
-            timelocks: timelocks,
-            parameters: ""
+            expiration: expiration,
+            publicCancellation: publicCancellation,
+            rescueAfter: (block.timestamp + RESCUE_DELAY).toUint40()
         });
-
-        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(immutables.hashMem());
-        // `order.maker` is the clone and an unset receiver resolves to it: the bought
-        // tokens would be paid to the escrow instead of the real maker.
-        require(makerOrder.traits.receiver(escrow) != escrow, NativeOrderExplicitReceiverRequired());
+        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(keccak256(abi.encode(nativeOrder)));
+        address receiver = makerOrder.traits.receiver(escrow);
+        require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
+        _validateHooks(makerOrder, escrow);
         NativeOrderEscrow(payable(escrow)).depositAndApprove{ value: msg.value }();
 
-        filledOrderHash = _hashOrder(escrow, makerOrder.traits, dataHash);
-
+        filledOrderHash = _hashOrder(escrow, makerOrder.traits, nativeOrder.dataHash);
         emit NativeOrderCreated(
-            escrow,
-            filledOrderHash,
-            immutables,
+            escrow, filledOrderHash, nativeOrder,
             ISwapVM.Order({ maker: escrow, traits: makerOrder.traits, data: makerOrder.data })
         );
     }
 
-    /// @notice Computes the deterministic escrow address for the given immutables.
-    /// @param immutables The immutables pack the clone would be deployed with.
-    /// @return The CREATE2 address of the corresponding escrow clone.
-    function addressOfEscrow(IBaseEscrow.Immutables calldata immutables) external view returns (address) {
-        return Create2.computeAddress(immutables.hash(), PROXY_BYTECODE_HASH, address(this));
+    /// @notice Computes the deterministic escrow address for the given terms.
+    /// @param order Terms the escrow is or would be created with.
+    /// @return Address of the escrow clone for these terms.
+    function addressOfEscrow(NativeOrder calldata order) external view returns (address) {
+        return ESCROW_IMPLEMENTATION.predictDeterministicAddress(keccak256(abi.encode(order)));
+    }
+
+    /// @dev An implicit hook would target the escrow after replacing maker, which cannot execute hooks.
+    function _validateHooks(ISwapVM.Order calldata order, address escrow) private pure {
+        if (order.traits.hasPreTransferInHook()) {
+            (IMakerHooks target,) = order.traits.preTransferInHook(escrow, order.data);
+            require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
+        }
+        if (order.traits.hasPostTransferInHook()) {
+            (IMakerHooks target,) = order.traits.postTransferInHook(escrow, order.data);
+            require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
+        }
+        if (order.traits.hasPreTransferOutHook()) {
+            (IMakerHooks target,) = order.traits.preTransferOutHook(escrow, order.data);
+            require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
+        }
+        if (order.traits.hasPostTransferOutHook()) {
+            (IMakerHooks target,) = order.traits.postTransferOutHook(escrow, order.data);
+            require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
+        }
     }
 }

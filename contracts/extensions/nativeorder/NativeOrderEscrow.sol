@@ -4,230 +4,187 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
-import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
+import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import { AddressLib, Address } from "@1inch/solidity-utils/contracts/libraries/AddressLib.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
-import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
-import { RouterOrderHasher } from "./vendor/RouterOrderHasher.sol";
-import { IBaseEscrow } from "./vendor/interfaces/IBaseEscrow.sol";
-import { ImmutablesLib } from "./vendor/libraries/ImmutablesLib.sol";
-import { Timelocks, TimelocksLib } from "./vendor/libraries/TimelocksLib.sol";
-import { ProxyHashLib } from "./vendor/libraries/ProxyHashLib.sol";
+import { RouterOrderHasher } from "./RouterOrderHasher.sol";
+
+/// @notice Terms committed in the escrow's CREATE2 address; all times are absolute Unix timestamps.
+/// @dev Does not contain an EIP-712 hash, so authentication for refunds survives chain ID changes.
+/// Fields:
+/// - maker:              original maker; the only caller of cancel and rescueFunds, receives all refunds
+/// - traits:             traits shared by the maker's order and the filled order
+/// - dataHash:           keccak256 of the order data, which takers pass to the router in full
+/// - amount:             native ETH deposited at creation, held as WETH and approved to the router
+/// - expiration:         fills are rejected from this time on
+/// - publicCancellation: access-token holders may cancel from this time on
+/// - rescueAfter:        the maker may rescue stray funds from this time on; stamped by the factory
+struct NativeOrder {
+    address maker;
+    MakerTraits traits;
+    bytes32 dataHash;
+    uint256 amount;
+    uint40 expiration;
+    uint40 publicCancellation;
+    uint40 rescueAfter;
+}
 
 /// @title NativeOrderEscrow
-/// @notice Per-order escrow clone that lets a maker sell native ETH through an unmodified SwapVM router.
-/// @dev Deployed by NativeOrderEscrowFactory via CREATE2 with salt = hash(IBaseEscrow.Immutables).
-/// Every call passes the immutables, re-authenticating them by CREATE2 self-proof.
-///
-/// Immutables fields:
-/// - orderHash:     hash of the PRE-PATCH order (maker = real maker) - resolves CREATE2 circularity
-/// - hashlock:      0 (unused)
-/// - maker:         the real maker EOA - receives cancellation refunds, may rescue funds
-/// - taker:         0 (unused)
-/// - token:         WETH
-/// - amount:        ETH deposited at creation (informational; live WETH balance is authoritative)
-/// - safetyDeposit: 0 (unused)
-/// - timelocks:     SrcCancellation = order expiry, SrcPublicCancellation = public GC start, plus deployedAt
+/// @notice Holds a single native ETH sell order as WETH, without changing the SwapVM router.
+/// @dev The exact WETH allowance is also the order's lifecycle state: fills consume it and cancellation
+/// permanently zeros it. Only the factory can approve, once when deploying the clone.
+/// @custom:security-contact security@1inch.io
 contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
-    using AddressLib for Address;
+    using Clones for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-    using TimelocksLib for Timelocks;
-    using ImmutablesLib for IBaseEscrow.Immutables;
-    using CalldataParse for bytes;
 
-    error BadSignature();
-    error MakerOrderMismatch();
-    error FilledOrderMismatch();
-    error OrderExpired();
+    error InvalidCaller();
+    error InvalidOrder();
+    error InvalidTime();
+    error OrderClosed();
+    error NativeTokenSendingFailure();
 
-    /// @notice Gas budget compensated to the resolver performing a public cancellation.
+    /// @notice Emitted by cancel and publicCancel after the remaining funds are paid out.
+    /// @param orderHash Hash of the filled order (maker = this clone), marked fully filled in the router.
+    /// @param refund Native ETH sent to the maker.
+    /// @param reward Native ETH sent to the public canceller; zero for the maker's own cancellation.
+    event NativeOrderCancelled(bytes32 indexed orderHash, uint256 refund, uint256 reward);
+    /// @notice Emitted when the maker rescues stray funds.
+    /// @param token Rescued token; zero address for native ETH.
+    /// @param amount Rescued amount.
+    event FundsRescued(address indexed token, uint256 amount);
+
+    /// @dev Public cancellation reward: base fee * gas budget * 110%, capped by rewardLimit and WETH left.
     uint256 private constant _PUBLIC_CANCEL_GAS_COST = 120_000;
-    /// @notice Premium (in percent) over the base fee applied to the public cancellation reward.
-    uint256 private constant _PUBLIC_CANCEL_REWARD_PREMIUM = 110;
 
-    /// @notice Factory that deployed this implementation and its clones.
+    /// @notice Factory that deployed this implementation, creates its clones and alone calls depositAndApprove.
     address public immutable FACTORY = msg.sender;
-    /// @notice Hash of the EIP-1167 proxy bytecode pointing at this implementation.
-    bytes32 public immutable PROXY_BYTECODE_HASH = ProxyHashLib.computeProxyBytecodeHash(address(this));
-    /// @notice SwapVM router the clone approves and validates orders for.
-    ISwapVM public immutable ROUTER;
-    /// @notice Wrapped native token the escrowed ETH is held in.
+    /// @notice Wrapped native token the deposit is held in.
     IWETH public immutable WETH;
-    /// @notice Delay after deployment when the maker may rescue stray funds.
-    uint256 public immutable RESCUE_DELAY;
-
-    /// @dev Token that gates the public cancellation path to registered resolvers.
+    /// @dev Clones read it to recompute their own CREATE2 address from the order terms.
+    address private immutable _IMPLEMENTATION = address(this);
+    /// @dev Token whose holders may call publicCancel.
     IERC20 private immutable _ACCESS_TOKEN;
 
-    constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 rescueDelay)
+    /// @param router SwapVM router that pulls the WETH and validates fills through isValidSignature.
+    /// @param weth Wrapped native token; plain ETH transfers are accepted only from it, when unwrapping.
+    /// @param accessToken Token whose holders may call publicCancel.
+    constructor(ISwapVM router, IWETH weth, IERC20 accessToken)
         OnlyWethReceiver(address(weth))
         RouterOrderHasher(router)
     {
-        ROUTER = router;
         WETH = weth;
         _ACCESS_TOKEN = accessToken;
-        RESCUE_DELAY = rescueDelay;
     }
 
-    modifier onlyCaller(address expected) {
-        if (msg.sender != expected) revert IBaseEscrow.InvalidCaller();
+    modifier onlyMaker(NativeOrder calldata order) {
+        require(msg.sender == order.maker, InvalidCaller());
+        _validateOrder(order);
         _;
     }
 
-    modifier onlyValidImmutables(bytes32 immutablesHash) {
-        _validateImmutables(immutablesHash);
-        _;
-    }
-
-    modifier onlyAfter(uint256 start) {
-        if (block.timestamp < start) revert IBaseEscrow.InvalidTime();
-        _;
-    }
-
-    modifier onlyAccessTokenHolder() {
-        if (_ACCESS_TOKEN.balanceOf(msg.sender) == 0) revert IBaseEscrow.InvalidCaller();
-        _;
-    }
-
-    /// @notice Wraps the ETH deposit into WETH and approves the router to pull it.
-    /// @dev Called once by the factory after clone is deployed. The allowance is exactly the deposit, so
-    /// WETH sent to the clone later can never be filled beyond the original order size.
-    function depositAndApprove() external payable onlyCaller(FACTORY) {
+    /// @notice Wraps the initial deposit and approves exactly that amount for the router.
+    /// @dev Only the factory may call it, which it does once, right after deploying the clone.
+    function depositAndApprove() external payable {
+        require(msg.sender == FACTORY, InvalidCaller());
         WETH.safeDeposit(msg.value);
-        IERC20(address(WETH)).forceApprove(address(ROUTER), msg.value);
+        WETH.forceApprove(address(ROUTER), msg.value);
     }
 
-    /// @notice ERC-1271 validation called by the router when this clone is `order.maker`.
-    /// @dev The signature bytes carry abi.encode(immutables, traits, keccak256(data)) of the order; the program
-    /// itself is already in the router's calldata and is never sent twice. Three links are verified:
-    /// 1. immutables authenticate against this clone's CREATE2 address (binds amount, maker, timelocks);
-    /// 2. the order with maker = address(this) hashes to `orderHash` being validated by the router, which
-    ///    by preimage resistance pins `traits` and `dataHash` to the order actually being executed;
-    /// 3. the same order with maker = immutables.maker hashes to immutables.orderHash (binds it to the
-    ///    order committed at creation, where the factory enforced maker == immutables.maker). This is the
-    ///    check that matters: without it any order naming this clone as maker would pass.
-    /// Fills are rejected from the SrcCancellation stage on, so the escrow expiry bounds the order lifetime
-    /// regardless of the program's own Deadline, and public cancellation never races a live order.
-    /// @param orderHash Hash of the patched order the router is executing.
-    /// @param signature abi.encode(IBaseEscrow.Immutables, MakerTraits, bytes32 dataHash).
-    /// @return magicValue ERC-1271 magic value on success.
+    /// @notice ERC-1271 validation called by the router when this clone is the order's maker.
+    /// @dev The signature is abi.encode(NativeOrder); the program is supplied only once, to the router.
+    /// Valid only if the terms are committed in this clone's address, the order has not expired, its hash
+    /// with maker = this clone equals `orderHash`, and router allowance remains.
+    /// @param orderHash Hash of the order the router is executing.
+    /// @param signature abi.encode(NativeOrder), exactly 224 bytes.
+    /// @return magicValue `IERC1271.isValidSignature.selector` if all checks pass, otherwise zero. A
+    /// non-canonical encoding may revert in ABI decoding instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        (IBaseEscrow.Immutables calldata immutables, MakerTraits traits, bytes32 dataHash) = _decode(signature);
-
-        _validateImmutables(immutables.hash());
-
-        if (block.timestamp >= immutables.timelocks.get(TimelocksLib.Stage.SrcCancellation)) revert OrderExpired();
-        if (_hashOrder(address(this), traits, dataHash) != orderHash) revert FilledOrderMismatch();
-        if (_hashOrder(immutables.maker.get(), traits, dataHash) != immutables.orderHash) revert MakerOrderMismatch();
-
+        if (signature.length != 7 * 32) return bytes4(0);
+        NativeOrder memory order = abi.decode(signature, (NativeOrder));
+        if (
+            !_isValidOrder(order) || block.timestamp >= order.expiration ||
+            _hashOrder(address(this), order.traits, order.dataHash) != orderHash ||
+            WETH.allowance(address(this), address(ROUTER)) == 0
+        ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
     }
 
-    /// @notice Cancels the order: closes it in the router, unwraps the remaining WETH and refunds
-    /// native ETH to the maker.
-    /// @dev Callable by the maker at any time (before expiry or to sweep a partial-fill remainder).
-    /// @param immutables The escrow immutables (validated against the clone address).
-    /// @param filledOrderHash Hash of the patched order (from NativeOrderCreated), see _closeOrder.
-    function cancel(IBaseEscrow.Immutables calldata immutables, bytes32 filledOrderHash)
-        external
-        onlyCaller(immutables.maker.get())
-        onlyValidImmutables(immutables.hash())
-    {
-        _closeOrder(filledOrderHash);
+    /// @notice Permanently closes the order and returns all remaining WETH and forced ETH as native ETH.
+    /// @dev May also sweep donations after a full fill or an earlier cancellation. No resolver reward.
+    /// @param order Terms committed in this clone's address; the caller must be `order.maker`.
+    function cancel(NativeOrder calldata order) external onlyMaker(order) {
+        _cancel(order, 0);
+    }
+
+    /// @notice An access-token holder may close an expired, abandoned order for a capped reward.
+    /// @dev Fully filled or already cancelled orders cannot earn another reward. Forced ETH is refunded
+    /// entirely to the maker and never increases the reward budget.
+    /// @param order Terms committed in this clone's address.
+    /// @param rewardLimit Cap on the caller's reward. The reward is also capped by the remaining allowance,
+    /// the WETH balance and `block.basefee * 120_000 * 110 / 100`.
+    function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external {
+        _validateOrder(order);
+        require(block.timestamp >= order.publicCancellation, InvalidTime());
+        require(_ACCESS_TOKEN.balanceOf(msg.sender) > 0, InvalidCaller());
+        uint256 allowance = WETH.allowance(address(this), address(ROUTER));
+        require(allowance > 0, OrderClosed());
+        uint256 reward = Math.min(
+            Math.min(rewardLimit, Math.min(allowance, WETH.balanceOf(address(this)))),
+            block.basefee * _PUBLIC_CANCEL_GAS_COST * 110 / 100
+        );
+        _cancel(order, reward);
+    }
+
+    /// @notice Recovers stray tokens after the factory's rescue delay; zero token means native ETH.
+    /// @dev Rescuing WETH also closes the order, so replacement WETH cannot revive it.
+    /// @param order Terms committed in this clone's address; the caller must be `order.maker`.
+    /// @param token Token to send to the maker; zero address for native ETH.
+    /// @param amount Amount to send.
+    function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external onlyMaker(order) {
+        require(block.timestamp >= order.rescueAfter, InvalidTime());
+        if (token == address(WETH)) _closeOrder(order);
+        if (token == address(0)) _ethTransfer(order.maker, amount);
+        else IERC20(token).safeTransfer(order.maker, amount);
+        emit FundsRescued(token, amount);
+    }
+
+    function _cancel(NativeOrder calldata order, uint256 reward) private {
+        bytes32 orderHash = _closeOrder(order);
         WETH.safeWithdraw(WETH.balanceOf(address(this)));
-        _ethTransfer(immutables.maker.get(), address(this).balance);
-        emit IBaseEscrow.EscrowCancelled();
+        // Pay the reward first, so a maker callback cannot rescue the resolver's reserved ETH.
+        _ethTransfer(msg.sender, reward);
+        uint256 refund = address(this).balance;
+        _ethTransfer(order.maker, refund);
+        emit NativeOrderCancelled(orderHash, refund, reward);
     }
 
-    /// @notice Public cancellation after the SrcPublicCancellation stage: any access-token holder may
-    /// garbage-collect an abandoned order for a base-fee-capped reward; the remainder refunds the maker.
-    /// @param immutables The escrow immutables (validated against the clone address).
-    /// @param filledOrderHash Hash of the patched order (from NativeOrderCreated), see _closeOrder.
-    function publicCancel(IBaseEscrow.Immutables calldata immutables, bytes32 filledOrderHash)
-        external
-        onlyAccessTokenHolder
-        onlyValidImmutables(immutables.hash())
-        onlyAfter(immutables.timelocks.get(TimelocksLib.Stage.SrcPublicCancellation))
-    {
-        _closeOrder(filledOrderHash);
-        WETH.safeWithdraw(WETH.balanceOf(address(this)));
-        uint256 balance = address(this).balance;
-        uint256 reward = Math.min(balance, block.basefee * _PUBLIC_CANCEL_GAS_COST * _PUBLIC_CANCEL_REWARD_PREMIUM / 100);
-        _ethTransfer(immutables.maker.get(), balance - reward);
-        if (reward > 0) _ethTransfer(msg.sender, reward);
-        emit IBaseEscrow.EscrowCancelled();
+    function _closeOrder(NativeOrder calldata order) private returns (bytes32 orderHash) {
+        WETH.forceApprove(address(ROUTER), 0);
+        orderHash = _hashOrder(address(this), order.traits, order.dataHash);
+        // Makes quotes using InvalidateTokenOut reflect cancellation as well.
+        InvalidateTokenOutExternal(address(ROUTER)).invalidateTokenOut(orderHash, address(WETH));
     }
 
-    /// @notice Rescues stray funds to the maker after the rescue delay.
-    /// @dev Only the maker may rescue: it is the sole owner of everything the clone holds.
-    /// @param token Token to rescue (zero address for native ETH).
-    /// @param amount Amount to rescue.
-    /// @param immutables The escrow immutables.
-    function rescueFunds(address token, uint256 amount, IBaseEscrow.Immutables calldata immutables)
-        external
-        onlyCaller(immutables.maker.get())
-        onlyValidImmutables(immutables.hash())
-        onlyAfter(immutables.timelocks.rescueStart(RESCUE_DELAY))
-    {
-        _uniTransfer(token, msg.sender, amount);
-        emit IBaseEscrow.FundsRescued(token, amount);
+    function _validateOrder(NativeOrder memory order) private view {
+        require(_isValidOrder(order), InvalidOrder());
     }
 
-    /// @dev Reads abi.encode(Immutables, MakerTraits, bytes32 dataHash) in place: 3-word head
-    /// (immutables offset, traits, dataHash), then the 9-word immutables head and the `parameters` length.
-    /// Only the length is checked; a wrong immutables image fails later in `immutables.hash()`.
-    function _decode(bytes calldata signature)
-        private
-        pure
-        returns (IBaseEscrow.Immutables calldata immutables, MakerTraits traits, bytes32 dataHash)
-    {
-        // 96 (offset, traits, dataHash) + 288 (immutables head) + 32 (parameters length)
-        if (signature.length < 416) revert BadSignature();
-
-        traits = MakerTraits.wrap(signature.at(32).asU256());
-        dataHash = signature.at(64).asBytes32();
-        assembly ("memory-safe") {
-            immutables := add(signature.offset, 96)
-        }
+    /// @dev Only the terms this clone was created with hash to the salt of its CREATE2 address.
+    function _isValidOrder(NativeOrder memory order) private view returns (bool) {
+        return _IMPLEMENTATION.predictDeterministicAddress(keccak256(abi.encode(order)), FACTORY) == address(this);
     }
 
-    /// @dev Verifies that the immutables(hash is the salt) match the CREATE2 address of this contract.
-    function _validateImmutables(bytes32 immutablesHash) internal view {
-        if (Create2.computeAddress(immutablesHash, PROXY_BYTECODE_HASH, FACTORY) != address(this)) {
-            revert IBaseEscrow.InvalidImmutables();
-        }
-    }
-
-    /// @dev Makes the cancellation final: revokes the router allowance, so WETH sent to the clone later
-    /// cannot revive the order, and marks the order fully filled in the router's InvalidateTokenOut
-    /// registry, so programs using that instruction also stop quoting.
-    /// `filledOrderHash` is not authenticated: the router keys the registry by msg.sender (this clone),
-    /// so a wrong hash can only fail to invalidate this clone's own order, never anyone else's.
-    function _closeOrder(bytes32 filledOrderHash) private {
-        IERC20(address(WETH)).forceApprove(address(ROUTER), 0);
-        InvalidateTokenOutExternal(address(ROUTER)).invalidateTokenOut(filledOrderHash, address(WETH));
-    }
-
-    /// @dev Transfers ERC20 or native tokens to the recipient.
-    function _uniTransfer(address token, address to, uint256 amount) internal {
-        if (token == address(0)) {
-            _ethTransfer(to, amount);
-        } else {
-            IERC20(token).safeTransfer(to, amount);
-        }
-    }
-
-    /// @dev Transfers native tokens to the recipient.
-    function _ethTransfer(address to, uint256 amount) internal {
+    function _ethTransfer(address to, uint256 amount) private {
+        if (amount == 0) return;
         (bool success,) = to.call{ value: amount }("");
-        if (!success) revert IBaseEscrow.NativeTokenSendingFailure();
+        require(success, NativeTokenSendingFailure());
     }
 }

@@ -19,10 +19,8 @@ import { Deadline } from "../../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
 import { WETHMock } from "../mocks/WETHMock.sol";
 
-import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
+import { NativeOrder, NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
-import { IBaseEscrow } from "../../../contracts/extensions/nativeorder/vendor/interfaces/IBaseEscrow.sol";
-import { Timelocks, TimelocksLib } from "../../../contracts/extensions/nativeorder/vendor/libraries/TimelocksLib.sol";
 
 /// @title NativeOrderGas
 /// @notice Native ETH order (escrow clone) gas benchmarks: lifecycle calls of the escrow flow, plus the same
@@ -46,7 +44,7 @@ contract NativeOrderGas is Test {
 
     ISwapVM.Order internal makerOrder;
     ISwapVM.Order internal filledOrder;
-    IBaseEscrow.Immutables internal immutables;
+    NativeOrder internal nativeOrder;
     NativeOrderEscrow internal escrow;
     bytes32 internal filledOrderHash;
 
@@ -79,10 +77,11 @@ contract NativeOrderGas is Test {
 
     function test_gas_NativeOrder_create() public {
         makerOrder = _buildOrder();
-        Timelocks timelocks = _timelocks();
+        uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
+        uint40 publicCancellation = uint40(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(makerOrder, timelocks);
-        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, timelocks)));
+        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration, publicCancellation);
+        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration, publicCancellation)));
     }
 
     function test_gas_NativeOrder_swap_exactIn() public {
@@ -108,16 +107,19 @@ contract NativeOrderGas is Test {
     function test_gas_NativeOrder_cancel() public {
         _createEscrow();
         vm.prank(maker);
-        escrow.cancel(immutables, filledOrderHash);
-        _snapshot("cancel", abi.encodeCall(NativeOrderEscrow.cancel, (immutables, filledOrderHash)));
+        escrow.cancel(nativeOrder);
+        _snapshot("cancel", abi.encodeCall(NativeOrderEscrow.cancel, (nativeOrder)));
     }
 
     function test_gas_NativeOrder_publicCancel() public {
         _createEscrow();
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(resolver);
-        escrow.publicCancel(immutables, filledOrderHash);
-        _snapshot("publicCancel", abi.encodeCall(NativeOrderEscrow.publicCancel, (immutables, filledOrderHash)));
+        escrow.publicCancel(nativeOrder, type(uint256).max);
+        _snapshot(
+            "publicCancel",
+            abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder, type(uint256).max))
+        );
     }
 
     // === Reference: same program as a plain EOA-signed WETH order ===
@@ -159,12 +161,13 @@ contract NativeOrderGas is Test {
     function _createEscrow() internal {
         makerOrder = _buildOrder();
         vm.prank(maker);
-        (address escrowAddr, bytes32 fHash, IBaseEscrow.Immutables memory imm) =
-            factory.create{ value: WETH_AMOUNT }(makerOrder, _timelocks());
+        (address escrowAddr, bytes32 fHash, NativeOrder memory terms) = factory.create{ value: WETH_AMOUNT }(
+            makerOrder, uint40(block.timestamp + EXPIRY_OFFSET), uint40(block.timestamp + PUBLIC_CANCEL_OFFSET)
+        );
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
         filledOrderHash = fHash;
-        immutables = imm;
+        nativeOrder = terms;
         filledOrder = makerOrder;
         filledOrder.maker = escrowAddr;
     }
@@ -188,22 +191,15 @@ contract NativeOrderGas is Test {
         (args.tokenA, args.tokenB) = isAToB ? (address(dai), address(weth)) : (address(weth), address(dai));
         args.program = bytes.concat(
             Deadline.build(uint40(block.timestamp + EXPIRY_OFFSET)),
-            StaticBalances.build(DAI_AMOUNT, WETH_AMOUNT),
+            StaticBalances.build(isAToB ? DAI_AMOUNT : WETH_AMOUNT, isAToB ? WETH_AMOUNT : DAI_AMOUNT),
             InvalidateTokenOut.build(),
             LimitSwap.build(address(dai), address(weth))
         );
         return MakerTraitsLib.build(args);
     }
 
-    function _timelocks() internal pure returns (Timelocks) {
-        return Timelocks.wrap(
-            (uint256(EXPIRY_OFFSET) << (uint256(TimelocksLib.Stage.SrcCancellation) * 32)) |
-            (uint256(PUBLIC_CANCEL_OFFSET) << (uint256(TimelocksLib.Stage.SrcPublicCancellation) * 32))
-        );
-    }
-
     function _escrowTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return _takerData(isExactIn, abi.encode(immutables, makerOrder.traits, keccak256(makerOrder.data)));
+        return _takerData(isExactIn, abi.encode(nativeOrder));
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
