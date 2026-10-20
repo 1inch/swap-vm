@@ -31,7 +31,7 @@ contract NativeOrderEscrowTest is Test {
     uint40 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_DELAY = 1 hours;
     uint32 private constant RESCUE_DELAY = 7 days;
-    uint128 private constant MAX_REWARD = type(uint128).max;
+    uint128 private constant MAX_REWARD = 0.001 ether;
     bytes4 private constant ERC1271_MAGIC = 0x1626ba7e;
 
     SwapVMRouter public router;
@@ -279,12 +279,11 @@ contract NativeOrderEscrowTest is Test {
         _assertClosed();
     }
 
-    function test_PublicCancel_BaseFeeRewardAndForcedEthRefund() public {
+    function test_PublicCancel_MaxRewardAndForcedEthRefund() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         vm.deal(address(escrow), 2 ether);
-        uint256 reward = 10 gwei * 120_000 * 110 / 100;
+        uint256 reward = MAX_REWARD;
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -296,7 +295,6 @@ contract NativeOrderEscrowTest is Test {
     function test_PublicCancel_RewardLimit() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, 100);
@@ -307,7 +305,6 @@ contract NativeOrderEscrowTest is Test {
     function test_PublicCancel_ZeroRewardLimit() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, 0);
@@ -318,7 +315,6 @@ contract NativeOrderEscrowTest is Test {
     function test_PublicCancel_RewardCappedByMakerMaxReward() public {
         _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), 0.0005 ether);
         vm.warp(_publicCancelStart());
-        vm.fee(100 gwei);
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -335,23 +331,27 @@ contract NativeOrderEscrowTest is Test {
         assertEq(maker.balance - makerBefore, WETH_AMOUNT);
     }
 
-    function test_PublicCancel_ZeroBaseFee() public {
+    function test_PublicCancel_NoncanonicalMaxRewardCannotRaiseReward() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
-        vm.fee(0);
-        uint256 makerBefore = maker.balance;
+        bytes memory callData = abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder, type(uint256).max));
+        // The salt ignores bits above uint128, so Solidity's calldata validation must reject them.
+        assembly ("memory-safe") {
+            let maxRewardWord := add(callData, 164)
+            mstore(maxRewardWord, or(mload(maxRewardWord), shl(128, 1)))
+        }
         vm.prank(resolver);
-        escrow.publicCancel(nativeOrder, type(uint256).max);
+        (bool success,) = address(escrow).call(callData);
+        assertFalse(success);
         assertEq(resolver.balance, 0);
-        assertEq(maker.balance - makerBefore, WETH_AMOUNT);
+        _assertCancellationRolledBack();
     }
 
     function test_PublicCancel_RewardCappedByRemainingAllowanceNotDonations() public {
-        _createEscrow(_defaultProgram());
+        _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), type(uint128).max);
         router.swap(filledOrder, 0.4 ether, _takerData(false));
         _donateWeth(2 ether);
         vm.warp(_publicCancelStart());
-        vm.fee(1 ether);
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -367,7 +367,6 @@ contract NativeOrderEscrowTest is Test {
         weth.transfer(address(this), WETH_AMOUNT - 123);
         vm.deal(address(escrow), 1 ether);
         vm.warp(_publicCancelStart());
-        vm.fee(1 ether);
         uint256 makerBefore = maker.balance;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -379,7 +378,6 @@ contract NativeOrderEscrowTest is Test {
     function test_PublicCancel_DustRemainder() public {
         _createOrder(_buildOrder(_defaultProgram()), 1, _expiration());
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(resolver.balance, 1);
@@ -389,7 +387,6 @@ contract NativeOrderEscrowTest is Test {
     function test_PublicCancel_CannotRewardTwiceEvenAfterDonation() public {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         uint256 resolverBefore = resolver.balance;
@@ -405,13 +402,11 @@ contract NativeOrderEscrowTest is Test {
         assertEq(maker.balance - makerBefore, WETH_AMOUNT);
     }
 
-    function testFuzz_PublicCancel_ConservesFunds(uint96 deposit, uint96 rewardLimit, uint64 baseFee) public {
+    function testFuzz_PublicCancel_ConservesFunds(uint96 deposit, uint96 rewardLimit, uint128 maxReward) public {
         deposit = uint96(bound(deposit, 1, 10 ether));
-        baseFee = uint64(bound(baseFee, 0, 100 gwei));
-        _createOrder(_buildOrder(_defaultProgram()), deposit, _expiration());
+        _createOrder(_buildOrder(_defaultProgram()), deposit, _expiration(), maxReward);
         vm.warp(_publicCancelStart());
-        vm.fee(baseFee);
-        uint256 reward = uint256(baseFee) * 120_000 * 110 / 100;
+        uint256 reward = maxReward;
         if (reward > rewardLimit) reward = rewardLimit;
         if (reward > deposit) reward = deposit;
         uint256 makerBefore = maker.balance;
@@ -426,7 +421,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AcceptsCommittedOrder() public {
         _createEscrow(_defaultProgram());
-        assertEq(_signature().length, 160);
+        assertEq(_signature().length, 105);
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
@@ -449,7 +444,7 @@ contract NativeOrderEscrowTest is Test {
     function testFuzz_IsValidSignature_MalformedLength(uint16 length) public {
         _createEscrow(_defaultProgram());
         length = uint16(bound(length, 0, 512));
-        if (length == 160) ++length;
+        if (length == 105) ++length;
         assertEq(escrow.isValidSignature(filledOrderHash, new bytes(length)), bytes4(0));
     }
 
@@ -458,22 +453,9 @@ contract NativeOrderEscrowTest is Test {
         assertEq(escrow.isValidSignature(filledOrderHash, bytes.concat(_signature(), hex"00")), bytes4(0));
     }
 
-    function test_IsValidSignature_NoncanonicalAddressCannotAuthenticate() public {
-        _createEscrow(_defaultProgram());
-        bytes memory signature = _signature();
-        assembly ("memory-safe") {
-            mstore(add(signature, 32), or(mload(add(signature, 32)), shl(160, 1)))
-        }
-        (bool success, bytes memory result) = address(escrow).staticcall(
-            abi.encodeCall(NativeOrderEscrow.isValidSignature, (filledOrderHash, signature))
-        );
-        // Solidity's ABI decoder may reject noncanonical values before the function can return zero.
-        if (success) assertEq(abi.decode(result, (bytes4)), bytes4(0));
-    }
-
     function test_Swap_TamperedSignatureRevertsBadSignature() public {
         _createEscrow(_defaultProgram());
-        bytes memory signature = abi.encode(_tamper(3, 0));
+        bytes memory signature = _encode(_tamper(3, 0));
         _expectBadSignature(signature);
         router.swap(filledOrder, WETH_AMOUNT, _takerData(false, signature));
     }
@@ -737,7 +719,6 @@ contract NativeOrderEscrowTest is Test {
         NativeOrderReceiver receiver = _contractMaker();
         receiver.configure(escrow, nativeOrder, true, false);
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         vm.prank(resolver);
         vm.expectRevert(NativeOrderEscrow.NativeTokenSendingFailure.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -751,7 +732,6 @@ contract NativeOrderEscrowTest is Test {
         receiver.configure(escrow, nativeOrder, true, false);
         accessToken.mint(address(receiver), 1);
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
         uint256 makerBefore = maker.balance;
         vm.prank(address(receiver));
         vm.expectRevert(NativeOrderEscrow.NativeTokenSendingFailure.selector);
@@ -765,8 +745,7 @@ contract NativeOrderEscrowTest is Test {
         receiver.configure(escrow, nativeOrder, false, true);
         accessToken.mint(maker, 1);
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
-        uint256 reward = 10 gwei * 120_000 * 110 / 100;
+        uint256 reward = MAX_REWARD;
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(resolver.balance, reward);
@@ -781,8 +760,7 @@ contract NativeOrderEscrowTest is Test {
         receiver.configure(escrow, nativeOrder, false, false);
         receiver.enableRescueDuringCallback();
         vm.warp(_rescueStart());
-        vm.fee(10 gwei);
-        uint256 reward = 10 gwei * 120_000 * 110 / 100;
+        uint256 reward = MAX_REWARD;
 
         vm.prank(resolver);
         escrow.publicCancel(nativeOrder, type(uint256).max);
@@ -801,8 +779,7 @@ contract NativeOrderEscrowTest is Test {
         receiver.configure(escrow, nativeOrder, false, true);
         accessToken.mint(address(receiver), 1);
         vm.warp(_publicCancelStart());
-        vm.fee(10 gwei);
-        uint256 reward = 10 gwei * 120_000 * 110 / 100;
+        uint256 reward = MAX_REWARD;
         uint256 makerBefore = maker.balance;
 
         vm.prank(address(receiver));
@@ -903,7 +880,11 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _signature() private view returns (bytes memory) {
-        return abi.encode(nativeOrder);
+        return _encode(nativeOrder);
+    }
+
+    function _encode(NativeOrder memory order) private pure returns (bytes memory) {
+        return abi.encodePacked(order.maker, order.traits, order.dataHash, order.expiration, order.maxReward);
     }
 
     function _takerData(bool isExactIn) private view returns (bytes memory) {
@@ -961,7 +942,7 @@ contract NativeOrderEscrowTest is Test {
 
     function _assertInvalidOrder(NativeOrder memory tampered) private {
         assertTrue(factory.addressOfEscrow(tampered) != address(escrow));
-        assertEq(escrow.isValidSignature(filledOrderHash, abi.encode(tampered)), bytes4(0));
+        assertEq(escrow.isValidSignature(filledOrderHash, _encode(tampered)), bytes4(0));
         vm.prank(tampered.maker);
         vm.expectRevert(NativeOrderEscrow.InvalidOrder.selector);
         escrow.cancel(tampered);

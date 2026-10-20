@@ -19,6 +19,8 @@ import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 /// @dev Does not contain an EIP-712 hash, so authentication for refunds survives chain ID changes.
 /// The deposit is not a term: the program prices the order and the exact router allowance caps it.
 /// Public cancellation and rescue open at the implementation's fixed delays after `expiration`.
+/// abi.encodePacked of the fields in declaration order (105 bytes) is the ERC-1271 signature, and its
+/// keccak256 is the CREATE2 salt.
 /// Fields:
 /// - maker:      original maker; the only caller of cancel and rescueFunds, receives all refunds
 /// - traits:     traits shared by the maker's order and the filled order
@@ -59,11 +61,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// @param amount Rescued amount.
     event FundsRescued(address indexed token, uint256 amount);
 
-    /// @dev Public cancellation reward: base fee * gas budget * 110%, capped by the maker's maxReward, the
-    /// caller's rewardLimit and the WETH left.
-    uint256 private constant _PUBLIC_CANCEL_GAS_COST = 120_000;
-    /// @dev Length of abi.encode(NativeOrder): five static words.
-    uint256 private constant _ORDER_SIZE = 160;
+    /// @dev Length of the packed NativeOrder: 20 + 32 + 32 + 5 + 16 bytes.
+    uint256 private constant _ORDER_SIZE = 105;
 
     /// @notice Factory that deployed this implementation, creates its clones and alone calls depositAndApprove.
     address public immutable FACTORY = msg.sender;
@@ -108,24 +107,32 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     }
 
     /// @notice ERC-1271 validation called by the router when this clone is the order's maker.
-    /// @dev The signature is abi.encode(NativeOrder), read in place from calldata; the program is supplied
-    /// only once, to the router.
+    /// @dev The signature is the packed NativeOrder, hashed in place as the CREATE2 salt; the program is
+    /// supplied only once, to the router.
     /// Valid only on the deployment chain, so a fork with a new chain ID cannot fill copies of the order,
     /// and only if the terms are committed in this clone's address, the order has not expired and its hash
     /// with maker = this clone equals `orderHash`. The allowance is not read here: a closed order keeps a
     /// valid signature until expiration, but its fills revert because the router allowance is zero.
     /// @param orderHash Hash of the order the router is executing.
-    /// @param signature abi.encode(NativeOrder), exactly 160 bytes.
+    /// @param signature abi.encodePacked(maker, traits, dataHash, expiration, maxReward), exactly 105 bytes.
     /// @return magicValue `IERC1271.isValidSignature.selector` if all checks pass, otherwise zero.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        if (signature.length != _ORDER_SIZE) return bytes4(0);
-        NativeOrder calldata order;
+        if (signature.length != _ORDER_SIZE || !_isDeploymentChain()) return bytes4(0);
+        bytes32 salt;
+        MakerTraits traits;
+        bytes32 dataHash;
+        uint256 expiration;
         assembly ("memory-safe") {
-            order := signature.offset
+            let ptr := mload(0x40)
+            calldatacopy(ptr, signature.offset, _ORDER_SIZE)
+            salt := keccak256(ptr, _ORDER_SIZE)
+            traits := calldataload(add(signature.offset, 20))
+            dataHash := calldataload(add(signature.offset, 52))
+            expiration := shr(216, calldataload(add(signature.offset, 84)))
         }
         if (
-            !_isDeploymentChain() || !_isValidOrder(order) || block.timestamp >= order.expiration ||
-            _hashOrder(address(this), order.traits, order.dataHash) != orderHash
+            !_isCommitted(salt) || block.timestamp >= expiration ||
+            _hashOrder(address(this), traits, dataHash) != orderHash
         ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
     }
@@ -143,7 +150,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// entirely to the maker and never increases the reward budget.
     /// @param order Terms committed in this clone's address.
     /// @param rewardLimit Cap on the caller's reward. The reward is also capped by the order's maxReward, the
-    /// remaining allowance, the WETH balance and `block.basefee * 120_000 * 110 / 100`.
+    /// remaining allowance and the WETH balance.
     function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external {
         _validateOrder(order);
         require(block.timestamp >= order.expiration + PUBLIC_CANCELLATION_DELAY, InvalidTime());
@@ -151,8 +158,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         uint256 allowance = WETH.allowance(address(this), address(ROUTER));
         require(allowance > 0, OrderClosed());
         uint256 reward = Math.min(
-            Math.min(Math.min(rewardLimit, order.maxReward), Math.min(allowance, WETH.balanceOf(address(this)))),
-            block.basefee * _PUBLIC_CANCEL_GAS_COST * 110 / 100
+            Math.min(rewardLimit, order.maxReward), Math.min(allowance, WETH.balanceOf(address(this)))
         );
         _cancel(order, reward);
     }
@@ -188,20 +194,24 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     }
 
     function _validateOrder(NativeOrder calldata order) private view {
-        require(_isValidOrder(order), InvalidOrder());
+        require(_isCommitted(_salt(order)), InvalidOrder());
     }
 
     /// @dev Only the terms this clone was created with hash to the salt of its CREATE2 address.
-    function _isValidOrder(NativeOrder calldata order) private view returns (bool) {
-        return _IMPLEMENTATION.predictDeterministicAddress(_salt(order), FACTORY) == address(this);
+    function _isCommitted(bytes32 salt) private view returns (bool) {
+        return _IMPLEMENTATION.predictDeterministicAddress(salt, FACTORY) == address(this);
     }
 
-    /// @dev Hashes the terms as they sit in calldata. Only the canonical encoding matches the factory's
-    /// keccak256(abi.encode(order)), so any other byte image of the same terms fails the address check.
+    /// @dev Repacks the ABI-encoded terms into the signature layout before hashing. The shifts drop dirty
+    /// high bits, so the salt commits to the same values Solidity reads from `order`.
     function _salt(NativeOrder calldata order) private pure returns (bytes32 salt) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
-            calldatacopy(ptr, order, _ORDER_SIZE)
+            mstore(ptr, shl(96, calldataload(order)))
+            mstore(add(ptr, 20), calldataload(add(order, 0x20)))
+            mstore(add(ptr, 52), calldataload(add(order, 0x40)))
+            mstore(add(ptr, 84), shl(216, calldataload(add(order, 0x60))))
+            mstore(add(ptr, 89), shl(128, calldataload(add(order, 0x80))))
             salt := keccak256(ptr, _ORDER_SIZE)
         }
     }

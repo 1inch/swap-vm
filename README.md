@@ -144,7 +144,8 @@ Aqua orders are rejected.
 
 ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
-// Takers use filledOrder and set TakerTraitsLib.Args.signature = abi.encode(nativeOrder).
+// Takers use filledOrder and set TakerTraitsLib.Args.signature = abi.encodePacked(nativeOrder.maker,
+// nativeOrder.traits, nativeOrder.dataHash, nativeOrder.expiration, nativeOrder.maxReward).
 // They can receive WETH or request the router's ordinary taker-side native ETH unwrap.
 ```
 
@@ -153,7 +154,8 @@ public cancellation reward in the escrow's CREATE2 address. The deposit is not a
 prices the order, the exact router allowance caps it, and `NativeOrderCreated` reports it. Public
 cancellation and rescue open at fixed delays after expiration, set when the factory is deployed
 (`PUBLIC_CANCELLATION_DELAY` and `RESCUE_DELAY` on the escrow implementation). Its ERC-1271 signature
-is 160 bytes, is read in place from calldata and does not duplicate the program. Fills
+is these fields packed in declaration order, 105 bytes. The escrow hashes it in place as its CREATE2
+salt, and it does not duplicate the program. Fills
 require the matching router-domain order hash, `block.timestamp < expiration` and a nonzero remaining
 allowance. The signature check does not read the allowance, so a closed order keeps a valid signature
 until expiration while its fills revert. Fills and `create` work only on the chain the factory was
@@ -169,8 +171,8 @@ tokens to the maker; rescuing WETH also closes the order. A zero token address m
 
 An access-token holder may call `publicCancel(nativeOrder, rewardLimit)` from
 `PUBLIC_CANCELLATION_DELAY` after expiration. The reward is the minimum of the caller's limit, the
-order's `maxReward`, remaining allowance, WETH balance and `block.basefee * 120_000 * 110 / 100`. Forced
-ETH is returned to the maker.
+order's `maxReward`, remaining allowance and WETH balance, so `maxReward` is what a canceller earns
+whenever enough remains. Forced ETH is returned to the maker.
 Fully filled and already cancelled orders cannot pay another cleanup reward. A failed ETH payment
 reverts the entire cancellation; contract makers that reject ETH can recover WETH via `rescueFunds`.
 

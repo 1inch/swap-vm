@@ -14,8 +14,8 @@ import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @title NativeOrderEscrowFactory
 /// @notice Deploys a deterministic WETH escrow for each maker-funded native ETH order.
-/// @dev Depositing ETH authenticates the maker; takers use the returned NativeOrder as the ERC-1271
-/// signature and submit the same SwapVM order with maker replaced by the escrow address.
+/// @dev Depositing ETH authenticates the maker; takers pass the returned NativeOrder, packed, as the
+/// ERC-1271 signature and submit the same SwapVM order with maker replaced by the escrow address.
 /// @custom:security-contact security@1inch.io
 contract NativeOrderEscrowFactory is RouterOrderHasher {
     using Clones for address;
@@ -32,8 +32,8 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// @notice Emitted when a native order escrow is created and funded.
     /// @param escrow Clone that acts as the maker of the filled order.
     /// @param filledOrderHash Hash of the filled order that takers fill and quote against.
-    /// @param nativeOrder Terms committed in the escrow's address. abi.encode(nativeOrder) is the ERC-1271
-    /// signature takers supply, and the maker passes it to cancel and rescueFunds.
+    /// @param nativeOrder Terms committed in the escrow's address. abi.encodePacked of its fields is the
+    /// ERC-1271 signature takers supply; the maker passes the struct itself to cancel and rescueFunds.
     /// @param amount Native ETH deposited, held as WETH and approved to the router.
     /// @param filledOrder Order to submit to the router: the maker's order with maker set to the escrow.
     event NativeOrderCreated(
@@ -98,7 +98,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
             expiration: expiration,
             maxReward: maxReward
         });
-        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(keccak256(abi.encode(nativeOrder)));
+        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(_salt(nativeOrder));
         address receiver = makerOrder.traits.receiver(escrow);
         require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
         _validateHooks(makerOrder, escrow);
@@ -115,7 +115,12 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// @param order Terms the escrow is or would be created with.
     /// @return Address of the escrow clone for these terms.
     function addressOfEscrow(NativeOrder calldata order) external view returns (address) {
-        return ESCROW_IMPLEMENTATION.predictDeterministicAddress(keccak256(abi.encode(order)));
+        return ESCROW_IMPLEMENTATION.predictDeterministicAddress(_salt(order));
+    }
+
+    /// @dev keccak256 of the packed terms, the same bytes takers supply as the ERC-1271 signature.
+    function _salt(NativeOrder memory order) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(order.maker, order.traits, order.dataHash, order.expiration, order.maxReward));
     }
 
     /// @dev An implicit hook would target the escrow after replacing maker, which cannot execute hooks.

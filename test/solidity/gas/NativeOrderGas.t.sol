@@ -73,7 +73,6 @@ contract NativeOrderGas is Test {
 
         // The program sells WETH regardless of token sort order
         isAToB = address(dai) < address(weth);
-        vm.fee(1 gwei);
     }
 
     // === Escrow lifecycle ===
@@ -200,7 +199,9 @@ contract NativeOrderGas is Test {
     }
 
     function _escrowTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return _takerData(isExactIn, abi.encode(nativeOrder));
+        return _takerData(isExactIn, abi.encodePacked(
+            nativeOrder.maker, nativeOrder.traits, nativeOrder.dataHash, nativeOrder.expiration, nativeOrder.maxReward
+        ));
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
