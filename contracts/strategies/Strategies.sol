@@ -18,7 +18,7 @@ import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../instruc
 import { Jump } from "../instructions/Jumps.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearSurcharge } from "../instructions/PiecewiseLinearSurcharge.sol";
-import { Feed, OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
+import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
 import {
     OnlyTakerTokenBalanceNonZero,
@@ -67,7 +67,7 @@ library Strategies {
         uint160 oracleMarketValue;
         uint8 tokenInDecimals;
         uint8 tokenOutDecimals;
-        Feed[] oracleFeeds;
+        OraclePriceAdjuster.Feed[] oracleFeeds;
         uint64 baseGasPrice;
         uint96 ethPrice;
         uint24 gasAmount;

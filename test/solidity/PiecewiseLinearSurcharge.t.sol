@@ -15,11 +15,7 @@ import { LimitSwapVMRouterDebug, DeployCode, TraitsHelper } from "./helpers/Swap
 
 import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
-import {
-    PiecewiseLinearSurcharge,
-    PiecewiseLinearSurchargeBalanceIn,
-    PiecewiseLinearSurchargeBalanceOut
-} from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
 /// @title PiecewiseLinearSurcharge tests
@@ -57,9 +53,7 @@ contract PiecewiseLinearSurchargeTest is Test {
     ) internal view returns (bytes memory) {
         return bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            scaleIn
-                ? PiecewiseLinearSurchargeBalanceIn.build(timestamp, durations, scales)
-                : PiecewiseLinearSurchargeBalanceOut.build(timestamp, durations, scales),
+            PiecewiseLinearSurcharge.build(scaleIn, timestamp, durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
@@ -97,7 +91,7 @@ contract PiecewiseLinearSurchargeTest is Test {
         uint256 amountOut;
         uint256 amountIn;
 
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[0]);
+        uint256 surcharge = _scaleValue(true, takingAmount, scales[0]);
 
         // At the initial point the whole `makingAmount` sells for exactly `takingAmount + surcharge`, and one wei less in buys strictly less
         vm.warp(timestamp);
@@ -132,7 +126,7 @@ contract PiecewiseLinearSurchargeTest is Test {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-            assertEq(amountInNext, takingAmount + PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[k]));
+            assertEq(amountInNext, takingAmount + _scaleValue(true, takingAmount, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
@@ -178,7 +172,7 @@ contract PiecewiseLinearSurchargeTest is Test {
 
         uint256 amountOut;
         uint256 amountIn;
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[0]);
+        uint256 surcharge = _scaleValue(false, makingAmount, scales[0]);
 
         // At the initial point the whole `takingAmount` sells for exactly `makingAmount - surcharge`, and one wei less in sells strictly less
         vm.warp(timestamp);
@@ -214,7 +208,7 @@ contract PiecewiseLinearSurchargeTest is Test {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (,uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-            assertEq(amountOutNext, makingAmount - PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[k]));
+            assertEq(amountOutNext, makingAmount - _scaleValue(false, makingAmount, scales[k]));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
 
             // Mid point
@@ -851,6 +845,11 @@ contract PiecewiseLinearSurchargeTest is Test {
         for (uint256 i; i < n; ++i) {
             sum += durations[i];
         }
+    }
+
+    function _scaleValue(bool adjustIn, uint256 value, uint24 scale) private pure returns (uint256) {
+        if (adjustIn) return (value * scale) >> 24;
+        return (value * scale) / ((1 << 24) + scale);
     }
 
     function _buildOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {

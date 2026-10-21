@@ -13,22 +13,9 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import {
-    PiecewiseLinearSurchargeBalanceIn,
-    PiecewiseLinearSurchargeBalanceOut
-} from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { BaseFeeAdjusterBalanceIn } from "../../contracts/instructions/BaseFeeAdjuster.sol";
-import {
-    Feed,
-    OraclePriceAdjusterBalanceIn,
-    OraclePriceAdjusterBalanceOut,
-    OraclePriceAdjusterInvalidDecimalsExponent,
-    OraclePriceAdjusterInvalidFeedCount,
-    OraclePriceAdjusterInvalidMaxStaleness,
-    OraclePriceAdjusterInvalidMarketValue,
-    OraclePriceAdjusterInvalidOraclePrice,
-    OraclePriceAdjusterOraclePriceStale
-} from "../../contracts/instructions/OraclePriceAdjuster.sol";
+import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjuster } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { OraclePriceAdjuster } from "../../contracts/instructions/OraclePriceAdjuster.sol";
 import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
 
 contract OraclePriceAdjusterTest is Test {
@@ -204,7 +191,8 @@ contract OraclePriceAdjusterTest is Test {
 
         ISwapVM.Order memory order = _buildOrder(bytes.concat(
             StaticBalances.build(2000e6, 1e18),
-            PiecewiseLinearSurchargeBalanceIn.build(
+            PiecewiseLinearSurcharge.build(
+                true,
                 uint40(block.timestamp),
                 durations,
                 scales
@@ -236,7 +224,8 @@ contract OraclePriceAdjusterTest is Test {
 
         ISwapVM.Order memory order = _buildOrder(bytes.concat(
             StaticBalances.build(2500e6, 1.5e18),
-            PiecewiseLinearSurchargeBalanceOut.build(
+            PiecewiseLinearSurcharge.build(
+                false,
                 uint40(block.timestamp),
                 durations,
                 scales
@@ -342,17 +331,17 @@ contract OraclePriceAdjusterTest is Test {
         PriceOracleMock oracleA = new PriceOracleMock(2e18, block.timestamp);
         PriceOracleMock oracleB = new PriceOracleMock(4e18, block.timestamp);
 
-        Feed[] memory singleFeed = new Feed[](1);
-        singleFeed[0] = Feed(18, false, MAX_STALENESS, address(oracleA));
-        bytes memory balanceInSingle = OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, singleFeed);
-        bytes memory balanceOutSingle = OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, singleFeed);
+        OraclePriceAdjuster.Feed[] memory singleFeed = new OraclePriceAdjuster.Feed[](1);
+        singleFeed[0] = OraclePriceAdjuster.Feed(18, false, MAX_STALENESS, address(oracleA));
+        bytes memory balanceInSingle = OraclePriceAdjuster.build(true, 1e18, 18, 18, singleFeed);
+        bytes memory balanceOutSingle = OraclePriceAdjuster.build(false, 1e18, 18, 18, singleFeed);
         _assertSameEncoding(balanceInSingle, balanceOutSingle);
 
-        Feed[] memory doubleFeeds = new Feed[](2);
-        doubleFeeds[0] = Feed(18, false, MAX_STALENESS, address(oracleA));
-        doubleFeeds[1] = Feed(18, true, MAX_STALENESS, address(oracleB));
-        bytes memory balanceInDouble = OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, doubleFeeds);
-        bytes memory balanceOutDouble = OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, doubleFeeds);
+        OraclePriceAdjuster.Feed[] memory doubleFeeds = new OraclePriceAdjuster.Feed[](2);
+        doubleFeeds[0] = OraclePriceAdjuster.Feed(18, false, MAX_STALENESS, address(oracleA));
+        doubleFeeds[1] = OraclePriceAdjuster.Feed(18, true, MAX_STALENESS, address(oracleB));
+        bytes memory balanceInDouble = OraclePriceAdjuster.build(true, 1e18, 18, 18, doubleFeeds);
+        bytes memory balanceOutDouble = OraclePriceAdjuster.build(false, 1e18, 18, 18, doubleFeeds);
         _assertSameEncoding(balanceInDouble, balanceOutDouble);
     }
 
@@ -383,7 +372,8 @@ contract OraclePriceAdjusterTest is Test {
 
         bytes memory program = bytes.concat(
             StaticBalances.build(1950e6, 1e18),
-            PiecewiseLinearSurchargeBalanceIn.build(
+            PiecewiseLinearSurcharge.build(
+                true,
                 uint40(block.timestamp),
                 durations,
                 scales
@@ -415,7 +405,7 @@ contract OraclePriceAdjusterTest is Test {
                 18,
                 _feed(oracle, 8, false)
             ),
-            BaseFeeAdjusterBalanceIn.build(0, 50e15, 1),
+            BaseFeeAdjuster.build(true, 0, 50e15, 1),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _buildOrder(program);
@@ -440,7 +430,7 @@ contract OraclePriceAdjusterTest is Test {
         bytes memory takerData = _buildTakerData(order, false);
 
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterOraclePriceStale.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterOraclePriceStale.selector,
             block.timestamp,
             updatedAt,
             MAX_STALENESS
@@ -470,7 +460,7 @@ contract OraclePriceAdjusterTest is Test {
         bytes memory takerData = _buildTakerData(order, false);
 
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterOraclePriceStale.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterOraclePriceStale.selector,
             block.timestamp,
             updatedAt,
             secondMaxStaleness
@@ -492,7 +482,7 @@ contract OraclePriceAdjusterTest is Test {
         bytes memory takerData = _buildTakerData(order, false);
 
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidOraclePrice.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidOraclePrice.selector,
             int256(-1)
         ));
         swapVM.quote(order, 1e18, takerData);
@@ -512,7 +502,7 @@ contract OraclePriceAdjusterTest is Test {
         bytes memory takerData = _buildTakerData(order, false);
 
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidOraclePrice.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidOraclePrice.selector,
             int256(0)
         ));
         swapVM.quote(order, 1e18, takerData);
@@ -522,42 +512,42 @@ contract OraclePriceAdjusterTest is Test {
         PriceOracleMock oracle = new PriceOracleMock(2550e8, block.timestamp);
         bytes memory validFeed = _feed(oracle, 8, false);
 
-        Feed[] memory noFeeds = new Feed[](0);
+        OraclePriceAdjuster.Feed[] memory noFeeds = new OraclePriceAdjuster.Feed[](0);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidFeedCount.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidFeedCount.selector,
             uint256(0)
         ));
         this.buildBalanceIn(2500e6, 6, 18, noFeeds);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidFeedCount.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidFeedCount.selector,
             uint256(0)
         ));
         this.buildBalanceOut(2500e6, 6, 18, noFeeds);
 
-        Feed[] memory tooManyFeeds = new Feed[](3);
-        tooManyFeeds[0] = Feed(8, false, MAX_STALENESS, address(oracle));
+        OraclePriceAdjuster.Feed[] memory tooManyFeeds = new OraclePriceAdjuster.Feed[](3);
+        tooManyFeeds[0] = OraclePriceAdjuster.Feed(8, false, MAX_STALENESS, address(oracle));
         tooManyFeeds[1] = tooManyFeeds[0];
         tooManyFeeds[2] = tooManyFeeds[0];
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidFeedCount.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidFeedCount.selector,
             uint256(3)
         ));
         this.buildBalanceIn(2500e6, 6, 18, tooManyFeeds);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidFeedCount.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidFeedCount.selector,
             uint256(3)
         ));
         this.buildBalanceOut(2500e6, 6, 18, tooManyFeeds);
 
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidMarketValue.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidMarketValue.selector,
             uint160(0)
         ));
         this.buildBalanceIn(0, 6, 18, validFeed);
 
         bytes memory zeroDecimalsFeed = _feed(oracle, 0, false);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidDecimalsExponent.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidDecimalsExponent.selector,
             uint256(255)
         ));
         this.buildBalanceIn(2500e6, 255, 0, zeroDecimalsFeed);
@@ -569,7 +559,7 @@ contract OraclePriceAdjusterTest is Test {
                 18,
                 _feed(oracle, 19, false)
             ).length,
-            46
+            47
         );
         assertEq(
             this.buildBalanceIn(
@@ -578,31 +568,31 @@ contract OraclePriceAdjusterTest is Test {
                 18,
                 _feed(oracle, 8, false, (1 << 23) - 1)
             ).length,
-            46
+            47
         );
 
-        Feed[] memory invalidSingleFeed = _toFeeds(_feed(oracle, 8, false, type(uint24).max));
+        OraclePriceAdjuster.Feed[] memory invalidSingleFeed = _toFeeds(_feed(oracle, 8, false, type(uint24).max));
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidMaxStaleness.selector,
             type(uint24).max
         ));
         this.buildBalanceIn(2500e6, 6, 18, invalidSingleFeed);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidMaxStaleness.selector,
             type(uint24).max
         ));
         this.buildBalanceOut(2500e6, 6, 18, invalidSingleFeed);
 
-        Feed[] memory invalidSecondFeed = _toFeeds(
+        OraclePriceAdjuster.Feed[] memory invalidSecondFeed = _toFeeds(
             bytes.concat(validFeed, _feed(oracle, 8, false, type(uint24).max))
         );
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidMaxStaleness.selector,
             type(uint24).max
         ));
         this.buildBalanceIn(2500e6, 6, 18, invalidSecondFeed);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterInvalidMaxStaleness.selector,
+            OraclePriceAdjuster.OraclePriceAdjusterInvalidMaxStaleness.selector,
             type(uint24).max
         ));
         this.buildBalanceOut(2500e6, 6, 18, invalidSecondFeed);
@@ -669,7 +659,11 @@ contract OraclePriceAdjusterTest is Test {
 
     function _assertSameEncoding(bytes memory balanceIn, bytes memory balanceOut) private pure {
         assertEq(balanceIn.length, balanceOut.length);
-        for (uint256 i = 1; i < balanceIn.length; i++) {
+        assertEq(uint8(balanceIn[0]), uint8(balanceOut[0]));
+        assertEq(uint8(balanceIn[1]), uint8(balanceOut[1]));
+        assertEq(uint8(balanceIn[2]), 0x80);
+        assertEq(uint8(balanceOut[2]), 0x00);
+        for (uint256 i = 3; i < balanceIn.length; i++) {
             assertEq(uint8(balanceIn[i]), uint8(balanceOut[i]));
         }
     }
@@ -680,7 +674,8 @@ contract OraclePriceAdjusterTest is Test {
         uint8 tokenOutDecimals,
         bytes memory feeds
     ) private pure returns (bytes memory) {
-        return OraclePriceAdjusterBalanceIn.build(
+        return OraclePriceAdjuster.build(
+            true,
             marketValue,
             tokenInDecimals,
             tokenOutDecimals,
@@ -694,7 +689,8 @@ contract OraclePriceAdjusterTest is Test {
         uint8 tokenOutDecimals,
         bytes memory feeds
     ) private pure returns (bytes memory) {
-        return OraclePriceAdjusterBalanceOut.build(
+        return OraclePriceAdjuster.build(
+            false,
             marketValue,
             tokenInDecimals,
             tokenOutDecimals,
@@ -702,7 +698,7 @@ contract OraclePriceAdjusterTest is Test {
         );
     }
 
-    function _toFeeds(bytes memory feeds) private pure returns (Feed[] memory parsed) {
+    function _toFeeds(bytes memory feeds) private pure returns (OraclePriceAdjuster.Feed[] memory parsed) {
         (
             uint8 oracleDecimalsA,
             bool isDenominatorA,
@@ -710,8 +706,8 @@ contract OraclePriceAdjusterTest is Test {
             address oracleA
         ) = _decodeFeed(feeds, 0);
         if (feeds.length == 24) {
-            parsed = new Feed[](1);
-            parsed[0] = Feed(oracleDecimalsA, isDenominatorA, maxStalenessA, oracleA);
+            parsed = new OraclePriceAdjuster.Feed[](1);
+            parsed[0] = OraclePriceAdjuster.Feed(oracleDecimalsA, isDenominatorA, maxStalenessA, oracleA);
             return parsed;
         }
 
@@ -721,9 +717,9 @@ contract OraclePriceAdjusterTest is Test {
             uint24 maxStalenessB,
             address oracleB
         ) = _decodeFeed(feeds, 24);
-        parsed = new Feed[](2);
-        parsed[0] = Feed(oracleDecimalsA, isDenominatorA, maxStalenessA, oracleA);
-        parsed[1] = Feed(oracleDecimalsB, isDenominatorB, maxStalenessB, oracleB);
+        parsed = new OraclePriceAdjuster.Feed[](2);
+        parsed[0] = OraclePriceAdjuster.Feed(oracleDecimalsA, isDenominatorA, maxStalenessA, oracleA);
+        parsed[1] = OraclePriceAdjuster.Feed(oracleDecimalsB, isDenominatorB, maxStalenessB, oracleB);
     }
 
     function _decodeFeed(
@@ -760,18 +756,18 @@ contract OraclePriceAdjusterTest is Test {
         uint160 marketValue,
         uint8 tokenInDecimals,
         uint8 tokenOutDecimals,
-        Feed[] memory feeds
+        OraclePriceAdjuster.Feed[] memory feeds
     ) external pure returns (bytes memory) {
-        return OraclePriceAdjusterBalanceIn.build(marketValue, tokenInDecimals, tokenOutDecimals, feeds);
+        return OraclePriceAdjuster.build(true, marketValue, tokenInDecimals, tokenOutDecimals, feeds);
     }
 
     function buildBalanceOut(
         uint160 marketValue,
         uint8 tokenInDecimals,
         uint8 tokenOutDecimals,
-        Feed[] memory feeds
+        OraclePriceAdjuster.Feed[] memory feeds
     ) external pure returns (bytes memory) {
-        return OraclePriceAdjusterBalanceOut.build(marketValue, tokenInDecimals, tokenOutDecimals, feeds);
+        return OraclePriceAdjuster.build(false, marketValue, tokenInDecimals, tokenOutDecimals, feeds);
     }
 
     function _buildProgram(

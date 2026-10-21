@@ -15,20 +15,20 @@ import { LimitSwap, LimitSwapFullAmount } from "../../../contracts/instructions/
 import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
-import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../../../contracts/instructions/FillGridAdjuster.sol";
+import { BaseFeeAdjuster } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjuster } from "../../../contracts/instructions/FillGridAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
 import { RequireMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { PiecewiseLinearSurcharge } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { Feed, OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
+import { DutchAuction } from "../../../contracts/instructions/DutchAuction.sol";
+import { OraclePriceAdjuster } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 import { PriceOracleMock } from "../mocks/PriceOracleMock.sol";
 
@@ -81,7 +81,7 @@ contract OpcodeGas is Test {
     function test_gas() public {
         just = bytes.concat(
             StaticBalances.build(AMOUNT, AMOUNT),
-            DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7),
+            DutchAuction.build(true, uint40(block.timestamp), 0.99e18, 0.1e7),
             StaticBalances.build(AMOUNT, AMOUNT),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -118,38 +118,38 @@ contract OpcodeGas is Test {
         _snapshot("FeeFlatOut", FeeFlatOut.build(0.10e7));
         _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
         _snapshot("DynamicBalances", DynamicBalances.build(AMOUNT, AMOUNT));
-        _snapshot("DutchAuctionBalanceIn", DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7));
-        _snapshot("DutchAuctionBalanceOut", DutchAuctionBalanceOut.build(uint40(block.timestamp), 0.99e18, 0.1e7));
-        _snapshot("PiecewiseLinearSurchargeBalanceIn", PiecewiseLinearSurchargeBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
-        _snapshot("PiecewiseLinearSurchargeBalanceOut", PiecewiseLinearSurchargeBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("DutchAuctionBalanceIn", DutchAuction.build(true, uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("DutchAuctionBalanceOut", DutchAuction.build(false, uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("PiecewiseLinearSurchargeBalanceIn", PiecewiseLinearSurcharge.build(true, uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("PiecewiseLinearSurchargeBalanceOut", PiecewiseLinearSurcharge.build(false, uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
         _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
-        _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
-        _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        _snapshot("OraclePriceAdjusterBalanceIn_OneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feed(false)));
-        _snapshot("OraclePriceAdjusterBalanceIn_TwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feeds(false, false)));
-        _snapshot("OraclePriceAdjusterBalanceIn_OneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feed(true)));
-        _snapshot("OraclePriceAdjusterBalanceIn_TwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feeds(true, true)));
-        _snapshot("OraclePriceAdjusterBalanceOut_OneFeed", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feed(false)));
-        _snapshot("OraclePriceAdjusterBalanceOut_TwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feeds(false, false)));
-        _snapshot("OraclePriceAdjusterBalanceOut_OneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feed(true)));
-        _snapshot("OraclePriceAdjusterBalanceOut_TwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feeds(true, true)));
-        _snapshot("FillGridAdjusterBalanceIn_eIn", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
-        _snapshot("FillGridAdjusterBalanceOut_eIn", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
-        _snapshot("FillGridAdjusterBalanceIn_eOut", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
-        _snapshot("FillGridAdjusterBalanceOut_eOut", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
+        _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjuster.build(true, 25 gwei, 3500e18, 150_000));
+        _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjuster.build(false, 25 gwei, 3500e18, 150_000));
+        _snapshot("OraclePriceAdjusterBalanceIn_OneFeed", OraclePriceAdjuster.build(true, 1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterBalanceIn_TwoFeeds", OraclePriceAdjuster.build(true, 1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterBalanceIn_OneInverseFeed", OraclePriceAdjuster.build(true, 0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterBalanceIn_TwoInverseFeeds", OraclePriceAdjuster.build(true, 0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("OraclePriceAdjusterBalanceOut_OneFeed", OraclePriceAdjuster.build(false, 1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterBalanceOut_TwoFeeds", OraclePriceAdjuster.build(false, 1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterBalanceOut_OneInverseFeed", OraclePriceAdjuster.build(false, 0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterBalanceOut_TwoInverseFeeds", OraclePriceAdjuster.build(false, 0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("FillGridAdjusterBalanceIn_eIn", FillGridAdjuster.build(true, dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterBalanceOut_eIn", FillGridAdjuster.build(false, dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterBalanceIn_eOut", FillGridAdjuster.build(true, dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
+        _snapshot("FillGridAdjusterBalanceOut_eOut", FillGridAdjuster.build(false, dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 
-    function _feed(bool isDenominator) private view returns (Feed[] memory feeds) {
-        feeds = new Feed[](1);
-        feeds[0] = Feed(8, isDenominator, type(uint24).max >> 1, address(oracles[0]));
+    function _feed(bool isDenominator) private view returns (OraclePriceAdjuster.Feed[] memory feeds) {
+        feeds = new OraclePriceAdjuster.Feed[](1);
+        feeds[0] = OraclePriceAdjuster.Feed(8, isDenominator, type(uint24).max >> 1, address(oracles[0]));
     }
 
-    function _feeds(bool isDenominatorA, bool isDenominatorB) private view returns (Feed[] memory feeds) {
-        feeds = new Feed[](2);
-        feeds[0] = Feed(8, isDenominatorA, type(uint24).max >> 1, address(oracles[0]));
-        feeds[1] = Feed(7, isDenominatorB, type(uint24).max >> 1, address(oracles[1]));
+    function _feeds(bool isDenominatorA, bool isDenominatorB) private view returns (OraclePriceAdjuster.Feed[] memory feeds) {
+        feeds = new OraclePriceAdjuster.Feed[](2);
+        feeds[0] = OraclePriceAdjuster.Feed(8, isDenominatorA, type(uint24).max >> 1, address(oracles[0]));
+        feeds[1] = OraclePriceAdjuster.Feed(7, isDenominatorB, type(uint24).max >> 1, address(oracles[1]));
     }
 
     function _snapshot(string memory name, bytes memory opcode) private {

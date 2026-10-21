@@ -10,8 +10,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../../contracts/instructions/FillGridAdjuster.sol";
+import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { FillGridAdjuster } from "../../contracts/instructions/FillGridAdjuster.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
 contract FillGridAdjusterTest is Test {
@@ -46,7 +46,7 @@ contract FillGridAdjusterTest is Test {
         adjustBps[1] = 1e7;
         adjustBps[2] = 0.5e7;
 
-        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
+        vm.expectRevert(FillGridAdjuster.FillGridAdjusterNotMonotonic.selector);
         this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
     }
 
@@ -59,7 +59,7 @@ contract FillGridAdjusterTest is Test {
         adjustBps[0] = 1e7;
         adjustBps[1] = 1e7;
 
-        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
+        vm.expectRevert(FillGridAdjuster.FillGridAdjusterNotMonotonic.selector);
         this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
     }
 
@@ -271,7 +271,7 @@ contract FillGridAdjusterTest is Test {
         uint24[] memory fillBps,
         uint24[] memory adjustBps
     ) external pure returns (bytes memory) {
-        return FillGridAdjusterBalanceIn.build(fillBps, adjustBps);
+        return FillGridAdjuster.build(true, fillBps, adjustBps);
     }
 
     function _buildProgram(uint256 balanceIn, uint256 balanceOut, bool adjustBalanceIn) private view returns (bytes memory) {
@@ -283,21 +283,12 @@ contract FillGridAdjusterTest is Test {
 
         (uint24[] memory fillBps, uint24[] memory adjustBps) = _grid();
 
-        if (adjustBalanceIn) {
-            return bytes.concat(
-                StaticBalances.build(balanceIn, balanceOut),
-                PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
-                FillGridAdjusterBalanceIn.build(fillBps, adjustBps),
-                LimitSwap.build(address(tokenA), address(tokenB))
-            );
-        } else {
-            return bytes.concat(
-                StaticBalances.build(balanceIn, balanceOut),
-                PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales),
-                FillGridAdjusterBalanceOut.build(fillBps, adjustBps),
-                LimitSwap.build(address(tokenA), address(tokenB))
-            );
-        }
+        return bytes.concat(
+            StaticBalances.build(balanceIn, balanceOut),
+            PiecewiseLinearSurcharge.build(adjustBalanceIn, uint40(block.timestamp), durations, scales),
+            FillGridAdjuster.build(adjustBalanceIn, fillBps, adjustBps),
+            LimitSwap.build(address(tokenA), address(tokenB))
+        );
     }
 
     function _grid() private pure returns (uint24[] memory fillBps, uint24[] memory adjustBps) {

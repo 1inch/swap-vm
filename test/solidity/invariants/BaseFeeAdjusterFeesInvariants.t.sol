@@ -13,9 +13,9 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { DutchAuction } from "../../../contracts/instructions/DutchAuction.sol";
+import { PiecewiseLinearSurcharge } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjuster } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
@@ -78,7 +78,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             _staticBalanceInSurcharge(),
             FeeFlatIn.build(0.01e7),
-            BaseFeeAdjusterBalanceIn.build(20 gwei, 3000e18, 150_000),
+            BaseFeeAdjuster.build(true, 20 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -92,7 +92,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             _staticBalanceOutSurcharge(),
             FeeFlatOut.build(0.02e7),
-            BaseFeeAdjusterBalanceOut.build(25 gwei, 2500e18, 180_000),
+            BaseFeeAdjuster.build(false, 25 gwei, 2500e18, 180_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -106,7 +106,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             _staticBalanceOutSurcharge(),
             FeeBuilders.protocolFeeOut(0.015e7, protocolFeeCollector),
-            BaseFeeAdjusterBalanceOut.build(22 gwei, 3200e18, 155_000),
+            BaseFeeAdjuster.build(false, 22 gwei, 3200e18, 155_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -121,7 +121,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
             _staticBalanceInSurcharge(),
             FeeFlatIn.build(0.005e7),
             FeeBuilders.protocolFeeOut(0.01e7, protocolFeeCollector),
-            BaseFeeAdjusterBalanceIn.build(20 gwei, 3000e18, 150_000),
+            BaseFeeAdjuster.build(true, 20 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -135,7 +135,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         bytes memory bytecode = bytes.concat(
             _staticBalanceInSurcharge(),
             FeeFlatIn.build(0.1e7),
-            BaseFeeAdjusterBalanceIn.build(20 gwei, 3000e18, 150_000),
+            BaseFeeAdjuster.build(true, 20 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -149,9 +149,9 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, 0.999e18, 0.5e7),
+            DutchAuction.build(true, startTime, 0.999e18, 0.5e7),
             FeeFlatIn.build(0.01e7),
-            BaseFeeAdjusterBalanceIn.build(25 gwei, 3000e18, 150_000),
+            BaseFeeAdjuster.build(true, 25 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -166,9 +166,9 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, 0.999e18, 0.5e7),
+            DutchAuction.build(false, startTime, 0.999e18, 0.5e7),
             FeeFlatOut.build(0.015e7),
-            BaseFeeAdjusterBalanceOut.build(25 gwei, 3000e18, 150_000),
+            BaseFeeAdjuster.build(false, 25 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -183,9 +183,9 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, 0.999e18, 0.5e7),
+            DutchAuction.build(true, startTime, 0.999e18, 0.5e7),
             FeeBuilders.protocolFeeOut(0.02e7, protocolFeeCollector),
-            BaseFeeAdjusterBalanceIn.build(30 gwei, 2800e18, 100_000),
+            BaseFeeAdjuster.build(true, 30 gwei, 2800e18, 100_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -200,10 +200,10 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, 0.999e18, 0.5e7),
+            DutchAuction.build(false, startTime, 0.999e18, 0.5e7),
             FeeFlatIn.build(0.0075e7),
             FeeBuilders.protocolFeeOut(0.01e7, protocolFeeCollector),
-            BaseFeeAdjusterBalanceOut.build(25 gwei, 3200e18, 160_000),
+            BaseFeeAdjuster.build(false, 25 gwei, 3200e18, 160_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -220,7 +220,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
 
         return bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales)
+            PiecewiseLinearSurcharge.build(true, uint40(block.timestamp), durations, scales)
         );
     }
 
@@ -233,7 +233,7 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
 
         return bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales)
+            PiecewiseLinearSurcharge.build(false, uint40(block.timestamp), durations, scales)
         );
     }
 
