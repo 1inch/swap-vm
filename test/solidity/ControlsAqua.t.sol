@@ -212,7 +212,6 @@ contract ControlsAquaTest is AquaSwapVMTest {
         vm.expectRevert(
             abi.encodeWithSelector(
                 OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector,
-                address(taker),
                 address(nftGate)
             )
         );
@@ -310,7 +309,6 @@ contract ControlsAquaTest is AquaSwapVMTest {
         vm.expectRevert(
             abi.encodeWithSelector(
                 OnlyTxOriginTokenBalanceNonZero.TxOriginTokenBalanceIsZero.selector,
-                trader,
                 address(nftGate)
             )
         );

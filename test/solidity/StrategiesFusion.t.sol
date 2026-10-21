@@ -336,7 +336,7 @@ contract StrategiesFusionTest is Test {
         // Public path: access token required, full fees charged
         vm.warp(START + 20);
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, stranger, address(kyc)));
+        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
         swapVM.quote(order, 1e18, exactInData);
 
         vm.prank(alien);
@@ -415,7 +415,7 @@ contract StrategiesFusionTest is Test {
         // No exclusivity: every resolver and the public fill at once, the public still needs the access token
         vm.warp(START);
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, stranger, address(kyc)));
+        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
         swapVM.quote(order, 1e18, exactInData);
 
         vm.prank(alien);
@@ -560,7 +560,7 @@ contract StrategiesFusionTest is Test {
         bytes memory exactInData = _takerData(order);
 
         vm.prank(resolver1);
-        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, resolver1, address(kyc)));
+        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
         swapVM.quote(order, 10e18, exactInData);
 
         vm.prank(alien);
