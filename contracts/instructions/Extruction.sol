@@ -7,10 +7,11 @@ pragma solidity ^0.8.27;
 import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
-import { Context, SwapQuery, SwapRegisters } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { IExtruction, IStaticExtruction } from "./interfaces/IExtruction.sol";
 
 /// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
 ///   The target may modify the swap registers, set the program counter and consume taker args
@@ -81,34 +82,4 @@ library Extruction {
         bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength); // Consumed taker arguments
         require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped, choppedLength));
     }
-}
-
-interface IExtruction {
-    function extruction(
-        bool isStaticContext,
-        uint256 nextPC,
-        SwapQuery calldata query,
-        SwapRegisters calldata swap,
-        bytes calldata args,
-        bytes calldata takerData
-    ) external returns (
-        uint256 updatedNextPC,
-        uint256 choppedLength,
-        SwapRegisters memory updatedSwap
-    );
-}
-
-interface IStaticExtruction {
-    function extruction(
-        bool isStaticContext,
-        uint256 nextPC,
-        SwapQuery calldata query,
-        SwapRegisters calldata swap,
-        bytes calldata args,
-        bytes calldata takerData
-    ) external view returns (
-        uint256 updatedNextPC,
-        uint256 choppedLength,
-        SwapRegisters memory updatedSwap
-    );
 }
