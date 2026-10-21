@@ -20,7 +20,7 @@ library OnlyTakerTokenBalanceNonZero {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    error TakerTokenBalanceIsZero(address taker, address token);
+    error TakerTokenBalanceIsZero(address token);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceNonZero;
 
@@ -45,7 +45,7 @@ library OnlyTakerTokenBalanceNonZero {
     function exec(Context memory ctx, bytes calldata args) internal view {
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance > 0, TakerTokenBalanceIsZero(ctx.query.taker, token));
+        require(balance > 0, TakerTokenBalanceIsZero(token));
     }
 }
 
@@ -58,7 +58,7 @@ library OnlyTxOriginTokenBalanceNonZero {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    error TxOriginTokenBalanceIsZero(address txOrigin, address token);
+    error TxOriginTokenBalanceIsZero(address token);
 
     Opcode constant opcode = Opcode.OnlyTxOriginTokenBalanceNonZero;
 
@@ -83,7 +83,7 @@ library OnlyTxOriginTokenBalanceNonZero {
     function exec(Context memory, bytes calldata args) internal view {
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(tx.origin);
-        require(balance > 0, TxOriginTokenBalanceIsZero(tx.origin, token));
+        require(balance > 0, TxOriginTokenBalanceIsZero(token));
     }
 }
 
@@ -93,7 +93,7 @@ library OnlyTakerTokenBalanceGte {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    error TakerTokenBalanceIsLessThanRequired(address taker, address token, uint256 balance, uint256 amount);
+    error TakerTokenBalanceIsLessThanRequired(address token, uint256 balance, uint256 required);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceGte;
 
@@ -119,7 +119,7 @@ library OnlyTakerTokenBalanceGte {
     function exec(Context memory ctx, bytes calldata args) internal view {
         (address token, uint256 amount) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
-        require(balance >= amount, TakerTokenBalanceIsLessThanRequired(ctx.query.taker, token, balance, amount));
+        require(balance >= amount, TakerTokenBalanceIsLessThanRequired(token, balance, amount));
     }
 }
 
@@ -130,9 +130,7 @@ library OnlyTakerTokenSupplyShareGte {
     using InstructionBuilder for MemoryPtr;
 
     error TakerTokenBalanceSupplyShareWrongShare(uint64 share);
-    error TakerTokenBalanceSupplyShareIsLessThanRequired(
-        address taker, address token, uint256 balance, uint256 totalSupply, uint64 share
-    );
+    error TakerTokenBalanceSupplyShareIsLessThanRequired(address token, uint256 balance, uint256 totalSupply, uint64 share);
 
     Opcode constant opcode = Opcode.OnlyTakerTokenSupplyShareGte;
 
@@ -167,7 +165,7 @@ library OnlyTakerTokenSupplyShareGte {
         // balance / totalSupply >= share
         require(
             totalSupply > 0 && balance * ONE >= share * totalSupply,
-            TakerTokenBalanceSupplyShareIsLessThanRequired(ctx.query.taker, token, balance, totalSupply, share)
+            TakerTokenBalanceSupplyShareIsLessThanRequired(token, balance, totalSupply, share)
         );
     }
 }

@@ -166,7 +166,7 @@ library FeeProtocol {
         if (isTokenIn) {
             if (ctx.query.isExactIn) {
                 totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
-                ctx.swap.amountIn -= totalFeeAmount;
+                unchecked { ctx.swap.amountIn -= totalFeeAmount; }
 
                 uint256 reduction = ctx.swap.amountIn;
                 ctx.runLoop();
@@ -182,7 +182,7 @@ library FeeProtocol {
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
             totalFeeAmount = ctx.swap.amountOut * totalFeeBps / BPS;
-            ctx.swap.amountOut -= totalFeeAmount;
+            unchecked { ctx.swap.amountOut -= totalFeeAmount; }
         }
 
         if (totalFeeBps == 0) totalFeeBps = 1; // Avoid zero total bps for unconditional final receiver amounts calculation
