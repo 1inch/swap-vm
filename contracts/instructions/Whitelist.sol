@@ -25,12 +25,12 @@ library PrivateOrder {
 
     Opcode constant opcode = Opcode.PrivateOrder;
 
-    function sizeOf(address) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 10;
     }
 
     function build(address allowedTaker) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(allowedTaker)), allowedTaker).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), allowedTaker).resolve();
     }
 
     function build(MemoryPtr ptrStart, address allowedTaker) internal pure returns (MemoryPtr ptr) {
@@ -64,12 +64,12 @@ library WhitelistCoequal {
 
     Opcode constant opcode = Opcode.WhitelistCoequal;
 
-    function sizeOf(uint16, address[] memory allowedTakers) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 2 + allowedTakers.length * 10;
+    function sizeOf(uint256 allowedTakersLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 2 + allowedTakersLen * 10;
     }
 
     function build(uint16 nextPC, address[] memory allowedTakers) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(nextPC, allowedTakers)), nextPC, allowedTakers).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(allowedTakers.length)), nextPC, allowedTakers).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 nextPC, address[] memory allowedTakers) internal pure returns (MemoryPtr ptr) {
@@ -130,8 +130,8 @@ library WhitelistSequential {
 
     Opcode constant opcode = Opcode.WhitelistSequential;
 
-    function sizeOf(uint40, uint16, address[] memory allowedTakers, uint16[] memory durations) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 5 + 2 + durations.length * 2 + allowedTakers.length * 10;
+    function sizeOf(uint256 allowedTakersLen, uint256 durationsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 5 + 2 + durationsLen * 2 + allowedTakersLen * 10;
     }
 
     function build(
@@ -141,7 +141,7 @@ library WhitelistSequential {
         uint16[] memory durations
     ) internal pure returns (bytes memory) {
         return build(
-            MemoryPtrLib.alloc(sizeOf(start, nextPC, allowedTakers, durations)),
+            MemoryPtrLib.alloc(sizeOf(allowedTakers.length, durations.length)),
             start, nextPC, allowedTakers, durations
         ).resolve();
     }

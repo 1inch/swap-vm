@@ -35,12 +35,12 @@ library Extruction {
 
     Opcode constant opcode = Opcode.Extruction;
 
-    function sizeOf(address, bytes memory extructionArgs) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + extructionArgs.length;
+    function sizeOf(uint256 extructionArgsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + extructionArgsLen;
     }
 
     function build(address target, bytes memory extructionArgs) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(target, extructionArgs)), target, extructionArgs).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(extructionArgs.length)), target, extructionArgs).resolve();
     }
 
     function build(MemoryPtr ptrStart, address target, bytes memory extructionArgs) internal pure returns (MemoryPtr ptr) {

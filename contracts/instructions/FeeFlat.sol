@@ -26,12 +26,12 @@ library FeeFlatIn {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 3;
     }
 
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), feeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {
@@ -82,12 +82,12 @@ library FeeFlatOut {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 3;
     }
 
     function build(uint24 feeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(feeBps)), feeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), feeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24 feeBps) internal pure returns (MemoryPtr ptr) {

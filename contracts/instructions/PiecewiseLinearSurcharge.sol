@@ -24,12 +24,12 @@ library PiecewiseLinearSurchargeBalanceIn {
 
     Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceIn;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
+    function sizeOf(uint256 durationsLen, uint256 scalesLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(durationsLen, scalesLen);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(durations.length, scales.length)), timestamp, durations, scales).resolve();
     }
 
     function build(
@@ -69,12 +69,12 @@ library PiecewiseLinearSurchargeBalanceOut {
 
     Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceOut;
 
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
+    function sizeOf(uint256 durationsLen, uint256 scalesLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(durationsLen, scalesLen);
     }
 
     function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(durations.length, scales.length)), timestamp, durations, scales).resolve();
     }
 
     function build(
@@ -109,8 +109,8 @@ library PiecewiseLinearSurcharge {
     error PiecewiseLinearSurchargeMismatchInputLengths();
     error PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece();
 
-    function sizeOf(uint40, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return 5 + durations.length * 2 + scales.length * 3;
+    function sizeOf(uint256 durationsLen, uint256 scalesLen) internal pure returns (uint256) {
+        return 5 + durationsLen * 2 + scalesLen * 3;
     }
 
     function build(MemoryPtr ptr, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (MemoryPtr) {

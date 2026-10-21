@@ -25,7 +25,7 @@ library PeggedSwap {
 
     Opcode constant opcode = Opcode.PeggedSwap;
 
-    function sizeOf(uint256, uint256, uint256, uint256, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
@@ -50,7 +50,7 @@ library PeggedSwap {
         uint256 rateA,
         uint256 rateB
     ) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(x0, y0, linearWidth, rateA, rateB)), x0, y0, linearWidth, rateA, rateB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), x0, y0, linearWidth, rateA, rateB).resolve();
     }
 
     function build(

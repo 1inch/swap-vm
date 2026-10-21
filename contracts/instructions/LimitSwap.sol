@@ -24,17 +24,17 @@ library LimitSwap {
 
     Opcode constant opcode = Opcode.LimitSwap;
 
-    function sizeOf(bool) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 1;
     }
 
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(bool direction) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {
@@ -85,17 +85,17 @@ library LimitSwapFullAmount {
 
     Opcode constant opcode = Opcode.LimitSwapFullAmount;
 
-    function sizeOf(bool) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 1;
     }
 
     function build(address tokenIn, address tokenOut) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(bool direction) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction)), direction).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction) internal pure returns (MemoryPtr ptr) {

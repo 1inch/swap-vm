@@ -32,12 +32,12 @@ library DutchAuctionBalanceIn {
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint40, uint64, uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 5 + 8 + 3;
     }
 
     function build(uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(start, decay, surchargeBps)), start, decay, surchargeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), start, decay, surchargeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (MemoryPtr ptr) {
@@ -89,12 +89,12 @@ library DutchAuctionBalanceOut {
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint40, uint64, uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 5 + 8 + 3;
     }
 
     function build(uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(start, decay, surchargeBps)), start, decay, surchargeBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), start, decay, surchargeBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 start, uint64 decay, uint24 surchargeBps) internal pure returns (MemoryPtr ptr) {

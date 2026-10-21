@@ -25,12 +25,12 @@ library BaseFeeAdjusterBalanceIn {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint64, uint96, uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 8 + 12 + 3;
     }
 
     function build(uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(baseGasPrice, ethPrice, gasAmount)), baseGasPrice, ethPrice, gasAmount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), baseGasPrice, ethPrice, gasAmount).resolve();
     }
 
     function build(
@@ -77,12 +77,12 @@ library BaseFeeAdjusterBalanceOut {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint64, uint96, uint24) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 8 + 12 + 3;
     }
 
     function build(uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(baseGasPrice, ethPrice, gasAmount)), baseGasPrice, ethPrice, gasAmount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), baseGasPrice, ethPrice, gasAmount).resolve();
     }
 
     function build(
