@@ -16,29 +16,18 @@ import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol"
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @notice Terms committed in the escrow's CREATE2 address.
-/// @dev Does not contain an EIP-712 hash, so authentication for refunds survives chain ID changes.
-/// The deposit is not a term: the program prices the order and the exact router allowance caps it.
-/// Public cancellation and rescue open at the implementation's fixed delays after `expiration`.
-/// abi.encodePacked of the fields in declaration order (101 bytes) is the ERC-1271 signature, and its
-/// keccak256 is the CREATE2 salt.
-/// Fields:
-/// - maker:      original maker; the only caller of cancel and rescueFunds, receives all refunds
-/// - traits:     traits shared by the maker's order and the filled order
-/// - dataHash:   keccak256 of the order data, which takers pass to the router in full
-/// - expiration: absolute Unix timestamp from which fills are rejected
-/// - maxReward:  most native ETH the maker agrees to pay a public canceller
+/// @dev Fixed-size fields only: their abi.encodePacked (101 bytes) is the signature, its keccak256 the salt.
 struct NativeOrder {
     address maker;
     MakerTraits traits;
-    bytes32 dataHash;
-    uint40 expiration;
-    uint96 maxReward;
+    bytes32 dataHash; // keccak256(order.data)
+    uint40 expiration; // fills are rejected from this timestamp
+    uint96 maxReward; // max native ETH paid to a public canceller
 }
 
 /// @title NativeOrderEscrow
-/// @notice Holds a single native ETH sell order as WETH, without changing the SwapVM router.
-/// @dev The exact WETH allowance is also the order's lifecycle state: fills consume it and cancellation
-/// permanently zeros it. Only the factory can approve, once when deploying the clone.
+/// @notice Holds one native ETH sell order as WETH, without changing the SwapVM router.
+/// @dev The exact router allowance is the order state: fills spend it, cancellation zeros it for good.
 /// @custom:security-contact security@1inch.io
 contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     using Clones for address;
@@ -51,37 +40,20 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     error OrderClosed();
     error NativeTokenSendingFailure();
 
-    /// @notice Emitted by cancel and publicCancel after the remaining funds are paid out.
-    /// @param orderHash Hash of the filled order (maker = this clone), marked fully filled in the router.
-    /// @param refund Native ETH sent to the maker.
-    /// @param reward Native ETH sent to the public canceller; zero for the maker's own cancellation.
     event NativeOrderCancelled(bytes32 indexed orderHash, uint256 refund, uint256 reward);
-    /// @notice Emitted when the maker rescues stray funds.
-    /// @param token Rescued token; zero address for native ETH.
-    /// @param amount Rescued amount.
     event FundsRescued(address indexed token, uint256 amount);
 
-    /// @dev Length of the packed NativeOrder: 20 + 32 + 32 + 5 + 12 bytes.
-    uint256 private constant _ORDER_SIZE = 101;
+    uint256 private constant _ORDER_SIZE = 101; // 20 + 32 + 32 + 5 + 12
 
-    /// @notice Factory that deployed this implementation, creates its clones and alone calls depositAndApprove.
     address public immutable FACTORY = msg.sender;
-    /// @notice Wrapped native token the deposit is held in.
     IWETH public immutable WETH;
-    /// @notice Seconds after expiration before access-token holders may call publicCancel.
+    /// @notice Seconds after expiration before publicCancel opens.
     uint256 public immutable PUBLIC_CANCELLATION_DELAY;
-    /// @notice Seconds after expiration before the maker may call rescueFunds.
+    /// @notice Seconds after expiration before rescueFunds opens.
     uint256 public immutable RESCUE_DELAY;
-    /// @dev Clones read it to recompute their own CREATE2 address from the order terms.
     address private immutable _IMPLEMENTATION = address(this);
-    /// @dev Token whose holders may call publicCancel.
     IERC20 private immutable _ACCESS_TOKEN;
 
-    /// @param router SwapVM router that pulls the WETH and validates fills through isValidSignature.
-    /// @param weth Wrapped native token; plain ETH transfers are accepted only from it, when unwrapping.
-    /// @param accessToken Token whose holders may call publicCancel.
-    /// @param publicCancellationDelay Seconds after expiration before access-token holders may call publicCancel.
-    /// @param rescueDelay Seconds after expiration before the maker may call rescueFunds.
     constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 publicCancellationDelay, uint32 rescueDelay)
         OnlyWethReceiver(address(weth))
         RouterOrderHasher(router)
@@ -98,24 +70,15 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         _;
     }
 
-    /// @notice Wraps the initial deposit and approves exactly that amount for the router.
-    /// @dev Only the factory may call it, which it does once, right after deploying the clone.
+    /// @notice Wraps the deposit and approves exactly that amount to the router; called once, by the factory.
     function depositAndApprove() external payable {
         require(msg.sender == FACTORY, InvalidCaller());
         WETH.safeDeposit(msg.value);
         WETH.forceApprove(address(ROUTER), msg.value);
     }
 
-    /// @notice ERC-1271 validation called by the router when this clone is the order's maker.
-    /// @dev The signature is the packed NativeOrder, hashed in place as the CREATE2 salt; the program is
-    /// supplied only once, to the router.
-    /// Valid only on the deployment chain, so a fork with a new chain ID cannot fill copies of the order,
-    /// and only if the terms are committed in this clone's address, the order has not expired and its hash
-    /// with maker = this clone equals `orderHash`. The allowance is not read here: a closed order keeps a
-    /// valid signature until expiration, but its fills revert because the router allowance is zero.
-    /// @param orderHash Hash of the order the router is executing.
-    /// @param signature abi.encodePacked(maker, traits, dataHash, expiration, maxReward), exactly 101 bytes.
-    /// @return magicValue `IERC1271.isValidSignature.selector` if all checks pass, otherwise zero.
+    /// @notice ERC-1271 check: `signature` is the packed NativeOrder this clone was created with.
+    /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != _ORDER_SIZE || !_isDeploymentChain()) return bytes4(0);
         bytes32 salt;
@@ -137,20 +100,13 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         return IERC1271.isValidSignature.selector;
     }
 
-    /// @notice Permanently closes the order and returns all remaining WETH and forced ETH as native ETH.
-    /// @dev May also sweep donations after a full fill or an earlier cancellation. No resolver reward.
-    /// @param order Terms committed in this clone's address; the caller must be `order.maker`.
+    /// @notice Closes the order for good, sending all WETH and ETH to the maker; repeatable to sweep donations.
     function cancel(NativeOrder calldata order) external onlyMaker(order) {
         _cancel(order, 0);
     }
 
-    /// @notice From PUBLIC_CANCELLATION_DELAY after expiration, an access-token holder may close an abandoned
-    /// order for a capped reward.
-    /// @dev Fully filled or already cancelled orders cannot earn another reward. Forced ETH is refunded
-    /// entirely to the maker and never increases the reward budget.
-    /// @param order Terms committed in this clone's address.
-    /// @param rewardLimit Cap on the caller's reward. The reward is also capped by the order's maxReward, the
-    /// remaining allowance and the WETH balance.
+    /// @notice After PUBLIC_CANCELLATION_DELAY, an access-token holder may close the order for a reward.
+    /// @param rewardLimit Caller's cap; the reward is also capped by maxReward and the remaining WETH.
     function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external {
         _validateOrder(order);
         require(block.timestamp >= order.expiration + PUBLIC_CANCELLATION_DELAY, InvalidTime());
@@ -163,11 +119,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         _cancel(order, reward);
     }
 
-    /// @notice From RESCUE_DELAY after expiration, recovers stray tokens; zero token means native ETH.
-    /// @dev Rescuing WETH also closes the order in the router, as cancel does.
-    /// @param order Terms committed in this clone's address; the caller must be `order.maker`.
-    /// @param token Token to send to the maker; zero address for native ETH.
-    /// @param amount Amount to send.
+    /// @notice After RESCUE_DELAY, sends stray tokens to the maker (zero token = ETH); rescuing WETH closes the order.
     function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external onlyMaker(order) {
         require(block.timestamp >= order.expiration + RESCUE_DELAY, InvalidTime());
         if (token == address(WETH)) _closeOrder(order);
@@ -179,7 +131,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     function _cancel(NativeOrder calldata order, uint256 reward) private {
         bytes32 orderHash = _closeOrder(order);
         WETH.safeWithdraw(WETH.balanceOf(address(this)));
-        // Pay the reward first, so a maker callback cannot rescue the resolver's reserved ETH.
+        // Reward first, so a maker callback cannot rescue the ETH reserved for it.
         _ethTransfer(msg.sender, reward);
         uint256 refund = address(this).balance;
         _ethTransfer(order.maker, refund);
@@ -189,7 +141,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     function _closeOrder(NativeOrder calldata order) private returns (bytes32 orderHash) {
         WETH.forceApprove(address(ROUTER), 0);
         orderHash = _hashOrder(address(this), order.traits, order.dataHash);
-        // Makes quotes using InvalidateTokenOut reflect cancellation as well.
+        // Makes quotes through InvalidateTokenOut fail too, not only fills.
         InvalidateTokenOutExternal(address(ROUTER)).invalidateTokenOut(orderHash, address(WETH));
     }
 
@@ -197,13 +149,11 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         require(_isCommitted(_salt(order)), InvalidOrder());
     }
 
-    /// @dev Only the terms this clone was created with hash to the salt of its CREATE2 address.
     function _isCommitted(bytes32 salt) private view returns (bool) {
         return _IMPLEMENTATION.predictDeterministicAddress(salt, FACTORY) == address(this);
     }
 
-    /// @dev Repacks the ABI-encoded terms into the signature layout before hashing. The shifts drop dirty
-    /// high bits, so the salt commits to the same values Solidity reads from `order`.
+    /// @dev Shifts drop dirty high bits; Solidity's calldata validation rejects them when the fields are read.
     function _salt(NativeOrder calldata order) private pure returns (bytes32 salt) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)

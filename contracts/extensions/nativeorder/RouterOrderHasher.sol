@@ -11,9 +11,8 @@ import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 
 /// @title RouterOrderHasher
-/// @notice Computes SwapVM signature-order hashes locally, byte-identical to `ROUTER.hash(order)`,
-/// without an external call and from `keccak256(order.data)` alone.
-/// @dev Covers only the EIP-712 branch of `SwapVM.hash`; Aqua orders must be rejected by the inheritor.
+/// @notice Computes `ROUTER.hash(order)` locally for signature orders, from `keccak256(order.data)`.
+/// @dev Aqua orders hash differently; inheritors must reject them.
 abstract contract RouterOrderHasher {
     error RouterOrderHashMismatch();
 
@@ -21,16 +20,13 @@ abstract contract RouterOrderHasher {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant _ORDER_TYPEHASH = keccak256("Order(address maker,uint256 traits,bytes data)");
 
-    /// @notice SwapVM router whose EIP-712 domain and order type this contract reproduces.
     ISwapVM public immutable ROUTER;
     bytes32 private immutable _ROUTER_NAME_HASH;
     bytes32 private immutable _ROUTER_VERSION_HASH;
     bytes32 private immutable _CACHED_DOMAIN_SEPARATOR;
     uint256 private immutable _CACHED_CHAIN_ID;
 
-    /// @dev Reads the router's name and version through ERC-5267 and compares a probe order's local hash
-    /// with `router.hash`, so deployment fails against a router with a different domain or order type.
-    /// @param router SwapVM router to reproduce order hashes for.
+    /// @dev Reverts if a probe order hashes differently than `router.hash`.
     constructor(ISwapVM router) {
         (, string memory name, string memory version,,,,) = IERC5267(address(router)).eip712Domain();
         bytes32 nameHash = keccak256(bytes(name));
@@ -49,12 +45,11 @@ abstract contract RouterOrderHasher {
         _CACHED_DOMAIN_SEPARATOR = domainSeparator;
     }
 
-    /// @dev Equals `ROUTER.hash(Order(maker, traits, data))` for non-Aqua traits, given `dataHash = keccak256(data)`.
     function _hashOrder(address maker, MakerTraits traits, bytes32 dataHash) internal view returns (bytes32) {
         return _typedOrderHash(_routerDomainSeparator(), maker, traits, dataHash);
     }
 
-    /// @dev Immutables keep the deployment chain ID in a fork, so this is false on a fork with a new chain ID.
+    /// @dev False on a fork with a new chain ID: immutables keep the deployment one.
     function _isDeploymentChain() internal view returns (bool) {
         return block.chainid == _CACHED_CHAIN_ID;
     }
@@ -68,7 +63,6 @@ abstract contract RouterOrderHasher {
         return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
     }
 
-    /// @dev Recomputed after a chain ID change, so hashes always use the router's current domain.
     function _routerDomainSeparator() private view returns (bytes32) {
         if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
         return _buildDomainSeparator(address(ROUTER), _ROUTER_NAME_HASH, _ROUTER_VERSION_HASH);
