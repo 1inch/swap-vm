@@ -82,8 +82,11 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(makerOrder, expiration, MAX_REWARD);
-        _snapshot("create", abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder, expiration, MAX_REWARD)));
+        factory.create{ value: WETH_AMOUNT }(makerOrder.traits, makerOrder.data, expiration, MAX_REWARD);
+        _snapshot(
+            "create",
+            abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder.traits, makerOrder.data, expiration, MAX_REWARD))
+        );
     }
 
     function test_gas_NativeOrder_swap_exactIn() public {
@@ -161,7 +164,9 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         vm.prank(maker);
         (address escrowAddr, bytes32 fHash, NativeOrder memory terms) =
-            factory.create{ value: WETH_AMOUNT }(makerOrder, uint40(block.timestamp + EXPIRY_OFFSET), MAX_REWARD);
+            factory.create{ value: WETH_AMOUNT }(
+                makerOrder.traits, makerOrder.data, uint40(block.timestamp + EXPIRY_OFFSET), MAX_REWARD
+            );
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
         filledOrderHash = fHash;

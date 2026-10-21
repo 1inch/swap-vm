@@ -56,8 +56,6 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
         _;
     }
 
-
-
     function depositAndApprove() external payable onlyFactory {
         WETH.safeDeposit(msg.value);
         WETH.forceApprove(address(ROUTER), msg.value);

@@ -9,6 +9,7 @@ import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { IMakerHooks } from "../../interfaces/IMakerHooks.sol";
+import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
 import { INativeOrderEscrowFactory } from "./interfaces/INativeOrderEscrowFactory.sol";
 import { NativeOrder, NativeOrderLib } from "./libs/NativeOrderLib.sol";
@@ -32,34 +33,35 @@ contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactor
         );
     }
 
-    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint96 maxReward)
+    function create(MakerTraits orderMakerTraits, bytes calldata orderData, uint40 expiration, uint96 maxReward)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
-        require(_isDeploymentChain(), NativeOrderWrongChain());
         require(msg.value > 0, NativeOrderZeroDeposit());
-        require(makerOrder.maker == msg.sender, NativeOrderOnlyMakerCanCreate());
-        require(!makerOrder.traits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());
-        require(expiration > block.timestamp, NativeOrderInvalidTime());
 
-        (address tokenA, address tokenB) = makerOrder.traits.tokens(makerOrder.data);
+        bytes32 dataHash = keccak256(orderData);
+        nativeOrder = NativeOrderLib.encode(msg.sender, orderMakerTraits, dataHash, expiration, maxReward);
+        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMemory());
+
+        require(!orderMakerTraits.useAquaInsteadOfSignature(), NativeOrderAquaNotSupported());
+        address receiver = orderMakerTraits.receiver(escrow);
+        require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
+        _validateHooks(orderMakerTraits, orderData, escrow);
+
+        (address tokenA, address tokenB) = orderMakerTraits.tokens(orderData);
         require(
-            makerOrder.data.length >= 40 && tokenA < tokenB && (tokenA == address(WETH) || tokenB == address(WETH)),
+            orderData.length >= 40 && tokenA < tokenB && (tokenA == address(WETH) || tokenB == address(WETH)),
             NativeOrderInvalidTokens()
         );
 
-        bytes32 dataHash = keccak256(makerOrder.data);
-        nativeOrder = NativeOrderLib.encode(msg.sender, makerOrder.traits, dataHash, expiration, maxReward);
-        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMemory());
-        address receiver = makerOrder.traits.receiver(escrow);
-        require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
-        _validateHooks(makerOrder, escrow);
+        require(expiration > block.timestamp, NativeOrderInvalidTime());
+
         INativeOrderEscrow(escrow).depositAndApprove{ value: msg.value }();
 
-        filledOrderHash = _hashOrder(escrow, makerOrder.traits, dataHash);
+        filledOrderHash = _hashOrder(escrow, orderMakerTraits, dataHash);
         emit NativeOrderCreated(
             escrow, filledOrderHash, nativeOrder, msg.value,
-            ISwapVM.Order({ maker: escrow, traits: makerOrder.traits, data: makerOrder.data })
+            ISwapVM.Order({ maker: escrow, traits: orderMakerTraits, data: orderData })
         );
     }
 
@@ -68,21 +70,21 @@ contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactor
     }
 
     /// @dev Default hook targets would resolve to the escrow, which implements no hooks.
-    function _validateHooks(ISwapVM.Order calldata order, address escrow) private pure {
-        if (order.traits.hasPreTransferInHook()) {
-            (IMakerHooks target,) = order.traits.preTransferInHook(escrow, order.data);
+    function _validateHooks(MakerTraits orderMakerTraits, bytes calldata orderData, address escrow) private pure {
+        if (orderMakerTraits.hasPreTransferInHook()) {
+            (IMakerHooks target,) = orderMakerTraits.preTransferInHook(escrow, orderData);
             require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
         }
-        if (order.traits.hasPostTransferInHook()) {
-            (IMakerHooks target,) = order.traits.postTransferInHook(escrow, order.data);
+        if (orderMakerTraits.hasPostTransferInHook()) {
+            (IMakerHooks target,) = orderMakerTraits.postTransferInHook(escrow, orderData);
             require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
         }
-        if (order.traits.hasPreTransferOutHook()) {
-            (IMakerHooks target,) = order.traits.preTransferOutHook(escrow, order.data);
+        if (orderMakerTraits.hasPreTransferOutHook()) {
+            (IMakerHooks target,) = orderMakerTraits.preTransferOutHook(escrow, orderData);
             require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
         }
-        if (order.traits.hasPostTransferOutHook()) {
-            (IMakerHooks target,) = order.traits.postTransferOutHook(escrow, order.data);
+        if (orderMakerTraits.hasPostTransferOutHook()) {
+            (IMakerHooks target,) = orderMakerTraits.postTransferOutHook(escrow, orderData);
             require(address(target) != escrow, NativeOrderExplicitHookTargetRequired());
         }
     }

@@ -131,16 +131,16 @@ deposit native ETH for a signature-mode order. It deploys a CREATE2 escrow, wrap
 and grants the router exactly that amount of allowance. The escrow acts as the order's maker and
 authenticates fills through ERC-1271; the router requires no changes.
 
-Build the order with the original maker, an **explicit receiver**, and a sorted pair containing WETH.
-The program must sell WETH and account for the intended deposit and any output fees. Enabled hooks
-must encode explicit targets: default targets would become the escrow when the maker is replaced.
-Aqua orders are rejected.
+Build the order's traits and data with an **explicit receiver** and a sorted pair containing WETH; the
+caller of `create` becomes its maker. The program must sell WETH and account for the intended deposit
+and any output fees. Enabled hooks must encode explicit targets: default targets would become the
+escrow when the maker is replaced. Aqua orders are rejected.
 
 ```solidity
-// Called by makerOrder.maker. expiration is an absolute Unix timestamp; maxReward caps the reward
+// The caller becomes the maker. expiration is an absolute Unix timestamp; maxReward caps the reward
 // a public canceller can take from the deposit.
 (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder) =
-    factory.create{ value: 0.5 ether }(makerOrder, expiration, maxReward);
+    factory.create{ value: 0.5 ether }(makerOrder.traits, makerOrder.data, expiration, maxReward);
 
 ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
@@ -157,8 +157,9 @@ reward share one word, `maxReward << 40 | expiration`. Its ERC-1271 signature is
 128 bytes; the escrow hashes it in place as its CREATE2 salt, and it does not duplicate the program. Fills
 require the matching router-domain order hash, `block.timestamp < expiration` and a nonzero remaining
 allowance. The signature check does not read the allowance, so a closed order keeps a valid signature
-until expiration while its fills revert. Fills and `create` work only on the chain the factory was
-deployed on, so after a fork with a new chain ID copies of existing orders cannot be filled there.
+until expiration while its fills revert. Fills work only on the chain the factory was deployed on:
+after a fork with a new chain ID, neither copies of existing orders nor orders created there can be
+filled.
 Cancellation and rescue do not depend on the chain ID, so the maker can recover funds on both sides of
 a fork.
 

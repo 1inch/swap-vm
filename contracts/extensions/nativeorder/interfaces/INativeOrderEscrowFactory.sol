@@ -7,6 +7,7 @@ pragma solidity ^0.8.27;
 import { IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 import { ISwapVM } from "../../../interfaces/ISwapVM.sol";
+import { MakerTraits } from "../../../libs/MakerTraits.sol";
 import { NativeOrder } from "../libs/NativeOrderLib.sol";
 import { IRouterOrderHasher } from "./IRouterOrderHasher.sol";
 
@@ -15,13 +16,11 @@ import { IRouterOrderHasher } from "./IRouterOrderHasher.sol";
 /// @custom:security-contact security@1inch.io
 interface INativeOrderEscrowFactory is IRouterOrderHasher {
     error NativeOrderZeroDeposit();
-    error NativeOrderOnlyMakerCanCreate();
     error NativeOrderAquaNotSupported();
     error NativeOrderExplicitReceiverRequired();
     error NativeOrderExplicitHookTargetRequired();
     error NativeOrderInvalidTokens();
     error NativeOrderInvalidTime();
-    error NativeOrderWrongChain();
 
     event NativeOrderCreated(
         address indexed escrow,
@@ -34,12 +33,12 @@ interface INativeOrderEscrowFactory is IRouterOrderHasher {
     function WETH() external view returns (IWETH);
     function ESCROW_IMPLEMENTATION() external view returns (address);
 
-    /// @notice Escrows msg.value for `makerOrder`. Takers fill it with maker = escrow and
-    /// `abi.encode(nativeOrder)` as the signature.
-    /// @dev Only the maker may create: the deposit replaces their signature.
+    /// @notice Escrows msg.value for an order of `orderMakerTraits` and `orderData` made by msg.sender. Takers
+    /// fill it with maker = escrow and `abi.encode(nativeOrder)` as the signature.
+    /// @dev The caller is the maker: the deposit replaces their signature.
     /// @param expiration Timestamp from which fills are rejected; the escrow's delays count from it.
     /// @param maxReward Max native ETH paid to a public canceller; zero offers no reward.
-    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint96 maxReward)
+    function create(MakerTraits orderMakerTraits, bytes calldata orderData, uint40 expiration, uint96 maxReward)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder);
 

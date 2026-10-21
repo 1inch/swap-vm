@@ -34,12 +34,6 @@ abstract contract RouterOrderHasher is IRouterOrderHasher {
         _ROUTER_VERSION_HASH = keccak256(bytes(version));
         _CACHED_CHAIN_ID = block.chainid;
         _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator();
-
-        ISwapVM.Order memory probe = ISwapVM.Order({ maker: address(this), traits: MakerTraits.wrap(0), data: "probe" });
-        require(
-            _hashOrder(probe.maker, probe.traits, keccak256(probe.data)) == router.hash(probe),
-            RouterOrderHashMismatch()
-        );
     }
 
     function _hashOrder(address maker, MakerTraits traits, bytes32 dataHash) internal view returns (bytes32) {
