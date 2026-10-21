@@ -36,9 +36,9 @@ interface INativeOrderEscrow is IERC1271, IRouterOrderHasher {
     /// @notice Closes the order for good, sending all WETH and ETH to the maker; repeatable to sweep donations.
     function cancel(NativeOrder calldata order) external;
 
-    /// @notice After PUBLIC_CANCELLATION_DELAY, an access-token holder may close the order for a reward.
-    /// @param rewardLimit Caller's cap; the reward is also capped by maxReward and the remaining WETH.
-    function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external;
+    /// @notice After PUBLIC_CANCELLATION_DELAY, an access-token holder may close the order for a reward of
+    /// maxReward, capped by the remaining allowance and WETH.
+    function publicCancel(NativeOrder calldata order) external;
 
     /// @notice After RESCUE_DELAY, sends stray tokens to the maker (zero token = ETH); rescuing WETH closes the order.
     function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external;

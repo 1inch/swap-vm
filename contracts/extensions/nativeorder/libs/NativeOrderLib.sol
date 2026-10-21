@@ -6,72 +6,75 @@ pragma solidity ^0.8.27;
 
 import { MakerTraits } from "../../../libs/MakerTraits.sol";
 
-/// @notice Terms committed in the escrow's CREATE2 address.
-/// @dev Fixed-size fields only: their abi.encodePacked (101 bytes) is the signature, its keccak256 the salt.
+/// @notice Terms committed in the escrow's CREATE2 address, read through the NativeOrderLib getters.
+/// @dev Fixed-size fields only: their abi.encode (128 bytes) is the signature, its keccak256 the salt.
 struct NativeOrder {
-    address maker;
-    MakerTraits traits;
-    bytes32 dataHash; // keccak256(order.data)
-    uint40 expiration; // fills are rejected from this timestamp
-    uint96 maxReward; // max native ETH paid to a public canceller
+    address _maker;
+    MakerTraits _traits;
+    bytes32 _dataHash;
+    uint256 _expirationAndMaxReward; // maxReward << 40 | expiration
 }
 
 using NativeOrderLib for NativeOrder global;
 
 /// @title NativeOrderLib
-/// @notice Packing, calldata decoding and CREATE2 salt calculation for `NativeOrder`.
+/// @notice Encoding, field getters and CREATE2 salt calculation for `NativeOrder`.
 library NativeOrderLib {
-    uint256 internal constant SIZE = 101; // 20 + 32 + 32 + 5 + 12
+    uint256 internal constant SIZE = 0x80;
 
-    function encode(NativeOrder memory order) internal pure returns (bytes memory) {
-        return abi.encodePacked(order.maker, order.traits, order.dataHash, order.expiration, order.maxReward);
+    function maker(NativeOrder calldata order) internal pure returns (address) {
+        return order._maker;
+    }
+
+    function traits(NativeOrder calldata order) internal pure returns (MakerTraits) {
+        return order._traits;
+    }
+
+    /// @dev keccak256 of the maker order's data.
+    function dataHash(NativeOrder calldata order) internal pure returns (bytes32) {
+        return order._dataHash;
+    }
+
+    /// @dev Fills are rejected from this timestamp.
+    function expiration(NativeOrder calldata order) internal pure returns (uint40) {
+        return uint40(order._expirationAndMaxReward);
+    }
+
+    /// @dev Max native ETH paid to a public canceller.
+    function maxReward(NativeOrder calldata order) internal pure returns (uint96) {
+        return uint96(order._expirationAndMaxReward >> 40);
+    }
+
+    function encode(
+        address orderMaker,
+        MakerTraits orderTraits,
+        bytes32 orderDataHash,
+        uint40 orderExpiration,
+        uint96 orderMaxReward
+    ) internal pure returns (NativeOrder memory) {
+        return NativeOrder({
+            _maker: orderMaker,
+            _traits: orderTraits,
+            _dataHash: orderDataHash,
+            _expirationAndMaxReward: (uint256(orderMaxReward) << 40) | orderExpiration
+        });
     }
 
     /// @dev Expects signature.length == SIZE and does not check it.
-    function decode(bytes calldata signature)
-        internal pure
-        returns (address maker, MakerTraits traits, bytes32 dataHash, uint40 expiration, uint96 maxReward)
-    {
-        assembly ("memory-safe") {
-            maker := shr(96, calldataload(signature.offset))
-            traits := calldataload(add(signature.offset, 20))
-            dataHash := calldataload(add(signature.offset, 52))
-            expiration := shr(216, calldataload(add(signature.offset, 84)))
-            maxReward := shr(160, calldataload(add(signature.offset, 89)))
-        }
+    function decode(bytes calldata signature) internal pure returns (NativeOrder calldata order) {
+        assembly ("memory-safe") { order := signature.offset }
     }
 
-    /// @dev Expects signature.length == SIZE and does not check it.
-    function salt(bytes calldata signature) internal pure returns (bytes32 result) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            calldatacopy(ptr, signature.offset, SIZE)
-            result := keccak256(ptr, SIZE)
-        }
-    }
-
-    /// @dev Shifts drop dirty high bits; Solidity's calldata validation rejects them when the fields are read.
+    /// @dev Hashes the calldata words as they are, so a noncanonical encoding gets a different salt.
     function salt(NativeOrder calldata order) internal pure returns (bytes32 result) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
-            mstore(ptr, shl(96, calldataload(order)))
-            mstore(add(ptr, 20), calldataload(add(order, 0x20)))
-            mstore(add(ptr, 52), calldataload(add(order, 0x40)))
-            mstore(add(ptr, 84), shl(216, calldataload(add(order, 0x60))))
-            mstore(add(ptr, 89), shl(160, calldataload(add(order, 0x80))))
+            calldatacopy(ptr, order, SIZE)
             result := keccak256(ptr, SIZE)
         }
     }
 
     function saltMemory(NativeOrder memory order) internal pure returns (bytes32 result) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, shl(96, mload(order)))
-            mstore(add(ptr, 20), mload(add(order, 0x20)))
-            mstore(add(ptr, 52), mload(add(order, 0x40)))
-            mstore(add(ptr, 84), shl(216, mload(add(order, 0x60))))
-            mstore(add(ptr, 89), shl(160, mload(add(order, 0x80))))
-            result := keccak256(ptr, SIZE)
-        }
+        assembly ("memory-safe") { result := keccak256(order, SIZE) }
     }
 }

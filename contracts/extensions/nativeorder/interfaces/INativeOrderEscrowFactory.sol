@@ -34,8 +34,8 @@ interface INativeOrderEscrowFactory is IRouterOrderHasher {
     function WETH() external view returns (IWETH);
     function ESCROW_IMPLEMENTATION() external view returns (address);
 
-    /// @notice Escrows msg.value for `makerOrder`. Takers fill it with maker = escrow and the packed
-    /// `nativeOrder` as the signature.
+    /// @notice Escrows msg.value for `makerOrder`. Takers fill it with maker = escrow and
+    /// `abi.encode(nativeOrder)` as the signature.
     /// @dev Only the maker may create: the deposit replaces their signature.
     /// @param expiration Timestamp from which fills are rejected; the escrow's delays count from it.
     /// @param maxReward Max native ETH paid to a public canceller; zero offers no reward.

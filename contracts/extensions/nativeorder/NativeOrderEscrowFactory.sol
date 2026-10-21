@@ -11,7 +11,7 @@ import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { IMakerHooks } from "../../interfaces/IMakerHooks.sol";
 import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
 import { INativeOrderEscrowFactory } from "./interfaces/INativeOrderEscrowFactory.sol";
-import { NativeOrder } from "./libs/NativeOrderLib.sol";
+import { NativeOrder, NativeOrderLib } from "./libs/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
@@ -48,20 +48,15 @@ contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactor
             NativeOrderInvalidTokens()
         );
 
-        nativeOrder = NativeOrder({
-            maker: msg.sender,
-            traits: makerOrder.traits,
-            dataHash: keccak256(makerOrder.data),
-            expiration: expiration,
-            maxReward: maxReward
-        });
+        bytes32 dataHash = keccak256(makerOrder.data);
+        nativeOrder = NativeOrderLib.encode(msg.sender, makerOrder.traits, dataHash, expiration, maxReward);
         escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMemory());
         address receiver = makerOrder.traits.receiver(escrow);
         require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
         _validateHooks(makerOrder, escrow);
         INativeOrderEscrow(escrow).depositAndApprove{ value: msg.value }();
 
-        filledOrderHash = _hashOrder(escrow, makerOrder.traits, nativeOrder.dataHash);
+        filledOrderHash = _hashOrder(escrow, makerOrder.traits, dataHash);
         emit NativeOrderCreated(
             escrow, filledOrderHash, nativeOrder, msg.value,
             ISwapVM.Order({ maker: escrow, traits: makerOrder.traits, data: makerOrder.data })

@@ -117,11 +117,8 @@ contract NativeOrderGas is Test {
         _createEscrow();
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(resolver);
-        escrow.publicCancel(nativeOrder, type(uint256).max);
-        _snapshot(
-            "publicCancel",
-            abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder, type(uint256).max))
-        );
+        escrow.publicCancel(nativeOrder);
+        _snapshot("publicCancel", abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder)));
     }
 
     // === Reference: same program as a plain EOA-signed WETH order ===
@@ -200,7 +197,7 @@ contract NativeOrderGas is Test {
     }
 
     function _escrowTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return _takerData(isExactIn, nativeOrder.encode());
+        return _takerData(isExactIn, abi.encode(nativeOrder));
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {

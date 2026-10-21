@@ -11,7 +11,6 @@ import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/librar
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
-import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
 import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
 import { NativeOrder, NativeOrderLib } from "./libs/NativeOrderLib.sol";
@@ -48,10 +47,16 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
     }
 
     modifier onlyMaker(NativeOrder calldata order) {
-        require(msg.sender == order.maker, InvalidCaller());
-        _validateOrder(order);
+        require(msg.sender == order.maker(), InvalidCaller());
         _;
     }
+
+    modifier isValidOrder(NativeOrder calldata order) {
+        require(_isCommitted(NativeOrderLib.salt(order)), InvalidOrder());
+        _;
+    }
+
+
 
     function depositAndApprove() external payable onlyFactory {
         WETH.safeDeposit(msg.value);
@@ -61,35 +66,32 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
     /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != NativeOrderLib.SIZE || !_isDeploymentChain()) return bytes4(0);
-        (, MakerTraits traits, bytes32 dataHash, uint40 expiration,) = NativeOrderLib.decode(signature);
+        NativeOrder calldata order = NativeOrderLib.decode(signature);
         if (
-            !_isCommitted(NativeOrderLib.salt(signature)) || block.timestamp >= expiration ||
-            _hashOrder(address(this), traits, dataHash) != orderHash
+            !_isCommitted(order.salt()) || block.timestamp >= order.expiration() ||
+            _hashOrder(address(this), order.traits(), order.dataHash()) != orderHash
         ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
     }
 
-    function cancel(NativeOrder calldata order) external onlyMaker(order) {
+    function cancel(NativeOrder calldata order) external isValidOrder(order) onlyMaker(order) {
         _cancel(order, 0);
     }
 
-    function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external {
-        _validateOrder(order);
-        require(block.timestamp >= order.expiration + PUBLIC_CANCELLATION_DELAY, InvalidTime());
+    function publicCancel(NativeOrder calldata order) external isValidOrder(order) {
+        require(block.timestamp >= order.expiration() + PUBLIC_CANCELLATION_DELAY, InvalidTime());
         require(_ACCESS_TOKEN.balanceOf(msg.sender) > 0, InvalidCaller());
         uint256 allowance = WETH.allowance(address(this), address(ROUTER));
         require(allowance > 0, OrderClosed());
-        uint256 reward = Math.min(
-            Math.min(rewardLimit, order.maxReward), Math.min(allowance, WETH.balanceOf(address(this)))
-        );
+        uint256 reward = Math.min(order.maxReward(), Math.min(allowance, WETH.balanceOf(address(this))));
         _cancel(order, reward);
     }
 
-    function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external onlyMaker(order) {
-        require(block.timestamp >= order.expiration + RESCUE_DELAY, InvalidTime());
+    function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external isValidOrder(order) onlyMaker(order) {
+        require(block.timestamp >= order.expiration() + RESCUE_DELAY, InvalidTime());
         if (token == address(WETH)) _closeOrder(order);
-        if (token == address(0)) _ethTransfer(order.maker, amount);
-        else IERC20(token).safeTransfer(order.maker, amount);
+        if (token == address(0)) _ethTransfer(order.maker(), amount);
+        else IERC20(token).safeTransfer(order.maker(), amount);
         emit FundsRescued(token, amount);
     }
 
@@ -99,19 +101,15 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
         // Reward first, so a maker callback cannot rescue the ETH reserved for it.
         _ethTransfer(msg.sender, reward);
         uint256 refund = address(this).balance;
-        _ethTransfer(order.maker, refund);
+        _ethTransfer(order.maker(), refund);
         emit NativeOrderCancelled(orderHash, refund, reward);
     }
 
     function _closeOrder(NativeOrder calldata order) private returns (bytes32 orderHash) {
         WETH.forceApprove(address(ROUTER), 0);
-        orderHash = _hashOrder(address(this), order.traits, order.dataHash);
+        orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
         // Makes quotes through InvalidateTokenOut fail too, not only fills.
         InvalidateTokenOutExternal(address(ROUTER)).invalidateTokenOut(orderHash, address(WETH));
-    }
-
-    function _validateOrder(NativeOrder calldata order) private view {
-        require(_isCommitted(order.salt()), InvalidOrder());
     }
 
     function _isCommitted(bytes32 salt) private view returns (bool) {
