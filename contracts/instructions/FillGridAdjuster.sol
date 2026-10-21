@@ -28,6 +28,7 @@ library FillGridAdjuster {
     error FillGridAdjusterInvalidGridStart();
     error FillGridAdjusterBpsOutOfRange();
     error FillGridAdjusterNotMonotonic();
+    error FillGridAdjusterContextOverflow();
 
     Opcode constant opcode = Opcode.FillGridAdjuster;
 
@@ -90,58 +91,78 @@ library FillGridAdjuster {
 
     function parseHeader(bytes calldata args) internal pure returns (bool adjustIn, uint256 count) {
         adjustIn = args.at(0).asBool(0);
-        count = (args.length - 1) / 6;
+        unchecked { count = (args.length - 1) / 6; }
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
         (bool adjustIn, uint256 count) = parseHeader(args);
 
+        unchecked {
+            require( // check that `value * bps + value * bps * 2` would not overflow
+                (ctx.swap.amountIn >> 224) + (ctx.swap.amountOut >> 224) + (ctx.swap.surcharge >> 224) +
+                (ctx.swap.balanceIn >> 224) + (ctx.swap.balanceOut >> 224) == 0,
+                FillGridAdjusterContextOverflow()
+            );
+        }
+
         if (adjustIn) {
             uint256 balance;
             if (ctx.query.isExactIn) {
                 if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.surcharge == 0) return;
-                (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
-                uint256 balanceInR = ctx.swap.balanceIn;
-                uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+                uint256 balanceInR; uint256 balanceInL; uint256 amountInR; uint256 amountInL; uint256 amountIn;
+                unchecked {
+                    (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
-                uint256 amountIn = ctx.swap.amountIn * BPS;
-                uint256 amountInR = balanceInR * BPS;
-                uint256 amountInL = fillBps * balanceInL;
-
-                while (amountIn < amountInL) {
-                    (balanceInR, amountInR) = (balanceInL, amountInL);
-                    (fillBps, adjustBps) = parsePoint(args, --count);
+                    balanceInR = ctx.swap.balanceIn;
                     balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+
+                    amountIn = ctx.swap.amountIn * BPS;
+                    amountInR = balanceInR * BPS;
                     amountInL = fillBps * balanceInL;
+
+                    while (amountIn < amountInL) {
+                        (balanceInR, amountInR) = (balanceInL, amountInL);
+                        (fillBps, adjustBps) = parsePoint(args, --count);
+                        balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+                        amountInL = fillBps * balanceInL;
+                    }
                 }
 
                 // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
                 balance = ((amountIn - amountInL) * balanceInR + (amountInR - amountIn) * balanceInL).ceilDiv(amountInR - amountInL);
             } else {
                 if (ctx.swap.amountOut >= ctx.swap.balanceOut || ctx.swap.surcharge == 0) return;
-                uint256 fillBpsR = BPS;
-                (uint256 fillBpsL, uint256 adjustBps) = parsePoint(args, --count);
 
-                // Known precision loss in balanceInL calculations leading to exactOut(x) > exactOut(x+1) for dust
-                uint256 balanceInR = ctx.swap.balanceIn;
-                uint256 balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
-
-                uint256 amountOut = ctx.swap.amountOut * BPS;
-
-                while (amountOut < fillBpsL * ctx.swap.balanceOut) {
-                    (balanceInR, fillBpsR) = (balanceInL, fillBpsL);
+                uint256 fillBpsR; uint256 fillBpsL; uint256 balanceInR; uint256 balanceInL; uint256 amountOut;
+                unchecked {
+                    uint256 adjustBps;
+                    fillBpsR = BPS;
                     (fillBpsL, adjustBps) = parsePoint(args, --count);
+
+                    // Known precision loss in balanceInL calculations leading to exactOut(x) > exactOut(x+1) for dust
+                    balanceInR = ctx.swap.balanceIn;
                     balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+
+                    amountOut = ctx.swap.amountOut * BPS;
+
+                    while (amountOut < fillBpsL * ctx.swap.balanceOut) {
+                        (balanceInR, fillBpsR) = (balanceInL, fillBpsL);
+                        (fillBpsL, adjustBps) = parsePoint(args, --count);
+                        balanceInL = ctx.swap.balanceIn + ctx.swap.surcharge * adjustBps / BPS;
+                    }
                 }
 
                 // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
                 // Consider `amountInL/R = fillBpsL/R * balanceInL/R`
                 // Consider `amountIn = amountOut * balance / balanceOut`
+                uint256 balanceDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                unchecked { balanceDelta = balanceInL - balanceInR; }
+                unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
                 balance = Math.mulDiv(
                     balanceInL * balanceInR,
-                    ctx.swap.balanceOut * (fillBpsR - fillBpsL),
-                    (fillBpsR * balanceInR - fillBpsL * balanceInL) * ctx.swap.balanceOut + amountOut * (balanceInL - balanceInR),
+                    ctx.swap.balanceOut * fillBpsDelta,
+                    (fillBpsR * balanceInR - fillBpsL * balanceInL) * ctx.swap.balanceOut + amountOut * balanceDelta,
                     Math.Rounding.Ceil
                 );
             }
@@ -152,55 +173,65 @@ library FillGridAdjuster {
             uint256 balance;
             if (ctx.query.isExactIn) {
                 if (ctx.swap.amountIn >= ctx.swap.balanceIn || ctx.swap.surcharge == 0) return;
-                (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
                 // balanceOutR = rational(balanceOutNum * BPS, balanceOutDenomR)
                 uint256 balanceOutNum = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
-                uint256 balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
+                uint256 balanceOutDenomR; uint256 balanceOutDenomL; uint256 amountInR; uint256 amountInL; uint256 amountIn;
+                unchecked {
+                    (uint256 fillBps, uint256 adjustBps) = parsePoint(args, --count);
 
-                // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-                uint256 balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
-
-                uint256 amountIn = ctx.swap.amountIn * BPS;
-                uint256 amountInR = ctx.swap.balanceIn * BPS;
-                uint256 amountInL = fillBps * ctx.swap.balanceIn;
-
-                while (amountIn < amountInL) {
-                    (balanceOutDenomR, amountInR) = (balanceOutDenomL, amountInL);
-                    (fillBps, adjustBps) = parsePoint(args, --count);
+                    balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
+                    // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
                     balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+
+                    amountIn = ctx.swap.amountIn * BPS;
+                    amountInR = ctx.swap.balanceIn * BPS;
                     amountInL = fillBps * ctx.swap.balanceIn;
+
+                    while (amountIn < amountInL) {
+                        (balanceOutDenomR, amountInR) = (balanceOutDenomL, amountInL);
+                        (fillBps, adjustBps) = parsePoint(args, --count);
+                        balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+                        amountInL = fillBps * ctx.swap.balanceIn;
+                    }
                 }
 
                 // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // The denominator is linear by amountIn, rounding it up keeps balance in favor of maker
-                balance = balanceOutNum * BPS
-                    / (balanceOutDenomL - Math.mulDiv(balanceOutDenomL - balanceOutDenomR, amountIn - amountInL, amountInR - amountInL));
+                uint256 delta; // denom and amount deltas >= 0 by monotonity
+                unchecked { delta = Math.mulDiv(balanceOutDenomL - balanceOutDenomR, amountIn - amountInL, amountInR - amountInL); }
+                balance = balanceOutNum * BPS / (balanceOutDenomL - delta);
             } else {
                 if (ctx.swap.amountOut >= ctx.swap.balanceOut || ctx.swap.surcharge == 0) return;
-                uint256 fillBpsR = BPS;
-                (uint256 fillBpsL, uint256 adjustBps) = parsePoint(args, --count);
 
                 // balanceOutR = rational(balanceOutNum * BPS, balanceOutDenomR)
                 uint256 balanceOutNum = ctx.swap.balanceOut * (ctx.swap.balanceOut + ctx.swap.surcharge);
-                uint256 balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS;
 
+                uint256 fillBpsR = BPS;
+                uint256 fillBpsL; uint256 adjustBps;
+                unchecked { (fillBpsL, adjustBps) = parsePoint(args, --count); }
+
+                uint256 balanceOutDenomR; uint256 balanceOutDenomL;
+                unchecked { balanceOutDenomR = (ctx.swap.balanceOut + ctx.swap.surcharge) * BPS; }
                 // Rescale balanceOut for `scale * (BPS + adjustBps) / BPS`
-                uint256 balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+                unchecked { balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps); }
 
                 while (ctx.swap.amountOut * balanceOutDenomL < fillBpsL * balanceOutNum) {
                     (balanceOutDenomR, fillBpsR) = (balanceOutDenomL, fillBpsL);
-                    (fillBpsL, adjustBps) = parsePoint(args, --count);
-                    balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps);
+                    unchecked { (fillBpsL, adjustBps) = parsePoint(args, --count); }
+                    unchecked { balanceOutDenomL = ctx.swap.balanceOut * BPS + ctx.swap.surcharge * (BPS + adjustBps); }
                 }
 
                 // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // Consider `amountInL/R = fillBpsL/R * balanceIn`
                 // Consider `amountIn = amountOut * balanceIn / balance`
+                uint256 balanceDenomDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                unchecked { balanceDenomDelta = balanceOutDenomL - balanceOutDenomR; }
+                unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
                 balance = Math.mulDiv(
-                    balanceOutNum * (fillBpsR - fillBpsL) + ctx.swap.amountOut * (balanceOutDenomL - balanceOutDenomR),
+                    balanceOutNum * fillBpsDelta + ctx.swap.amountOut * balanceDenomDelta,
                     BPS,
                     fillBpsR * balanceOutDenomL - fillBpsL * balanceOutDenomR
                 );
