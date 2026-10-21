@@ -22,6 +22,26 @@ using NativeOrderLib for NativeOrder global;
 library NativeOrderLib {
     uint256 internal constant SIZE = 0x80;
 
+    function encode(
+        address orderMaker,
+        MakerTraits orderTraits,
+        bytes32 orderDataHash,
+        uint40 orderExpiration,
+        uint96 orderMaxReward
+    ) internal pure returns (NativeOrder memory) {
+        return NativeOrder({
+            _maker: orderMaker,
+            _traits: orderTraits,
+            _dataHash: orderDataHash,
+            _expirationAndMaxReward: (uint256(orderMaxReward) << 40) | orderExpiration
+        });
+    }
+
+    /// @dev Expects signature.length == SIZE and does not check it.
+    function decode(bytes calldata signature) internal pure returns (NativeOrder calldata order) {
+        assembly ("memory-safe") { order := signature.offset }
+    }
+
     function maker(NativeOrder calldata order) internal pure returns (address) {
         return order._maker;
     }
@@ -43,26 +63,6 @@ library NativeOrderLib {
     /// @dev Max native ETH paid to a public canceller.
     function maxReward(NativeOrder calldata order) internal pure returns (uint96) {
         return uint96(order._expirationAndMaxReward >> 40);
-    }
-
-    function encode(
-        address orderMaker,
-        MakerTraits orderTraits,
-        bytes32 orderDataHash,
-        uint40 orderExpiration,
-        uint96 orderMaxReward
-    ) internal pure returns (NativeOrder memory) {
-        return NativeOrder({
-            _maker: orderMaker,
-            _traits: orderTraits,
-            _dataHash: orderDataHash,
-            _expirationAndMaxReward: (uint256(orderMaxReward) << 40) | orderExpiration
-        });
-    }
-
-    /// @dev Expects signature.length == SIZE and does not check it.
-    function decode(bytes calldata signature) internal pure returns (NativeOrder calldata order) {
-        assembly ("memory-safe") { order := signature.offset }
     }
 
     /// @dev Hashes the calldata words as they are, so a noncanonical encoding gets a different salt.
