@@ -9,8 +9,9 @@ import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { IMakerHooks } from "../../interfaces/IMakerHooks.sol";
-import { NativeOrder, INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
+import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
 import { INativeOrderEscrowFactory } from "./interfaces/INativeOrderEscrowFactory.sol";
+import { NativeOrder } from "./libs/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
@@ -54,7 +55,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactor
             expiration: expiration,
             maxReward: maxReward
         });
-        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(_salt(nativeOrder));
+        escrow = ESCROW_IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMemory());
         address receiver = makerOrder.traits.receiver(escrow);
         require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
         _validateHooks(makerOrder, escrow);
@@ -68,11 +69,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactor
     }
 
     function addressOfEscrow(NativeOrder calldata order) external view returns (address) {
-        return ESCROW_IMPLEMENTATION.predictDeterministicAddress(_salt(order));
-    }
-
-    function _salt(NativeOrder memory order) private pure returns (bytes32) {
-        return keccak256(abi.encodePacked(order.maker, order.traits, order.dataHash, order.expiration, order.maxReward));
+        return ESCROW_IMPLEMENTATION.predictDeterministicAddress(order.salt());
     }
 
     /// @dev Default hook targets would resolve to the escrow, which implements no hooks.

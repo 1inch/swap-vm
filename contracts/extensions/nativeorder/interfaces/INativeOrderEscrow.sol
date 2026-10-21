@@ -7,18 +7,8 @@ pragma solidity ^0.8.27;
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
-import { MakerTraits } from "../../../libs/MakerTraits.sol";
+import { NativeOrder } from "../libs/NativeOrderLib.sol";
 import { IRouterOrderHasher } from "./IRouterOrderHasher.sol";
-
-/// @notice Terms committed in the escrow's CREATE2 address.
-/// @dev Fixed-size fields only: their abi.encodePacked (101 bytes) is the signature, its keccak256 the salt.
-struct NativeOrder {
-    address maker;
-    MakerTraits traits;
-    bytes32 dataHash; // keccak256(order.data)
-    uint40 expiration; // fills are rejected from this timestamp
-    uint96 maxReward; // max native ETH paid to a public canceller
-}
 
 /// @title INativeOrderEscrow
 /// @notice Holds one native ETH sell order as WETH, without changing the SwapVM router.

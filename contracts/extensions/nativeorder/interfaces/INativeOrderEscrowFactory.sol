@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 
 import { ISwapVM } from "../../../interfaces/ISwapVM.sol";
-import { NativeOrder } from "./INativeOrderEscrow.sol";
+import { NativeOrder } from "../libs/NativeOrderLib.sol";
 import { IRouterOrderHasher } from "./IRouterOrderHasher.sol";
 
 /// @title INativeOrderEscrowFactory

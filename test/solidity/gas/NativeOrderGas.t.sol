@@ -19,7 +19,7 @@ import { Deadline } from "../../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
 import { WETHMock } from "../mocks/WETHMock.sol";
 
-import { NativeOrder } from "../../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrow.sol";
+import { NativeOrder } from "../../../contracts/extensions/nativeorder/libs/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
 
@@ -200,9 +200,7 @@ contract NativeOrderGas is Test {
     }
 
     function _escrowTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return _takerData(isExactIn, abi.encodePacked(
-            nativeOrder.maker, nativeOrder.traits, nativeOrder.dataHash, nativeOrder.expiration, nativeOrder.maxReward
-        ));
+        return _takerData(isExactIn, nativeOrder.encode());
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {

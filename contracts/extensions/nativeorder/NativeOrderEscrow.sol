@@ -13,7 +13,8 @@ import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWet
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
-import { NativeOrder, INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
+import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
+import { NativeOrder, NativeOrderLib } from "./libs/NativeOrderLib.sol";
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @title NativeOrderEscrow
@@ -23,8 +24,6 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
     using Clones for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-
-    uint256 private constant _ORDER_SIZE = 101; // 20 + 32 + 32 + 5 + 12
 
     address public immutable FACTORY = msg.sender;
     IWETH public immutable WETH;
@@ -61,21 +60,10 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
 
     /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        if (signature.length != _ORDER_SIZE || !_isDeploymentChain()) return bytes4(0);
-        bytes32 salt;
-        MakerTraits traits;
-        bytes32 dataHash;
-        uint256 expiration;
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            calldatacopy(ptr, signature.offset, _ORDER_SIZE)
-            salt := keccak256(ptr, _ORDER_SIZE)
-            traits := calldataload(add(signature.offset, 20))
-            dataHash := calldataload(add(signature.offset, 52))
-            expiration := shr(216, calldataload(add(signature.offset, 84)))
-        }
+        if (signature.length != NativeOrderLib.SIZE || !_isDeploymentChain()) return bytes4(0);
+        (, MakerTraits traits, bytes32 dataHash, uint40 expiration,) = NativeOrderLib.decode(signature);
         if (
-            !_isCommitted(salt) || block.timestamp >= expiration ||
+            !_isCommitted(NativeOrderLib.salt(signature)) || block.timestamp >= expiration ||
             _hashOrder(address(this), traits, dataHash) != orderHash
         ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
@@ -123,24 +111,11 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
     }
 
     function _validateOrder(NativeOrder calldata order) private view {
-        require(_isCommitted(_salt(order)), InvalidOrder());
+        require(_isCommitted(order.salt()), InvalidOrder());
     }
 
     function _isCommitted(bytes32 salt) private view returns (bool) {
         return _IMPLEMENTATION.predictDeterministicAddress(salt, FACTORY) == address(this);
-    }
-
-    /// @dev Shifts drop dirty high bits; Solidity's calldata validation rejects them when the fields are read.
-    function _salt(NativeOrder calldata order) private pure returns (bytes32 salt) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, shl(96, calldataload(order)))
-            mstore(add(ptr, 20), calldataload(add(order, 0x20)))
-            mstore(add(ptr, 52), calldataload(add(order, 0x40)))
-            mstore(add(ptr, 84), shl(216, calldataload(add(order, 0x60))))
-            mstore(add(ptr, 89), shl(160, calldataload(add(order, 0x80))))
-            salt := keccak256(ptr, _ORDER_SIZE)
-        }
     }
 
     function _ethTransfer(address to, uint256 amount) private {

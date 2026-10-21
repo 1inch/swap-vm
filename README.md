@@ -144,8 +144,7 @@ Aqua orders are rejected.
 
 ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
-// Takers use filledOrder and set TakerTraitsLib.Args.signature = abi.encodePacked(nativeOrder.maker,
-// nativeOrder.traits, nativeOrder.dataHash, nativeOrder.expiration, nativeOrder.maxReward).
+// Takers use filledOrder and set TakerTraitsLib.Args.signature = nativeOrder.encode().
 // They can receive WETH or request the router's ordinary taker-side native ETH unwrap.
 ```
 

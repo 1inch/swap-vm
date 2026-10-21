@@ -20,8 +20,9 @@ import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { NativeOrder, INativeOrderEscrow } from "../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrow.sol";
+import { INativeOrderEscrow } from "../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrow.sol";
 import { INativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrowFactory.sol";
+import { NativeOrder, NativeOrderLib } from "../../contracts/extensions/nativeorder/libs/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
@@ -455,9 +456,27 @@ contract NativeOrderEscrowTest is Test {
         assertEq(escrow.isValidSignature(filledOrderHash, bytes.concat(_signature(), hex"00")), bytes4(0));
     }
 
+    function testFuzz_NativeOrderLib_RoundTrip(NativeOrder memory order) public {
+        NativeOrderLibHarness harness = new NativeOrderLibHarness();
+        bytes memory signature = order.encode();
+        bytes32 expected = keccak256(signature);
+        assertEq(signature.length, NativeOrderLib.SIZE);
+        assertEq(order.saltMemory(), expected);
+        assertEq(harness.salt(order), expected);
+        assertEq(harness.salt(signature), expected);
+
+        (address orderMaker, MakerTraits traits, bytes32 dataHash, uint40 expiration, uint96 maxReward) =
+            harness.decode(signature);
+        assertEq(orderMaker, order.maker);
+        assertEq(MakerTraits.unwrap(traits), MakerTraits.unwrap(order.traits));
+        assertEq(dataHash, order.dataHash);
+        assertEq(expiration, order.expiration);
+        assertEq(maxReward, order.maxReward);
+    }
+
     function test_Swap_TamperedSignatureRevertsBadSignature() public {
         _createEscrow(_defaultProgram());
-        bytes memory signature = _encode(_tamper(3, 0));
+        bytes memory signature = _tamper(3, 0).encode();
         _expectBadSignature(signature);
         router.swap(filledOrder, WETH_AMOUNT, _takerData(false, signature));
     }
@@ -882,11 +901,7 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _signature() private view returns (bytes memory) {
-        return _encode(nativeOrder);
-    }
-
-    function _encode(NativeOrder memory order) private pure returns (bytes memory) {
-        return abi.encodePacked(order.maker, order.traits, order.dataHash, order.expiration, order.maxReward);
+        return nativeOrder.encode();
     }
 
     function _takerData(bool isExactIn) private view returns (bytes memory) {
@@ -944,7 +959,7 @@ contract NativeOrderEscrowTest is Test {
 
     function _assertInvalidOrder(NativeOrder memory tampered) private {
         assertTrue(factory.addressOfEscrow(tampered) != address(escrow));
-        assertEq(escrow.isValidSignature(filledOrderHash, _encode(tampered)), bytes4(0));
+        assertEq(escrow.isValidSignature(filledOrderHash, tampered.encode()), bytes4(0));
         vm.prank(tampered.maker);
         vm.expectRevert(INativeOrderEscrow.InvalidOrder.selector);
         escrow.cancel(tampered);
@@ -973,7 +988,12 @@ contract NativeOrderReceiver {
     uint256 public rescuedDuringCallback;
     bytes4 public reentrantError;
 
-    function configure(NativeOrderEscrow escrow, NativeOrder calldata order, bool rejectsEther, bool reenters) external {
+    function configure(
+        NativeOrderEscrow escrow,
+        NativeOrder calldata order,
+        bool rejectsEther,
+        bool reenters
+    ) external {
         _escrow = escrow;
         _order = order;
         _rejectsEther = rejectsEther;
@@ -1000,5 +1020,20 @@ contract NativeOrderReceiver {
                 if (reason.length >= 4) reentrantError = bytes4(reason);
             }
         }
+    }
+}
+
+/// @dev Exposes the calldata variants of NativeOrderLib.
+contract NativeOrderLibHarness {
+    function decode(bytes calldata signature) external pure returns (address, MakerTraits, bytes32, uint40, uint96) {
+        return NativeOrderLib.decode(signature);
+    }
+
+    function salt(bytes calldata signature) external pure returns (bytes32) {
+        return NativeOrderLib.salt(signature);
+    }
+
+    function salt(NativeOrder calldata order) external pure returns (bytes32) {
+        return NativeOrderLib.salt(order);
     }
 }
