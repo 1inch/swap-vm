@@ -10,8 +10,8 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../../contracts/instructions/FillGridAdjuster.sol";
+import { PiecewiseLinearSurchargeSell, PiecewiseLinearSurchargeBuy } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { FillGridAdjusterSell, FillGridAdjusterBuy } from "../../contracts/instructions/FillGridAdjuster.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
 contract FillGridAdjusterTest is Test {
@@ -35,7 +35,7 @@ contract FillGridAdjusterTest is Test {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
     }
 
-    function test_FillGridAdjusterBalanceIn_BuildRejectsPotentialAmountInInversion() public {
+    function test_FillGridAdjusterSell_BuildRejectsPotentialAmountInInversion() public {
         uint24[] memory fillBps = new uint24[](3);
         uint24[] memory adjustBps = new uint24[](3);
 
@@ -46,11 +46,11 @@ contract FillGridAdjusterTest is Test {
         adjustBps[1] = 1e7;
         adjustBps[2] = 0.5e7;
 
-        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
-        this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
+        vm.expectRevert(FillGridAdjusterSell.FillGridAdjusterNotMonotonic.selector);
+        this.buildFillGridAdjusterSell(fillBps, adjustBps);
     }
 
-    function test_FillGridAdjusterBalanceIn_BuildRejectsPotentialEndpointCollision() public {
+    function test_FillGridAdjusterSell_BuildRejectsPotentialEndpointCollision() public {
         uint24[] memory fillBps = new uint24[](2);
         uint24[] memory adjustBps = new uint24[](2);
 
@@ -59,11 +59,11 @@ contract FillGridAdjusterTest is Test {
         adjustBps[0] = 1e7;
         adjustBps[1] = 1e7;
 
-        vm.expectRevert(FillGridAdjusterBalanceIn.FillGridAdjusterNotMonotonic.selector);
-        this.buildFillGridAdjusterBalanceIn(fillBps, adjustBps);
+        vm.expectRevert(FillGridAdjusterSell.FillGridAdjusterNotMonotonic.selector);
+        this.buildFillGridAdjusterSell(fillBps, adjustBps);
     }
 
-    function test_FillGridAdjusterBalanceIn_ExactIn_QuotesAmountwiseInterpolation() public view {
+    function test_FillGridAdjusterSell_ExactIn_QuotesAmountwiseInterpolation() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, true));
 
         (uint256 amountIn, uint256 amountOut,) = swapVM.quote(order, 459e18, _buildTakerData(order, true));
@@ -72,7 +72,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(amountOut, 299_510_603_588_907_014_681);
     }
 
-    function test_FillGridAdjusterBalanceIn_ExactOut_QuotesAmountwiseInterpolation() public view {
+    function test_FillGridAdjusterSell_ExactOut_QuotesAmountwiseInterpolation() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1000e18, 1000e18, true));
 
         (uint256 amountIn, uint256 amountOut,) = swapVM.quote(order, 306e18, _buildTakerData(order, false));
@@ -81,7 +81,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(amountOut, 306e18);
     }
 
-    function test_FillGridAdjusterBalanceOut_ExactIn_QuotesAmountwiseInterpolation() public view {
+    function test_FillGridAdjusterBuy_ExactIn_QuotesAmountwiseInterpolation() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1500e18, 1500e18, false));
 
         (uint256 amountIn, uint256 amountOut,) = swapVM.quote(order, 450e18, _buildTakerData(order, true));
@@ -90,7 +90,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(amountOut, 293_637_846_655_791_190_864);
     }
 
-    function test_FillGridAdjusterBalanceOut_ExactOut_QuotesAmountwiseInterpolation() public view {
+    function test_FillGridAdjusterBuy_ExactOut_QuotesAmountwiseInterpolation() public view {
         ISwapVM.Order memory order = _buildOrder(_buildProgram(1500e18, 1500e18, false));
 
         (uint256 amountIn, uint256 amountOut,) = swapVM.quote(order, 300e18, _buildTakerData(order, false));
@@ -99,7 +99,7 @@ contract FillGridAdjusterTest is Test {
         assertEq(amountOut, 300e18);
     }
 
-    function testFuzz_FillGridAdjusterBalanceIn_PriceIsLinearByAmountIn(uint256 amountIn) public view {
+    function testFuzz_FillGridAdjusterSell_PriceIsLinearByAmountIn(uint256 amountIn) public view {
         uint256 amountInL = 308e18;
         uint256 amountInR = 610e18;
         amountIn = bound(amountIn, amountInL + 1, amountInR - 1);
@@ -124,7 +124,7 @@ contract FillGridAdjusterTest is Test {
         assertApproxEqAbs(exactOutPrice, expectedExactOutPrice, 2);
     }
 
-    function testFuzz_FillGridAdjusterBalanceOut_PriceIsLinearByAmountIn(uint256 amountIn) public view {
+    function testFuzz_FillGridAdjusterBuy_PriceIsLinearByAmountIn(uint256 amountIn) public view {
         uint256 amountInL = 610e18;
         uint256 amountInR = 1040e18;
         amountIn = bound(amountIn, amountInL + 1, amountInR - 1);
@@ -149,7 +149,7 @@ contract FillGridAdjusterTest is Test {
         assertApproxEqAbs(exactOutPrice, expectedExactOutPrice, 2);
     }
 
-    function testFuzz_FillGridAdjusterBalanceIn_ExactInAndExactOutQuotesMatch(
+    function testFuzz_FillGridAdjusterSell_ExactInAndExactOutQuotesMatch(
         uint256 amountIn,
         uint256 amountOut
     ) public view {
@@ -169,7 +169,7 @@ contract FillGridAdjusterTest is Test {
         assertApproxEqAbs(roundTripAmountOut, amountOut, 2);
     }
 
-    function testFuzz_FillGridAdjusterBalanceOut_ExactInAndExactOutQuotesMatch(
+    function testFuzz_FillGridAdjusterBuy_ExactInAndExactOutQuotesMatch(
         uint256 amountIn,
         uint256 amountOut
     ) public view {
@@ -189,7 +189,7 @@ contract FillGridAdjusterTest is Test {
         assertApproxEqAbs(roundTripAmountOut, amountOut, 2);
     }
 
-    function test_FillGridAdjusterBalanceInAndOut_ShareGridPointPrices() public view {
+    function test_FillGridAdjusterSellAndBuy_ShareGridPointPrices() public view {
         uint256 balanceIn = 1000e18;
         uint256 balanceOut = 2000e18;
         uint256 surcharge = balanceIn / 2;
@@ -226,7 +226,7 @@ contract FillGridAdjusterTest is Test {
         );
     }
 
-    function testFuzz_FillGridAdjusterBalanceInAndOut_MatchPricesAtSameCurvePosition(
+    function testFuzz_FillGridAdjusterSellAndBuy_MatchPricesAtSameCurvePosition(
         uint24 interpolationSeed,
         uint8 segmentSeed
     ) public view {
@@ -267,11 +267,11 @@ contract FillGridAdjusterTest is Test {
         );
     }
 
-    function buildFillGridAdjusterBalanceIn(
+    function buildFillGridAdjusterSell(
         uint24[] memory fillBps,
         uint24[] memory adjustBps
     ) external pure returns (bytes memory) {
-        return FillGridAdjusterBalanceIn.build(fillBps, adjustBps);
+        return FillGridAdjusterSell.build(fillBps, adjustBps);
     }
 
     function _buildProgram(uint256 balanceIn, uint256 balanceOut, bool adjustBalanceIn) private view returns (bytes memory) {
@@ -286,15 +286,15 @@ contract FillGridAdjusterTest is Test {
         if (adjustBalanceIn) {
             return bytes.concat(
                 StaticBalances.build(balanceIn, balanceOut),
-                PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
-                FillGridAdjusterBalanceIn.build(fillBps, adjustBps),
+                PiecewiseLinearSurchargeSell.build(uint40(block.timestamp), durations, scales),
+                FillGridAdjusterSell.build(fillBps, adjustBps),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
         } else {
             return bytes.concat(
                 StaticBalances.build(balanceIn, balanceOut),
-                PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales),
-                FillGridAdjusterBalanceOut.build(fillBps, adjustBps),
+                PiecewiseLinearSurchargeBuy.build(uint40(block.timestamp), durations, scales),
+                FillGridAdjusterBuy.build(fillBps, adjustBps),
                 LimitSwap.build(address(tokenA), address(tokenB))
             );
         }

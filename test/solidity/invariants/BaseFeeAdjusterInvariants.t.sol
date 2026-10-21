@@ -13,9 +13,9 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { DutchAuctionSell, DutchAuctionBuy } from "../../../contracts/instructions/DutchAuction.sol";
+import { PiecewiseLinearSurchargeSell } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjusterSell, BaseFeeAdjusterBuy } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -106,14 +106,14 @@ contract BaseFeeAdjusterInvariants is Test, CoreInvariants {
     }
 
     /**
-     * Test BaseFeeAdjusterBalanceIn with DutchAuctionBalanceIn.
+     * Test BaseFeeAdjusterSell with DutchAuctionSell.
      */
     function test_BaseFeeAdjuster_WithDutchAuctionIn() public {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, 0.999e18, 0.5e7),
-            BaseFeeAdjusterBalanceIn.build(25 gwei, 3000e18, 150_000),
+            DutchAuctionSell.build(startTime, 0.999e18, 0.5e7),
+            BaseFeeAdjusterSell.build(25 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -122,14 +122,14 @@ contract BaseFeeAdjusterInvariants is Test, CoreInvariants {
     }
 
     /**
-     * Test BaseFeeAdjusterBalanceOut with DutchAuctionBalanceOut.
+     * Test BaseFeeAdjusterBuy with DutchAuctionBuy.
      */
     function test_BaseFeeAdjuster_WithDutchAuctionOut() public {
         uint40 startTime = uint40(block.timestamp);
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, 0.999e18, 0.5e7),
-            BaseFeeAdjusterBalanceOut.build(25 gwei, 3000e18, 150_000),
+            DutchAuctionBuy.build(startTime, 0.999e18, 0.5e7),
+            BaseFeeAdjusterBuy.build(25 gwei, 3000e18, 150_000),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -150,8 +150,8 @@ contract BaseFeeAdjusterInvariants is Test, CoreInvariants {
 
         return bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
-            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethPrice, gasAmount),
+            PiecewiseLinearSurchargeSell.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterSell.build(baseGasPrice, ethPrice, gasAmount),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }

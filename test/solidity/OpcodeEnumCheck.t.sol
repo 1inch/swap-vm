@@ -32,15 +32,15 @@ contract OpcodeEnumCheckTest is Test {
         assertEq(uint8(Opcode.FeeProtocolSurplus), 0x81);
         // Balances tuning bank (0x90-0xaf)
         assertEq(uint8(Opcode.StaticBalances), 0x90);
-        assertEq(uint8(Opcode.PiecewiseLinearSurchargeBalanceIn), 0x98);
-        assertEq(uint8(Opcode.PiecewiseLinearSurchargeBalanceOut), 0x99);
+        assertEq(uint8(Opcode.PiecewiseLinearSurchargeSell), 0x98);
+        assertEq(uint8(Opcode.PiecewiseLinearSurchargeBuy), 0x99);
         assertEq(uint8(Opcode.Decay), 0x9c);
         // Rates tuning bank (0xb0-0xcf)
         assertEq(uint8(Opcode.RequireMinRate), 0xb0);
-        assertEq(uint8(Opcode.OraclePriceAdjusterBalanceIn), 0xb2);
-        assertEq(uint8(Opcode.OraclePriceAdjusterBalanceOut), 0xb3);
-        assertEq(uint8(Opcode.BaseFeeAdjusterBalanceIn), 0xb4);
-        assertEq(uint8(Opcode.BaseFeeAdjusterBalanceOut), 0xb5);
+        assertEq(uint8(Opcode.OraclePriceAdjusterSell), 0xb2);
+        assertEq(uint8(Opcode.OraclePriceAdjusterBuy), 0xb3);
+        assertEq(uint8(Opcode.BaseFeeAdjusterSell), 0xb4);
+        assertEq(uint8(Opcode.BaseFeeAdjusterBuy), 0xb5);
         // Reserved bank tail (0xf0-0xff)
         assertEq(uint8(Opcode._fe), 0xfe);
         assertEq(uint8(Opcode._ff), 0xff);

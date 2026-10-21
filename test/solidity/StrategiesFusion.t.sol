@@ -18,16 +18,16 @@ import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
-import { InvalidateBit, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
 import { Jump } from "../../contracts/instructions/Jumps.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../contracts/instructions/Whitelist.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { PiecewiseLinearSurchargeSell } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import {
     Feed,
-    OraclePriceAdjusterBalanceIn,
+    OraclePriceAdjusterSell,
     OraclePriceAdjusterOraclePriceStale
 } from "../../contracts/instructions/OraclePriceAdjuster.sol";
-import { BaseFeeAdjusterBalanceIn } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { BaseFeeAdjusterSell } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 import { OnlyTakerTokenBalanceNonZero } from "../../contracts/instructions/TokenValidators.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
@@ -109,10 +109,10 @@ contract StrategiesFusionTest is Test {
             Jump.build(commonPC),
             whitelistedFees,
             FeeProtocolSurplus.build(true, ESTIMATED_IN),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
-            OraclePriceAdjusterBalanceIn.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
-            BaseFeeAdjusterBalanceIn.build(0, 3000e18, 150_000),
-            InvalidateTokenOut.build(),
+            PiecewiseLinearSurchargeSell.build(START, args.auctionDurations, args.auctionScales),
+            OraclePriceAdjusterSell.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
+            BaseFeeAdjusterSell.build(0, 3000e18, 150_000),
+            InvalidateTokenSell.build(),
             LimitSwap.build(true)
         ));
     }
@@ -142,10 +142,10 @@ contract StrategiesFusionTest is Test {
             Jump.build(commonPC),
             whitelistedFees,
             FeeProtocolSurplus.build(true, ESTIMATED_IN),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
-            OraclePriceAdjusterBalanceIn.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
-            BaseFeeAdjusterBalanceIn.build(0, 3000e18, 150_000),
-            InvalidateTokenOut.build(),
+            PiecewiseLinearSurchargeSell.build(START, args.auctionDurations, args.auctionScales),
+            OraclePriceAdjusterSell.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
+            BaseFeeAdjusterSell.build(0, 3000e18, 150_000),
+            InvalidateTokenSell.build(),
             LimitSwap.build(true)
         ));
     }
@@ -166,7 +166,7 @@ contract StrategiesFusionTest is Test {
             head,
             WhitelistSequential.build(START, whitelistedPC, args.whitelistResolvers, args.whitelistDelays),
             Jump.build(whitelistedPC),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(true)
         ));
     }
@@ -176,7 +176,7 @@ contract StrategiesFusionTest is Test {
 
         assertEq(this.fusionOrder(new bytes[](0), args), bytes.concat(
             StaticBalances.build(BALANCE_IN, BALANCE_OUT),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(true)
         ));
     }
@@ -190,7 +190,7 @@ contract StrategiesFusionTest is Test {
 
         assertEq(this.fusionOrder(new bytes[](0), args), bytes.concat(
             StaticBalances.build(BALANCE_IN, BALANCE_OUT),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
+            PiecewiseLinearSurchargeSell.build(START, args.auctionDurations, args.auctionScales),
             InvalidateBit.build(7),
             LimitSwapFullAmount.build(true)
         ));
@@ -326,7 +326,7 @@ contract StrategiesFusionTest is Test {
         assertEq(tokenA.balanceOf(protocol), 4.4625e18, "Whitelisted protocol fee");
         assertEq(tokenA.balanceOf(integrator), 0.375e18, "Half the 0.5% integrator fee");
         assertEq(tokenA.balanceOf(maker), 145.1625e18, "Maker receives input minus fees");
-        assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 197.5e18);
+        assertEq(swapVM.tokenSellInvalidators(maker, swapVM.hash(order), address(tokenB)), 197.5e18);
 
         // Second resolver unlocks after the first delay, public still locked
         vm.warp(START + 10);
@@ -500,7 +500,7 @@ contract StrategiesFusionTest is Test {
 
         assertEq(tokenA.balanceOf(maker), BALANCE_IN);
         assertEq(tokenB.balanceOf(resolver1), BALANCE_OUT);
-        assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), BALANCE_OUT);
+        assertEq(swapVM.tokenSellInvalidators(maker, swapVM.hash(order), address(tokenB)), BALANCE_OUT);
 
         // Nothing left: the fill degenerates to zero and is rejected
         vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);

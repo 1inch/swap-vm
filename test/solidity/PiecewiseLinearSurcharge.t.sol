@@ -17,8 +17,8 @@ import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import {
     PiecewiseLinearSurcharge,
-    PiecewiseLinearSurchargeBalanceIn,
-    PiecewiseLinearSurchargeBalanceOut
+    PiecewiseLinearSurchargeSell,
+    PiecewiseLinearSurchargeBuy
 } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
@@ -58,8 +58,8 @@ contract PiecewiseLinearSurchargeTest is Test {
         return bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
             scaleIn
-                ? PiecewiseLinearSurchargeBalanceIn.build(timestamp, durations, scales)
-                : PiecewiseLinearSurchargeBalanceOut.build(timestamp, durations, scales),
+                ? PiecewiseLinearSurchargeSell.build(timestamp, durations, scales)
+                : PiecewiseLinearSurchargeBuy.build(timestamp, durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
@@ -97,7 +97,7 @@ contract PiecewiseLinearSurchargeTest is Test {
         uint256 amountOut;
         uint256 amountIn;
 
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[0]);
+        uint256 surcharge = PiecewiseLinearSurchargeSell.scaleValue(takingAmount, scales[0]);
 
         // At the initial point the whole `makingAmount` sells for exactly `takingAmount + surcharge`, and one wei less in buys strictly less
         vm.warp(timestamp);
@@ -132,7 +132,7 @@ contract PiecewiseLinearSurchargeTest is Test {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount, takerDataExactOut);
-            assertEq(amountInNext, takingAmount + PiecewiseLinearSurchargeBalanceIn.scaleValue(takingAmount, scales[k]));
+            assertEq(amountInNext, takingAmount + PiecewiseLinearSurchargeSell.scaleValue(takingAmount, scales[k]));
 
             // Mid point
             vm.warp(timestamp + (_sum(durations, k - 1) + _sum(durations, k)) / 2);
@@ -178,7 +178,7 @@ contract PiecewiseLinearSurchargeTest is Test {
 
         uint256 amountOut;
         uint256 amountIn;
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[0]);
+        uint256 surcharge = PiecewiseLinearSurchargeBuy.scaleValue(makingAmount, scales[0]);
 
         // At the initial point the whole `takingAmount` sells for exactly `makingAmount - surcharge`, and one wei less in sells strictly less
         vm.warp(timestamp);
@@ -214,7 +214,7 @@ contract PiecewiseLinearSurchargeTest is Test {
             // Predictable at exact point
             vm.warp(timestamp + _sum(durations, k));
             (,uint256 amountOutNext,) = swapVM.quote(order, takingAmount, takerDataExactIn);
-            assertEq(amountOutNext, makingAmount - PiecewiseLinearSurchargeBalanceOut.scaleValue(makingAmount, scales[k]));
+            assertEq(amountOutNext, makingAmount - PiecewiseLinearSurchargeBuy.scaleValue(makingAmount, scales[k]));
             (uint256 amountInNext,,) = swapVM.quote(order, makingAmount - surcharge, takerDataExactOut);
 
             // Mid point
@@ -264,7 +264,7 @@ contract PiecewiseLinearSurchargeTest is Test {
         }
     }
 
-    function test_PiecewiseLinearSurchargeBalanceIn_RelativeToOrderAnnouncement() public {
+    function test_PiecewiseLinearSurchargeSell_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         maker = vm.addr(MAKER_PRIVATE_KEY);
         uint16[] memory durations = new uint16[](1);
@@ -295,7 +295,7 @@ contract PiecewiseLinearSurchargeTest is Test {
         assertEq(amountOut, 1_714_285_772_673_939_727);
     }
 
-    function test_PiecewiseLinearSurchargeBalanceOut_RelativeToOrderAnnouncement() public {
+    function test_PiecewiseLinearSurchargeBuy_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         maker = vm.addr(MAKER_PRIVATE_KEY);
         uint16[] memory durations = new uint16[](1);

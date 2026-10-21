@@ -14,12 +14,12 @@ import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { FeeFlatIn } from "../instructions/FeeFlat.sol";
 import { Decay } from "../instructions/Decay.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
-import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenBuy, InvalidateTokenSell } from "../instructions/Invalidators.sol";
 import { Jump } from "../instructions/Jumps.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../instructions/PiecewiseLinearSurcharge.sol";
-import { Feed, OraclePriceAdjusterBalanceIn } from "../instructions/OraclePriceAdjuster.sol";
-import { BaseFeeAdjusterBalanceIn } from "../instructions/BaseFeeAdjuster.sol";
+import { PiecewiseLinearSurchargeSell } from "../instructions/PiecewiseLinearSurcharge.sol";
+import { Feed, OraclePriceAdjusterSell } from "../instructions/OraclePriceAdjuster.sol";
+import { BaseFeeAdjusterSell } from "../instructions/BaseFeeAdjuster.sol";
 import {
     OnlyTakerTokenBalanceNonZero,
     OnlyTakerTokenBalanceGte,
@@ -108,7 +108,7 @@ library Strategies {
         }
     }
 
-    /// @notice Limit order: `StaticBalances` + `InvalidateToken Out/In` + `LimitSwap`, the maker
+    /// @notice Limit order: `StaticBalances` + `InvalidateTokenSell` / `InvalidateTokenBuy` + `LimitSwap`, the maker
     ///   swaps at the fixed rate `balanceA / balanceB` in one direction, partial fills bounded by the balances in total
     function buildLimitOrder(
         bytes[] calldata prefix,
@@ -117,14 +117,14 @@ library Strategies {
         MemoryPtr ptr = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
             StaticBalances.sizeOf(args.balanceA, args.balanceB) +
-            (args.sell ? InvalidateTokenOut.sizeOf() : InvalidateTokenIn.sizeOf()) +
+            (args.sell ? InvalidateTokenSell.sizeOf() : InvalidateTokenBuy.sizeOf()) +
             LimitSwap.sizeOf(args.direction)
         );
 
         for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
         ptr = StaticBalances.build(ptr, args.balanceA, args.balanceB);
-        if (args.sell) ptr = InvalidateTokenOut.build(ptr);
-        else ptr = InvalidateTokenIn.build(ptr);
+        if (args.sell) ptr = InvalidateTokenSell.build(ptr);
+        else ptr = InvalidateTokenBuy.build(ptr);
         ptr = LimitSwap.build(ptr, args.direction);
 
         return ptr.resolve();
@@ -169,20 +169,20 @@ library Strategies {
     ///     above `surplusEstimation`, scaled to the filled part of the order,
     ///     `surplusEstimation >= balanceIn` so the limit price never carries a surplus fee. No surplus config
     ///     disables and `surplusEstimation` is ignored
-    ///   - Auction, `PiecewiseLinearSurchargeBalanceIn`: `auctionScales[i]` surcharges the maker's receive at
+    ///   - Auction, `PiecewiseLinearSurchargeSell`: `auctionScales[i]` surcharges the maker's receive at
     ///     point `i`, `2 ** 24` is +100%, `auctionDurations[i]` seconds separate points `i` and `i + 1` starting
     ///     at `auctionStartTime`, the first scale holds before the start and the last one after the end, so a
     ///     Fusion auction ends with scale 0. Empty `auctionScales` disables, the order is a plain limit order
-    ///   - Oracle adjustment, `OraclePriceAdjusterBalanceIn`: shifts the maker's receive by the market move since
+    ///   - Oracle adjustment, `OraclePriceAdjusterSell`: shifts the maker's receive by the market move since
     ///     the order was priced, `oracleMarketValue` is `balanceOut` valued in token in by the Chainlink-style
     ///     `oracleFeeds` (one or two) at that time, `tokenInDecimals` / `tokenOutDecimals` align the decimals, a
     ///     rise adds to the receive and to the surcharge, a fall consumes the surcharge left so the limit price
     ///     holds. Empty `oracleFeeds` disables, `oracleMarketValue` stays zero
-    ///   - Gas bump, `BaseFeeAdjusterBalanceIn`: discounts the maker's receive by `gasAmount` units of base fee
+    ///   - Gas bump, `BaseFeeAdjusterSell`: discounts the maker's receive by `gasAmount` units of base fee
     ///     above `baseGasPrice` priced at `ethPrice` token in per 1e18 wei, capped by the surcharge left at that
     ///     moment so the limit price holds. `gasAmount == 0` disables, requires the auction
     ///   - Fills: `allowPartialFills` picks `LimitSwap` over `LimitSwapFullAmount` (fill-or-kill),
-    ///     `allowMultipleFills` caps the cumulative output with `InvalidateTokenOut`, otherwise `InvalidateBit`
+    ///     `allowMultipleFills` caps the cumulative output with `InvalidateTokenSell`, otherwise `InvalidateBit`
     ///     with the maker-scoped `nonce` lets the order fill once
     ///   Time fields with `Time.RELATIVE_TIME_FLAG` set count from the order announcement
     function buildFusionOrder(
@@ -228,10 +228,10 @@ library Strategies {
             (hasWhitelist ? Jump.sizeOf(0) : 0) +
             (hasWhitelist && hasFees ? FeeProtocol.sizeOf(true, whitelistedReceivers, noProviders) : 0) +
             (hasSurplus ? FeeProtocolSurplus.sizeOf(true, args.surplusEstimation) : 0) +
-            (hasAuction ? PiecewiseLinearSurchargeBalanceIn.sizeOf(args.auctionStartTime, args.auctionDurations, args.auctionScales) : 0) +
-            (hasOracle ? OraclePriceAdjusterBalanceIn.sizeOf(args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds) : 0) +
-            (hasGasBump ? BaseFeeAdjusterBalanceIn.sizeOf(args.baseGasPrice, args.ethPrice, args.gasAmount) : 0) +
-            (args.allowMultipleFills ? InvalidateTokenOut.sizeOf() : InvalidateBit.sizeOf(args.nonce)) +
+            (hasAuction ? PiecewiseLinearSurchargeSell.sizeOf(args.auctionStartTime, args.auctionDurations, args.auctionScales) : 0) +
+            (hasOracle ? OraclePriceAdjusterSell.sizeOf(args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds) : 0) +
+            (hasGasBump ? BaseFeeAdjusterSell.sizeOf(args.baseGasPrice, args.ethPrice, args.gasAmount) : 0) +
+            (args.allowMultipleFills ? InvalidateTokenSell.sizeOf() : InvalidateBit.sizeOf(args.nonce)) +
             (args.allowPartialFills ? LimitSwap.sizeOf(args.direction) : LimitSwapFullAmount.sizeOf(args.direction))
         );
 
@@ -257,10 +257,10 @@ library Strategies {
         if (hasWhitelist) Jump.patchNextPC(ptrJump, ptr.sub(ptrStart).toUint16());
 
         if (hasSurplus) ptr = FeeProtocolSurplus.build(ptr, true, args.surplusEstimation);
-        if (hasAuction) ptr = PiecewiseLinearSurchargeBalanceIn.build(ptr, args.auctionStartTime, args.auctionDurations, args.auctionScales);
-        if (hasOracle) ptr = OraclePriceAdjusterBalanceIn.build(ptr, args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds);
-        if (hasGasBump) ptr = BaseFeeAdjusterBalanceIn.build(ptr, args.baseGasPrice, args.ethPrice, args.gasAmount);
-        if (args.allowMultipleFills) ptr = InvalidateTokenOut.build(ptr);
+        if (hasAuction) ptr = PiecewiseLinearSurchargeSell.build(ptr, args.auctionStartTime, args.auctionDurations, args.auctionScales);
+        if (hasOracle) ptr = OraclePriceAdjusterSell.build(ptr, args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds);
+        if (hasGasBump) ptr = BaseFeeAdjusterSell.build(ptr, args.baseGasPrice, args.ethPrice, args.gasAmount);
+        if (args.allowMultipleFills) ptr = InvalidateTokenSell.build(ptr);
         else ptr = InvalidateBit.build(ptr, args.nonce);
         if (args.allowPartialFills) ptr = LimitSwap.build(ptr, args.direction);
         else ptr = LimitSwapFullAmount.build(ptr, args.direction);

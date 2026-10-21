@@ -13,9 +13,9 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { DutchAuctionBuy } from "../../contracts/instructions/DutchAuction.sol";
+import { PiecewiseLinearSurchargeSell, PiecewiseLinearSurchargeBuy } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjusterSell, BaseFeeAdjusterBuy } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 
 /**
  * @title BaseFeeAdjusterTest
@@ -54,7 +54,7 @@ contract BaseFeeAdjusterTest is Test {
     }
 
     /**
-     * Test BaseFeeAdjusterBalanceIn with LimitSwap at different gas prices.
+     * Test BaseFeeAdjusterSell with LimitSwap at different gas prices.
      */
     function test_BaseFeeAdjusterLimitSwapGasVariations() public {
         uint256 balanceIn = 3000e18;
@@ -83,7 +83,7 @@ contract BaseFeeAdjusterTest is Test {
         gasPrices[3] = 200 gwei;
 
         uint256 amountIn = 1000e18;
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        uint256 surcharge = PiecewiseLinearSurchargeSell.scaleValue(balanceIn, surchargeScale);
         uint256 previousOutput;
 
         for (uint256 i = 0; i < gasPrices.length; i++) {
@@ -104,7 +104,7 @@ contract BaseFeeAdjusterTest is Test {
     }
 
     /**
-     * Test BaseFeeAdjusterBalanceOut with a Dutch auction at different times.
+     * Test BaseFeeAdjusterBuy with a Dutch auction at different times.
      */
     function test_BaseFeeAdjusterWithDutchAuction() public {
         uint40 startTime = uint40(block.timestamp);
@@ -116,8 +116,8 @@ contract BaseFeeAdjusterTest is Test {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1000e18, 3500e18),
-            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
-            BaseFeeAdjusterBalanceOut.build(baseGasPrice, ethToTokenPrice, gasAmount),
+            DutchAuctionBuy.build(startTime, decayFactor, surchargeBps),
+            BaseFeeAdjusterBuy.build(baseGasPrice, ethToTokenPrice, gasAmount),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -194,7 +194,7 @@ contract BaseFeeAdjusterTest is Test {
         vm.fee(50 gwei);
         (, uint256 outputBaseGas,) = swapVM.asView().quote(order, balanceIn, exactInData);
 
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        uint256 surcharge = PiecewiseLinearSurchargeSell.scaleValue(balanceIn, surchargeScale);
         uint256 expectedOutput = balanceIn * balanceOut / (balanceIn + surcharge);
 
         assertEq(outputLowGas, outputBaseGas, "No adjustment expected at or below base gas");
@@ -202,7 +202,7 @@ contract BaseFeeAdjusterTest is Test {
     }
 
     /**
-     * Test exact token-out compensation through BaseFeeAdjusterBalanceOut.
+     * Test exact token-out compensation through BaseFeeAdjusterBuy.
      */
     function test_BaseFeeAdjusterExactCompensation() public {
         uint256 balanceIn = 3000e18;
@@ -283,7 +283,7 @@ contract BaseFeeAdjusterTest is Test {
         vm.fee(100 gwei);
         (uint256 adjustedInput,,) = swapVM.asView().quote(order, balanceOut, exactOutData);
 
-        uint256 surcharge = PiecewiseLinearSurchargeBalanceIn.scaleValue(balanceIn, surchargeScale);
+        uint256 surcharge = PiecewiseLinearSurchargeSell.scaleValue(balanceIn, surchargeScale);
         assertEq(baseInput, balanceIn + surcharge, "Unexpected surcharged input balance");
         assertEq(baseInput - adjustedInput, 36e18, "Incorrect input-token discount");
     }
@@ -304,8 +304,8 @@ contract BaseFeeAdjusterTest is Test {
 
         return bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp), durations, scales),
-            BaseFeeAdjusterBalanceIn.build(baseGasPrice, ethPrice, gasAmount),
+            PiecewiseLinearSurchargeSell.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterSell.build(baseGasPrice, ethPrice, gasAmount),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }
@@ -326,8 +326,8 @@ contract BaseFeeAdjusterTest is Test {
 
         return bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            PiecewiseLinearSurchargeBalanceOut.build(uint40(block.timestamp), durations, scales),
-            BaseFeeAdjusterBalanceOut.build(baseGasPrice, ethPrice, gasAmount),
+            PiecewiseLinearSurchargeBuy.build(uint40(block.timestamp), durations, scales),
+            BaseFeeAdjusterBuy.build(baseGasPrice, ethPrice, gasAmount),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
     }

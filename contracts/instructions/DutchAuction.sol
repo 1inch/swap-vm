@@ -14,11 +14,11 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { Power } from "../libs/Power.sol";
 import { Time } from "../libs/Time.sol";
 
-/// @notice DutchAuctionBalanceIn opcode, applies exponential decay to balance in (maker exact sell)
+/// @notice DutchAuctionSell opcode, applies exponential decay to balance in (maker exact sell)
 ///   Max surcharge bps is specified; order balance in is the "maker receive at least" value
 /// @dev Encoding: [uint40 start, uint64 decay, uint24 surchargeBps]
-/// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
-library DutchAuctionBalanceIn {
+/// @dev Should not be used with InvalidateTokenBuy because it relies on balance in which is modified here
+library DutchAuctionSell {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
@@ -27,7 +27,7 @@ library DutchAuctionBalanceIn {
     error DutchAuctionWrongDecayFactor(uint64 decay);
     error DutchAuctionSurchargeOutOfRange(uint24 surchargeBps);
 
-    Opcode constant opcode = Opcode.DutchAuctionBalanceIn;
+    Opcode constant opcode = Opcode.DutchAuctionSell;
 
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;
@@ -70,11 +70,11 @@ library DutchAuctionBalanceIn {
     }
 }
 
-/// @notice DutchAuctionBalanceOut opcode, applies exponential growth to balance out (maker exact buy)
+/// @notice DutchAuctionBuy opcode, applies exponential growth to balance out (maker exact buy)
 ///   Max surcharge bps is specified; order balance out is the "maker spend at most" value
 /// @dev Encoding: [uint40 start, uint64 decay, uint24 surchargeBps]
-/// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
-library DutchAuctionBalanceOut {
+/// @dev Should not be used with InvalidateTokenSell because it relies on balance out which is modified here
+library DutchAuctionBuy {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
@@ -84,7 +84,7 @@ library DutchAuctionBalanceOut {
     error DutchAuctionWrongDecayFactor(uint64 decay);
     error DutchAuctionSurchargeOutOfRange(uint24 surchargeBps);
 
-    Opcode constant opcode = Opcode.DutchAuctionBalanceOut;
+    Opcode constant opcode = Opcode.DutchAuctionBuy;
 
     uint256 constant ONE = 1e18;
     uint256 constant BPS = 1e7;

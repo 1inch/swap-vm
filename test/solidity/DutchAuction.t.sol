@@ -17,7 +17,7 @@ import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetu
 import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
+import { DutchAuctionSell, DutchAuctionBuy } from "../../contracts/instructions/DutchAuction.sol";
 
 /**
  * @title DutchAuctionTest
@@ -101,7 +101,7 @@ contract DutchAuctionTest is Test {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            DutchAuctionBuy.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -130,7 +130,7 @@ contract DutchAuctionTest is Test {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
+            DutchAuctionSell.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -150,7 +150,7 @@ contract DutchAuctionTest is Test {
     }
 
     /**
-     * Test DutchAuctionBalanceIn exact decay amount.
+     * Test DutchAuctionSell exact decay amount.
      */
     function test_DutchAuctionIn_ExactDecayedAmount() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
@@ -159,7 +159,7 @@ contract DutchAuctionTest is Test {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
+            DutchAuctionSell.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -192,7 +192,7 @@ contract DutchAuctionTest is Test {
     }
 
     /**
-     * Test DutchAuctionBalanceOut exact decay amount.
+     * Test DutchAuctionBuy exact decay amount.
      */
     function test_DutchAuctionOut_ExactDecayedAmount() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
@@ -201,7 +201,7 @@ contract DutchAuctionTest is Test {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            DutchAuctionBuy.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -243,12 +243,12 @@ contract DutchAuctionTest is Test {
 
         ISwapVM.Order memory orderIn = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            DutchAuctionBalanceIn.build(timestamp, decay, surchargeBps),
+            DutchAuctionSell.build(timestamp, decay, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         ISwapVM.Order memory orderOut = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            DutchAuctionBalanceOut.build(timestamp, decay, surchargeBps),
+            DutchAuctionBuy.build(timestamp, decay, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
 
@@ -272,11 +272,11 @@ contract DutchAuctionTest is Test {
         }
     }
 
-    function test_DutchAuctionBalanceIn_RelativeToOrderAnnouncement() public {
+    function test_DutchAuctionSell_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceIn.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
+            DutchAuctionSell.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -293,11 +293,11 @@ contract DutchAuctionTest is Test {
         assertEq(amountOut, 20e18);
     }
 
-    function test_DutchAuctionBalanceOut_RelativeToOrderAnnouncement() public {
+    function test_DutchAuctionBuy_RelativeToOrderAnnouncement() public {
         uint40 announcedAt = 1_000_000;
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            DutchAuctionBalanceOut.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
+            DutchAuctionBuy.build(Time.RELATIVE_TIME_FLAG, 0.5e18, 0.5e7),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -315,14 +315,14 @@ contract DutchAuctionTest is Test {
     }
 
     /**
-     * Test DutchAuctionBalanceOut rounds inverse decay up.
+     * Test DutchAuctionBuy rounds inverse decay up.
      */
     function test_DutchAuctionOut_RoundingUp() public {
         uint40 startTime = AUCTION_REALISTIC_START_TS;
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e18, 10),
-            DutchAuctionBalanceOut.build(startTime, 0.9e18, 0.9e7),
+            DutchAuctionBuy.build(startTime, 0.9e18, 0.9e7),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -337,33 +337,33 @@ contract DutchAuctionTest is Test {
      * Test Dutch auction build rejects invalid decay and surcharge values.
      */
     function test_Fail_DutchAuctionInvalidDecay() public {
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionSell.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
+        this.buildDutchAuctionSell(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBuy.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
+        this.buildDutchAuctionBuy(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionSell.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
+        this.buildDutchAuctionSell(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBuy.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
+        this.buildDutchAuctionBuy(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceIn.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionSell.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
+        this.buildDutchAuctionSell(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBalanceOut.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
+        vm.expectRevert(abi.encodeWithSelector(DutchAuctionBuy.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
+        this.buildDutchAuctionBuy(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
     }
 
-    /// @dev Simple wrapper over library function `DutchAuctionBalanceIn.build`.
-    function buildDutchAuctionBalanceIn(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
-        DutchAuctionBalanceIn.build(start, decay, surchargeBps);
+    /// @dev Simple wrapper over library function `DutchAuctionSell.build`.
+    function buildDutchAuctionSell(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
+        DutchAuctionSell.build(start, decay, surchargeBps);
     }
 
-    /// @dev Simple wrapper over library function `DutchAuctionBalanceOut.build`.
-    function buildDutchAuctionBalanceOut(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
-        DutchAuctionBalanceOut.build(start, decay, surchargeBps);
+    /// @dev Simple wrapper over library function `DutchAuctionBuy.build`.
+    function buildDutchAuctionBuy(uint40 start, uint64 decay, uint24 surchargeBps) external pure {
+        DutchAuctionBuy.build(start, decay, surchargeBps);
     }
     /**
      * Helper to test Dutch auction with specific decay factor
@@ -375,8 +375,8 @@ contract DutchAuctionTest is Test {
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
             useIn ?
-                DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps) :
-                DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+                DutchAuctionSell.build(startTime, decayFactor, surchargeBps) :
+                DutchAuctionBuy.build(startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

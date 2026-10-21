@@ -15,11 +15,11 @@ library StorageSlots {
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateBit")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant InvalidateBit = 0x7fecc769dbd392886fe3a80cbebbd95af52350f470aa49fde0e0bc4a4d01b900;
 
-    // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenIn")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 internal constant InvalidateTokenIn = 0xdec8baa2d3dc86177e0434fffbc83f7b9c94be3640a9bc75a6216af7c1874a00;
+    // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenBuy")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant InvalidateTokenBuy = 0x8cb978299deee5c2b6acc89a460543d3d413482e1458f3508ea11d4556265100;
 
-    // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenOut")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 internal constant InvalidateTokenOut = 0x3c2634352eb2315e2005a08709d3df3f3b85b4a68fc7225cebee8d3fcbf55900;
+    // keccak256(abi.encode(uint256(keccak256("1inch.storage.InvalidateTokenSell")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant InvalidateTokenSell = 0x29ce6468c8c7c4b4e579762679691250c661f2e3a7cbbb4c370649f3e73cb800;
 
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.ValidateSeriesEpoch")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant ValidateSeriesEpoch = 0xf6109436226f9396495ee71ea3d10edae6e620df596c3feca8428935dd6b1400;

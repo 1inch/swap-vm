@@ -21,7 +21,7 @@ import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { PeggedSwap } from "../../contracts/instructions/PeggedSwap.sol";
 import { RequireMinRate } from "../../contracts/instructions/MinRate.sol";
-import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenSell, InvalidateTokenBuy, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Extruction } from "../../contracts/instructions/Extruction.sol";
 import { ContextLib } from "../../contracts/libs/VM.sol";
 

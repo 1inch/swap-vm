@@ -12,10 +12,10 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../contracts/instructions/DutchAuction.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { InvalidateTokenBuy, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
+import { DutchAuctionSell, DutchAuctionBuy } from "../../contracts/instructions/DutchAuction.sol";
+import { PiecewiseLinearSurchargeSell, PiecewiseLinearSurchargeBuy } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { BaseFeeAdjusterSell, BaseFeeAdjusterBuy } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 
 contract SurchargeTest is Test {
     Aqua public immutable aqua;
@@ -62,9 +62,9 @@ contract SurchargeTest is Test {
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            DutchAuctionBalanceIn.build(0, 0.999e18, 0.1e7),
-            InvalidateTokenOut.build(),
-            BaseFeeAdjusterBalanceIn.build(0, type(uint96).max, type(uint24).max),
+            DutchAuctionSell.build(0, 0.999e18, 0.1e7),
+            InvalidateTokenSell.build(),
+            BaseFeeAdjusterSell.build(0, type(uint96).max, type(uint24).max),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _signAndPackTakerData(order, false);
@@ -96,9 +96,9 @@ contract SurchargeTest is Test {
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            DutchAuctionBalanceOut.build(0, 0.999e18, 0.1e7),
-            InvalidateTokenIn.build(),
-            BaseFeeAdjusterBalanceOut.build(0, type(uint96).max, type(uint24).max),
+            DutchAuctionBuy.build(0, 0.999e18, 0.1e7),
+            InvalidateTokenBuy.build(),
+            BaseFeeAdjusterBuy.build(0, type(uint96).max, type(uint24).max),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactInData = _signAndPackTakerData(order, true);
@@ -136,9 +136,9 @@ contract SurchargeTest is Test {
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            PiecewiseLinearSurchargeBalanceIn.build(0, durations, scales),
-            InvalidateTokenOut.build(),
-            BaseFeeAdjusterBalanceIn.build(0, type(uint96).max, type(uint24).max),
+            PiecewiseLinearSurchargeSell.build(0, durations, scales),
+            InvalidateTokenSell.build(),
+            BaseFeeAdjusterSell.build(0, type(uint96).max, type(uint24).max),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _signAndPackTakerData(order, false);
@@ -176,9 +176,9 @@ contract SurchargeTest is Test {
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            PiecewiseLinearSurchargeBalanceOut.build(0, durations, scales),
-            InvalidateTokenIn.build(),
-            BaseFeeAdjusterBalanceOut.build(0, type(uint96).max, type(uint24).max),
+            PiecewiseLinearSurchargeBuy.build(0, durations, scales),
+            InvalidateTokenBuy.build(),
+            BaseFeeAdjusterBuy.build(0, type(uint96).max, type(uint24).max),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactInData = _signAndPackTakerData(order, true);

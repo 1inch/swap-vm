@@ -14,7 +14,7 @@ import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
 import { Salt, Deadline } from "../../../contracts/instructions/Controls.sol";
-import { InvalidateTokenIn, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenBuy, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
 
 /// @title LimitRouterGas
 /// @notice Limit-order gas benchmarks.
@@ -133,24 +133,24 @@ contract LimitRouterGas is Test {
         snapshotSwap("LimitRouterSwap", "InvalidateBit_LimitSwap_exactOut", order, takerData);
     }
 
-    function test_gas_LimitSwap_InvalidateTokenIn_quote_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenIn(true);
-        snapshotQuote("LimitRouterQuote", "LimitSwap_InvalidateTokenIn_exactIn", order, takerData);
+    function test_gas_LimitSwap_InvalidateTokenBuy_quote_exactIn() public {
+        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenBuy(true);
+        snapshotQuote("LimitRouterQuote", "LimitSwap_InvalidateTokenBuy_exactIn", order, takerData);
     }
 
-    function test_gas_LimitSwap_InvalidateTokenIn_swap_exactIn() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenIn(true);
-        snapshotSwap("LimitRouterSwap", "LimitSwap_InvalidateTokenIn_exactIn", order, takerData);
+    function test_gas_LimitSwap_InvalidateTokenBuy_swap_exactIn() public {
+        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenBuy(true);
+        snapshotSwap("LimitRouterSwap", "LimitSwap_InvalidateTokenBuy_exactIn", order, takerData);
     }
 
-    function test_gas_LimitSwap_InvalidateTokenIn_quote_exactOut() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenIn(false);
-        snapshotQuote("LimitRouterQuote", "LimitSwap_InvalidateTokenIn_exactOut", order, takerData);
+    function test_gas_LimitSwap_InvalidateTokenBuy_quote_exactOut() public {
+        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenBuy(false);
+        snapshotQuote("LimitRouterQuote", "LimitSwap_InvalidateTokenBuy_exactOut", order, takerData);
     }
 
-    function test_gas_LimitSwap_InvalidateTokenIn_swap_exactOut() public {
-        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenIn(false);
-        snapshotSwap("LimitRouterSwap", "LimitSwap_InvalidateTokenIn_exactOut", order, takerData);
+    function test_gas_LimitSwap_InvalidateTokenBuy_swap_exactOut() public {
+        (ISwapVM.Order memory order, bytes memory takerData) = programLimitSwapInvalidateTokenBuy(false);
+        snapshotSwap("LimitRouterSwap", "LimitSwap_InvalidateTokenBuy_exactOut", order, takerData);
     }
 
     function test_gas_FullLimitSwap_quote_exactIn() public {
@@ -249,12 +249,12 @@ contract LimitRouterGas is Test {
         );
     }
 
-    function programLimitSwapInvalidateTokenIn(bool isExactIn) internal view returns (ISwapVM.Order memory, bytes memory) {
+    function programLimitSwapInvalidateTokenBuy(bool isExactIn) internal view returns (ISwapVM.Order memory, bytes memory) {
         return buildOrder(
             bytes.concat(
                 StaticBalances.build(LIMIT_BALANCE_A, LIMIT_BALANCE_B),
                 LimitSwap.build(address(tokenA), address(tokenB)),
-                InvalidateTokenIn.build()
+                InvalidateTokenBuy.build()
             ),
             isExactIn
         );
@@ -267,7 +267,7 @@ contract LimitRouterGas is Test {
                 Salt.build(99999),
                 StaticBalances.build(LIMIT_BALANCE_A, LIMIT_BALANCE_B),
                 LimitSwap.build(address(tokenA), address(tokenB)),
-                InvalidateTokenIn.build()
+                InvalidateTokenBuy.build()
             ),
             isExactIn
         );

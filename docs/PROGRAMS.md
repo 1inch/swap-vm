@@ -58,9 +58,9 @@ You can use these invariant suites as references for testing your programs:
   - `LimitSwap` or `LimitSwapFullAmount`
 - **Common Add-ons:**
   - `InvalidateBit`
-  - `InvalidateTokenIn` / `InvalidateTokenOut`
-  - `DutchAuctionBalanceIn` / `DutchAuctionBalanceOut`
-  - `BaseFeeAdjusterBalanceIn` / `BaseFeeAdjusterBalanceOut`
+  - `InvalidateTokenBuy` / `InvalidateTokenSell`
+  - `DutchAuctionSell` / `DutchAuctionBuy`
+  - `BaseFeeAdjusterSell` / `BaseFeeAdjusterBuy`
   - `RequireMinRate`
 
 **Example A - One-time limit order (bitmap invalidator):**
@@ -81,13 +81,13 @@ bytes memory bytecode = bytes.concat(
 
 Use case: fixed-rate quote that can be filled over multiple swaps until exhausted.  
 Analog: partially fillable limit-order systems.  
-Difference note: partial-fill accounting is instruction-driven (`InvalidateTokenOut`) and can differ from external orderbook accounting models.
+Difference note: partial-fill accounting is instruction-driven (`InvalidateTokenSell`) and can differ from external orderbook accounting models.
 
 ```solidity
 bytes memory bytecode = bytes.concat(
     StaticBalances.build(1000e18, 2000e18), // Set fixed-rate balances for 1D swap
     LimitSwap.build(tokenA, tokenB), // Compute limit-order amounts
-    InvalidateTokenOut.build() // Track cumulative output for partial fills
+    InvalidateTokenSell.build() // Track cumulative output for partial fills
 );
 ```
 

@@ -12,11 +12,11 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
-/// @notice FillGridAdjusterBalanceIn opcode, balance in surcharge based on fill percent
+/// @notice FillGridAdjusterSell opcode, balance in surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
-/// @dev The opcode is expected to be applied after InvalidateTokenOut; amount >= balance exit branch relies on balance being final
-library FillGridAdjusterBalanceIn {
+/// @dev The opcode is expected to be applied after InvalidateTokenSell; amount >= balance exit branch relies on balance being final
+library FillGridAdjusterSell {
     using Math for uint256;
 
     using CalldataParse for bytes;
@@ -28,7 +28,7 @@ library FillGridAdjusterBalanceIn {
     error FillGridAdjusterBpsOutOfRange();
     error FillGridAdjusterNotMonotonic();
 
-    Opcode constant opcode = Opcode.FillGridAdjusterBalanceIn;
+    Opcode constant opcode = Opcode.FillGridAdjusterSell;
 
     uint256 constant BPS = 1e7;
 
@@ -128,11 +128,11 @@ library FillGridAdjusterBalanceIn {
     }
 }
 
-/// @notice FillGridAdjusterBalanceOut opcode, balance out surcharge based on fill percent
+/// @notice FillGridAdjusterBuy opcode, balance out surcharge based on fill percent
 /// @dev Encoding: [[uint24 fillBps, uint24 adjustBps] * points.length]; has a virtual endpoint (BPS; 0)
 /// @dev Relies on the surcharge being final; no additional adjustments should be applied after this opcode
-/// @dev The opcode is expected to be applied after InvalidateTokenIn; amount >= balance exit branch relies on balance being final
-library FillGridAdjusterBalanceOut {
+/// @dev The opcode is expected to be applied after InvalidateTokenBuy; amount >= balance exit branch relies on balance being final
+library FillGridAdjusterBuy {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
@@ -142,7 +142,7 @@ library FillGridAdjusterBalanceOut {
     error FillGridAdjusterBpsOutOfRange();
     error FillGridAdjusterNotMonotonic();
 
-    Opcode constant opcode = Opcode.FillGridAdjusterBalanceOut;
+    Opcode constant opcode = Opcode.FillGridAdjusterBuy;
 
     uint256 constant BPS = 1e7;
 

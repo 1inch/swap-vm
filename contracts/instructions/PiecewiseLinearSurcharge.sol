@@ -12,17 +12,17 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { Time } from "../libs/Time.sol";
 
-/// @notice PiecewiseLinearSurchargeBalanceIn opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
+/// @notice PiecewiseLinearSurchargeSell opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
 ///   Applies initial percent surcharge before start and last percent surcharge after end
 /// @dev Surcharge formula `balance * scale / 2 ** 24`
 /// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
 ///   Order balance in is the "maker receive at least" value
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
-library PiecewiseLinearSurchargeBalanceIn {
+/// @dev Should not be used with InvalidateTokenBuy because it relies on balance in which is modified here
+library PiecewiseLinearSurchargeSell {
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceIn;
+    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeSell;
 
     function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
@@ -57,17 +57,17 @@ library PiecewiseLinearSurchargeBalanceIn {
     }
 }
 
-/// @notice PiecewiseLinearSurchargeBalanceOut opcode, apply a piecewise-linear percent surcharge to the balance out (maker exact buy)
+/// @notice PiecewiseLinearSurchargeBuy opcode, apply a piecewise-linear percent surcharge to the balance out (maker exact buy)
 ///   Applies initial percent surcharge before start and last percent surcharge after end
 /// @dev Surcharge formula `balance * scale / (2 ** 24 + scale)`
 /// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
 ///   Order balance out is the "maker spend at most" value
 /// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
-library PiecewiseLinearSurchargeBalanceOut {
+/// @dev Should not be used with InvalidateTokenSell because it relies on balance out which is modified here
+library PiecewiseLinearSurchargeBuy {
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceOut;
+    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBuy;
 
     function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);

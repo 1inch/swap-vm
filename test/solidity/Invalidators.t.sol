@@ -12,7 +12,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenSell, InvalidateTokenBuy, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 
@@ -153,12 +153,12 @@ contract InvalidatorsTest is Test {
     /**
      * Test token input invalidation - partial fills
      */
-    function test_InvalidateTokenInPartialFills() public {
+    function test_InvalidateTokenBuyPartialFills() public {
         // Order with 10 tokenA available, but can be filled multiple times
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(10e18, 20e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            InvalidateTokenIn.build()
+            InvalidateTokenBuy.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -176,20 +176,20 @@ contract InvalidatorsTest is Test {
         // Fourth fill should fail - would exceed balance
         TokenMock(address(tokenA)).mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
-            InvalidateTokenIn.InvalidateTokenInExceeded.selector, 11e18, 1e18, 10e18
+            InvalidateTokenBuy.InvalidateTokenBuyExceeded.selector, 11e18, 1e18, 10e18
         ));
         swapVM.swap(order, 1e18, exactInData);
     }
 
     /**
      * Test token input invalidation - partial fills.
-     * In this test `InvalidateTokenIn` instruction placed before limit swap to trigger inner
-     * `ctx.runLoop()` call in `InvalidateTokenIn`.
+     * In this test `InvalidateTokenBuy` instruction placed before limit swap to trigger inner
+     * `ctx.runLoop()` call in `InvalidateTokenBuy`.
      */
-    function test_InvalidateTokenInPartialFillsBeforeSwap() public {
+    function test_InvalidateTokenBuyPartialFillsBeforeSwap() public {
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(10e18, 200e18),
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -212,12 +212,12 @@ contract InvalidatorsTest is Test {
     /**
      * Test token output invalidation
      */
-    function test_InvalidateTokenOutPartialFills() public {
+    function test_InvalidateTokenSellPartialFills() public {
         // Order with 20 tokenB available for outp
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 20e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            InvalidateTokenOut.build()
+            InvalidateTokenSell.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -263,14 +263,14 @@ contract InvalidatorsTest is Test {
 
     /** 
      * Test token output invalidation.
-     * In this test `InvalidateTokenOut` instruction located before limit swap to trigger inner
-     * `ctx.runLoop()` call in `InvalidateTokenOut`.
+     * In this test `InvalidateTokenSell` instruction located before limit swap to trigger inner
+     * `ctx.runLoop()` call in `InvalidateTokenSell`.
     */
-    function test_InvalidateTokenOutPartialFillsBeforeSwap() public {
+    function test_InvalidateTokenSellPartialFillsBeforeSwap() public {
         // Order with 20 tokenB available for output
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 20e18),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -315,8 +315,8 @@ contract InvalidatorsTest is Test {
             InvalidateBit.build(bitIndex),
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            InvalidateTokenIn.build(),
-            InvalidateTokenOut.build()
+            InvalidateTokenBuy.build(),
+            InvalidateTokenSell.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -398,7 +398,7 @@ contract InvalidatorsTest is Test {
         bytes memory bytecode2 = bytes.concat(
             StaticBalances.build(100e18, 200e18),
             LimitSwap.build(address(tokenA), address(tokenB)),
-            InvalidateTokenIn.build()
+            InvalidateTokenBuy.build()
         );
 
         ISwapVM.Order memory order2 = _createOrder(bytecode2);
@@ -407,7 +407,7 @@ contract InvalidatorsTest is Test {
         // Also test external token invalidation
         bytes32 orderHash = swapVM.hash(order2);
         vm.prank(maker);
-        swapVM.invalidateTokenIn(orderHash, address(tokenA));
+        swapVM.invalidateTokenBuy(orderHash, address(tokenA));
 
         TokenMock(address(tokenA)).mint(taker, 1e18);
         vm.expectRevert();
@@ -521,7 +521,7 @@ contract InvalidatorsTest is Test {
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(100e18, 0), // Zero output balance
             LimitSwap.build(address(tokenA), address(tokenB)),
-            InvalidateTokenOut.build()
+            InvalidateTokenSell.build()
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

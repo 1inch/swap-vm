@@ -16,7 +16,7 @@ import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenOut, InvalidateTokenIn, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenSell, InvalidateTokenBuy, InvalidateBit } from "../../contracts/instructions/Invalidators.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
 import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
@@ -90,7 +90,7 @@ contract SwapVMTest is Test {
         bytes memory programBytes = bytes.concat(
             StaticBalances.build(setup.balanceA, setup.balanceB),
             LimitSwap.build(setup.tokenIn, setup.tokenOut),
-            setup.useInvalidator ? InvalidateTokenOut.build() : bytes(""),
+            setup.useInvalidator ? InvalidateTokenSell.build() : bytes(""),
             setup.salt != 0 ? Salt.build(uint64(setup.salt)) : bytes("")
         );
 

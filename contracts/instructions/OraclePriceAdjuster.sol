@@ -31,7 +31,7 @@ struct Feed {
     address oracle;
 }
 
-/// @notice OraclePriceAdjusterBalanceIn opcode, shifts an exact-sell auction by the market price movement
+/// @notice OraclePriceAdjusterSell opcode, shifts an exact-sell auction by the market price movement
 /// @dev Encoding: [uint160 marketValue, bytes1 decimalsConfig, bytes23 packedFeed[1..2]]
 ///   decimalsConfig = [bit1 scaleNumerator, uint7 decimalsExponent]
 ///   packedFeed = [uint23 maxStaleness, bit1 isDenominator, address oracle]
@@ -40,14 +40,14 @@ struct Feed {
 ///   marketValue is the reference raw token in value of balance out
 /// @dev If the oracle value rises above `marketValue`, the delta increases balance in and surcharge;
 ///   otherwise the delta consumes at most the existing surcharge
-/// @dev Should be applied after balance in surcharge applied and before InvalidateTokenOut opcode
-library OraclePriceAdjusterBalanceIn {
+/// @dev Should be applied after balance in surcharge applied and before InvalidateTokenSell opcode
+library OraclePriceAdjusterSell {
     using CalldataParse for bytes;
     using CalldataCut for bytes;
     using InstructionBuilder for MemoryPtr;
     using Math for uint256;
 
-    Opcode constant opcode = Opcode.OraclePriceAdjusterBalanceIn;
+    Opcode constant opcode = Opcode.OraclePriceAdjusterSell;
 
     function sizeOf(uint160, uint8, uint8, Feed[] memory feeds) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 1 + feeds.length * FEED_SIZE;
@@ -149,7 +149,7 @@ library OraclePriceAdjusterBalanceIn {
     }
 }
 
-/// @notice OraclePriceAdjusterBalanceOut opcode, shifts an exact-buy auction by the market price movement
+/// @notice OraclePriceAdjusterBuy opcode, shifts an exact-buy auction by the market price movement
 /// @dev Encoding: [uint160 marketValue, bytes1 decimalsConfig, bytes23 packedFeed[1..2]]
 ///   decimalsConfig = [bit1 scaleNumerator, uint7 decimalsExponent]
 ///   packedFeed = [uint23 maxStaleness, bit1 isDenominator, address oracle]
@@ -158,14 +158,14 @@ library OraclePriceAdjusterBalanceIn {
 ///   marketValue is the reference raw token out value of balance in
 /// @dev If the oracle value falls below `marketValue`, the delta decreases balance out and increases surcharge;
 ///   otherwise the delta consumes at most the existing surcharge
-/// @dev Should be applied after balance out surcharge applied and before InvalidateTokenIn opcode
-library OraclePriceAdjusterBalanceOut {
+/// @dev Should be applied after balance out surcharge applied and before InvalidateTokenBuy opcode
+library OraclePriceAdjusterBuy {
     using CalldataParse for bytes;
     using CalldataCut for bytes;
     using InstructionBuilder for MemoryPtr;
     using Math for uint256;
 
-    Opcode constant opcode = Opcode.OraclePriceAdjusterBalanceOut;
+    Opcode constant opcode = Opcode.OraclePriceAdjusterBuy;
 
     function sizeOf(uint160, uint8, uint8, Feed[] memory feeds) internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 1 + feeds.length * FEED_SIZE;

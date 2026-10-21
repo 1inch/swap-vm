@@ -16,8 +16,8 @@ import { Context, SwapRegisters } from "../../contracts/libs/VM.sol";
 import { Opcode } from "../../contracts/libs/OpcodeList.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { InvalidateTokenBuy, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
+import { PiecewiseLinearSurchargeSell } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
 import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
@@ -62,7 +62,7 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 
     /// @dev Order: 100e18 in -> 200e18 out, maker estimates 80e18 total input, 10% surplus fee.
-    ///   FeeProtocolSurplus precedes InvalidateTokenOut and scales the token-in estimate by the
+    ///   FeeProtocolSurplus precedes InvalidateTokenSell and scales the token-in estimate by the
     ///   delivered output fraction.
     ///   Each fill of half the order must contribute half the estimate: surplus 10e18, fee 1e18 per fill,
     ///   regardless of being the first or the second fill and of over-asking.
@@ -70,7 +70,7 @@ contract ProtocolSurplusPartialFillTest is Test {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 80e18),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactInData = _makeTakerData(order, true);
@@ -96,11 +96,11 @@ contract ProtocolSurplusPartialFillTest is Test {
         assertEq(tokenA.balanceOf(feeRecipient) - recipientBefore, 1e18, "Second fill surplus fee should stay pro-rata");
         assertEq(tokenA.balanceOf(maker) - makerBefore, 49e18, "Maker receives input minus surplus fee");
 
-        assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 200e18);
+        assertEq(swapVM.tokenSellInvalidators(maker, swapVM.hash(order), address(tokenB)), 200e18);
     }
 
     /// @dev Order: 100e18 in -> 200e18 out, maker estimates 240e18 total output, 10% surplus fee.
-    ///   FeeProtocolSurplus precedes InvalidateTokenIn and scales the token-out estimate by the
+    ///   FeeProtocolSurplus precedes InvalidateTokenBuy and scales the token-out estimate by the
     ///   consumed input fraction.
     ///   Each fill of half the order compares against half the estimate: surplus 20e18, fee 2e18 per fill.
     function test_SurplusOut_Multifill_ProRataEstimate() public {
@@ -108,7 +108,7 @@ contract ProtocolSurplusPartialFillTest is Test {
         bytes memory program = bytes.concat(
             StaticBalances.build(100e18, 200e18),
             protocolFee,
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
@@ -132,7 +132,7 @@ contract ProtocolSurplusPartialFillTest is Test {
         assertEq(amountIn, 50e18);
         assertEq(tokenB.balanceOf(feeRecipient) - recipientBefore, 2e18, "Second fill surplus fee should stay pro-rata");
 
-        assertEq(swapVM.tokenInInvalidators(maker, swapVM.hash(order), address(tokenA)), 100e18);
+        assertEq(swapVM.tokenBuyInvalidators(maker, swapVM.hash(order), address(tokenA)), 100e18);
     }
 
     function testFuzz_SurplusIn_Multifill(
@@ -158,7 +158,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             uint256 remainingOut = balanceOut - filledOut;
             if (remainingOut == 0) break;
 
-            // InvalidateTokenOut restores the remaining capacity, rounding the input side up
+            // InvalidateTokenSell restores the remaining capacity, rounding the input side up
             uint256 scaledIn = (balanceIn * remainingOut).ceilDiv(balanceOut);
 
             uint256 ask = bound(asks[i], 1, balanceIn);
@@ -213,7 +213,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             uint256 remainingIn = balanceIn - filledIn;
             if (remainingIn == 0) break;
 
-            // InvalidateTokenIn restores the remaining capacity, rounding the output side down
+            // InvalidateTokenBuy restores the remaining capacity, rounding the output side down
             uint256 scaledOut = balanceOut * remainingIn / balanceIn;
             if (scaledOut == 0) break; // Tail dust quotes to zero output and cannot be filled
 
@@ -243,9 +243,9 @@ contract ProtocolSurplusPartialFillTest is Test {
         assertLe(totalShares, estimate, "Cumulative estimate shares should be pro-rata of the order");
     }
 
-    /// @dev Fusion-style Dutch auction: maker sells a fixed 200e18 output (InvalidateTokenOut) with the
+    /// @dev Fusion-style Dutch auction: maker sells a fixed 200e18 output (InvalidateTokenSell) with the
     ///   order priced at the auction maximum of 100e18 input, scaled down over time
-    ///   (PiecewiseLinearSurchargeBalanceIn, here frozen at 0.75). The maker estimates receiving the 50e18
+    ///   (PiecewiseLinearSurchargeSell, here frozen at 0.75). The maker estimates receiving the 50e18
     ///   auction minimum, so the premium above it is the surplus: each half fill pays 37.5e18 against
     ///   a 25e18 estimate share -> surplus 12.5e18, fee 1.25e18.
     function test_SurplusIn_PiecewiseLinearAuction_ProRataEstimate() public {
@@ -258,8 +258,8 @@ contract ProtocolSurplusPartialFillTest is Test {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(50e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 50e18),
-            InvalidateTokenOut.build(),
-            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp + 1000), durations, scales),
+            InvalidateTokenSell.build(),
+            PiecewiseLinearSurchargeSell.build(uint40(block.timestamp + 1000), durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _makeTakerData(order, false);
@@ -275,7 +275,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             assertEq(tokenA.balanceOf(maker) - makerBefore, 36.25e18, "Maker receives input minus surplus fee");
         }
 
-        assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 200e18);
+        assertEq(swapVM.tokenSellInvalidators(maker, swapVM.hash(order), address(tokenB)), 200e18);
     }
 
     /// @dev FeeProtocolSurplus scales the estimate without relying on an invalidator.
@@ -342,7 +342,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             isTokenIn
                 ? FeeBuilders.protocolFlatSurplusIn(feeBps, surplusBps, feeRecipient, estimate)
                 : FeeBuilders.protocolFlatSurplusOut(feeBps, surplusBps, feeRecipient, estimate),
-            isTokenIn ? InvalidateTokenOut.build() : InvalidateTokenIn.build(),
+            isTokenIn ? InvalidateTokenSell.build() : InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
     }

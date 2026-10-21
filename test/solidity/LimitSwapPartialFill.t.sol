@@ -14,7 +14,7 @@ import { MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenBuy, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
 
 contract LimitSwapPartialFillTest is Test {
     using Math for uint256;
@@ -141,13 +141,13 @@ contract LimitSwapPartialFillTest is Test {
 
     // === Multifill ===
 
-    function testFuzz_Multifill_InvalidateTokenIn(uint256 balanceIn, uint256 balanceOut, uint256[4] memory asks) public {
+    function testFuzz_Multifill_InvalidateTokenBuy(uint256 balanceIn, uint256 balanceOut, uint256[4] memory asks) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory takerData = _makeTakerData(order, true, true);
@@ -187,18 +187,18 @@ contract LimitSwapPartialFillTest is Test {
         assertLe(totalOut, balanceOut, "Cumulative output is bounded by the order capacity");
 
         // Storage and token accounting match the fills
-        assertEq(swapVM.tokenInInvalidators(maker, swapVM.hash(order), address(tokenA)), filled);
+        assertEq(swapVM.tokenBuyInvalidators(maker, swapVM.hash(order), address(tokenA)), filled);
         assertEq(tokenA.balanceOf(maker) - makerBalanceA, filled);
         assertEq(tokenB.balanceOf(taker) - takerBalanceB, totalOut);
     }
 
-    function testFuzz_Multifill_InvalidateTokenOut(uint256 balanceIn, uint256 balanceOut, uint256[4] memory asks) public {
+    function testFuzz_Multifill_InvalidateTokenSell(uint256 balanceIn, uint256 balanceOut, uint256[4] memory asks) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory takerData = _makeTakerData(order, false, true);
@@ -233,18 +233,18 @@ contract LimitSwapPartialFillTest is Test {
         assertLe(filled, balanceOut, "Cumulative output is bounded by the order capacity");
 
         // Storage and token accounting match the fills
-        assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), filled);
+        assertEq(swapVM.tokenSellInvalidators(maker, swapVM.hash(order), address(tokenB)), filled);
         assertEq(tokenA.balanceOf(maker) - makerBalanceA, totalIn);
         assertEq(tokenB.balanceOf(taker) - takerBalanceB, filled);
     }
 
-    function testFuzz_FullFill_InvalidateTokenIn_ConsumesAtMostBalanceOut(uint256 balanceIn, uint256 balanceOut, uint256[3] memory asks) public {
+    function testFuzz_FullFill_InvalidateTokenBuy_ConsumesAtMostBalanceOut(uint256 balanceIn, uint256 balanceOut, uint256[3] memory asks) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory takerData = _makeTakerData(order, true, true);
@@ -272,13 +272,13 @@ contract LimitSwapPartialFillTest is Test {
         assertLe(totalOut, balanceOut, "Full fill should consume at most balanceOut");
     }
 
-    function testFuzz_FullFill_InvalidateTokenOut_PaysAtLeastBalanceIn(uint256 balanceIn, uint256 balanceOut, uint256[3] memory asks) public {
+    function testFuzz_FullFill_InvalidateTokenSell_PaysAtLeastBalanceIn(uint256 balanceIn, uint256 balanceOut, uint256[3] memory asks) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory takerData = _makeTakerData(order, false, true);
@@ -304,7 +304,7 @@ contract LimitSwapPartialFillTest is Test {
     function test_ExhaustedOrder_RevertsCleanly() public {
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
 

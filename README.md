@@ -59,10 +59,10 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 |--------------|--------------|
 | Control      | `Stop`, `Revert`, `Salt`, `Jump`, `Extruction` (delegate registers to a maker-chosen contract) |
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
-| Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
-| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearSurchargeBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
+| Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenBuy` / `InvalidateTokenSell` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
+| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionSell` / `Buy`, `PiecewiseLinearSurchargeSell` / `Buy`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `OraclePriceAdjusterBalanceIn` / `Out` (one or two Chainlink feeds), `BaseFeeAdjuster*` (gas-aware) |
+| Rates        | `RequireMinRate`, `OraclePriceAdjusterSell` / `Buy` (one or two Chainlink feeds), `BaseFeeAdjuster*` (gas-aware) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
@@ -100,7 +100,7 @@ contract MyRouter is SwapVM, Opcodes {
 bytes memory program = bytes.concat(
     StaticBalances.build(1000e6, 0.5e18), // (balanceA, balanceB)
     LimitSwap.build(USDC, WETH),          // taker pays USDC, receives WETH
-    InvalidateTokenOut.build()            // partial fills, capped at 0.5 WETH in total
+    InvalidateTokenSell.build()           // partial fills, capped at 0.5 WETH in total
 );
 
 ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
@@ -142,7 +142,7 @@ With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come fr
 
 ### Checklist
 
-- Add `Deadline`. Use `InvalidateBit` for one-shot orders, `InvalidateTokenIn` / `InvalidateTokenOut` for partial fills, `ValidateSeriesEpoch` to cancel a whole series at once.
+- Add `Deadline`. Use `InvalidateBit` for one-shot orders, `InvalidateTokenBuy` / `InvalidateTokenSell` for partial fills, `ValidateSeriesEpoch` to cancel a whole series at once.
 - Guard rates with `RequireMinRate`; consider `Decay` for AMM positions.
 - `Salt` makes otherwise identical orders hash differently.
 - Authorize the router to pull `tokenOut`: approve the router directly for ERC-20 `transferFrom`, or approve Permit2 and set `usePermit2: true`. Aqua orders use Aqua `pull`.

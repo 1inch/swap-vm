@@ -11,17 +11,17 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
-/// @notice BaseFeeAdjusterBalanceIn opcode, price adjustment based on network gas costs
+/// @notice BaseFeeAdjusterSell opcode, price adjustment based on network gas costs
 /// @dev Encoding: [uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount]
 /// @dev Supports only single direction swaps, eth price specified in token in
-/// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenOut opcode
-library BaseFeeAdjusterBalanceIn {
+/// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenSell opcode
+library BaseFeeAdjusterSell {
     using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.BaseFeeAdjusterBalanceIn;
+    Opcode constant opcode = Opcode.BaseFeeAdjusterSell;
 
     uint256 constant ONE = 1e18;
 
@@ -63,17 +63,17 @@ library BaseFeeAdjusterBalanceIn {
     }
 }
 
-/// @notice BaseFeeAdjusterBalanceOut opcode, price adjustment based on network gas costs
+/// @notice BaseFeeAdjusterBuy opcode, price adjustment based on network gas costs
 /// @dev Encoding: [uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount]
 /// @dev Supports only single direction swaps, eth price specified in token out
-/// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenIn opcode
-library BaseFeeAdjusterBalanceOut {
+/// @dev Adjustment is applied to the total or remaining balance depending on ordering with InvalidateTokenBuy opcode
+library BaseFeeAdjusterBuy {
     using CalldataParse for bytes;
 
     using MemoryPtrLib for MemoryPtr;
     using InstructionBuilder for MemoryPtr;
 
-    Opcode constant opcode = Opcode.BaseFeeAdjusterBalanceOut;
+    Opcode constant opcode = Opcode.BaseFeeAdjusterBuy;
 
     uint256 constant ONE = 1e18;
 

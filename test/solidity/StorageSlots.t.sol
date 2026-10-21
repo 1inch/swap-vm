@@ -8,7 +8,7 @@ import { Test } from "forge-std/Test.sol";
 import { StorageSlots } from "../../contracts/libs/StorageSlots.sol";
 import { DynamicBalances } from "../../contracts/instructions/Balances.sol";
 import { Decay } from "../../contracts/instructions/Decay.sol";
-import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenBuy, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
 import { ValidateSeriesEpoch } from "../../contracts/instructions/SeriesEpochManager.sol";
 import { OrderRegistratorLib } from "../../contracts/extensions/OrderRegistrator.sol";
 
@@ -17,8 +17,8 @@ contract StorageSlotsTest is Test {
         assertEq(StorageSlots.DynamicBalances,         _erc7201("1inch.storage.DynamicBalances"));
         assertEq(StorageSlots.Decay,                   _erc7201("1inch.storage.Decay"));
         assertEq(StorageSlots.InvalidateBit,           _erc7201("1inch.storage.InvalidateBit"));
-        assertEq(StorageSlots.InvalidateTokenIn,       _erc7201("1inch.storage.InvalidateTokenIn"));
-        assertEq(StorageSlots.InvalidateTokenOut,      _erc7201("1inch.storage.InvalidateTokenOut"));
+        assertEq(StorageSlots.InvalidateTokenBuy,      _erc7201("1inch.storage.InvalidateTokenBuy"));
+        assertEq(StorageSlots.InvalidateTokenSell,     _erc7201("1inch.storage.InvalidateTokenSell"));
         assertEq(StorageSlots.ValidateSeriesEpoch,     _erc7201("1inch.storage.ValidateSeriesEpoch"));
         assertEq(StorageSlots.OrderRegistrator,        _erc7201("1inch.storage.OrderRegistrator"));
     }
@@ -45,19 +45,19 @@ contract StorageSlotsTest is Test {
         }
         assertEq(StorageSlots.InvalidateBit, slotInvalidateBit);
 
-        bytes32 slotInvalidateTokenIn;
-        InvalidateTokenIn.Storage storage InvalidateTokenInStorage = InvalidateTokenIn.store();
+        bytes32 slotInvalidateTokenBuy;
+        InvalidateTokenBuy.Storage storage InvalidateTokenBuyStorage = InvalidateTokenBuy.store();
         assembly ("memory-safe") {
-            slotInvalidateTokenIn := InvalidateTokenInStorage.slot
+            slotInvalidateTokenBuy := InvalidateTokenBuyStorage.slot
         }
-        assertEq(StorageSlots.InvalidateTokenIn, slotInvalidateTokenIn);
+        assertEq(StorageSlots.InvalidateTokenBuy, slotInvalidateTokenBuy);
 
-        bytes32 slotInvalidateTokenOut;
-        InvalidateTokenOut.Storage storage InvalidateTokenOutStorage = InvalidateTokenOut.store();
+        bytes32 slotInvalidateTokenSell;
+        InvalidateTokenSell.Storage storage InvalidateTokenSellStorage = InvalidateTokenSell.store();
         assembly ("memory-safe") {
-            slotInvalidateTokenOut := InvalidateTokenOutStorage.slot
+            slotInvalidateTokenSell := InvalidateTokenSellStorage.slot
         }
-        assertEq(StorageSlots.InvalidateTokenOut, slotInvalidateTokenOut);
+        assertEq(StorageSlots.InvalidateTokenSell, slotInvalidateTokenSell);
 
         bytes32 slotValidateSeriesEpoch;
         ValidateSeriesEpoch.Storage storage ValidateSeriesEpochStorage = ValidateSeriesEpoch.store();

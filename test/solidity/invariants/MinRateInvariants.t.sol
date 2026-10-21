@@ -14,7 +14,7 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
+import { DutchAuctionSell, DutchAuctionBuy } from "../../../contracts/instructions/DutchAuction.sol";
 import { RequireMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";

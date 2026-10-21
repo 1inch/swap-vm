@@ -31,11 +31,11 @@ interface SwapVMRouter is ISwapVM {
 
     function balance(bytes32 orderHash, address token) external view returns (uint256);
 
-    function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
-    function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
+    function tokenBuyInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
+    function tokenSellInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
     function invalidateBit(uint256 bitIndex) external;
     function invalidateBits(uint256 slot, uint256 mask) external;
-    function invalidateTokenIn(bytes32 orderHash, address token) external;
+    function invalidateTokenBuy(bytes32 orderHash, address token) external;
 
     function registerOrder(Order calldata order, bytes calldata signature) external;
     function announcedAt(bytes32 orderHash) external view returns (uint256);

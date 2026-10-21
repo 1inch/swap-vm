@@ -20,7 +20,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @dev General safety measures:
 ///   Maker min exchange rate expectations should be guarded by using RequireMinRate before Extruction
 ///   Maker max spend expectations should be guarded by using AQUA or DynamicBalances for AMM-strategies
-///   or using StaticBalances with InvalidateTokenIn or InvalidateTokenOut before Extruction for amount-limited strategies
+///   or using StaticBalances with InvalidateTokenBuy or InvalidateTokenSell before Extruction for amount-limited strategies
 ///
 ///   Taker should employ threshold to guard the min exchange rate
 ///   SwapVM guards taker-specified amount to be unchanged by the strategy execution

@@ -196,7 +196,7 @@ library FeeProtocol {
 ///   isTokenIn should match the flag set in FeeProtocol
 /// @dev Supports only single direction swaps, scales estimation according to the amount-to-balance proportion
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
-///   The opcode is expected to be applied before InvalidateTokenIn or InvalidateTokenOut to apply scaling properly
+///   The opcode is expected to be applied before InvalidateTokenBuy or InvalidateTokenSell to apply scaling properly
 library FeeProtocolSurplus {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;

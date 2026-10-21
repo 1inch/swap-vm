@@ -17,7 +17,7 @@ import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { XYCConcentrateSwap } from "../../contracts/instructions/XYCConcentrate.sol";
 import { FeeFlatIn } from "../../contracts/instructions/FeeFlat.sol";
 import { Decay } from "../../contracts/instructions/Decay.sol";
-import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenBuy, InvalidateTokenSell } from "../../contracts/instructions/Invalidators.sol";
 import { Deadline, Salt, Stop } from "../../contracts/instructions/Controls.sol";
 
 /**
@@ -52,7 +52,7 @@ contract StrategiesTest is Test {
 
         assertEq(this.limitOrder(new bytes[](0), args), bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(true)
         ));
     }
@@ -67,7 +67,7 @@ contract StrategiesTest is Test {
 
         assertEq(this.limitOrder(new bytes[](0), args), bytes.concat(
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenIn.build(),
+            InvalidateTokenBuy.build(),
             LimitSwap.build(true)
         ));
     }
@@ -88,7 +88,7 @@ contract StrategiesTest is Test {
             Deadline.build(uint40(1e9)),
             Salt.build(uint64(42)),
             StaticBalances.build(100e18, 200e18),
-            InvalidateTokenOut.build(),
+            InvalidateTokenSell.build(),
             LimitSwap.build(false)
         ));
     }

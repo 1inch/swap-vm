@@ -12,23 +12,23 @@ import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../../contracts/instructions/LimitSwap.sol";
-import { InvalidateTokenIn, InvalidateTokenOut, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
+import { InvalidateTokenBuy, InvalidateTokenSell, InvalidateBit } from "../../../contracts/instructions/Invalidators.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../../contracts/instructions/Whitelist.sol";
 import { ValidateSeriesEpoch } from "../../../contracts/instructions/SeriesEpochManager.sol";
-import { BaseFeeAdjusterBalanceIn, BaseFeeAdjusterBalanceOut } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
-import { FillGridAdjusterBalanceIn, FillGridAdjusterBalanceOut } from "../../../contracts/instructions/FillGridAdjuster.sol";
+import { BaseFeeAdjusterSell, BaseFeeAdjusterBuy } from "../../../contracts/instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjusterSell, FillGridAdjusterBuy } from "../../../contracts/instructions/FillGridAdjuster.sol";
 import { Stop, Deadline, Salt } from "../../../contracts/instructions/Controls.sol";
 import { Jump, JumpIfDirection, JumpIfTokenIn, JumpIfTokenOut } from "../../../contracts/instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../../../contracts/instructions/TokenValidators.sol";
 import { RequireMinRate } from "../../../contracts/instructions/MinRate.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
-import { PiecewiseLinearSurchargeBalanceIn, PiecewiseLinearSurchargeBalanceOut } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { PiecewiseLinearSurchargeSell, PiecewiseLinearSurchargeBuy } from "../../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../../../contracts/instructions/XYCConcentrate.sol";
 import { Decay } from "../../../contracts/instructions/Decay.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
-import { Feed, OraclePriceAdjusterBalanceIn, OraclePriceAdjusterBalanceOut } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
+import { DutchAuctionSell, DutchAuctionBuy } from "../../../contracts/instructions/DutchAuction.sol";
+import { Feed, OraclePriceAdjusterSell, OraclePriceAdjusterBuy } from "../../../contracts/instructions/OraclePriceAdjuster.sol";
 import { dynamic } from "../utils/Dynamic.sol";
 import { PriceOracleMock } from "../mocks/PriceOracleMock.sol";
 
@@ -81,7 +81,7 @@ contract OpcodeGas is Test {
     function test_gas() public {
         just = bytes.concat(
             StaticBalances.build(AMOUNT, AMOUNT),
-            DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7),
+            DutchAuctionSell.build(uint40(block.timestamp), 0.99e18, 0.1e7),
             StaticBalances.build(AMOUNT, AMOUNT),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -107,8 +107,8 @@ contract OpcodeGas is Test {
         _snapshot("JumpIfTokenIn", JumpIfTokenIn.build(address(tokenA), type(uint16).max));
         _snapshot("JumpIfTokenOut", JumpIfTokenOut.build(address(tokenB), type(uint16).max));
         _snapshot("InvalidateBit", InvalidateBit.build(15));
-        _snapshot("InvalidateTokenIn", InvalidateTokenIn.build());
-        _snapshot("InvalidateTokenOut", InvalidateTokenOut.build());
+        _snapshot("InvalidateTokenBuy", InvalidateTokenBuy.build());
+        _snapshot("InvalidateTokenSell", InvalidateTokenSell.build());
         _snapshot("XYCSwap", XYCSwap.build());
         _snapshot("XYCConcentrateSwap", XYCConcentrateSwap.build(0.1e18, 5e18));
         _snapshot("LimitSwap", LimitSwap.build(address(tokenA), address(tokenB)));
@@ -118,26 +118,26 @@ contract OpcodeGas is Test {
         _snapshot("FeeFlatOut", FeeFlatOut.build(0.10e7));
         _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
         _snapshot("DynamicBalances", DynamicBalances.build(AMOUNT, AMOUNT));
-        _snapshot("DutchAuctionBalanceIn", DutchAuctionBalanceIn.build(uint40(block.timestamp), 0.99e18, 0.1e7));
-        _snapshot("DutchAuctionBalanceOut", DutchAuctionBalanceOut.build(uint40(block.timestamp), 0.99e18, 0.1e7));
-        _snapshot("PiecewiseLinearSurchargeBalanceIn", PiecewiseLinearSurchargeBalanceIn.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
-        _snapshot("PiecewiseLinearSurchargeBalanceOut", PiecewiseLinearSurchargeBalanceOut.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("DutchAuctionSell", DutchAuctionSell.build(uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("DutchAuctionBuy", DutchAuctionBuy.build(uint40(block.timestamp), 0.99e18, 0.1e7));
+        _snapshot("PiecewiseLinearSurchargeSell", PiecewiseLinearSurchargeSell.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
+        _snapshot("PiecewiseLinearSurchargeBuy", PiecewiseLinearSurchargeBuy.build(uint40(1700000000), dynamic([uint16(3600)]), dynamic([uint24(type(uint24).max), type(uint24).max / 2 + 1])));
         _snapshot("Decay", Decay.build(155));
         _snapshot("RequireMinRate", RequireMinRate.build(1e18, 2.2e18));
-        _snapshot("BaseFeeAdjusterBalanceIn", BaseFeeAdjusterBalanceIn.build(25 gwei, 3500e18, 150_000));
-        _snapshot("BaseFeeAdjusterBalanceOut", BaseFeeAdjusterBalanceOut.build(25 gwei, 3500e18, 150_000));
-        _snapshot("OraclePriceAdjusterBalanceIn_OneFeed", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feed(false)));
-        _snapshot("OraclePriceAdjusterBalanceIn_TwoFeeds", OraclePriceAdjusterBalanceIn.build(1e18, 18, 18, _feeds(false, false)));
-        _snapshot("OraclePriceAdjusterBalanceIn_OneInverseFeed", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feed(true)));
-        _snapshot("OraclePriceAdjusterBalanceIn_TwoInverseFeeds", OraclePriceAdjusterBalanceIn.build(0.4e18, 18, 18, _feeds(true, true)));
-        _snapshot("OraclePriceAdjusterBalanceOut_OneFeed", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feed(false)));
-        _snapshot("OraclePriceAdjusterBalanceOut_TwoFeeds", OraclePriceAdjusterBalanceOut.build(1e18, 18, 18, _feeds(false, false)));
-        _snapshot("OraclePriceAdjusterBalanceOut_OneInverseFeed", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feed(true)));
-        _snapshot("OraclePriceAdjusterBalanceOut_TwoInverseFeeds", OraclePriceAdjusterBalanceOut.build(0.4e18, 18, 18, _feeds(true, true)));
-        _snapshot("FillGridAdjusterBalanceIn_eIn", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
-        _snapshot("FillGridAdjusterBalanceOut_eIn", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
-        _snapshot("FillGridAdjusterBalanceIn_eOut", FillGridAdjusterBalanceIn.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
-        _snapshot("FillGridAdjusterBalanceOut_eOut", FillGridAdjusterBalanceOut.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
+        _snapshot("BaseFeeAdjusterSell", BaseFeeAdjusterSell.build(25 gwei, 3500e18, 150_000));
+        _snapshot("BaseFeeAdjusterBuy", BaseFeeAdjusterBuy.build(25 gwei, 3500e18, 150_000));
+        _snapshot("OraclePriceAdjusterSell_OneFeed", OraclePriceAdjusterSell.build(1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterSell_TwoFeeds", OraclePriceAdjusterSell.build(1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterSell_OneInverseFeed", OraclePriceAdjusterSell.build(0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterSell_TwoInverseFeeds", OraclePriceAdjusterSell.build(0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("OraclePriceAdjusterBuy_OneFeed", OraclePriceAdjusterBuy.build(1e18, 18, 18, _feed(false)));
+        _snapshot("OraclePriceAdjusterBuy_TwoFeeds", OraclePriceAdjusterBuy.build(1e18, 18, 18, _feeds(false, false)));
+        _snapshot("OraclePriceAdjusterBuy_OneInverseFeed", OraclePriceAdjusterBuy.build(0.4e18, 18, 18, _feed(true)));
+        _snapshot("OraclePriceAdjusterBuy_TwoInverseFeeds", OraclePriceAdjusterBuy.build(0.4e18, 18, 18, _feeds(true, true)));
+        _snapshot("FillGridAdjusterSell_eIn", FillGridAdjusterSell.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterBuy_eIn", FillGridAdjusterBuy.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, true);
+        _snapshot("FillGridAdjusterSell_eOut", FillGridAdjusterSell.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
+        _snapshot("FillGridAdjusterBuy_eOut", FillGridAdjusterBuy.build(dynamic([uint24(0e7), 0.2e7, 0.4e7, 0.6e7, 0.8e7]), dynamic([uint24(0.1e7), 0.09e7, 0.07e7, 0.05e7, 0.02e7])), AMOUNT / 9, false);
         _snapshot("ValidateSeriesEpoch", ValidateSeriesEpoch.build(10, 0));
     }
 

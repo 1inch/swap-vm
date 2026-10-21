@@ -93,18 +93,18 @@ contract InvalidateBitExternal {
     }
 }
 
-/// @notice InvalidateTokenIn opcode, bounds cumulative amount in across all fills by the strategy balance in
+/// @notice InvalidateTokenBuy opcode, bounds cumulative amount in across all fills by the strategy balance in
 ///   Reduces balance registries according to the filled portion
 ///   Balance in is cached at the moment of opcode execution while amount in is taken after rest of strategy executed
 /// @dev Encoding: []
 /// @dev The opcode supposes exact buy intention, fees should be taken in token out
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
-library InvalidateTokenIn {
+library InvalidateTokenBuy {
     using InstructionBuilder for MemoryPtr;
 
-    error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
+    error InvalidateTokenBuyExceeded(uint256 filled, uint256 amount, uint256 balance);
 
-    Opcode constant opcode = Opcode.InvalidateTokenIn;
+    Opcode constant opcode = Opcode.InvalidateTokenBuy;
 
     function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf();
@@ -124,7 +124,7 @@ library InvalidateTokenIn {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = StorageSlots.InvalidateTokenIn;
+        bytes32 slot = StorageSlots.InvalidateTokenBuy;
         assembly ("memory-safe") { $.slot := slot }
     }
 
@@ -141,7 +141,7 @@ library InvalidateTokenIn {
         (uint256 amountIn,) = ctx.runLoop();
 
         filled += amountIn;
-        require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
+        require(filled <= balanceIn, InvalidateTokenBuyExceeded(filled, amountIn, balanceIn));
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
@@ -149,36 +149,36 @@ library InvalidateTokenIn {
     }
 }
 
-contract InvalidateTokenInExternal {
-    event InvalidateTokenInFilled(address indexed maker, bytes32 indexed orderHash);
+contract InvalidateTokenBuyExternal {
+    event InvalidateTokenBuyFilled(address indexed maker, bytes32 indexed orderHash);
 
-    function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
-        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+    function tokenBuyInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenBuy.Storage storage $ = InvalidateTokenBuy.store();
         return $.filled[maker][orderHash][token];
     }
 
-    function invalidateTokenIn(bytes32 orderHash, address token) external {
-        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+    function invalidateTokenBuy(bytes32 orderHash, address token) external {
+        InvalidateTokenBuy.Storage storage $ = InvalidateTokenBuy.store();
 
         $.filled[msg.sender][orderHash][token] = type(uint256).max;
-        emit InvalidateTokenInFilled(msg.sender, orderHash);
+        emit InvalidateTokenBuyFilled(msg.sender, orderHash);
     }
 }
 
-/// @notice InvalidateTokenOut opcode, bounds cumulative amount out across all fills by the strategy balance out
+/// @notice InvalidateTokenSell opcode, bounds cumulative amount out across all fills by the strategy balance out
 ///   Reduces balance registries according to the filled portion
 ///   Balance out is cached at the moment of opcode execution while amount out is taken after rest of strategy executed
 /// @dev Encoding: []
 /// @dev The opcode supposes exact sell intention, fees should be taken in token in
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
-library InvalidateTokenOut {
+library InvalidateTokenSell {
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;
 
-    error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
+    error InvalidateTokenSellExceeded(uint256 filled, uint256 amount, uint256 balance);
 
-    Opcode constant opcode = Opcode.InvalidateTokenOut;
+    Opcode constant opcode = Opcode.InvalidateTokenSell;
 
     function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf();
@@ -198,7 +198,7 @@ library InvalidateTokenOut {
     }
 
     function store() internal pure returns (Storage storage $) {
-        bytes32 slot = StorageSlots.InvalidateTokenOut;
+        bytes32 slot = StorageSlots.InvalidateTokenSell;
         assembly ("memory-safe") { $.slot := slot }
     }
 
@@ -215,7 +215,7 @@ library InvalidateTokenOut {
         (, uint256 amountOut) = ctx.runLoop();
 
         filled += amountOut;
-        require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
+        require(filled <= balanceOut, InvalidateTokenSellExceeded(filled, amountOut, balanceOut));
 
         if (!ctx.vm.isStaticContext) {
             $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;
@@ -223,18 +223,18 @@ library InvalidateTokenOut {
     }
 }
 
-contract InvalidateTokenOutExternal {
-    event InvalidateTokenOutFilled(address indexed maker, bytes32 indexed orderHash);
+contract InvalidateTokenSellExternal {
+    event InvalidateTokenSellFilled(address indexed maker, bytes32 indexed orderHash);
 
-    function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
-        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+    function tokenSellInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
+        InvalidateTokenSell.Storage storage $ = InvalidateTokenSell.store();
         return $.filled[maker][orderHash][token];
     }
 
-    function invalidateTokenOut(bytes32 orderHash, address token) external {
-        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+    function invalidateTokenSell(bytes32 orderHash, address token) external {
+        InvalidateTokenSell.Storage storage $ = InvalidateTokenSell.store();
 
         $.filled[msg.sender][orderHash][token] = type(uint256).max;
-        emit InvalidateTokenOutFilled(msg.sender, orderHash);
+        emit InvalidateTokenSellFilled(msg.sender, orderHash);
     }
 }
