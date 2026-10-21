@@ -31,7 +31,7 @@ contract NativeOrderEscrowTest is Test {
     uint40 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_DELAY = 1 hours;
     uint32 private constant RESCUE_DELAY = 7 days;
-    uint128 private constant MAX_REWARD = 0.001 ether;
+    uint96 private constant MAX_REWARD = 0.001 ether;
     bytes4 private constant ERC1271_MAGIC = 0x1626ba7e;
 
     SwapVMRouter public router;
@@ -335,10 +335,10 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart());
         bytes memory callData = abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder, type(uint256).max));
-        // The salt ignores bits above uint128, so Solidity's calldata validation must reject them.
+        // The salt ignores bits above uint96, so Solidity's calldata validation must reject them.
         assembly ("memory-safe") {
             let maxRewardWord := add(callData, 164)
-            mstore(maxRewardWord, or(mload(maxRewardWord), shl(128, 1)))
+            mstore(maxRewardWord, or(mload(maxRewardWord), shl(96, 1)))
         }
         vm.prank(resolver);
         (bool success,) = address(escrow).call(callData);
@@ -348,7 +348,7 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function test_PublicCancel_RewardCappedByRemainingAllowanceNotDonations() public {
-        _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), type(uint128).max);
+        _createOrder(_buildOrder(_defaultProgram()), WETH_AMOUNT, _expiration(), type(uint96).max);
         router.swap(filledOrder, 0.4 ether, _takerData(false));
         _donateWeth(2 ether);
         vm.warp(_publicCancelStart());
@@ -402,7 +402,7 @@ contract NativeOrderEscrowTest is Test {
         assertEq(maker.balance - makerBefore, WETH_AMOUNT);
     }
 
-    function testFuzz_PublicCancel_ConservesFunds(uint96 deposit, uint96 rewardLimit, uint128 maxReward) public {
+    function testFuzz_PublicCancel_ConservesFunds(uint96 deposit, uint96 rewardLimit, uint96 maxReward) public {
         deposit = uint96(bound(deposit, 1, 10 ether));
         _createOrder(_buildOrder(_defaultProgram()), deposit, _expiration(), maxReward);
         vm.warp(_publicCancelStart());
@@ -421,7 +421,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_IsValidSignature_AcceptsCommittedOrder() public {
         _createEscrow(_defaultProgram());
-        assertEq(_signature().length, 105);
+        assertEq(_signature().length, 101);
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
@@ -444,7 +444,7 @@ contract NativeOrderEscrowTest is Test {
     function testFuzz_IsValidSignature_MalformedLength(uint16 length) public {
         _createEscrow(_defaultProgram());
         length = uint16(bound(length, 0, 512));
-        if (length == 105) ++length;
+        if (length == 101) ++length;
         assertEq(escrow.isValidSignature(filledOrderHash, new bytes(length)), bytes4(0));
     }
 
@@ -847,7 +847,7 @@ contract NativeOrderEscrowTest is Test {
         _createOrder(order, amount, expiration, MAX_REWARD);
     }
 
-    function _createOrder(ISwapVM.Order memory order, uint256 amount, uint40 expiration, uint128 maxReward) private {
+    function _createOrder(ISwapVM.Order memory order, uint256 amount, uint40 expiration, uint96 maxReward) private {
         makerOrder = order;
         vm.prank(order.maker);
         (address escrowAddress, bytes32 orderHash, NativeOrder memory terms) =
@@ -937,7 +937,7 @@ contract NativeOrderEscrowTest is Test {
         else if (field == 1) tampered.traits = MakerTraits.wrap(MakerTraits.unwrap(tampered.traits) ^ (uint256(1) << (bit % 256)));
         else if (field == 2) tampered.dataHash ^= bytes32(uint256(1) << (bit % 256));
         else if (field == 3) tampered.expiration ^= uint40(uint256(1) << (bit % 40));
-        else tampered.maxReward ^= uint128(uint256(1) << (bit % 128));
+        else tampered.maxReward ^= uint96(uint256(1) << (bit % 96));
     }
 
     function _assertInvalidOrder(NativeOrder memory tampered) private {

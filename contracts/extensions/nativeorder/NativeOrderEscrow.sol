@@ -19,7 +19,7 @@ import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 /// @dev Does not contain an EIP-712 hash, so authentication for refunds survives chain ID changes.
 /// The deposit is not a term: the program prices the order and the exact router allowance caps it.
 /// Public cancellation and rescue open at the implementation's fixed delays after `expiration`.
-/// abi.encodePacked of the fields in declaration order (105 bytes) is the ERC-1271 signature, and its
+/// abi.encodePacked of the fields in declaration order (101 bytes) is the ERC-1271 signature, and its
 /// keccak256 is the CREATE2 salt.
 /// Fields:
 /// - maker:      original maker; the only caller of cancel and rescueFunds, receives all refunds
@@ -32,7 +32,7 @@ struct NativeOrder {
     MakerTraits traits;
     bytes32 dataHash;
     uint40 expiration;
-    uint128 maxReward;
+    uint96 maxReward;
 }
 
 /// @title NativeOrderEscrow
@@ -61,8 +61,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// @param amount Rescued amount.
     event FundsRescued(address indexed token, uint256 amount);
 
-    /// @dev Length of the packed NativeOrder: 20 + 32 + 32 + 5 + 16 bytes.
-    uint256 private constant _ORDER_SIZE = 105;
+    /// @dev Length of the packed NativeOrder: 20 + 32 + 32 + 5 + 12 bytes.
+    uint256 private constant _ORDER_SIZE = 101;
 
     /// @notice Factory that deployed this implementation, creates its clones and alone calls depositAndApprove.
     address public immutable FACTORY = msg.sender;
@@ -114,7 +114,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
     /// with maker = this clone equals `orderHash`. The allowance is not read here: a closed order keeps a
     /// valid signature until expiration, but its fills revert because the router allowance is zero.
     /// @param orderHash Hash of the order the router is executing.
-    /// @param signature abi.encodePacked(maker, traits, dataHash, expiration, maxReward), exactly 105 bytes.
+    /// @param signature abi.encodePacked(maker, traits, dataHash, expiration, maxReward), exactly 101 bytes.
     /// @return magicValue `IERC1271.isValidSignature.selector` if all checks pass, otherwise zero.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != _ORDER_SIZE || !_isDeploymentChain()) return bytes4(0);
@@ -211,7 +211,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
             mstore(add(ptr, 20), calldataload(add(order, 0x20)))
             mstore(add(ptr, 52), calldataload(add(order, 0x40)))
             mstore(add(ptr, 84), shl(216, calldataload(add(order, 0x60))))
-            mstore(add(ptr, 89), shl(128, calldataload(add(order, 0x80))))
+            mstore(add(ptr, 89), shl(160, calldataload(add(order, 0x80))))
             salt := keccak256(ptr, _ORDER_SIZE)
         }
     }

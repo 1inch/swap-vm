@@ -154,7 +154,7 @@ public cancellation reward in the escrow's CREATE2 address. The deposit is not a
 prices the order, the exact router allowance caps it, and `NativeOrderCreated` reports it. Public
 cancellation and rescue open at fixed delays after expiration, set when the factory is deployed
 (`PUBLIC_CANCELLATION_DELAY` and `RESCUE_DELAY` on the escrow implementation). Its ERC-1271 signature
-is these fields packed in declaration order, 105 bytes. The escrow hashes it in place as its CREATE2
+is these fields packed in declaration order, 101 bytes. The escrow hashes it in place as its CREATE2
 salt, and it does not duplicate the program. Fills
 require the matching router-domain order hash, `block.timestamp < expiration` and a nonzero remaining
 allowance. The signature check does not read the allowance, so a closed order keeps a valid signature

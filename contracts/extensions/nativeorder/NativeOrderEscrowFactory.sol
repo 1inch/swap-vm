@@ -75,7 +75,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
     /// @return escrow The deployed and funded clone.
     /// @return filledOrderHash Hash of the filled order that takers fill and quote against.
     /// @return nativeOrder Terms committed in the escrow's address, needed for fills and cancellations.
-    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint128 maxReward)
+    function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint96 maxReward)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
     {
