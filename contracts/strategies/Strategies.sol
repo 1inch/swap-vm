@@ -116,9 +116,9 @@ library Strategies {
     ) internal pure returns (bytes memory) {
         MemoryPtr ptr = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
-            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
+            StaticBalances.sizeOf() +
             (args.sell ? InvalidateTokenOut.sizeOf() : InvalidateTokenIn.sizeOf()) +
-            LimitSwap.sizeOf(args.direction)
+            LimitSwap.sizeOf()
         );
 
         for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
@@ -139,9 +139,9 @@ library Strategies {
     ) internal pure returns (bytes memory) {
         MemoryPtr ptr = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
-            FeeFlatIn.sizeOf(args.feeBps) +
-            (args.decayPeriod != 0 ? Decay.sizeOf(args.decayPeriod) : 0) +
-            XYCConcentrateSwap.sizeOf(args.sqrtPriceMin, args.sqrtPriceMax)
+            FeeFlatIn.sizeOf() +
+            (args.decayPeriod != 0 ? Decay.sizeOf() : 0) +
+            XYCConcentrateSwap.sizeOf()
         );
 
         for (uint256 i; i < prefix.length; i++) ptr = ptr.push(prefix[i]);
@@ -220,19 +220,19 @@ library Strategies {
 
         MemoryPtr ptrStart = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
-            StaticBalances.sizeOf(args.balanceA, args.balanceB) +
-            (hasWhitelist && args.whitelistCoequal ? WhitelistCoequal.sizeOf(0, args.whitelistResolvers) : 0) +
-            (hasWhitelist && !args.whitelistCoequal ? WhitelistSequential.sizeOf(args.whitelistStartTime, 0, args.whitelistResolvers, args.whitelistDelays) : 0) +
-            (hasGate ? OnlyTakerTokenBalanceNonZero.sizeOf(args.accessToken) : 0) +
-            (hasFees ? FeeProtocol.sizeOf(true, args.feeReceivers, noProviders) : 0) +
-            (hasWhitelist ? Jump.sizeOf(0) : 0) +
-            (hasWhitelist && hasFees ? FeeProtocol.sizeOf(true, whitelistedReceivers, noProviders) : 0) +
-            (hasSurplus ? FeeProtocolSurplus.sizeOf(true, args.surplusEstimation) : 0) +
-            (hasAuction ? PiecewiseLinearSurchargeBalanceIn.sizeOf(args.auctionStartTime, args.auctionDurations, args.auctionScales) : 0) +
-            (hasOracle ? OraclePriceAdjusterBalanceIn.sizeOf(args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds) : 0) +
-            (hasGasBump ? BaseFeeAdjusterBalanceIn.sizeOf(args.baseGasPrice, args.ethPrice, args.gasAmount) : 0) +
-            (args.allowMultipleFills ? InvalidateTokenOut.sizeOf() : InvalidateBit.sizeOf(args.nonce)) +
-            (args.allowPartialFills ? LimitSwap.sizeOf(args.direction) : LimitSwapFullAmount.sizeOf(args.direction))
+            StaticBalances.sizeOf() +
+            (hasWhitelist && args.whitelistCoequal ? WhitelistCoequal.sizeOf(args.whitelistResolvers.length) : 0) +
+            (hasWhitelist && !args.whitelistCoequal ? WhitelistSequential.sizeOf(args.whitelistResolvers.length, args.whitelistDelays.length) : 0) +
+            (hasGate ? OnlyTakerTokenBalanceNonZero.sizeOf() : 0) +
+            (hasFees ? FeeProtocol.sizeOf(args.feeReceivers.length, noProviders.length) : 0) +
+            (hasWhitelist ? Jump.sizeOf() : 0) +
+            (hasWhitelist && hasFees ? FeeProtocol.sizeOf(whitelistedReceivers.length, noProviders.length) : 0) +
+            (hasSurplus ? FeeProtocolSurplus.sizeOf() : 0) +
+            (hasAuction ? PiecewiseLinearSurchargeBalanceIn.sizeOf(args.auctionDurations.length, args.auctionScales.length) : 0) +
+            (hasOracle ? OraclePriceAdjusterBalanceIn.sizeOf(args.oracleFeeds.length) : 0) +
+            (hasGasBump ? BaseFeeAdjusterBalanceIn.sizeOf() : 0) +
+            (args.allowMultipleFills ? InvalidateTokenOut.sizeOf() : InvalidateBit.sizeOf()) +
+            (args.allowPartialFills ? LimitSwap.sizeOf() : LimitSwapFullAmount.sizeOf())
         );
 
         MemoryPtr ptr = ptrStart;

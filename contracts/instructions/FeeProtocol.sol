@@ -53,12 +53,12 @@ library FeeProtocol {
         bool takeSurplusFee;
     }
 
-    function sizeOf(bool, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + receivers.length * (1 + 20 + 6) + providers.length * (1 + 20);
+    function sizeOf(uint256 receiversLen, uint256 providersLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + receiversLen * (1 + 20 + 6) + providersLen * (1 + 20);
     }
 
     function build(bool isTokenIn, ReceiverConfig[] memory receivers, ProviderConfig[] memory providers) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, receivers, providers)), isTokenIn, receivers, providers).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(receivers.length, providers.length)), isTokenIn, receivers, providers).resolve();
     }
 
     function build(
@@ -205,12 +205,12 @@ library FeeProtocolSurplus {
 
     Opcode constant opcode = Opcode.FeeProtocolSurplus;
 
-    function sizeOf(bool, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 1 + 32;
     }
 
     function build(bool isTokenIn, uint256 estimated) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(isTokenIn, estimated)), isTokenIn, estimated).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), isTokenIn, estimated).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool isTokenIn, uint256 estimated) internal pure returns (MemoryPtr ptr) {

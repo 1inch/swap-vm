@@ -21,12 +21,12 @@ library Jump {
 
     Opcode constant opcode = Opcode.Jump;
 
-    function sizeOf(uint16) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 2;
     }
 
     function build(uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(nextPC)), nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -59,17 +59,17 @@ library JumpIfDirection {
 
     Opcode constant opcode = Opcode.JumpIfDirection;
 
-    function sizeOf(bool, uint16) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 1 + 2;
     }
 
     function build(address tokenIn, address tokenOut, uint16 nextPC) internal pure returns (bytes memory) {
         bool direction = tokenIn < tokenOut;
-        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction, nextPC).resolve();
     }
 
     function build(bool direction, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(direction, nextPC)), direction, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), direction, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, bool direction, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -106,12 +106,12 @@ library JumpIfTokenIn {
 
     Opcode constant opcode = Opcode.JumpIfTokenIn;
 
-    function sizeOf(address, uint16) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 2;
     }
 
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {
@@ -147,12 +147,12 @@ library JumpIfTokenOut {
 
     Opcode constant opcode = Opcode.JumpIfTokenOut;
 
-    function sizeOf(address, uint16) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 2;
     }
 
     function build(address token, uint16 nextPC) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, nextPC)), token, nextPC).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, nextPC).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint16 nextPC) internal pure returns (MemoryPtr ptr) {

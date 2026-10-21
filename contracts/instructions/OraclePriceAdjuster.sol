@@ -49,8 +49,8 @@ library OraclePriceAdjusterBalanceIn {
 
     Opcode constant opcode = Opcode.OraclePriceAdjusterBalanceIn;
 
-    function sizeOf(uint160, uint8, uint8, Feed[] memory feeds) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 1 + feeds.length * FEED_SIZE;
+    function sizeOf(uint256 feedsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 1 + feedsLen * FEED_SIZE;
     }
 
     function build(
@@ -59,10 +59,7 @@ library OraclePriceAdjusterBalanceIn {
         uint8 tokenOutDecimals,
         Feed[] memory feeds
     ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)),
-            marketValue, tokenInDecimals, tokenOutDecimals, feeds
-        ).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(feeds.length)), marketValue, tokenInDecimals, tokenOutDecimals, feeds).resolve();
     }
 
     function build(
@@ -167,8 +164,8 @@ library OraclePriceAdjusterBalanceOut {
 
     Opcode constant opcode = Opcode.OraclePriceAdjusterBalanceOut;
 
-    function sizeOf(uint160, uint8, uint8, Feed[] memory feeds) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 20 + 1 + feeds.length * FEED_SIZE;
+    function sizeOf(uint256 feedsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 20 + 1 + feedsLen * FEED_SIZE;
     }
 
     function build(
@@ -177,10 +174,7 @@ library OraclePriceAdjusterBalanceOut {
         uint8 tokenOutDecimals,
         Feed[] memory feeds
     ) internal pure returns (bytes memory) {
-        return build(
-            MemoryPtrLib.alloc(sizeOf(marketValue, tokenInDecimals, tokenOutDecimals, feeds)),
-            marketValue, tokenInDecimals, tokenOutDecimals, feeds
-        ).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(feeds.length)), marketValue, tokenInDecimals, tokenOutDecimals, feeds).resolve();
     }
 
     function build(

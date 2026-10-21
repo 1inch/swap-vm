@@ -98,7 +98,7 @@ contract StrategiesFusionTest is Test {
         bytes memory publicFees = FeeProtocol.build(true, args.feeReceivers, noProviders);
         bytes memory whitelistedFees = FeeProtocol.build(true, _receivers(0.0025e7, 0.01e7, 0.1e7), noProviders);
 
-        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf(0));
+        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf());
         uint16 commonPC = whitelistedPC + uint16(whitelistedFees.length);
 
         assertEq(program, bytes.concat(
@@ -131,7 +131,7 @@ contract StrategiesFusionTest is Test {
         bytes memory publicFees = FeeProtocol.build(true, args.feeReceivers, noProviders);
         bytes memory whitelistedFees = FeeProtocol.build(true, _receivers(0.0025e7, 0.01e7, 0.1e7), noProviders);
 
-        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf(0));
+        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf());
         uint16 commonPC = whitelistedPC + uint16(whitelistedFees.length);
 
         assertEq(program, bytes.concat(
@@ -160,7 +160,7 @@ contract StrategiesFusionTest is Test {
         bytes memory whitelist = WhitelistSequential.build(START, 0, args.whitelistResolvers, args.whitelistDelays);
 
         // Nothing on either branch: whitelisted resolvers jump over the public jump, which jumps over nothing
-        uint16 whitelistedPC = uint16(head.length + whitelist.length + Jump.sizeOf(0));
+        uint16 whitelistedPC = uint16(head.length + whitelist.length + Jump.sizeOf());
 
         assertEq(this.fusionOrder(new bytes[](0), args), bytes.concat(
             head,

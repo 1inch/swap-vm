@@ -21,12 +21,12 @@ library StaticBalances {
 
     Opcode constant opcode = Opcode.StaticBalances;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 32 + 32;
     }
 
     function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), balanceA, balanceB).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {
@@ -62,12 +62,12 @@ library DynamicBalances {
 
     Opcode constant opcode = Opcode.DynamicBalances;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 32 + 32;
     }
 
     function build(uint256 balanceA, uint256 balanceB) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(balanceA, balanceB)), balanceA, balanceB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), balanceA, balanceB).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 balanceA, uint256 balanceB) internal pure returns (MemoryPtr ptr) {

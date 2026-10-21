@@ -32,12 +32,12 @@ library Decay {
 
     error DecayPeriodMustBeNonZero();
 
-    function sizeOf(uint16) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 2;
     }
 
     function build(uint16 period) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(period)), period).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), period).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint16 period) internal pure returns (MemoryPtr ptr) {
