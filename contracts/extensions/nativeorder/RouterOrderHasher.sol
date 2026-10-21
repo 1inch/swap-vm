@@ -47,6 +47,15 @@ abstract contract RouterOrderHasher is IRouterOrderHasher {
         return MessageHashUtils.toTypedDataHash(_routerDomainSeparator(), structHash);
     }
 
+    /// @dev Matches `ROUTER.hash` only on the deployment chain, so order hashes from a fork never match.
+    function _hashOrderOnDeploymentChain(address maker, MakerTraits traits, bytes32 dataHash)
+        internal view
+        returns (bytes32)
+    {
+        bytes32 structHash = keccak256(abi.encode(_ORDER_TYPEHASH, maker, traits, dataHash));
+        return MessageHashUtils.toTypedDataHash(_CACHED_DOMAIN_SEPARATOR, structHash);
+    }
+
     /// @dev False on a fork with a new chain ID: immutables keep the deployment one.
     function _isDeploymentChain() internal view returns (bool) {
         return block.chainid == _CACHED_CHAIN_ID;

@@ -613,7 +613,8 @@ contract NativeOrderEscrowTest is Test {
         filledOrderHash = router.hash(filledOrder);
         assertTrue(filledOrderHash != oldHash);
         assertEq(factory.addressOfEscrow(nativeOrder), address(escrow));
-        assertEq(escrow.isValidSignature(oldHash, _signature()), bytes4(0));
+        // Signatures only cover the deployment-chain hash, which the forked router never computes.
+        assertEq(escrow.isValidSignature(oldHash, _signature()), ERC1271_MAGIC);
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), bytes4(0));
         bytes memory signature = _signature();
         _expectBadSignature(signature);

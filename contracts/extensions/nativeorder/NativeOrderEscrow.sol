@@ -65,11 +65,11 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderE
 
     /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
-        if (signature.length != NativeOrderLib.SIZE || !_isDeploymentChain()) return bytes4(0);
+        if (signature.length != NativeOrderLib.SIZE) return bytes4(0);
         NativeOrder calldata order = NativeOrderLib.decode(signature);
         if (
             !_isCommitted(order.salt()) || block.timestamp >= order.expiration() ||
-            _hashOrder(address(this), order.traits(), order.dataHash()) != orderHash
+            _hashOrderOnDeploymentChain(address(this), order.traits(), order.dataHash()) != orderHash
         ) return bytes4(0);
         return IERC1271.isValidSignature.selector;
     }
