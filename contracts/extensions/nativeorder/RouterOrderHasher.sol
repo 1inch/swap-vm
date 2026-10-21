@@ -9,13 +9,12 @@ import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/Mes
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
+import { IRouterOrderHasher } from "./interfaces/IRouterOrderHasher.sol";
 
 /// @title RouterOrderHasher
 /// @notice Computes `ROUTER.hash(order)` locally for signature orders, from `keccak256(order.data)`.
 /// @dev Aqua orders hash differently; inheritors must reject them.
-abstract contract RouterOrderHasher {
-    error RouterOrderHashMismatch();
-
+abstract contract RouterOrderHasher is IRouterOrderHasher {
     bytes32 private constant _DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant _ORDER_TYPEHASH = keccak256("Order(address maker,uint256 traits,bytes data)");

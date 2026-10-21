@@ -13,43 +13,22 @@ import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWet
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
+import { NativeOrder, INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
-/// @notice Terms committed in the escrow's CREATE2 address.
-/// @dev Fixed-size fields only: their abi.encodePacked (101 bytes) is the signature, its keccak256 the salt.
-struct NativeOrder {
-    address maker;
-    MakerTraits traits;
-    bytes32 dataHash; // keccak256(order.data)
-    uint40 expiration; // fills are rejected from this timestamp
-    uint96 maxReward; // max native ETH paid to a public canceller
-}
-
 /// @title NativeOrderEscrow
-/// @notice Holds one native ETH sell order as WETH, without changing the SwapVM router.
 /// @dev The exact router allowance is the order state: fills spend it, cancellation zeros it for good.
 /// @custom:security-contact security@1inch.io
-contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
+contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderEscrow {
     using Clones for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-
-    error InvalidCaller();
-    error InvalidOrder();
-    error InvalidTime();
-    error OrderClosed();
-    error NativeTokenSendingFailure();
-
-    event NativeOrderCancelled(bytes32 indexed orderHash, uint256 refund, uint256 reward);
-    event FundsRescued(address indexed token, uint256 amount);
 
     uint256 private constant _ORDER_SIZE = 101; // 20 + 32 + 32 + 5 + 12
 
     address public immutable FACTORY = msg.sender;
     IWETH public immutable WETH;
-    /// @notice Seconds after expiration before publicCancel opens.
     uint256 public immutable PUBLIC_CANCELLATION_DELAY;
-    /// @notice Seconds after expiration before rescueFunds opens.
     uint256 public immutable RESCUE_DELAY;
     address private immutable _IMPLEMENTATION = address(this);
     IERC20 private immutable _ACCESS_TOKEN;
@@ -64,20 +43,22 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         RESCUE_DELAY = rescueDelay;
     }
 
+    modifier onlyFactory() {
+        require(msg.sender == FACTORY, InvalidCaller());
+        _;
+    }
+
     modifier onlyMaker(NativeOrder calldata order) {
         require(msg.sender == order.maker, InvalidCaller());
         _validateOrder(order);
         _;
     }
 
-    /// @notice Wraps the deposit and approves exactly that amount to the router; called once, by the factory.
-    function depositAndApprove() external payable {
-        require(msg.sender == FACTORY, InvalidCaller());
+    function depositAndApprove() external payable onlyFactory {
         WETH.safeDeposit(msg.value);
         WETH.forceApprove(address(ROUTER), msg.value);
     }
 
-    /// @notice ERC-1271 check: `signature` is the packed NativeOrder this clone was created with.
     /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
     function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != _ORDER_SIZE || !_isDeploymentChain()) return bytes4(0);
@@ -100,13 +81,10 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         return IERC1271.isValidSignature.selector;
     }
 
-    /// @notice Closes the order for good, sending all WETH and ETH to the maker; repeatable to sweep donations.
     function cancel(NativeOrder calldata order) external onlyMaker(order) {
         _cancel(order, 0);
     }
 
-    /// @notice After PUBLIC_CANCELLATION_DELAY, an access-token holder may close the order for a reward.
-    /// @param rewardLimit Caller's cap; the reward is also capped by maxReward and the remaining WETH.
     function publicCancel(NativeOrder calldata order, uint256 rewardLimit) external {
         _validateOrder(order);
         require(block.timestamp >= order.expiration + PUBLIC_CANCELLATION_DELAY, InvalidTime());
@@ -119,7 +97,6 @@ contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, IERC1271 {
         _cancel(order, reward);
     }
 
-    /// @notice After RESCUE_DELAY, sends stray tokens to the maker (zero token = ETH); rescuing WETH closes the order.
     function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external onlyMaker(order) {
         require(block.timestamp >= order.expiration + RESCUE_DELAY, InvalidTime());
         if (token == address(WETH)) _closeOrder(order);

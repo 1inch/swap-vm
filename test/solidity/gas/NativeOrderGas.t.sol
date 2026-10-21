@@ -19,7 +19,8 @@ import { Deadline } from "../../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
 import { WETHMock } from "../mocks/WETHMock.sol";
 
-import { NativeOrder, NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
+import { NativeOrder } from "../../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrow.sol";
+import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
 
 /// @title NativeOrderGas

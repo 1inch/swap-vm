@@ -20,7 +20,9 @@ import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { NativeOrder, NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
+import { NativeOrder, INativeOrderEscrow } from "../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrow.sol";
+import { INativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/interfaces/INativeOrderEscrowFactory.sol";
+import { NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
@@ -131,7 +133,7 @@ contract NativeOrderEscrowTest is Test {
         assertEq(dai.balanceOf(recipient), 1200e18);
         assertEq(dai.balanceOf(maker), 0);
         vm.prank(recipient);
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.cancel(nativeOrder);
 
         uint256 makerBefore = maker.balance;
@@ -177,7 +179,7 @@ contract NativeOrderEscrowTest is Test {
     function test_DepositAndApprove_OnlyFactory() public {
         _createEscrow(_defaultProgram());
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.depositAndApprove{ value: 1 ether }();
         assertEq(weth.allowance(address(escrow), address(router)), WETH_AMOUNT);
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
@@ -200,7 +202,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_Cancel_OnlyMaker() public {
         _createEscrow(_defaultProgram());
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.cancel(nativeOrder);
     }
 
@@ -229,7 +231,7 @@ contract NativeOrderEscrowTest is Test {
         router.swap(filledOrder, 0.1 ether, _takerData(false));
         vm.warp(_publicCancelStart());
         vm.prank(resolver);
-        vm.expectRevert(NativeOrderEscrow.OrderClosed.selector);
+        vm.expectRevert(INativeOrderEscrow.OrderClosed.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         uint256 makerBefore = maker.balance;
         vm.prank(maker);
@@ -262,16 +264,16 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(_defaultProgram());
         vm.warp(_publicCancelStart() - 1);
         vm.prank(resolver);
-        vm.expectRevert(NativeOrderEscrow.InvalidTime.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidTime.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         vm.warp(_publicCancelStart());
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         // Eligibility is checked at cancellation, rather than snapshotted at creation.
         vm.prank(resolver);
         accessToken.transfer(address(this), 1);
         vm.prank(resolver);
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         accessToken.transfer(resolver, 1);
         vm.prank(resolver);
@@ -392,7 +394,7 @@ contract NativeOrderEscrowTest is Test {
         uint256 resolverBefore = resolver.balance;
         _donateWeth(WETH_AMOUNT);
         vm.prank(resolver);
-        vm.expectRevert(NativeOrderEscrow.OrderClosed.selector);
+        vm.expectRevert(INativeOrderEscrow.OrderClosed.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(resolver.balance, resolverBefore);
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
@@ -475,9 +477,9 @@ contract NativeOrderEscrowTest is Test {
     function test_Create_ZeroDepositAndOnlyMaker() public {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderZeroDeposit.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderZeroDeposit.selector);
         factory.create(order, _expiration(), MAX_REWARD);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderOnlyMakerCanCreate.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderOnlyMakerCanCreate.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
@@ -486,7 +488,7 @@ contract NativeOrderEscrowTest is Test {
         args.useAquaInsteadOfSignature = true;
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderAquaNotSupported.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderAquaNotSupported.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
@@ -495,12 +497,12 @@ contract NativeOrderEscrowTest is Test {
         args.receiver = address(0);
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
         args.receiver = address(factory);
         order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderExplicitReceiverRequired.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
@@ -519,7 +521,7 @@ contract NativeOrderEscrowTest is Test {
     function test_Create_AbsoluteTimeBounds() public {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTime.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderInvalidTime.selector);
         factory.create{ value: WETH_AMOUNT }(order, uint40(block.timestamp), MAX_REWARD);
         // Public cancellation opens a fixed delay after signatures expire.
         _createOrder(order, WETH_AMOUNT, _expiration());
@@ -540,7 +542,7 @@ contract NativeOrderEscrowTest is Test {
             else args.hasPostTransferOutHook = true;
             ISwapVM.Order memory order = MakerTraitsLib.build(args);
             vm.prank(maker);
-            vm.expectRevert(NativeOrderEscrowFactory.NativeOrderExplicitHookTargetRequired.selector);
+            vm.expectRevert(INativeOrderEscrowFactory.NativeOrderExplicitHookTargetRequired.selector);
             factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
         }
         assertEq(address(factory).balance, 0);
@@ -624,7 +626,7 @@ contract NativeOrderEscrowTest is Test {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
         vm.chainId(block.chainid + 1);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderWrongChain.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderWrongChain.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
@@ -645,10 +647,10 @@ contract NativeOrderEscrowTest is Test {
         dai.mint(address(escrow), 123e18);
         vm.warp(_rescueStart() - 1);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrow.InvalidTime.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidTime.selector);
         escrow.rescueFunds(nativeOrder, address(dai), 123e18);
         vm.warp(_rescueStart());
-        vm.expectRevert(NativeOrderEscrow.InvalidCaller.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidCaller.selector);
         escrow.rescueFunds(nativeOrder, address(dai), 123e18);
         vm.prank(maker);
         escrow.rescueFunds(nativeOrder, address(dai), 123e18);
@@ -705,7 +707,7 @@ contract NativeOrderEscrowTest is Test {
         NativeOrderReceiver receiver = _contractMaker();
         receiver.configure(escrow, nativeOrder, true, false);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrow.NativeTokenSendingFailure.selector);
+        vm.expectRevert(INativeOrderEscrow.NativeTokenSendingFailure.selector);
         escrow.cancel(nativeOrder);
         _assertCancellationRolledBack();
         receiver.configure(escrow, nativeOrder, false, false);
@@ -720,7 +722,7 @@ contract NativeOrderEscrowTest is Test {
         receiver.configure(escrow, nativeOrder, true, false);
         vm.warp(_publicCancelStart());
         vm.prank(resolver);
-        vm.expectRevert(NativeOrderEscrow.NativeTokenSendingFailure.selector);
+        vm.expectRevert(INativeOrderEscrow.NativeTokenSendingFailure.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(resolver.balance, 0);
         _assertCancellationRolledBack();
@@ -734,7 +736,7 @@ contract NativeOrderEscrowTest is Test {
         vm.warp(_publicCancelStart());
         uint256 makerBefore = maker.balance;
         vm.prank(address(receiver));
-        vm.expectRevert(NativeOrderEscrow.NativeTokenSendingFailure.selector);
+        vm.expectRevert(INativeOrderEscrow.NativeTokenSendingFailure.selector);
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(maker.balance, makerBefore);
         _assertCancellationRolledBack();
@@ -750,7 +752,7 @@ contract NativeOrderEscrowTest is Test {
         escrow.publicCancel(nativeOrder, type(uint256).max);
         assertEq(resolver.balance, reward);
         assertEq(receiver.received(), WETH_AMOUNT - reward);
-        assertEq(receiver.reentrantError(), NativeOrderEscrow.OrderClosed.selector);
+        assertEq(receiver.reentrantError(), INativeOrderEscrow.OrderClosed.selector);
         assertEq(receiver.callbacks(), 1);
         _assertClosed();
     }
@@ -787,7 +789,7 @@ contract NativeOrderEscrowTest is Test {
 
         assertEq(receiver.received(), reward);
         assertEq(maker.balance - makerBefore, WETH_AMOUNT - reward);
-        assertEq(receiver.reentrantError(), NativeOrderEscrow.OrderClosed.selector);
+        assertEq(receiver.reentrantError(), INativeOrderEscrow.OrderClosed.selector);
         assertEq(receiver.callbacks(), 1);
         _assertClosed();
     }
@@ -909,7 +911,7 @@ contract NativeOrderEscrowTest is Test {
 
     function _expectInvalidTokens(ISwapVM.Order memory order) private {
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderInvalidTokens.selector);
+        vm.expectRevert(INativeOrderEscrowFactory.NativeOrderInvalidTokens.selector);
         factory.create{ value: WETH_AMOUNT }(order, _expiration(), MAX_REWARD);
     }
 
@@ -944,12 +946,12 @@ contract NativeOrderEscrowTest is Test {
         assertTrue(factory.addressOfEscrow(tampered) != address(escrow));
         assertEq(escrow.isValidSignature(filledOrderHash, _encode(tampered)), bytes4(0));
         vm.prank(tampered.maker);
-        vm.expectRevert(NativeOrderEscrow.InvalidOrder.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidOrder.selector);
         escrow.cancel(tampered);
-        vm.expectRevert(NativeOrderEscrow.InvalidOrder.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidOrder.selector);
         escrow.publicCancel(tampered, type(uint256).max);
         vm.prank(tampered.maker);
-        vm.expectRevert(NativeOrderEscrow.InvalidOrder.selector);
+        vm.expectRevert(INativeOrderEscrow.InvalidOrder.selector);
         escrow.rescueFunds(tampered, address(weth), 1);
     }
 

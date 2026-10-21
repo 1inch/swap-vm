@@ -9,31 +9,15 @@ import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC
 
 import { ISwapVM } from "../../interfaces/ISwapVM.sol";
 import { IMakerHooks } from "../../interfaces/IMakerHooks.sol";
-import { NativeOrder, NativeOrderEscrow } from "./NativeOrderEscrow.sol";
+import { NativeOrder, INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
+import { INativeOrderEscrowFactory } from "./interfaces/INativeOrderEscrowFactory.sol";
+import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { RouterOrderHasher } from "./RouterOrderHasher.sol";
 
 /// @title NativeOrderEscrowFactory
-/// @notice Deploys and funds a deterministic WETH escrow per native ETH sell order.
 /// @custom:security-contact security@1inch.io
-contract NativeOrderEscrowFactory is RouterOrderHasher {
+contract NativeOrderEscrowFactory is RouterOrderHasher, INativeOrderEscrowFactory {
     using Clones for address;
-
-    error NativeOrderZeroDeposit();
-    error NativeOrderOnlyMakerCanCreate();
-    error NativeOrderAquaNotSupported();
-    error NativeOrderExplicitReceiverRequired();
-    error NativeOrderExplicitHookTargetRequired();
-    error NativeOrderInvalidTokens();
-    error NativeOrderInvalidTime();
-    error NativeOrderWrongChain();
-
-    event NativeOrderCreated(
-        address indexed escrow,
-        bytes32 indexed filledOrderHash,
-        NativeOrder nativeOrder,
-        uint256 amount,
-        ISwapVM.Order filledOrder
-    );
 
     IWETH public immutable WETH;
     address public immutable ESCROW_IMPLEMENTATION;
@@ -47,11 +31,6 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
         );
     }
 
-    /// @notice Escrows msg.value for `makerOrder`. Takers fill it with maker = escrow and the packed
-    /// `nativeOrder` as the signature.
-    /// @dev Only the maker may create: the deposit replaces their signature.
-    /// @param expiration Timestamp from which fills are rejected; the escrow's delays count from it.
-    /// @param maxReward Max native ETH paid to a public canceller; zero offers no reward.
     function create(ISwapVM.Order calldata makerOrder, uint40 expiration, uint96 maxReward)
         external payable
         returns (address escrow, bytes32 filledOrderHash, NativeOrder memory nativeOrder)
@@ -79,7 +58,7 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
         address receiver = makerOrder.traits.receiver(escrow);
         require(receiver != escrow && receiver != address(this), NativeOrderExplicitReceiverRequired());
         _validateHooks(makerOrder, escrow);
-        NativeOrderEscrow(payable(escrow)).depositAndApprove{ value: msg.value }();
+        INativeOrderEscrow(escrow).depositAndApprove{ value: msg.value }();
 
         filledOrderHash = _hashOrder(escrow, makerOrder.traits, nativeOrder.dataHash);
         emit NativeOrderCreated(
@@ -88,7 +67,6 @@ contract NativeOrderEscrowFactory is RouterOrderHasher {
         );
     }
 
-    /// @notice Escrow address for `order`, deployed or not.
     function addressOfEscrow(NativeOrder calldata order) external view returns (address) {
         return ESCROW_IMPLEMENTATION.predictDeterministicAddress(_salt(order));
     }
