@@ -28,27 +28,23 @@ abstract contract RouterOrderHasher is IRouterOrderHasher {
     /// @dev Reverts if a probe order hashes differently than `router.hash`.
     constructor(ISwapVM router) {
         (, string memory name, string memory version,,,,) = IERC5267(address(router)).eip712Domain();
-        bytes32 nameHash = keccak256(bytes(name));
-        bytes32 versionHash = keccak256(bytes(version));
-        bytes32 domainSeparator = _buildDomainSeparator(address(router), nameHash, versionHash);
-        bytes32 orderTypehash = router.ORDER_TYPEHASH();
+        ROUTER = router;
+        _ORDER_TYPEHASH = router.ORDER_TYPEHASH();
+        _ROUTER_NAME_HASH = keccak256(bytes(name));
+        _ROUTER_VERSION_HASH = keccak256(bytes(version));
+        _CACHED_CHAIN_ID = block.chainid;
+        _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator();
 
         ISwapVM.Order memory probe = ISwapVM.Order({ maker: address(this), traits: MakerTraits.wrap(0), data: "probe" });
-        if (
-            _typedOrderHash(orderTypehash, domainSeparator, probe.maker, probe.traits, keccak256(probe.data)) !=
-            router.hash(probe)
-        ) revert RouterOrderHashMismatch();
-
-        ROUTER = router;
-        _ORDER_TYPEHASH = orderTypehash;
-        _ROUTER_NAME_HASH = nameHash;
-        _ROUTER_VERSION_HASH = versionHash;
-        _CACHED_CHAIN_ID = block.chainid;
-        _CACHED_DOMAIN_SEPARATOR = domainSeparator;
+        require(
+            _hashOrder(probe.maker, probe.traits, keccak256(probe.data)) == router.hash(probe),
+            RouterOrderHashMismatch()
+        );
     }
 
     function _hashOrder(address maker, MakerTraits traits, bytes32 dataHash) internal view returns (bytes32) {
-        return _typedOrderHash(_ORDER_TYPEHASH, _routerDomainSeparator(), maker, traits, dataHash);
+        bytes32 structHash = keccak256(abi.encode(_ORDER_TYPEHASH, maker, traits, dataHash));
+        return MessageHashUtils.toTypedDataHash(_routerDomainSeparator(), structHash);
     }
 
     /// @dev False on a fork with a new chain ID: immutables keep the deployment one.
@@ -56,23 +52,13 @@ abstract contract RouterOrderHasher is IRouterOrderHasher {
         return block.chainid == _CACHED_CHAIN_ID;
     }
 
-    function _typedOrderHash(
-        bytes32 orderTypehash,
-        bytes32 domainSeparator,
-        address maker,
-        MakerTraits traits,
-        bytes32 dataHash
-    ) private pure returns (bytes32) {
-        bytes32 structHash = keccak256(abi.encode(orderTypehash, maker, traits, dataHash));
-        return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
-    }
-
     function _routerDomainSeparator() private view returns (bytes32) {
-        if (block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
-        return _buildDomainSeparator(address(ROUTER), _ROUTER_NAME_HASH, _ROUTER_VERSION_HASH);
+        return _isDeploymentChain() ? _CACHED_DOMAIN_SEPARATOR : _buildDomainSeparator();
     }
 
-    function _buildDomainSeparator(address router, bytes32 nameHash, bytes32 versionHash) private view returns (bytes32) {
-        return keccak256(abi.encode(_DOMAIN_TYPEHASH, nameHash, versionHash, block.chainid, router));
+    function _buildDomainSeparator() private view returns (bytes32) {
+        return keccak256(
+            abi.encode(_DOMAIN_TYPEHASH, _ROUTER_NAME_HASH, _ROUTER_VERSION_HASH, block.chainid, address(ROUTER))
+        );
     }
 }
