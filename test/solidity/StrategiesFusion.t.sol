@@ -21,13 +21,9 @@ import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/Fe
 import { InvalidateBit, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
 import { Jump } from "../../contracts/instructions/Jumps.sol";
 import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../contracts/instructions/Whitelist.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
-import {
-    Feed,
-    OraclePriceAdjusterBalanceIn,
-    OraclePriceAdjusterOraclePriceStale
-} from "../../contracts/instructions/OraclePriceAdjuster.sol";
-import { BaseFeeAdjusterBalanceIn } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { OraclePriceAdjuster } from "../../contracts/instructions/OraclePriceAdjuster.sol";
+import { BaseFeeAdjuster } from "../../contracts/instructions/BaseFeeAdjuster.sol";
 import { OnlyTakerTokenBalanceNonZero } from "../../contracts/instructions/TokenValidators.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
@@ -109,9 +105,9 @@ contract StrategiesFusionTest is Test {
             Jump.build(commonPC),
             whitelistedFees,
             FeeProtocolSurplus.build(true, ESTIMATED_IN),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
-            OraclePriceAdjusterBalanceIn.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
-            BaseFeeAdjusterBalanceIn.build(0, 3000e18, 150_000),
+            PiecewiseLinearSurcharge.build(true, START, args.auctionDurations, args.auctionScales),
+            OraclePriceAdjuster.build(true, MARKET_VALUE, 18, 18, args.oracleFeeds),
+            BaseFeeAdjuster.build(true, 0, 3000e18, 150_000),
             InvalidateTokenOut.build(),
             LimitSwap.build(true)
         ));
@@ -142,9 +138,9 @@ contract StrategiesFusionTest is Test {
             Jump.build(commonPC),
             whitelistedFees,
             FeeProtocolSurplus.build(true, ESTIMATED_IN),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
-            OraclePriceAdjusterBalanceIn.build(MARKET_VALUE, 18, 18, args.oracleFeeds),
-            BaseFeeAdjusterBalanceIn.build(0, 3000e18, 150_000),
+            PiecewiseLinearSurcharge.build(true, START, args.auctionDurations, args.auctionScales),
+            OraclePriceAdjuster.build(true, MARKET_VALUE, 18, 18, args.oracleFeeds),
+            BaseFeeAdjuster.build(true, 0, 3000e18, 150_000),
             InvalidateTokenOut.build(),
             LimitSwap.build(true)
         ));
@@ -190,7 +186,7 @@ contract StrategiesFusionTest is Test {
 
         assertEq(this.fusionOrder(new bytes[](0), args), bytes.concat(
             StaticBalances.build(BALANCE_IN, BALANCE_OUT),
-            PiecewiseLinearSurchargeBalanceIn.build(START, args.auctionDurations, args.auctionScales),
+            PiecewiseLinearSurcharge.build(true, START, args.auctionDurations, args.auctionScales),
             InvalidateBit.build(7),
             LimitSwapFullAmount.build(true)
         ));
@@ -402,7 +398,7 @@ contract StrategiesFusionTest is Test {
         // Stale feed reverts
         vm.warp(START + MAX_STALENESS + 1);
         vm.expectRevert(abi.encodeWithSelector(
-            OraclePriceAdjusterOraclePriceStale.selector, START + MAX_STALENESS + 1, START, MAX_STALENESS
+            OraclePriceAdjuster.OraclePriceAdjusterOraclePriceStale.selector, START + MAX_STALENESS + 1, START, MAX_STALENESS
         ));
         swapVM.quote(order, 10e18, exactInData);
     }
@@ -729,8 +725,13 @@ contract StrategiesFusionTest is Test {
         args.oracleMarketValue = MARKET_VALUE;
         args.tokenInDecimals = 18;
         args.tokenOutDecimals = 18;
-        args.oracleFeeds = new Feed[](1);
-        args.oracleFeeds[0] = Feed({ oracleDecimals: 18, isDenominator: false, maxStaleness: MAX_STALENESS, oracle: address(oracle) });
+        args.oracleFeeds = new OraclePriceAdjuster.Feed[](1);
+        args.oracleFeeds[0] = OraclePriceAdjuster.Feed({
+            oracleDecimals: 18,
+            isDenominator: false,
+            maxStaleness: MAX_STALENESS,
+            oracle: address(oracle)
+        });
     }
 
     function _receivers(
@@ -759,7 +760,7 @@ contract StrategiesFusionTest is Test {
             oracleMarketValue: 0,
             tokenInDecimals: 0,
             tokenOutDecimals: 0,
-            oracleFeeds: new Feed[](0),
+            oracleFeeds: new OraclePriceAdjuster.Feed[](0),
             baseGasPrice: 0,
             ethPrice: 0,
             gasAmount: 0,

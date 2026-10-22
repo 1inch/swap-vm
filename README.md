@@ -60,9 +60,9 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Control      | `Stop`, `Revert`, `Salt`, `Jump`, `Extruction` (delegate registers to a maker-chosen contract) |
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
-| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearSurchargeBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
+| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuction`, `PiecewiseLinearSurcharge`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `OraclePriceAdjusterBalanceIn` / `Out` (one or two Chainlink feeds), `BaseFeeAdjuster*` (gas-aware) |
+| Rates        | `RequireMinRate`, `OraclePriceAdjuster` (one or two Chainlink feeds), `BaseFeeAdjuster` (gas-aware), `FillGridAdjuster` (adjusters select balance in/out with `adjustIn`) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
