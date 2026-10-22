@@ -34,14 +34,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     error CancelForZeroBalance();
     error ETHTransferFailed();
 
-    uint256 private constant _CANCEL_GAS_REFUND = 70_000;
-
     address private immutable _FACTORY = msg.sender;
     address private immutable _IMPLEMENTATION = address(this);
 
     address private immutable _SWAP_VM_ROUTER;
     IWETH private immutable _WETH;
     IERC20 private immutable _ACCESS_TOKEN;
+
+    uint256 private immutable _CANCEL_GAS_REFUND;
     uint256 private immutable _CANCELLATION_DELAY;
 
     modifier onlyFactory {
@@ -65,10 +65,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         _;
     }
 
-    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint24 cancelDelay) OnlyWethReceiver(address(weth)) EIP712SwapVM(swapVM) {
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay)
+        OnlyWethReceiver(address(weth))
+        EIP712SwapVM(swapVM)
+    {
         _SWAP_VM_ROUTER = swapVM;
         _WETH = weth;
         _ACCESS_TOKEN = accessToken;
+        _CANCEL_GAS_REFUND = cancelGasRefund;
         _CANCELLATION_DELAY = cancelDelay;
     }
 

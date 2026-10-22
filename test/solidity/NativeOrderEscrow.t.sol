@@ -58,7 +58,11 @@ contract NativeOrderEscrowTest is Test {
         orders = DeployCode.TraitsHelper();
         router = DeployCode.SwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
         factory = new NativeOrderFactory(
-            address(router), IWETH(address(weth)), IERC20(address(accessToken)), uint24(PUBLIC_CANCEL_DELAY)
+            address(router),
+            IWETH(address(weth)),
+            IERC20(address(accessToken)),
+            CANCEL_GAS_REFUND,
+            uint24(PUBLIC_CANCEL_DELAY)
         );
         maker = makeAddr("maker");
         resolver = makeAddr("resolver");

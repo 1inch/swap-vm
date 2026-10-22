@@ -33,6 +33,7 @@ contract NativeOrderGas is Test {
     uint32 private constant PUBLIC_CANCEL_OFFSET = 1 days + 1 hours;
     uint32 private constant PUBLIC_CANCEL_DELAY = PUBLIC_CANCEL_OFFSET - EXPIRY_OFFSET;
     uint56 private constant MAX_BASE_FEE = 10 gwei;
+    uint256 private constant CANCEL_GAS_REFUND = 70_000;
 
     LimitSwapVMRouter public swapVM;
     WETHMock public weth;
@@ -62,6 +63,7 @@ contract NativeOrderGas is Test {
             address(swapVM),
             IWETH(address(weth)),
             IERC20(address(accessToken)),
+            CANCEL_GAS_REFUND,
             uint24(PUBLIC_CANCEL_DELAY)
         );
 

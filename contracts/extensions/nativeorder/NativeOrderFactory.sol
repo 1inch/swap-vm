@@ -26,8 +26,8 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
 
     address public immutable IMPLEMENTATION;
 
-    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint24 cancelDelay) EIP712SwapVM(swapVM) Rescuable(msg.sender) {
-        IMPLEMENTATION = address(new NativeOrderEscrow(swapVM, weth, accessToken, cancelDelay));
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay) EIP712SwapVM(swapVM) Rescuable(msg.sender) {
+        IMPLEMENTATION = address(new NativeOrderEscrow(swapVM, weth, accessToken, cancelGasRefund, cancelDelay));
     }
 
     /// @dev Assume the order includes Deadline.build(expiration) and that its sell token is WETH
