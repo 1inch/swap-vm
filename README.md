@@ -245,7 +245,7 @@ Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, wh
 ## Order registry and canonical strategies
 
 - `registerOrder(order, signature)` verifies the order (signature or Aqua balances), records `announcedAt[orderHash]` and emits `OrderRegistered` — on-chain publication for indexers.
-- [`Strategies`](contracts/strategies/Strategies.sol) builds canonical bytecode from typed arguments (`buildLimitOrder`, `buildXYCConcentrateOrder`) behind an allow-listed prefix of validation-only instructions, so integrators can verify a program's shape on-chain.
+- [`Strategies`](contracts/strategies/Strategies.sol) builds canonical bytecode from typed arguments (`buildLimitOrder`, `buildXYCConcentrateOrder`, `buildFusionOrder`) behind an allow-listed prefix of validation-only instructions, so integrators can verify a program's shape on-chain.
 
 ## Core invariants
 

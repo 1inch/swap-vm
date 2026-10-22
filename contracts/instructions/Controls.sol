@@ -19,31 +19,27 @@ library Salt {
 
     Opcode constant opcode = Opcode.Salt;
 
-    function sizeOf(uint64) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 8;
-    }
-
-    function build(uint64 salt) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(salt)), salt).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, uint64 salt) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(salt, 8);
-        ptrStart.patchLength(ptr);
-    }
-
-    function sizeOf(bytes memory salt) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + salt.length;
+    function sizeOf(uint256 saltLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + saltLen;
     }
 
     function build(bytes memory salt) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(salt)), salt).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(salt.length)), salt).resolve();
+    }
+
+    function build(uint64 salt) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(8)), salt).resolve();
     }
 
     function build(MemoryPtr ptrStart, bytes memory salt) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.pushMem(salt);
+        ptrStart.patchLength(ptr);
+    }
+
+    function build(MemoryPtr ptrStart, uint64 salt) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(salt, 8);
         ptrStart.patchLength(ptr);
     }
 
@@ -59,31 +55,27 @@ library Revert {
 
     Opcode constant opcode = Opcode.Revert;
 
-    function sizeOf(bytes4) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 4;
-    }
-
-    function build(bytes4 exception) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(exception)), exception).resolve();
-    }
-
-    function build(MemoryPtr ptrStart, bytes4 exception) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(exception, 4);
-        ptrStart.patchLength(ptr);
-    }
-
-    function sizeOf(bytes memory exception) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + exception.length;
+    function sizeOf(uint256 exceptionLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + exceptionLen;
     }
 
     function build(bytes memory exception) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(exception)), exception).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(exception.length)), exception).resolve();
+    }
+
+    function build(bytes4 exception) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(4)), exception).resolve();
     }
 
     function build(MemoryPtr ptrStart, bytes memory exception) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.pushMem(exception);
+        ptrStart.patchLength(ptr);
+    }
+
+    function build(MemoryPtr ptrStart, bytes4 exception) internal pure returns (MemoryPtr ptr) {
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(exception, 4);
         ptrStart.patchLength(ptr);
     }
 
@@ -128,12 +120,12 @@ library Deadline {
 
     Opcode constant opcode = Opcode.Deadline;
 
-    function sizeOf(uint40) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 5;
     }
 
     function build(uint40 deadline) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(deadline)), deadline).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), deadline).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint40 deadline) internal pure returns (MemoryPtr ptr) {

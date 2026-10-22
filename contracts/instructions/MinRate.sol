@@ -24,12 +24,12 @@ library RequireMinRate {
 
     Opcode constant opcode = Opcode.RequireMinRate;
 
-    function sizeOf(uint64, uint64) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 8 + 8;
     }
 
     function build(uint64 rateA, uint64 rateB) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(rateA, rateB)), rateA, rateB).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), rateA, rateB).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint64 rateA, uint64 rateB) internal pure returns (MemoryPtr ptr) {

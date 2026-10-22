@@ -28,12 +28,12 @@ library XYCConcentrateSwap {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(uint256, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 32 + 32;
     }
 
     function build(uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(sqrtPriceMin, sqrtPriceMax)), sqrtPriceMin, sqrtPriceMax).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), sqrtPriceMin, sqrtPriceMax).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint256 sqrtPriceMin, uint256 sqrtPriceMax) internal pure returns (MemoryPtr ptr) {

@@ -32,12 +32,12 @@ library FillGridAdjusterBalanceIn {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + fillBps.length * 3 + adjustBps.length * 3;
+    function sizeOf(uint256 fillBpsLen, uint256 adjustBpsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + fillBpsLen * 3 + adjustBpsLen * 3;
     }
 
     function build(uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(fillBps, adjustBps)), fillBps, adjustBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(fillBps.length, adjustBps.length)), fillBps, adjustBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (MemoryPtr ptr) {
@@ -146,12 +146,12 @@ library FillGridAdjusterBalanceOut {
 
     uint256 constant BPS = 1e7;
 
-    function sizeOf(uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + fillBps.length * 3 + adjustBps.length * 3;
+    function sizeOf(uint256 fillBpsLen, uint256 adjustBpsLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + fillBpsLen * 3 + adjustBpsLen * 3;
     }
 
     function build(uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(fillBps, adjustBps)), fillBps, adjustBps).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf(fillBps.length, adjustBps.length)), fillBps, adjustBps).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint24[] memory fillBps, uint24[] memory adjustBps) internal pure returns (MemoryPtr ptr) {
