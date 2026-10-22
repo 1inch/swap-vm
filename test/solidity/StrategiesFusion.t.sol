@@ -18,12 +18,13 @@ import { Time } from "../../contracts/libs/Time.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../../contracts/instructions/LimitSwap.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
-import { InvalidateBit, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
+import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
 import { Jump } from "../../contracts/instructions/Jumps.sol";
-import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../../contracts/instructions/Whitelist.sol";
+import { PrivateOrder, WhitelistCoequal } from "../../contracts/instructions/Whitelist.sol";
 import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { OraclePriceAdjuster } from "../../contracts/instructions/OraclePriceAdjuster.sol";
 import { BaseFeeAdjuster } from "../../contracts/instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjuster } from "../../contracts/instructions/FillGridAdjuster.sol";
 import { OnlyTakerTokenBalanceNonZero } from "../../contracts/instructions/TokenValidators.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { PriceOracleMock } from "./mocks/PriceOracleMock.sol";
@@ -89,39 +90,6 @@ contract StrategiesFusionTest is Test {
             Salt.build(uint64(42)),
             StaticBalances.build(BALANCE_IN, BALANCE_OUT)
         );
-        bytes memory whitelist = WhitelistSequential.build(START, 0, args.whitelistResolvers, args.whitelistDelays);
-        bytes memory gate = OnlyTakerTokenBalanceNonZero.build(address(kyc));
-        bytes memory publicFees = FeeProtocol.build(true, args.feeReceivers, noProviders);
-        bytes memory whitelistedFees = FeeProtocol.build(true, _receivers(0.0025e7, 0.01e7, 0.1e7), noProviders);
-
-        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf());
-        uint16 commonPC = whitelistedPC + uint16(whitelistedFees.length);
-
-        assertEq(program, bytes.concat(
-            head,
-            WhitelistSequential.build(START, whitelistedPC, args.whitelistResolvers, args.whitelistDelays),
-            gate,
-            publicFees,
-            Jump.build(commonPC),
-            whitelistedFees,
-            FeeProtocolSurplus.build(true, ESTIMATED_IN),
-            PiecewiseLinearSurcharge.build(true, START, args.auctionDurations, args.auctionScales),
-            OraclePriceAdjuster.build(true, MARKET_VALUE, 18, 18, args.oracleFeeds),
-            BaseFeeAdjuster.build(true, 0, 3000e18, 150_000),
-            InvalidateTokenOut.build(),
-            LimitSwap.build(true)
-        ));
-    }
-
-    function test_StrategiesFusion_CoequalWhitelistLayout() public view {
-        Strategies.FusionOrder memory args = _fullArgs();
-        args.whitelistCoequal = true;
-        args.whitelistStartTime = 0;
-        args.whitelistDelays = new uint16[](0);
-
-        bytes memory program = this.fusionOrder(new bytes[](0), args);
-
-        bytes memory head = StaticBalances.build(BALANCE_IN, BALANCE_OUT);
         bytes memory whitelist = WhitelistCoequal.build(0, args.whitelistResolvers);
         bytes memory gate = OnlyTakerTokenBalanceNonZero.build(address(kyc));
         bytes memory publicFees = FeeProtocol.build(true, args.feeReceivers, noProviders);
@@ -146,21 +114,52 @@ contract StrategiesFusionTest is Test {
         ));
     }
 
-    function test_StrategiesFusion_WhitelistOnlyLayout() public view {
-        Strategies.FusionOrder memory args = _minimalArgs();
-        args.whitelistStartTime = START;
-        args.whitelistResolvers = dynamic([resolver1, resolver2]);
-        args.whitelistDelays = dynamic([uint16(10), 10]);
+    function test_StrategiesFusion_BuyFillGridLayout() public view {
+        Strategies.FusionOrder memory args = _fullArgs();
+        args.sell = false;
+        _setFillGrid(args);
+
+        bytes memory program = this.fusionOrder(new bytes[](0), args);
 
         bytes memory head = StaticBalances.build(BALANCE_IN, BALANCE_OUT);
-        bytes memory whitelist = WhitelistSequential.build(START, 0, args.whitelistResolvers, args.whitelistDelays);
+        bytes memory whitelist = WhitelistCoequal.build(0, args.whitelistResolvers);
+        bytes memory gate = OnlyTakerTokenBalanceNonZero.build(address(kyc));
+        bytes memory publicFees = FeeProtocol.build(false, args.feeReceivers, noProviders);
+        bytes memory whitelistedFees = FeeProtocol.build(false, _receivers(0.0025e7, 0.01e7, 0.1e7), noProviders);
+
+        uint16 whitelistedPC = uint16(head.length + whitelist.length + gate.length + publicFees.length + Jump.sizeOf());
+        uint16 commonPC = whitelistedPC + uint16(whitelistedFees.length);
+
+        assertEq(program, bytes.concat(
+            head,
+            WhitelistCoequal.build(whitelistedPC, args.whitelistResolvers),
+            gate,
+            publicFees,
+            Jump.build(commonPC),
+            whitelistedFees,
+            FeeProtocolSurplus.build(false, ESTIMATED_IN),
+            PiecewiseLinearSurcharge.build(false, START, args.auctionDurations, args.auctionScales),
+            OraclePriceAdjuster.build(false, MARKET_VALUE, 18, 18, args.oracleFeeds),
+            BaseFeeAdjuster.build(false, 0, 3000e18, 150_000),
+            InvalidateTokenIn.build(),
+            FillGridAdjuster.build(false, args.fillBps, args.adjustBps),
+            LimitSwap.build(true)
+        ));
+    }
+
+    function test_StrategiesFusion_WhitelistOnlyLayout() public view {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.whitelistResolvers = dynamic([resolver1, resolver2]);
+
+        bytes memory head = StaticBalances.build(BALANCE_IN, BALANCE_OUT);
+        bytes memory whitelist = WhitelistCoequal.build(0, args.whitelistResolvers);
 
         // Nothing on either branch: whitelisted resolvers jump over the public jump, which jumps over nothing
         uint16 whitelistedPC = uint16(head.length + whitelist.length + Jump.sizeOf());
 
         assertEq(this.fusionOrder(new bytes[](0), args), bytes.concat(
             head,
-            WhitelistSequential.build(START, whitelistedPC, args.whitelistResolvers, args.whitelistDelays),
+            WhitelistCoequal.build(whitelistedPC, args.whitelistResolvers),
             Jump.build(whitelistedPC),
             InvalidateTokenOut.build(),
             LimitSwap.build(true)
@@ -209,7 +208,6 @@ contract StrategiesFusionTest is Test {
     function test_StrategiesFusion_RevertWhitelistDiscountWithoutWhitelist() public {
         Strategies.FusionOrder memory args = _fullArgs();
         args.whitelistResolvers = new address[](0);
-        args.whitelistDelays = new uint16[](0);
 
         vm.expectRevert(Strategies.OrderInconsistent.selector);
         this.fusionOrder(_prefix(), args);
@@ -223,12 +221,14 @@ contract StrategiesFusionTest is Test {
         this.fusionOrder(_prefix(), args);
     }
 
-    function test_StrategiesFusion_RevertCoequalWhitelistWithSchedule() public {
-        Strategies.FusionOrder memory args = _fullArgs();
-        args.whitelistCoequal = true;
+    function test_StrategiesFusion_RevertBuySurplusEstimationAboveBalanceOut() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.sell = false;
+        args.feeReceivers = _receivers(0, 0.02e7, 0.1e7);
+        args.surplusEstimation = BALANCE_OUT + 1;
 
         vm.expectRevert(Strategies.OrderInconsistent.selector);
-        this.fusionOrder(_prefix(), args);
+        this.fusionOrder(new bytes[](0), args);
     }
 
     function test_StrategiesFusion_RevertOracleMarketValueWithoutFeeds() public {
@@ -272,19 +272,18 @@ contract StrategiesFusionTest is Test {
         for (uint256 i; i < prefix.length; i++) prefix[i] = PrivateOrder.build(resolver1);
 
         Strategies.FusionOrder memory args = _minimalArgs();
-        args.whitelistCoequal = true;
         args.whitelistResolvers = dynamic([resolver1]);
 
         vm.expectPartialRevert(SafeCast.SafeCastOverflowedUintDowncast.selector);
         this.fusionOrder(prefix, args);
     }
 
-    function test_StrategiesFusion_RevertWhitelistLengthMismatch() public {
-        Strategies.FusionOrder memory args = _fullArgs();
-        args.whitelistDelays = dynamic([uint16(10)]);
+    function test_StrategiesFusion_RevertFillGridLengthMismatch() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.fillBps = dynamic([uint24(0)]);
 
-        vm.expectRevert(WhitelistSequential.WhitelistSequentialLengthMismatch.selector);
-        this.fusionOrder(_prefix(), args);
+        vm.expectRevert(FillGridAdjuster.FillGridAdjusterMismatchInputLengths.selector);
+        this.fusionOrder(new bytes[](0), args);
     }
 
     // Execution tests
@@ -293,20 +292,11 @@ contract StrategiesFusionTest is Test {
         ISwapVM.Order memory order = _order(this.fusionOrder(_prefix(), _fullArgs()));
         bytes memory exactInData = _takerData(order);
 
-        // Nobody fills before the whitelist start
-        vm.warp(START - 1);
-        vm.prank(resolver1);
-        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
-        swapVM.quote(order, 150e18, exactInData);
-
-        // First resolver is exclusive at start
+        // Public path requires the access token; resolvers skip it immediately
         vm.warp(START);
-        vm.prank(resolver2);
-        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
-        swapVM.quote(order, 150e18, exactInData);
-        vm.prank(alien);
-        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
-        swapVM.quote(order, 150e18, exactInData);
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
+        swapVM.quote(order, 1e18, exactInData);
 
         // Auction start: +50% surcharge, 150e18 in buys the whole 200e18 out before the halved 1.25% flat fee
         tokenA.mint(resolver1, 150e18);
@@ -324,27 +314,13 @@ contract StrategiesFusionTest is Test {
         assertEq(tokenA.balanceOf(maker), 145.1625e18, "Maker receives input minus fees");
         assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 197.5e18);
 
-        // Second resolver unlocks after the first delay, public still locked
-        vm.warp(START + 10);
-        vm.prank(resolver2);
-        (, uint256 resolver2Out,) = swapVM.quote(order, 1e18, exactInData);
-        assertGt(resolver2Out, 0);
-        vm.prank(alien);
-        vm.expectRevert(WhitelistSequential.WhitelistSequentialTimeViolation.selector);
-        swapVM.quote(order, 1e18, exactInData);
-
-        // Public path: access token required, full fees charged
-        vm.warp(START + 20);
-        vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
-        swapVM.quote(order, 1e18, exactInData);
-
+        // Public pays full fees while every listed resolver receives the discount
         vm.prank(alien);
         (, uint256 alienOut,) = swapVM.quote(order, 1e18, exactInData);
-        vm.prank(resolver1);
-        (, uint256 resolver1Out,) = swapVM.quote(order, 1e18, exactInData);
+        vm.prank(resolver2);
+        (, uint256 resolverOut,) = swapVM.quote(order, 1e18, exactInData);
         assertGt(alienOut, 0);
-        assertGt(resolver1Out, alienOut, "Whitelisted resolvers pay lower fees");
+        assertGt(resolverOut, alienOut, "Whitelisted resolvers pay lower fees");
     }
 
     function test_StrategiesFusion_AuctionDecaysToBalanceIn() public {
@@ -403,27 +379,107 @@ contract StrategiesFusionTest is Test {
         swapVM.quote(order, 10e18, exactInData);
     }
 
-    function test_StrategiesFusion_CoequalWhitelistExecution() public {
-        Strategies.FusionOrder memory args = _fullArgs();
-        args.whitelistCoequal = true;
-        args.whitelistStartTime = 0;
-        args.whitelistDelays = new uint16[](0);
+    function test_StrategiesFusion_BuyMultipleFillsBoundInput() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.sell = false;
 
-        ISwapVM.Order memory order = _order(this.fusionOrder(_prefix(), args));
+        ISwapVM.Order memory order = _order(this.fusionOrder(new bytes[](0), args));
         bytes memory exactInData = _takerData(order);
 
-        // No exclusivity: every resolver and the public fill at once, the public still needs the access token
-        vm.warp(START);
-        vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
-        swapVM.quote(order, 1e18, exactInData);
+        tokenA.mint(resolver1, 1e30);
+        vm.startPrank(resolver1);
+        tokenA.approve(address(swapVM), type(uint256).max);
 
-        vm.prank(alien);
-        (, uint256 alienOut,) = swapVM.quote(order, 1e18, exactInData);
-        vm.prank(resolver2);
-        (, uint256 resolver2Out,) = swapVM.quote(order, 1e18, exactInData);
-        assertGt(alienOut, 0);
-        assertGt(resolver2Out, alienOut, "Whitelisted resolvers pay lower fees");
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 75e18, exactInData);
+        assertEq(amountIn, 75e18);
+        assertEq(amountOut, 150e18);
+
+        (amountIn, amountOut,) = swapVM.swap(order, 50e18, exactInData);
+        assertEq(amountIn, 25e18, "Clamped to the remaining maker buy amount");
+        assertEq(amountOut, 50e18);
+        vm.stopPrank();
+
+        assertEq(swapVM.tokenInInvalidators(maker, swapVM.hash(order), address(tokenA)), BALANCE_IN);
+        assertEq(tokenA.balanceOf(maker), BALANCE_IN);
+        assertEq(tokenB.balanceOf(resolver1), BALANCE_OUT);
+    }
+
+    function test_StrategiesFusion_BuyFeesAndSurplusPaidInTokenOut() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.sell = false;
+        _setAuction(args);
+        args.feeReceivers = _receivers(0, 0.1e7, 0.2e7);
+        args.surplusEstimation = BALANCE_OUT;
+
+        ISwapVM.Order memory order = _order(this.fusionOrder(new bytes[](0), args));
+        bytes memory exactInData = _takerData(order);
+
+        vm.warp(START);
+        tokenA.mint(resolver1, 50e18);
+        vm.startPrank(resolver1);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 50e18, exactInData);
+        vm.stopPrank();
+
+        // +50% maker-price improvement: 50e18 in has 66.66e18 gross out.
+        // The taker receives gross minus 10%; protocol also receives 20% of the 33.33e18 saved vs estimation.
+        uint256 expectedOut = 60_000_000_000_000_000_001;
+        uint256 expectedFee = 13_333_333_333_333_333_332;
+        assertEq(amountIn, 50e18);
+        assertEq(amountOut, expectedOut);
+        assertEq(tokenA.balanceOf(maker), 50e18);
+        assertEq(tokenB.balanceOf(resolver1), expectedOut);
+        assertEq(tokenB.balanceOf(protocol), expectedFee);
+        assertEq(tokenB.balanceOf(maker), 1e30 - expectedOut - expectedFee);
+    }
+
+    function test_StrategiesFusion_BuyAuctionOracleAndGasAdjustSpend() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.sell = false;
+        _setAuction(args);
+        _setOracle(args);
+        args.oracleMarketValue = uint160(BALANCE_OUT);
+        _setGasBump(args);
+
+        ISwapVM.Order memory order = _order(this.fusionOrder(new bytes[](0), args));
+        bytes memory exactInData = _takerData(order);
+
+        vm.warp(START);
+        (, uint256 amountOut,) = swapVM.quote(order, 10e18, exactInData);
+        assertEq(amountOut, 13_333_333_333_333_333_333, "Auction improves maker buy price by 50%");
+
+        oracle.setRoundData(ORACLE_PRICE * 6 / 5, START);
+        (, amountOut,) = swapVM.quote(order, 10e18, exactInData);
+        assertEq(amountOut, 10e18, "Token out appreciation further reduces maker spend");
+
+        oracle.setRoundData(ORACLE_PRICE, START);
+        vm.fee(10 gwei);
+        (, amountOut,) = swapVM.quote(order, 10e18, exactInData);
+        assertEq(amountOut, 13_783_333_333_333_333_333, "Gas cost increases maker spend within surcharge");
+    }
+
+    function test_StrategiesFusion_BuyFillGridImprovesEarlyFillPrice() public {
+        Strategies.FusionOrder memory plainArgs = _minimalArgs();
+        plainArgs.sell = false;
+        _setAuction(plainArgs);
+
+        Strategies.FusionOrder memory gridArgs = _minimalArgs();
+        gridArgs.sell = false;
+        _setAuction(gridArgs);
+        _setFillGrid(gridArgs);
+
+        ISwapVM.Order memory plainOrder = _order(this.fusionOrder(new bytes[](0), plainArgs));
+        ISwapVM.Order memory gridOrder = _order(this.fusionOrder(new bytes[](0), gridArgs));
+
+        vm.warp(START);
+        (, uint256 plainPartialOut,) = swapVM.quote(plainOrder, 10e18, _takerData(plainOrder));
+        (, uint256 gridPartialOut,) = swapVM.quote(gridOrder, 10e18, _takerData(gridOrder));
+        assertLt(gridPartialOut, plainPartialOut, "Fill grid improves the maker price for an early partial fill");
+
+        (, uint256 plainFullOut,) = swapVM.quote(plainOrder, BALANCE_IN, _takerData(plainOrder));
+        (, uint256 gridFullOut,) = swapVM.quote(gridOrder, BALANCE_IN, _takerData(gridOrder));
+        assertEq(gridFullOut, plainFullOut, "Fill grid converges to the auction price at full fill");
+        assertEq(gridFullOut, 133_333_333_333_333_333_334);
     }
 
     function test_StrategiesFusion_FillOrKillExecution() public {
@@ -636,7 +692,6 @@ contract StrategiesFusionTest is Test {
 
     function test_StrategiesFusion_WhitelistedResolversPayNothing() public {
         Strategies.FusionOrder memory args = _minimalArgs();
-        args.whitelistCoequal = true;
         args.whitelistResolvers = dynamic([resolver1]);
         args.feeReceivers = _receivers(0, 0.02e7, 0);
         args.whitelistFeeDiscount = 1e7;
@@ -715,6 +770,11 @@ contract StrategiesFusionTest is Test {
         args.auctionScales = dynamic([uint24(1 << 23), 0]);
     }
 
+    function _setFillGrid(Strategies.FusionOrder memory args) internal pure {
+        args.fillBps = dynamic([uint24(0), 0.2e7, 0.4e7, 0.7e7]);
+        args.adjustBps = dynamic([uint24(0.1e7), 0.08e7, 0.05e7, 0.04e7]);
+    }
+
     function _setGasBump(Strategies.FusionOrder memory args) internal pure {
         args.baseGasPrice = 0;
         args.ethPrice = 3000e18;
@@ -751,12 +811,15 @@ contract StrategiesFusionTest is Test {
             balanceA: BALANCE_IN,
             balanceB: BALANCE_OUT,
             direction: true,
+            sell: true,
             allowPartialFills: true,
             allowMultipleFills: true,
             nonce: 0,
             auctionStartTime: 0,
             auctionDurations: new uint16[](0),
             auctionScales: new uint24[](0),
+            fillBps: new uint24[](0),
+            adjustBps: new uint24[](0),
             oracleMarketValue: 0,
             tokenInDecimals: 0,
             tokenOutDecimals: 0,
@@ -764,10 +827,7 @@ contract StrategiesFusionTest is Test {
             baseGasPrice: 0,
             ethPrice: 0,
             gasAmount: 0,
-            whitelistCoequal: false,
-            whitelistStartTime: 0,
             whitelistResolvers: new address[](0),
-            whitelistDelays: new uint16[](0),
             accessToken: address(0),
             feeReceivers: new FeeProtocol.ReceiverConfig[](0),
             whitelistFeeDiscount: 0,
@@ -775,7 +835,7 @@ contract StrategiesFusionTest is Test {
         });
     }
 
-    /// @dev Two resolvers unlocked 10 seconds apart, public after 20 seconds with access token
+    /// @dev Two coequal resolvers skip the access-token gate and receive discounted fees.
     ///   Public takers pay 0.5% to the integrator and 2% + 10% surplus to the protocol,
     ///   whitelisted resolvers pay half the flat fees and the same surplus
     ///   The oracle sits at the market value the order was priced at, so it shifts nothing
@@ -784,9 +844,7 @@ contract StrategiesFusionTest is Test {
         _setAuction(args);
         _setOracle(args);
         _setGasBump(args);
-        args.whitelistStartTime = START;
         args.whitelistResolvers = dynamic([resolver1, resolver2]);
-        args.whitelistDelays = dynamic([uint16(10), 10]);
         args.accessToken = address(kyc);
         args.feeReceivers = _receivers(0.005e7, 0.02e7, 0.1e7);
         args.whitelistFeeDiscount = 0.5e7;

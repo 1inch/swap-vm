@@ -39,7 +39,7 @@ When designing a SwapVM program, we focus on these security-critical technical p
   - Symmetry, additivity profile, monotonicity, quote/swap consistency, balance sufficiency, and strategy liveness.
   - Validate invariants with scenario tests before production deployment.
 
-**Thorough testing and audit are mandatory for every program before production use.**  
+**Thorough testing and audit are mandatory for every program before production use.**
 
 You can use these invariant suites as references for testing your programs:
 
@@ -65,8 +65,8 @@ You can use these invariant suites as references for testing your programs:
 
 **Example A - One-time limit order (bitmap invalidator):**
 
-Use case: one-shot maker quote that must execute at most once.  
-Analog: RFQ/limit-order style flow (not a pool AMM).  
+Use case: one-shot maker quote that must execute at most once.
+Analog: RFQ/limit-order style flow (not a pool AMM).
 Difference note: SwapVM composes this behavior via instruction ordering and invalidators, so execution/fee behavior can differ from traditional order protocols.
 
 ```solidity
@@ -79,8 +79,8 @@ bytes memory bytecode = bytes.concat(
 
 **Example B - Partial-fill limit order (token-out invalidator):**
 
-Use case: fixed-rate quote that can be filled over multiple swaps until exhausted.  
-Analog: partially fillable limit-order systems.  
+Use case: fixed-rate quote that can be filled over multiple swaps until exhausted.
+Analog: partially fillable limit-order systems.
 Difference note: partial-fill accounting is instruction-driven (`InvalidateTokenOut`) and can differ from external orderbook accounting models.
 
 ```solidity
@@ -114,8 +114,8 @@ bytes memory bytecode = bytes.concat(
 
 **Example A - XYCSwap AMM:**
 
-Use case: generic constant-product AMM curve for volatile pairs.  
-Analog: Uniswap V2-style `x*y=k` pool.  
+Use case: generic constant-product AMM curve for volatile pairs.
+Analog: Uniswap V2-style `x*y=k` pool.
 Difference note: SwapVM uses composable VM instructions, so fee layering and exact internal math may differ from canonical Uniswap V2 implementations.
 
 ```solidity
@@ -127,8 +127,8 @@ bytes memory bytecode = bytes.concat(
 
 **Example B - Concentrated liquidity swap (2D, price-bounded):**
 
-Use case: liquidity concentrated into a bounded price range for capital efficiency.  
-Analog: Uniswap V3-style concentrated liquidity behavior.  
+Use case: liquidity concentrated into a bounded price range for capital efficiency.
+Analog: Uniswap V3-style concentrated liquidity behavior.
 Difference note: price-range logic and fee composition are implemented through SwapVM instructions and can differ from Uniswap V3 internals/math details.
 
 ```solidity
@@ -140,8 +140,8 @@ bytes memory bytecode = bytes.concat(
 
 **Example C - PeggedSwap AMM (pegged assets):**
 
-Use case: low-slippage swapping for correlated/pegged assets.  
-Analog: Curve StableSwap-style behavior.  
+Use case: low-slippage swapping for correlated/pegged assets.
+Analog: Curve StableSwap-style behavior.
 Difference note: SwapVM pegged math and fee integration are not byte-for-byte Curve StableSwap and may produce different edge-case behavior.
 
 ```solidity
@@ -153,8 +153,8 @@ bytes memory bytecode = bytes.concat(
 
 **Example D - Decay-enhanced AMM:**
 
-Use case: AMM with virtual-balance decay for MEV/frontrun resistance.  
-Analog: Mooniswap-style virtual balances/decay behavior.  
+Use case: AMM with virtual-balance decay for MEV/frontrun resistance.
+Analog: Mooniswap-style virtual balances/decay behavior.
 Difference note: decay is composed as a dedicated instruction with SwapVM-specific interaction with fees and swap primitives.
 
 ```solidity
@@ -207,7 +207,7 @@ bytes memory bytecode = bytes.concat(
 
 **Example B - Best strategy selection (XYC vs Pegged):**
 
-Use case: evaluate multiple AMM strategy branches and execute the one that gives better output for current conditions.  
+Use case: evaluate multiple AMM strategy branches and execute the one that gives better output for current conditions.
 Reference: `test/solidity/RunLoop.t.sol` (`test_BestRouteSelector_XYC_vs_Pegged`).
 
 ```solidity

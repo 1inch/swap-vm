@@ -16,10 +16,11 @@ import { Decay } from "../instructions/Decay.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../instructions/FeeProtocol.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../instructions/Invalidators.sol";
 import { Jump } from "../instructions/Jumps.sol";
-import { PrivateOrder, WhitelistCoequal, WhitelistSequential } from "../instructions/Whitelist.sol";
+import { PrivateOrder, WhitelistCoequal } from "../instructions/Whitelist.sol";
 import { PiecewiseLinearSurcharge } from "../instructions/PiecewiseLinearSurcharge.sol";
 import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
 import { BaseFeeAdjuster } from "../instructions/BaseFeeAdjuster.sol";
+import { FillGridAdjuster } from "../instructions/FillGridAdjuster.sol";
 import {
     OnlyTakerTokenBalanceNonZero,
     OnlyTakerTokenBalanceGte,
@@ -58,12 +59,15 @@ library Strategies {
         uint256 balanceA;
         uint256 balanceB;
         bool direction;
+        bool sell;
         bool allowPartialFills;
         bool allowMultipleFills;
         uint32 nonce;
         uint40 auctionStartTime;
         uint16[] auctionDurations;
         uint24[] auctionScales;
+        uint24[] fillBps;
+        uint24[] adjustBps;
         uint160 oracleMarketValue;
         uint8 tokenInDecimals;
         uint8 tokenOutDecimals;
@@ -71,10 +75,7 @@ library Strategies {
         uint64 baseGasPrice;
         uint96 ethPrice;
         uint24 gasAmount;
-        bool whitelistCoequal;
-        uint40 whitelistStartTime;
         address[] whitelistResolvers;
-        uint16[] whitelistDelays;
         address accessToken;
         FeeProtocol.ReceiverConfig[] feeReceivers;
         uint24 whitelistFeeDiscount;
@@ -152,38 +153,30 @@ library Strategies {
         return ptr.resolve();
     }
 
-    /// @notice Fusion order: the maker sells `balanceOut` for at least `balanceIn` in one direction, the price
-    ///   starts above the limit and decays along a Dutch auction, whitelisted resolvers fill first and the public
-    ///   fills after the whitelist period, fees are charged to the taker in token in on top of the maker's amount
+    /// @notice Fusion order: the maker sells `balanceOut` for at least `balanceIn` or buys `balanceIn` for at most
+    ///   `balanceOut` in one direction, with a Dutch auction price and optional resolver benefits
     /// @dev Every feature is optional, in program order after `prefix` and `StaticBalances`:
-    ///   - Whitelist, `WhitelistSequential`: nobody fills before `whitelistStartTime`, `whitelistResolvers[0]`
-    ///     fills from there, each next one `whitelistDelays[i]` seconds later, everybody after the last delay.
-    ///     `whitelistCoequal` switches to `WhitelistCoequal`: every resolver and the public fill from the start,
-    ///     `whitelistStartTime` and `whitelistDelays` stay zero. Either way whitelisted resolvers skip the access
-    ///     token and the public fees. Empty `whitelistResolvers` disables, the order is public from the start
+    ///   - Whitelist, `WhitelistCoequal`: whitelisted resolvers skip the access token and receive the fee discount,
+    ///     while public takers use the public branch. Empty `whitelistResolvers` disables
     ///   - Access token, `OnlyTakerTokenBalanceNonZero`: the public taker holds `accessToken`. `address(0)` disables
     ///   - Fees, `FeeProtocol`: `feeReceivers` charged to the taker, whitelisted resolvers get `whitelistFeeDiscount`
     ///     (`1e7` is 100%) off every receiver's flat `feeBps`, the surplus shares stay. Empty `feeReceivers`
     ///     disables, the discount requires the whitelist
-    ///   - Surplus fee, `FeeProtocolSurplus`: receivers with `surplusBps` take their share of what the taker pays
-    ///     above `surplusEstimation`, scaled to the filled part of the order,
-    ///     `surplusEstimation >= balanceIn` so the limit price never carries a surplus fee. No surplus config
-    ///     disables and `surplusEstimation` is ignored
-    ///   - Auction, `PiecewiseLinearSurcharge`: `auctionScales[i]` surcharges the maker's receive at
-    ///     point `i`, `2 ** 24` is +100%, `auctionDurations[i]` seconds separate points `i` and `i + 1` starting
-    ///     at `auctionStartTime`, the first scale holds before the start and the last one after the end, so a
-    ///     Fusion auction ends with scale 0. Empty `auctionScales` disables, the order is a plain limit order
-    ///   - Oracle adjustment, `OraclePriceAdjuster`: shifts the maker's receive by the market move since
-    ///     the order was priced, `oracleMarketValue` is `balanceOut` valued in token in by the Chainlink-style
-    ///     `oracleFeeds` (one or two) at that time, `tokenInDecimals` / `tokenOutDecimals` align the decimals, a
-    ///     rise adds to the receive and to the surcharge, a fall consumes the surcharge left so the limit price
-    ///     holds. Empty `oracleFeeds` disables, `oracleMarketValue` stays zero
-    ///   - Gas bump, `BaseFeeAdjuster`: discounts the maker's receive by `gasAmount` units of base fee
-    ///     above `baseGasPrice` priced at `ethPrice` token in per 1e18 wei, capped by the surcharge left at that
-    ///     moment so the limit price holds. `gasAmount == 0` disables, requires the auction
+    ///   - Surplus fee, `FeeProtocolSurplus`: receivers with `surplusBps` take their share of receive above the
+    ///     sell estimation or spend below the buy estimation, scaled to the filled part of the order. The estimation
+    ///     may not cross the limit balance. No surplus config disables and `surplusEstimation` is ignored
+    ///   - Auction, `PiecewiseLinearSurcharge`: `auctionScales[i]` improves the maker price at point `i`,
+    ///     `2 ** 24` is +100%, `auctionDurations[i]` seconds separate points `i` and `i + 1` starting at
+    ///     `auctionStartTime`. Empty `auctionScales` disables
+    ///   - Oracle adjustment, `OraclePriceAdjuster`: shifts the maker price by the market move since the order was
+    ///     priced. Empty `oracleFeeds` disables, `oracleMarketValue` stays zero
+    ///   - Gas bump, `BaseFeeAdjuster`: discounts the maker price by the base-fee cost, capped by the surcharge.
+    ///     `gasAmount == 0` disables, requires the auction
     ///   - Fills: `allowPartialFills` picks `LimitSwap` over `LimitSwapFullAmount` (fill-or-kill),
-    ///     `allowMultipleFills` caps the cumulative output with `InvalidateTokenOut`, otherwise `InvalidateBit`
-    ///     with the maker-scoped `nonce` lets the order fill once
+    ///     `allowMultipleFills` caps cumulative output for sell orders or input for buy orders; otherwise
+    ///     `InvalidateBit` with the maker-scoped `nonce` lets the order fill once
+    ///   - Fill grid, `FillGridAdjuster`: `fillBps` and `adjustBps` redistribute the final auction surcharge by
+    ///     fill percentage. Empty arrays disable
     ///   Time fields with `Time.RELATIVE_TIME_FLAG` set count from the order announcement
     function buildFusionOrder(
         bytes[] calldata prefix,
@@ -193,6 +186,7 @@ library Strategies {
         bool hasFees = args.feeReceivers.length > 0;
         bool hasGate = args.accessToken != address(0);
         bool hasAuction = args.auctionScales.length > 0;
+        bool hasFillGrid = args.fillBps.length > 0 || args.adjustBps.length > 0;
         bool hasOracle = args.oracleFeeds.length > 0;
         bool hasGasBump = args.gasAmount != 0;
         bool hasSurplus;
@@ -201,14 +195,17 @@ library Strategies {
         // The whitelist discount needs the whitelist and is at most the whole flat fee
         require(hasWhitelist || args.whitelistFeeDiscount == 0, OrderInconsistent());
         require(args.whitelistFeeDiscount <= FeeProtocol.BPS, OrderInconsistent());
-        // Coequal whitelist has no schedule
-        require(!args.whitelistCoequal || (args.whitelistStartTime == 0 && args.whitelistDelays.length == 0), OrderInconsistent());
         // Oracle market value goes with the feeds
         require(hasOracle || args.oracleMarketValue == 0, OrderInconsistent());
         // Gas bump consumes the auction surcharge
         require(hasAuction || !hasGasBump, OrderInconsistent());
-        // The maker never pays surplus fee on the guaranteed minimum receive
-        require(!hasSurplus || args.surplusEstimation >= (args.direction ? args.balanceA : args.balanceB), OrderInconsistent());
+        // The limit price itself never carries a surplus fee
+        uint256 balanceIn = args.direction ? args.balanceA : args.balanceB;
+        uint256 balanceOut = args.direction ? args.balanceB : args.balanceA;
+        require(
+            !hasSurplus || (args.sell ? args.surplusEstimation >= balanceIn : args.surplusEstimation <= balanceOut),
+            OrderInconsistent()
+        );
 
         // Whitelisted resolvers pay the same receivers with the discount off the flat fee
         FeeProtocol.ProviderConfig[] memory noProviders;
@@ -221,8 +218,7 @@ library Strategies {
         MemoryPtr ptrStart = MemoryPtrLib.alloc(
             _checkPrefix(prefix) +
             StaticBalances.sizeOf() +
-            (hasWhitelist && args.whitelistCoequal ? WhitelistCoequal.sizeOf(args.whitelistResolvers.length) : 0) +
-            (hasWhitelist && !args.whitelistCoequal ? WhitelistSequential.sizeOf(args.whitelistResolvers.length, args.whitelistDelays.length) : 0) +
+            (hasWhitelist ? WhitelistCoequal.sizeOf(args.whitelistResolvers.length) : 0) +
             (hasGate ? OnlyTakerTokenBalanceNonZero.sizeOf() : 0) +
             (hasFees ? FeeProtocol.sizeOf(args.feeReceivers.length, noProviders.length) : 0) +
             (hasWhitelist ? Jump.sizeOf() : 0) +
@@ -231,7 +227,8 @@ library Strategies {
             (hasAuction ? PiecewiseLinearSurcharge.sizeOf(args.auctionDurations.length, args.auctionScales.length) : 0) +
             (hasOracle ? OraclePriceAdjuster.sizeOf(args.oracleFeeds.length) : 0) +
             (hasGasBump ? BaseFeeAdjuster.sizeOf() : 0) +
-            (args.allowMultipleFills ? InvalidateTokenOut.sizeOf() : InvalidateBit.sizeOf()) +
+            (args.allowMultipleFills ? (args.sell ? InvalidateTokenOut.sizeOf() : InvalidateTokenIn.sizeOf()) : InvalidateBit.sizeOf()) +
+            (hasFillGrid ? FillGridAdjuster.sizeOf(args.fillBps.length, args.adjustBps.length) : 0) +
             (args.allowPartialFills ? LimitSwap.sizeOf() : LimitSwapFullAmount.sizeOf())
         );
 
@@ -241,27 +238,27 @@ library Strategies {
 
         // The whitelist target is patched once the public-only sections it skips are written
         MemoryPtr ptrWhitelist = ptr;
-        if (hasWhitelist && args.whitelistCoequal) ptr = WhitelistCoequal.build(ptr, 0, args.whitelistResolvers);
-        if (hasWhitelist && !args.whitelistCoequal) ptr = WhitelistSequential.build(ptr, args.whitelistStartTime, 0, args.whitelistResolvers, args.whitelistDelays);
+        if (hasWhitelist) ptr = WhitelistCoequal.build(ptr, 0, args.whitelistResolvers);
 
         // Public branch, ends with the jump over the whitelisted one
         if (hasGate) ptr = OnlyTakerTokenBalanceNonZero.build(ptr, args.accessToken);
-        if (hasFees) ptr = FeeProtocol.build(ptr, true, args.feeReceivers, noProviders);
+        if (hasFees) ptr = FeeProtocol.build(ptr, args.sell, args.feeReceivers, noProviders);
         MemoryPtr ptrJump = ptr;
         if (hasWhitelist) ptr = Jump.build(ptr, 0);
 
         // Whitelisted branch, the jump target is patched once the whitelisted fees it skips are written
-        if (hasWhitelist && args.whitelistCoequal) WhitelistCoequal.patchNextPC(ptrWhitelist, ptr.sub(ptrStart).toUint16());
-        if (hasWhitelist && !args.whitelistCoequal) WhitelistSequential.patchNextPC(ptrWhitelist, ptr.sub(ptrStart).toUint16());
-        if (hasWhitelist && hasFees) ptr = FeeProtocol.build(ptr, true, whitelistedReceivers, noProviders);
+        if (hasWhitelist) WhitelistCoequal.patchNextPC(ptrWhitelist, ptr.sub(ptrStart).toUint16());
+        if (hasWhitelist && hasFees) ptr = FeeProtocol.build(ptr, args.sell, whitelistedReceivers, noProviders);
         if (hasWhitelist) Jump.patchNextPC(ptrJump, ptr.sub(ptrStart).toUint16());
 
-        if (hasSurplus) ptr = FeeProtocolSurplus.build(ptr, true, args.surplusEstimation);
-        if (hasAuction) ptr = PiecewiseLinearSurcharge.build(ptr, true, args.auctionStartTime, args.auctionDurations, args.auctionScales);
-        if (hasOracle) ptr = OraclePriceAdjuster.build(ptr, true, args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds);
-        if (hasGasBump) ptr = BaseFeeAdjuster.build(ptr, true, args.baseGasPrice, args.ethPrice, args.gasAmount);
-        if (args.allowMultipleFills) ptr = InvalidateTokenOut.build(ptr);
+        if (hasSurplus) ptr = FeeProtocolSurplus.build(ptr, args.sell, args.surplusEstimation);
+        if (hasAuction) ptr = PiecewiseLinearSurcharge.build(ptr, args.sell, args.auctionStartTime, args.auctionDurations, args.auctionScales);
+        if (hasOracle) ptr = OraclePriceAdjuster.build(ptr, args.sell, args.oracleMarketValue, args.tokenInDecimals, args.tokenOutDecimals, args.oracleFeeds);
+        if (hasGasBump) ptr = BaseFeeAdjuster.build(ptr, args.sell, args.baseGasPrice, args.ethPrice, args.gasAmount);
+        if (args.allowMultipleFills && args.sell) ptr = InvalidateTokenOut.build(ptr);
+        else if (args.allowMultipleFills) ptr = InvalidateTokenIn.build(ptr);
         else ptr = InvalidateBit.build(ptr, args.nonce);
+        if (hasFillGrid) ptr = FillGridAdjuster.build(ptr, args.sell, args.fillBps, args.adjustBps);
         if (args.allowPartialFills) ptr = LimitSwap.build(ptr, args.direction);
         else ptr = LimitSwapFullAmount.build(ptr, args.direction);
 

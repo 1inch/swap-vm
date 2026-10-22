@@ -54,7 +54,7 @@ library MemoryPtrLib {
         return slice;
     }
 
-    /// @dev Prefer exact resolve if possible 
+    /// @dev Prefer exact resolve if possible
     function resolveShrink(MemoryPtr ptr) internal pure returns (bytes memory, uint256 shrink) {
         (bytes memory slice, uint256 end, uint256 current) = _resolve(ptr);
         require(end >= current, MemoryPtrWriteOutOfBounds(end, current));

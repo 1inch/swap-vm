@@ -261,7 +261,7 @@ contract InvalidatorsTest is Test {
         swapVM.swap(order, 1e18, exactOutData);
     }
 
-    /** 
+    /**
      * Test token output invalidation.
      * In this test `InvalidateTokenOut` instruction located before limit swap to trigger inner
      * `ctx.runLoop()` call in `InvalidateTokenOut`.

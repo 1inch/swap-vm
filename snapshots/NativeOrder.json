@@ -1,10 +1,10 @@
 {
-  "swap_exactOut": "104162",
-  "swap_exactIn": "104139",
-  "referenceEoaSwap_exactOut": "105474",
-  "referenceEoaSwap_exactIn": "105451",
-  "quote_exactOut": "15491",
-  "quote_exactIn": "15463",
+  "swap_exactOut": "104403",
+  "swap_exactIn": "104380",
+  "referenceEoaSwap_exactOut": "105715",
+  "referenceEoaSwap_exactIn": "105692",
+  "quote_exactOut": "15732",
+  "quote_exactIn": "15704",
   "create": "138295",
   "cancelExpiredForReward": "60736",
   "cancel": "23046"

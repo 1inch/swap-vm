@@ -214,7 +214,7 @@ contract SwapVmAccounting is Test {
             flatFeeCode,
             swapCode,
             Salt.build(abi.encodePacked(vm.randomUint()))
-        ); 
+        );
     }
 
     function buildWrongProgram(
