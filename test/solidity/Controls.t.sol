@@ -156,7 +156,6 @@ contract ControlsTest is Test {
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
             OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector,
-            taker,
             address(tokenC)
         ));
         swapVM.swap(order, 1e18, takerData);
@@ -189,7 +188,6 @@ contract ControlsTest is Test {
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
             OnlyTakerTokenBalanceGte.TakerTokenBalanceIsLessThanRequired.selector,
-            taker,
             address(tokenC),
             999e18,
             minBalance
@@ -226,7 +224,6 @@ contract ControlsTest is Test {
         tokenA.mint(taker, 1e18);
         vm.expectRevert(abi.encodeWithSelector(
             OnlyTakerTokenSupplyShareGte.TakerTokenBalanceSupplyShareIsLessThanRequired.selector,
-            taker,
             address(tokenC),
             1000e18,
             tokenC.totalSupply(),

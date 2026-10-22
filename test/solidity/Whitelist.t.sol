@@ -11,7 +11,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
+import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { Time } from "../../contracts/libs/Time.sol";
 import { WhitelistCoequal, WhitelistSequential } from "../../contracts/instructions/Whitelist.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
@@ -21,7 +21,7 @@ import { Jump } from "../../contracts/instructions/Jumps.sol";
 /// @title Whitelist tests
 contract WhitelistTest is Test {
     Aqua public immutable aqua;
-    LimitSwapVMRouter public swapVM;
+    SwapVMRouter public swapVM;
     TraitsHelper internal orders;
     TokenMock public tokenA;
     TokenMock public tokenB;
@@ -47,7 +47,7 @@ contract WhitelistTest is Test {
         maker = vm.addr(makerPK);
         taker = address(this);
         orders = DeployCode.TraitsHelper();
-        swapVM = DeployCode.LimitSwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = DeployCode.SwapVMRouter(address(aqua), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");

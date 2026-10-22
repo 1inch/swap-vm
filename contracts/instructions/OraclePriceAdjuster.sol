@@ -138,24 +138,27 @@ library OraclePriceAdjuster {
 
         if (adjustIn) {
             uint256 oracleValue = ctx.swap.balanceOut.mulDiv(numerator, denominator, Math.Rounding.Ceil);
+
+            uint256 balanceDelta;
             if (oracleValue > marketValue) {
-                uint256 balanceDelta = oracleValue - marketValue;
+                unchecked { balanceDelta = oracleValue - marketValue; }
                 ctx.swap.surcharge += balanceDelta;
                 ctx.swap.balanceIn += balanceDelta;
             } else {
-                uint256 balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.surcharge);
+                unchecked { balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.surcharge); }
                 ctx.swap.surcharge -= balanceDelta;
                 ctx.swap.balanceIn -= balanceDelta;
             }
         } else {
             uint256 oracleValue = ctx.swap.balanceIn.mulDiv(denominator, numerator);
 
+            uint256 balanceDelta;
             if (oracleValue < marketValue) {
-                uint256 balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.balanceOut);
+                unchecked { balanceDelta = Math.min(marketValue - oracleValue, ctx.swap.balanceOut); }
                 ctx.swap.surcharge += balanceDelta;
                 ctx.swap.balanceOut -= balanceDelta;
             } else {
-                uint256 balanceDelta = Math.min(oracleValue - marketValue, ctx.swap.surcharge);
+                unchecked { balanceDelta = Math.min(oracleValue - marketValue, ctx.swap.surcharge); }
                 ctx.swap.surcharge -= balanceDelta;
                 ctx.swap.balanceOut += balanceDelta;
             }

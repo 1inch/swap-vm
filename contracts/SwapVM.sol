@@ -276,9 +276,10 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
                         IERC20(ctx.query.tokenIn).safeTransferFromUniversal(ctx.query.taker, address(this), ctx.swap.amountIn, takerTraits.usePermit2());
                     }
                     fee = ProtocolFeeLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
+                    uint256 amountInNet = ctx.swap.amountIn - fee;
 
-                    IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), ctx.swap.amountIn - fee);
-                    AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, ctx.swap.amountIn - fee);
+                    IERC20(ctx.query.tokenIn).forceApprove(address(AQUA), amountInNet);
+                    AQUA.push(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn, amountInNet);
                 } else {
                     require(msg.value == 0, UnexpectedMsgValue());
                     (uint256 balanceIn,) = AQUA.rawBalances(order.maker, address(this), ctx.query.orderHash, ctx.query.tokenIn);
@@ -289,11 +290,12 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
             } else if (_acceptNativePayment(ctx.swap.amountIn)) {
                 WETH.safeDeposit(ctx.swap.amountIn);
                 fee = ProtocolFeeLib.resolveInSafeTransfer(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn);
+                uint256 amountInNet = ctx.swap.amountIn - fee;
 
                 if (order.traits.shouldUnwrapWeth()) {
-                    WETH.safeWithdrawTo(ctx.swap.amountIn - fee, order.traits.receiver(order.maker));
+                    WETH.safeWithdrawTo(amountInNet, order.traits.receiver(order.maker));
                 } else {
-                    IERC20(ctx.query.tokenIn).safeTransfer(order.traits.receiver(order.maker), ctx.swap.amountIn - fee);
+                    IERC20(ctx.query.tokenIn).safeTransfer(order.traits.receiver(order.maker), amountInNet);
                 }
             } else {
                 fee = ProtocolFeeLib.resolveInSafeTransferFromTaker(ctx.fee, ctx.query.tokenIn, ctx.swap.amountIn, ctx.query.taker, takerTraits.usePermit2());

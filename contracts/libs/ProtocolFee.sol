@@ -108,10 +108,11 @@ library ProtocolFeeLib {
         uint256 surplusIn;
         uint256 estimatedIn = data.surplusEstimation;
         uint256 realIn = amountIn - totalFeeAmountMax;
-        if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
+        unchecked { if (realIn > estimatedIn) surplusIn = realIn - estimatedIn; }
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn);
+            address receiver; uint256 fee;
+            unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
             IERC20(tokenIn).safeTransfer(receiver, fee);
@@ -136,10 +137,11 @@ library ProtocolFeeLib {
         uint256 surplusIn;
         uint256 estimatedIn = data.surplusEstimation;
         uint256 realIn = amountIn - totalFeeAmountMax;
-        if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
+        unchecked { if (realIn > estimatedIn) surplusIn = realIn - estimatedIn; }
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn);
+            address receiver; uint256 fee;
+            unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
             aqua.pull(maker, orderHash, tokenIn, fee, receiver);
@@ -163,10 +165,11 @@ library ProtocolFeeLib {
         uint256 surplusIn;
         uint256 estimatedIn = data.surplusEstimation;
         uint256 realIn = amountIn - totalFeeAmountMax;
-        if (realIn > estimatedIn) surplusIn = realIn - estimatedIn;
+        unchecked { if (realIn > estimatedIn) surplusIn = realIn - estimatedIn; }
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn);
+            address receiver; uint256 fee;
+            unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
             IERC20(tokenIn).safeTransferFromUniversal(taker, receiver, fee, usePermit2);
@@ -191,10 +194,11 @@ library ProtocolFeeLib {
         uint256 surplusOut;
         uint256 estimatedOut = data.surplusEstimation;
         uint256 realOut = amountOut + totalFeeAmountMax;
-        if (estimatedOut > realOut) surplusOut = estimatedOut - realOut;
+        unchecked { if (estimatedOut > realOut) surplusOut = estimatedOut - realOut; }
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut);
+            address receiver; uint256 fee;
+            unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut); }
             totalFee += fee;
 
             aqua.pull(maker, orderHash, tokenOut, fee, receiver);
@@ -218,10 +222,11 @@ library ProtocolFeeLib {
         uint256 surplusOut;
         uint256 estimatedOut = data.surplusEstimation;
         uint256 realOut = amountOut + totalFeeAmountMax;
-        if (estimatedOut > realOut) surplusOut = estimatedOut - realOut;
+        unchecked { if (estimatedOut > realOut) surplusOut = estimatedOut - realOut; }
 
         while (count > 0) {
-            (address receiver, uint256 fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut);
+            address receiver; uint256 fee;
+            unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut); }
             totalFee += fee;
 
             IERC20(tokenOut).safeTransferFromUniversal(maker, receiver, fee, usePermit2);
