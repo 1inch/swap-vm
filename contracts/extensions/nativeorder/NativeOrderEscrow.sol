@@ -6,117 +6,129 @@ pragma solidity ^0.8.27;
 
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
+import { UniERC20 } from "@1inch/solidity-utils/contracts/libraries/UniERC20.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 
-import { ISwapVM } from "../../interfaces/ISwapVM.sol";
-import { InvalidateTokenOutExternal } from "../../instructions/Invalidators.sol";
-import { INativeOrderEscrow } from "./interfaces/INativeOrderEscrow.sol";
-import { NativeOrder, NativeOrderLib } from "./libs/NativeOrderLib.sol";
-import { RouterOrderHasher } from "./RouterOrderHasher.sol";
+import { EIP712SwapVM } from "../EIP712SwapVM.sol";
+import { NativeOrder, NativeOrderLib } from "./NativeOrderLib.sol";
 
-/// @title NativeOrderEscrow
-/// @dev The exact router allowance is the order state: fills spend it, cancellation zeros it for good.
-/// @custom:security-contact security@1inch.io
-contract NativeOrderEscrow is OnlyWethReceiver, RouterOrderHasher, INativeOrderEscrow {
+contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     using Clones for address;
+    using UniERC20 for IERC20;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
 
-    address public immutable FACTORY = msg.sender;
-    IWETH public immutable WETH;
-    uint256 public immutable PUBLIC_CANCELLATION_DELAY;
-    uint256 public immutable RESCUE_DELAY;
-    address private immutable _IMPLEMENTATION = address(this);
-    IERC20 private immutable _ACCESS_TOKEN;
+    event NativeOrderCancelled(bytes32 orderHash, uint256 balance);
+    event NativeOrderCancelledByResolver(bytes32 orderHash, uint256 balance, uint256 resolverReward);
 
-    constructor(ISwapVM router, IWETH weth, IERC20 accessToken, uint32 publicCancellationDelay, uint32 rescueDelay)
-        OnlyWethReceiver(address(weth))
-        RouterOrderHasher(router)
-    {
-        WETH = weth;
-        _ACCESS_TOKEN = accessToken;
-        PUBLIC_CANCELLATION_DELAY = publicCancellationDelay;
-        RESCUE_DELAY = rescueDelay;
-    }
+    error NotFactory(address sender, address factory);
+    error NotResolver(address resolver, address accessToken);
+    error NotMaker(address sender, address maker);
+    error BadOrder(address expected, address actual);
+    error NotExpired(uint256 currentTime, uint256 expirationTime);
+    error NotAtPublicCancel(uint256 currentTime, uint256 unlockTime);
+    error CancelForZeroBalance();
+    error ETHTransferFailed();
+
+    uint256 private constant _CANCEL_GAS_REFUND = 70_000;
+
+    address private immutable _FACTORY = msg.sender;
+    address private immutable _IMPLEMENTATION = address(this);
+
+    address private immutable _SWAP_VM_ROUTER;
+    IWETH private immutable _WETH;
+    IERC20 private immutable _ACCESS_TOKEN;
+    uint256 private immutable _CANCELLATION_DELAY;
 
     modifier onlyFactory() {
-        require(msg.sender == FACTORY, InvalidCaller());
+        require(msg.sender == _FACTORY, NotFactory(msg.sender, _FACTORY));
+        _;
+    }
+
+    modifier onlyResolver {
+        require(_ACCESS_TOKEN.balanceOf(msg.sender) == 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
         _;
     }
 
     modifier onlyMaker(NativeOrder calldata order) {
-        require(msg.sender == order.maker(), InvalidCaller());
+        require(msg.sender == order.maker(), NotMaker(msg.sender, order.maker()));
         _;
     }
 
-    modifier isValidOrder(NativeOrder calldata order) {
-        require(_isCommitted(NativeOrderLib.salt(order)), InvalidOrder());
+    modifier validOrder(NativeOrder calldata order) {
+        address clone = _calcCloneAddress(order);
+        require(clone == address(this), BadOrder(clone, address(this)));
         _;
+    }
+
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint24 cancelDelay) OnlyWethReceiver(address(weth)) EIP712SwapVM(swapVM) {
+        _SWAP_VM_ROUTER = swapVM;
+        _WETH = weth;
+        _ACCESS_TOKEN = accessToken;
+        _CANCELLATION_DELAY = cancelDelay;
     }
 
     function depositAndApprove() external payable onlyFactory {
-        WETH.safeDeposit(msg.value);
-        WETH.forceApprove(address(ROUTER), msg.value);
+        _WETH.safeDeposit(msg.value);
+        _WETH.forceApprove(address(_SWAP_VM_ROUTER), msg.value);
     }
 
-    /// @dev Skips the allowance: fills of a closed order revert on the zero allowance instead.
-    function isValidSignature(bytes32 orderHash, bytes calldata signature) external view returns (bytes4) {
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != NativeOrderLib.SIZE) return bytes4(0);
-        NativeOrder calldata order = NativeOrderLib.decode(signature);
-        if (
-            !_isCommitted(order.salt()) || block.timestamp >= order.expiration() ||
-            _hashOrderOnDeploymentChain(address(this), order.traits(), order.dataHash()) != orderHash
-        ) return bytes4(0);
-        return IERC1271.isValidSignature.selector;
+        NativeOrder calldata order = NativeOrderLib.wrap(signature);
+
+        bytes32 orderHash = _hashOrder(order.maker(), order.traits(), order.dataHash());
+        if (_calcCloneAddress(order) != address(this) || orderHash != hash) return bytes4(0);
+
+        return this.isValidSignature.selector;
     }
 
-    function cancel(NativeOrder calldata order) external isValidOrder(order) onlyMaker(order) {
-        _cancel(order, 0);
+    function cancel(NativeOrder calldata order) external validOrder(order) onlyMaker(order) {
+        uint256 balance = _cancel(order, 0);
+        emit NativeOrderCancelled(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance);
     }
 
-    function publicCancel(NativeOrder calldata order) external isValidOrder(order) {
-        require(block.timestamp >= order.expiration() + PUBLIC_CANCELLATION_DELAY, InvalidTime());
-        require(_ACCESS_TOKEN.balanceOf(msg.sender) > 0, InvalidCaller());
-        uint256 allowance = WETH.allowance(address(this), address(ROUTER));
-        require(allowance > 0, OrderClosed());
-        uint256 reward = Math.min(order.maxReward(), Math.min(allowance, WETH.balanceOf(address(this))));
-        _cancel(order, reward);
+    function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver() {
+        require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
+
+        uint256 balance = _cancel(order, 0);
+        emit NativeOrderCancelledByResolver(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance, 0);
     }
 
-    function rescueFunds(NativeOrder calldata order, address token, uint256 amount) external isValidOrder(order) onlyMaker(order) {
-        require(block.timestamp >= order.expiration() + RESCUE_DELAY, InvalidTime());
-        if (token == address(WETH)) _closeOrder(order);
-        if (token == address(0)) _ethTransfer(order.maker(), amount);
-        else IERC20(token).safeTransfer(order.maker(), amount);
-        emit FundsRescued(token, amount);
+    function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver() {
+        uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
+        require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));
+
+        uint256 reward = Math.min(block.basefee, order.maxBaseFee()) * _CANCEL_GAS_REFUND;
+        uint256 balance = _cancel(order, reward);
+        emit NativeOrderCancelledByResolver(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance, reward);
     }
 
-    function _cancel(NativeOrder calldata order, uint256 reward) private {
-        bytes32 orderHash = _closeOrder(order);
-        WETH.safeWithdraw(WETH.balanceOf(address(this)));
-        // Reward first, so a maker callback cannot rescue the ETH reserved for it.
-        _ethTransfer(msg.sender, reward);
-        uint256 refund = address(this).balance;
-        _ethTransfer(order.maker(), refund);
-        emit NativeOrderCancelled(orderHash, refund, reward);
+    function _cancel(NativeOrder calldata order, uint256 reward) private returns(uint256 balance) {
+        balance = _WETH.safeBalanceOf(address(this));
+        require(balance > 0, CancelForZeroBalance());
+
+        _WETH.safeWithdraw(balance);
+
+        if (reward > 0) {
+            balance -= reward;
+            (bool success, ) = msg.sender.call{ value: reward }("");
+            require(success, ETHTransferFailed());
+        }
+
+        {
+            (bool success, ) = order.maker().call{ value: balance }("");
+            require(success, ETHTransferFailed());
+        }
     }
 
-    function _closeOrder(NativeOrder calldata order) private returns (bytes32 orderHash) {
-        WETH.forceApprove(address(ROUTER), 0);
-        orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
-        // Makes quotes through InvalidateTokenOut fail too, not only fills.
-        InvalidateTokenOutExternal(address(ROUTER)).invalidateTokenOut(orderHash, address(WETH));
+    function _calcCloneAddress(NativeOrder calldata order) private view returns(address) {
+        return _IMPLEMENTATION.predictDeterministicAddress(order.salt(), _FACTORY);
     }
 
-    function _isCommitted(bytes32 salt) private view returns (bool) {
-        return _IMPLEMENTATION.predictDeterministicAddress(salt, FACTORY) == address(this);
-    }
-
-    function _ethTransfer(address to, uint256 amount) private {
-        if (amount == 0) return;
-        (bool success,) = to.call{ value: amount }("");
-        require(success, NativeTokenSendingFailure());
+    function rescueFunds(NativeOrder calldata order, IERC20 token, uint256 amount) external validOrder(order) onlyMaker(order) {
+        token.uniTransfer(payable(msg.sender), amount);
     }
 }
