@@ -172,14 +172,17 @@ contract NativeOrderEscrowTest is Test {
         router.swap(filledOrder, WETH_AMOUNT, takerData);
     }
 
-    function test_NativeOrder_Fill_ExpirationDoesNotReplaceProgramDeadline() public {
+    function test_NativeOrder_Fill_ExpirationInvalidatesSignatureBeforeProgramDeadline() public {
         _createEscrow(_program(uint40(block.timestamp + 2 * EXPIRY_OFFSET)));
+        bytes memory signature = _signature();
+        bytes memory takerData = _takerData(false, signature);
         vm.warp(_orderExpiration() - 1);
-        assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
-        router.swap(filledOrder, 0.5 ether, _takerData(false));
+        assertEq(escrow.isValidSignature(filledOrderHash, signature), ERC1271_MAGIC);
+        router.swap(filledOrder, 0.5 ether, takerData);
         vm.warp(_orderExpiration());
-        assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
-        router.swap(filledOrder, 0.5 ether, _takerData(false));
+        assertEq(escrow.isValidSignature(filledOrderHash, signature), bytes4(0));
+        _expectBadSignature(signature);
+        router.swap(filledOrder, 0.5 ether, takerData);
     }
 
     function test_NativeOrder_DepositAndApprove_OnlyFactory() public {
