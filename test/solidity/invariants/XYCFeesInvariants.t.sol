@@ -16,7 +16,7 @@ import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.s
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 import { XYCSwap } from "../../../contracts/instructions/XYCSwap.sol";
 
-import { ProtocolFeeProviderMock } from "../../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 import { TokenMockDecimals } from "../mocks/TokenMockDecimals.sol";

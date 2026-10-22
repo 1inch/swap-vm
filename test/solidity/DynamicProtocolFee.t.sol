@@ -19,7 +19,7 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { FeeProtocol } from "../../contracts/instructions/FeeProtocol.sol";
 
-import { ProtocolFeeProviderMock } from "../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { ProtocolFeeProviderMock } from "./mocks/ProtocolFeeProviderMock.sol";
 import { InvalidProtocolFeeProviderMock } from "./mocks/InvalidProtocolFeeProviderMock.sol";
 
 
