@@ -130,6 +130,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
         }
 
         {
+            // Maker may potentially DoS receiving their leftover
             (bool success, ) = order.maker().call{ value: balance }("");
             require(success, ETHTransferFailed());
         }
