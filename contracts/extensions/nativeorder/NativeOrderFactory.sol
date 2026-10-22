@@ -27,14 +27,15 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
 
     address public immutable IMPLEMENTATION;
 
-    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay) EIP712SwapVM(swapVM) Rescuable(msg.sender) {
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay)
+        EIP712SwapVM(swapVM)
+        Rescuable(msg.sender)
+    {
         IMPLEMENTATION = address(new NativeOrderEscrow(swapVM, weth, accessToken, cancelGasRefund, cancelDelay));
     }
 
     /// @dev Assume the order includes Deadline.build(expiration) and that its sell token is WETH
-    function create(MakerTraits traits, bytes32 dataHash, uint40 expiration, uint56 maxBaseFee) external payable
-        returns (address escrow)
-    {
+    function create(MakerTraits traits, bytes32 dataHash, uint40 expiration, uint56 maxBaseFee) external payable returns (address escrow) {
         address receiver = traits.receiver(address(0));
         require(receiver != address(0) && receiver != address(this), OrderReceiverShouldBeValid(receiver));
         require(!traits.useAquaInsteadOfSignature() && !traits.usePermit2(), NativeOrderUnsupportedFeatures());
