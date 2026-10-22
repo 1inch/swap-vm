@@ -29,6 +29,7 @@ contract NativeOrderEscrowFactory is EIP712SwapVM, Rescuable {
         IMPLEMENTATION = address(new NativeOrderEscrow(swapVM, weth, accessToken, cancelDelay));
     }
 
+    /// @dev Suppose order includes Deadline.build(expiration) and the sell tokens is WETH
     function create(MakerTraits traits, bytes32 dataHash, uint40 expiration, uint56 maxBaseFee) external payable
         returns (address escrow)
     {
