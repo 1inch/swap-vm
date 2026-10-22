@@ -17,7 +17,7 @@ import { Opcode } from "../../contracts/libs/OpcodeList.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
-import { PiecewiseLinearSurchargeBalanceIn } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
+import { PiecewiseLinearSurcharge } from "../../contracts/instructions/PiecewiseLinearSurcharge.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
 import { PatchSwapRegisters } from "../../contracts/instructions/Debug.sol";
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
@@ -245,7 +245,7 @@ contract ProtocolSurplusPartialFillTest is Test {
 
     /// @dev Fusion-style Dutch auction: maker sells a fixed 200e18 output (InvalidateTokenOut) with the
     ///   order priced at the auction maximum of 100e18 input, scaled down over time
-    ///   (PiecewiseLinearSurchargeBalanceIn, here frozen at 0.75). The maker estimates receiving the 50e18
+    ///   (PiecewiseLinearSurcharge with `adjustIn = true`, here frozen at 0.75). The maker estimates receiving the 50e18
     ///   auction minimum, so the premium above it is the surplus: each half fill pays 37.5e18 against
     ///   a 25e18 estimate share -> surplus 12.5e18, fee 1.25e18.
     function test_SurplusIn_PiecewiseLinearAuction_ProRataEstimate() public {
@@ -259,7 +259,7 @@ contract ProtocolSurplusPartialFillTest is Test {
             StaticBalances.build(50e18, 200e18),
             FeeBuilders.protocolSurplusIn(0.1e7, feeRecipient, 50e18),
             InvalidateTokenOut.build(),
-            PiecewiseLinearSurchargeBalanceIn.build(uint40(block.timestamp + 1000), durations, scales),
+            PiecewiseLinearSurcharge.build(true, uint40(block.timestamp + 1000), durations, scales),
             LimitSwap.build(address(tokenA), address(tokenB))
         ));
         bytes memory exactOutData = _makeTakerData(order, false);

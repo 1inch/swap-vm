@@ -23,12 +23,12 @@ library InvalidateBit {
 
     Opcode constant opcode = Opcode.InvalidateBit;
 
-    function sizeOf(uint32) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 4;
     }
 
     function build(uint32 bitIndex) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(bitIndex)), bitIndex).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), bitIndex).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint32 bitIndex) internal pure returns (MemoryPtr ptr) {

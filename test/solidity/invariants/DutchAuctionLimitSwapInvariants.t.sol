@@ -15,7 +15,7 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
+import { DutchAuction } from "../../../contracts/instructions/DutchAuction.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 
@@ -91,9 +91,7 @@ contract DutchAuctionLimitSwapInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            useIn ?
-                DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps) :
-                DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(useIn, startTime, decayFactor, surchargeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 

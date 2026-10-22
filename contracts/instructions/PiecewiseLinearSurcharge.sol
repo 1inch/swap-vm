@@ -12,136 +12,84 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { Time } from "../libs/Time.sol";
 
-/// @notice PiecewiseLinearSurchargeBalanceIn opcode, apply a piecewise-linear percent surcharge to the balance in (maker exact sell)
-///   Applies initial percent surcharge before start and last percent surcharge after end
-/// @dev Surcharge formula `balance * scale / 2 ** 24`
-/// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
-///   Order balance in is the "maker receive at least" value
-/// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with InvalidateTokenIn because it relies on balance in which is modified here
-library PiecewiseLinearSurchargeBalanceIn {
-    using InstructionBuilder for MemoryPtr;
-
-    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceIn;
-
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
-    }
-
-    function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint40 timestamp,
-        uint16[] memory durations,
-        uint24[] memory scales
-    ) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearSurcharge.build(ptr, timestamp, durations, scales);
-        ptrStart.patchLength(ptr);
-    }
-
-    function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 scale = PiecewiseLinearSurcharge.calcScaleNow(ctx, args);
-        uint256 surcharge = (ctx.swap.balanceIn * scale) >> 24;
-
-        ctx.swap.surcharge += surcharge;
-        ctx.swap.balanceIn += surcharge;
-    }
-
-    /// @notice Scale value external helper
-    function scaleValue(uint256 value, uint24 scale) internal pure returns (uint256 scaled) {
-        scaled = (value * scale) >> 24;
-    }
-}
-
-/// @notice PiecewiseLinearSurchargeBalanceOut opcode, apply a piecewise-linear percent surcharge to the balance out (maker exact buy)
-///   Applies initial percent surcharge before start and last percent surcharge after end
-/// @dev Surcharge formula `balance * scale / (2 ** 24 + scale)`
-/// @dev To build a Dutch auction, start with max surcharge percent and decrease it over time towards zero
-///   Order balance out is the "maker spend at most" value
-/// @dev Encoding: [uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
-/// @dev Should not be used with InvalidateTokenOut because it relies on balance out which is modified here
-library PiecewiseLinearSurchargeBalanceOut {
-    using InstructionBuilder for MemoryPtr;
-
-    Opcode constant opcode = Opcode.PiecewiseLinearSurchargeBalanceOut;
-
-    function sizeOf(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + PiecewiseLinearSurcharge.sizeOf(timestamp, durations, scales);
-    }
-
-    function build(uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(timestamp, durations, scales)), timestamp, durations, scales).resolve();
-    }
-
-    function build(
-        MemoryPtr ptrStart,
-        uint40 timestamp,
-        uint16[] memory durations,
-        uint24[] memory scales
-    ) internal pure returns (MemoryPtr ptr) {
-        ptr = ptrStart.pushHeader(opcode);
-        ptr = PiecewiseLinearSurcharge.build(ptr, timestamp, durations, scales);
-        ptrStart.patchLength(ptr);
-    }
-
-    function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 scale = PiecewiseLinearSurcharge.calcScaleNow(ctx, args);
-        uint256 surcharge = ctx.swap.balanceOut * scale / ((1 << 24) + scale);
-
-        ctx.swap.surcharge += surcharge;
-        ctx.swap.balanceOut -= surcharge;
-    }
-
-    /// @notice Scale value external helper
-    function scaleValue(uint256 value, uint24 scale) internal pure returns (uint256 scaled) {
-        scaled = (value * scale) / ((1 << 24) + scale);
-    }
-}
-
+/// @notice PiecewiseLinearSurcharge opcode, apply a piecewise-linear percent surcharge to balance in or balance out
+///   Applies the initial percent surcharge before start and the last percent surcharge after end
+/// @dev To build a Dutch auction, start with the maximum surcharge and decrease it over time towards zero
+/// @dev Encoding: [bool adjustIn, uint40 timestamp, uint24 scales[k], uint16 durations[k] ...], `durations.length == scales.length - 1`
+/// @dev Should not be used with InvalidateTokenIn for `adjustIn = true` or InvalidateTokenOut for `adjustIn = false`
 library PiecewiseLinearSurcharge {
     using CalldataParse for bytes;
+    using InstructionBuilder for MemoryPtr;
     using PiecewiseLinearSurcharge for bytes;
 
     error PiecewiseLinearSurchargeMismatchInputLengths();
     error PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece();
 
-    function sizeOf(uint40, uint16[] memory durations, uint24[] memory scales) internal pure returns (uint256) {
-        return 5 + durations.length * 2 + scales.length * 3;
+    Opcode constant opcode = Opcode.PiecewiseLinearSurcharge;
+
+    function sizeOf(uint256 durationsLen, uint256 scalesLen) internal pure returns (uint256) {
+        return InstructionBuilder.sizeOf() + 1 + 5 + durationsLen * 2 + scalesLen * 3;
     }
 
-    function build(MemoryPtr ptr, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (MemoryPtr) {
+    function build(bool adjustIn, uint40 timestamp, uint16[] memory durations, uint24[] memory scales) internal pure returns (bytes memory) {
+        return build(MemoryPtrLib.alloc(sizeOf(durations.length, scales.length)), adjustIn, timestamp, durations, scales).resolve();
+    }
+
+    function build(
+        MemoryPtr ptrStart,
+        bool adjustIn,
+        uint40 timestamp,
+        uint16[] memory durations,
+        uint24[] memory scales
+    ) internal pure returns (MemoryPtr ptr) {
         require(scales.length >= 2, PiecewiseLinearSurchargeNotEnoughPointsToBuildPiece());
         require(durations.length + 1 == scales.length, PiecewiseLinearSurchargeMismatchInputLengths());
 
-        ptr = ptr.push(timestamp, 5).push(scales[0], 3);
+        ptr = ptrStart.pushHeader(opcode);
+        ptr = ptr.push(InstructionBuilder.encodeBool(adjustIn, 0)).push(timestamp, 5).push(scales[0], 3);
         for (uint256 i; i < durations.length; i++) {
             ptr = ptr.push(durations[i], 2).push(scales[i + 1], 3);
         }
+        ptrStart.patchLength(ptr);
+    }
 
-        return ptr;
+    function parse(bytes calldata args) internal pure returns (bool adjustIn) {
+        adjustIn = args.at(0).asBool(0);
     }
 
     function parseStartTimestamp(bytes calldata args) internal pure returns (uint40 ts) {
-        ts = args.at(0).asU40();
+        // Skip [adjustIn]
+        ts = args.at(1).asU40();
     }
 
     function parsePointScale(bytes calldata args, uint256 n) internal pure returns (uint24 scale) {
-        // Skip [start, n * [scale[k], duration[k]]]
-        unchecked { scale = args.at(5 + 5 * n).asU24(); }
+        // Skip [adjustIn, start, n * [scale[k], duration[k]]]
+        unchecked { scale = args.at(1 + 5 + 5 * n).asU24(); }
     }
 
     function parseIntervalDuration(bytes calldata args, uint256 n) internal pure returns (uint16 duration) {
-        // Skip [start, scale[0], n * [duration[k], scale[k + 1]]]
-        unchecked { duration = args.at((5 + 3) + 5 * n).asU16(); }
+        // Skip [adjustIn, start, scale[0], n * [duration[k], scale[k + 1]]]
+        unchecked { duration = args.at((1 + 5 + 3) + 5 * n).asU16(); }
     }
 
     function parseIntervalsCount(bytes calldata args) internal pure returns (uint256 count) {
-        // Skip [start, scale[0]], divide by [duration, scale] length
-        unchecked { count = (args.length - (5 + 3)) / 5; }
+        // Skip [adjustIn, start, scale[0]], divide by [duration, scale] length
+        unchecked { count = (args.length - (1 + 5 + 3)) / 5; }
+    }
+
+    function exec(Context memory ctx, bytes calldata args) internal {
+        bool adjustIn = parse(args);
+        uint256 scale = calcScaleNow(ctx, args);
+
+        if (adjustIn) {
+            uint256 surcharge = (ctx.swap.balanceIn * scale) >> 24;
+            ctx.swap.surcharge += surcharge;
+            ctx.swap.balanceIn += surcharge;
+        } else {
+            uint256 surcharge = ctx.swap.balanceOut * scale / ((1 << 24) + scale);
+            ctx.swap.surcharge += surcharge;
+            ctx.swap.balanceOut -= surcharge;
+        }
     }
 
     /// @notice Find the current interval and get linear time-weighted scale, returns initial or last scale for no matching interval

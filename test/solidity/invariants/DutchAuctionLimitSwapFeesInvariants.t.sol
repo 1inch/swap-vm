@@ -13,7 +13,7 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "../helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../../contracts/instructions/LimitSwap.sol";
-import { DutchAuctionBalanceIn, DutchAuctionBalanceOut } from "../../../contracts/instructions/DutchAuction.sol";
+import { DutchAuction } from "../../../contracts/instructions/DutchAuction.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
@@ -98,7 +98,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(true, startTime, decayFactor, surchargeBps),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -117,7 +117,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(false, startTime, decayFactor, surchargeBps),
             FeeFlatOut.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -136,7 +136,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(true, startTime, decayFactor, surchargeBps),
             FeeBuilders.protocolFeeOut(feeBps, protocolFeeCollector),
             LimitSwap.build(address(tokenA), address(tokenB))
         );
@@ -157,7 +157,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceOut.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(false, startTime, decayFactor, surchargeBps),
             // Multiple fees
             FeeFlatIn.build(flatFeeBps),
             FeeBuilders.protocolFeeIn(protocolFeeBps, protocolFeeCollector),
@@ -178,7 +178,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
 
         bytes memory bytecode = bytes.concat(
             StaticBalances.build(1e30, 2e30),
-            DutchAuctionBalanceIn.build(startTime, decayFactor, surchargeBps),
+            DutchAuction.build(true, startTime, decayFactor, surchargeBps),
             FeeFlatIn.build(feeBps),
             LimitSwap.build(address(tokenA), address(tokenB))
         );

@@ -60,9 +60,9 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Control      | `Stop`, `Revert`, `Salt`, `Jump`, `Extruction` (delegate registers to a maker-chosen contract) |
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
-| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuctionBalanceIn` / `Out`, `PiecewiseLinearSurchargeBalanceIn` / `Out`, `Decay` (time-decaying virtual balances) |
+| Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuction`, `PiecewiseLinearSurcharge`, `Decay` (time-decaying virtual balances) |
 | Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
-| Rates        | `RequireMinRate`, `OraclePriceAdjusterBalanceIn` / `Out` (one or two Chainlink feeds), `BaseFeeAdjuster*` (gas-aware) |
+| Rates        | `RequireMinRate`, `OraclePriceAdjuster` (one or two Chainlink feeds), `BaseFeeAdjuster` (gas-aware), `FillGridAdjuster` (adjusters select balance in/out with `adjustIn`) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
@@ -123,6 +123,48 @@ ISwapVM.Order memory order = MakerTraitsLib.build(MakerTraitsLib.Args({
 
 bytes32 orderHash = router.hash(order); // EIP-712 digest, sign off-chain
 ```
+
+### Native ETH sell order
+
+[`NativeOrderFactory`](contracts/extensions/nativeorder/NativeOrderFactory.sol) creates a deterministic
+CREATE2 escrow for a signature order funded with ETH. The escrow wraps `msg.value` into WETH, approves
+that amount to the router, becomes the order maker and validates fills through ERC-1271.
+
+The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable
+Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271
+rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
+Enabled hooks need explicit targets because their default target would be the escrow.
+
+```solidity
+bytes32 dataHash = keccak256(makerOrder.data);
+address escrow = factory.create{ value: 0.5 ether }(
+    makerOrder.traits, dataHash, expiration, maxBaseFee
+);
+
+// address(this) must be the account that called factory.create.
+NativeOrder memory nativeOrder = NativeOrderLib.encode(
+    address(this), makerOrder.traits, dataHash, expiration, maxBaseFee
+);
+
+ISwapVM.Order memory filledOrder = makerOrder;
+filledOrder.maker = escrow;
+bytes memory signature = abi.encode(nativeOrder); // 96-byte ERC-1271 signature
+bytes32 filledOrderHash = router.hash(filledOrder);
+```
+
+`NativeOrder` commits the original maker, traits, `dataHash`, `expiration` and `maxBaseFee` in the escrow
+address. The deposit is not part of the commitment.
+
+- `cancel` lets the maker unwrap and withdraw the current WETH balance at any time.
+- `cancelExpired` lets an access-token holder return the balance from `expiration` onward.
+- `cancelExpiredForReward` opens from `expiration + cancelDelay` onward. Its reward is
+  `min(WETH balance, min(block.basefee, maxBaseFee) * cancelGasRefund)`.
+- `rescueFunds` lets the maker recover ERC-20 tokens or ETH at any time; address zero means ETH.
+
+Cancellation withdraws the current balance but does not revoke the allowance. Before `expiration`, funding
+the escrow again can make the order fillable. ERC-1271 validates the commitment, order hash and expiration,
+but not the WETH balance or allowance. `quote()` does not run ERC-1271 validation. The program controls
+quote deadlines, pricing and fill limits.
 
 ### AMM position
 
@@ -188,7 +230,7 @@ Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, wh
 ## Order registry and canonical strategies
 
 - `registerOrder(order, signature)` verifies the order (signature or Aqua balances), records `announcedAt[orderHash]` and emits `OrderRegistered` — on-chain publication for indexers.
-- [`Strategies`](contracts/strategies/Strategies.sol) builds canonical bytecode from typed arguments (`buildLimitOrder`, `buildXYCConcentrateOrder`) behind an allow-listed prefix of validation-only instructions, so integrators can verify a program's shape on-chain.
+- [`Strategies`](contracts/strategies/Strategies.sol) builds canonical bytecode from typed arguments (`buildLimitOrder`, `buildXYCConcentrateOrder`, `buildFusionOrder`) behind an allow-listed prefix of validation-only instructions, so integrators can verify a program's shape on-chain.
 
 ## Core invariants
 

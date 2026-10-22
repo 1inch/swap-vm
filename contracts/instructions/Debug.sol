@@ -211,12 +211,12 @@ library PatchSwapRegisters {
 
     Opcode constant opcode = Opcode.PatchSwapRegisters;
 
-    function sizeOf(SwapRegisters memory) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 32 + 32 + 32 + 32 + 32;
     }
 
     function build(SwapRegisters memory swap) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(swap)), swap).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), swap).resolve();
     }
 
     function build(MemoryPtr ptrStart, SwapRegisters memory swap) internal pure returns (MemoryPtr ptr) {

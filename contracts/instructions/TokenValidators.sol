@@ -24,12 +24,12 @@ library OnlyTakerTokenBalanceNonZero {
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceNonZero;
 
-    function sizeOf(address) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20;
     }
 
     function build(address token) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
@@ -62,12 +62,12 @@ library OnlyTxOriginTokenBalanceNonZero {
 
     Opcode constant opcode = Opcode.OnlyTxOriginTokenBalanceNonZero;
 
-    function sizeOf(address) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20;
     }
 
     function build(address token) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token)), token).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token) internal pure returns (MemoryPtr ptr) {
@@ -97,12 +97,12 @@ library OnlyTakerTokenBalanceGte {
 
     Opcode constant opcode = Opcode.OnlyTakerTokenBalanceGte;
 
-    function sizeOf(address, uint256) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 32;
     }
 
     function build(address token, uint256 amount) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, amount)), token, amount).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, amount).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint256 amount) internal pure returns (MemoryPtr ptr) {
@@ -138,12 +138,12 @@ library OnlyTakerTokenSupplyShareGte {
 
     uint256 constant ONE = 1e18;
 
-    function sizeOf(address, uint64) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 20 + 8;
     }
 
     function build(address token, uint64 share) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(token, share)), token, share).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), token, share).resolve();
     }
 
     function build(MemoryPtr ptrStart, address token, uint64 share) internal pure returns (MemoryPtr ptr) {

@@ -24,12 +24,12 @@ library ValidateSeriesEpoch {
 
     Opcode constant opcode = Opcode.ValidateSeriesEpoch;
 
-    function sizeOf(uint32, uint32) internal pure returns (uint256) {
+    function sizeOf() internal pure returns (uint256) {
         return InstructionBuilder.sizeOf() + 4 + 4;
     }
 
     function build(uint32 seriesId, uint32 epoch) internal pure returns (bytes memory) {
-        return build(MemoryPtrLib.alloc(sizeOf(seriesId, epoch)), seriesId, epoch).resolve();
+        return build(MemoryPtrLib.alloc(sizeOf()), seriesId, epoch).resolve();
     }
 
     function build(MemoryPtr ptrStart, uint32 seriesId, uint32 epoch) internal pure returns (MemoryPtr ptr) {

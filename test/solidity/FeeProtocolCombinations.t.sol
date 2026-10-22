@@ -17,7 +17,7 @@ import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { FeeProtocol, FeeProtocolSurplus } from "../../contracts/instructions/FeeProtocol.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 
-import { ProtocolFeeProviderMock } from "../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { ProtocolFeeProviderMock } from "./mocks/ProtocolFeeProviderMock.sol";
 import { Permit2TestLib } from "./helpers/Permit2TestLib.sol";
 
 uint256 constant BPS = 1e7;
