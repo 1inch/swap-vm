@@ -562,12 +562,13 @@ contract NativeOrderEscrowTest is Test {
         assertEq(escrow.isValidSignature(filledOrderHash, _signature()), ERC1271_MAGIC);
     }
 
-    function test_NativeOrder_Create_ElapsedExpirationCanBeCancelledImmediately() public {
+    function test_NativeOrder_Create_ElapsedExpirationRejected() public {
         ISwapVM.Order memory order = _buildOrder(_defaultProgram());
-        _createOrder(order, WETH_AMOUNT, uint40(block.timestamp));
-        vm.prank(resolver);
-        escrow.cancelExpired(nativeOrder);
-        assertEq(weth.balanceOf(address(escrow)), 0);
+        vm.prank(maker);
+        vm.expectRevert(NativeOrderFactory.ExpirationInPast.selector);
+        factory.create{ value: WETH_AMOUNT }(
+            order.traits, keccak256(order.data), uint40(block.timestamp), MAX_BASE_FEE
+        );
     }
 
     function test_NativeOrder_Create_ImplicitHooksAreFactoryAgnostic() public {

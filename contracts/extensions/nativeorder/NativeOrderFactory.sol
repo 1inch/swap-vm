@@ -23,6 +23,7 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
 
     error OrderReceiverShouldBeValid(address receiver);
     error NativeOrderUnsupportedFeatures();
+    error ExpirationInPast();
 
     address public immutable IMPLEMENTATION;
 
@@ -37,6 +38,7 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
         address receiver = traits.receiver(address(0));
         require(receiver != address(0) && receiver != address(this), OrderReceiverShouldBeValid(receiver));
         require(!traits.useAquaInsteadOfSignature() && !traits.usePermit2(), NativeOrderUnsupportedFeatures());
+        require(expiration > block.timestamp, ExpirationInPast());
 
         NativeOrder memory nativeOrder = NativeOrderLib.encode(msg.sender, traits, dataHash, expiration, maxBaseFee);
 
