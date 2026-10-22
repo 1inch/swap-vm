@@ -53,8 +53,8 @@ library NativeOrderLib {
         return uint40(order._packed >> 160);
     }
 
-    function maxBaseFee(NativeOrder calldata order) internal pure returns (uint96) {
-        return uint96(order._packed >> 200);
+    function maxBaseFee(NativeOrder calldata order) internal pure returns (uint56) {
+        return uint56(order._packed >> 200);
     }
 
     function salt(NativeOrder calldata order) internal pure returns (bytes32 result) {
