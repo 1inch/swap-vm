@@ -10,7 +10,7 @@
 
 **A virtual machine for programmable token swaps.** A maker signs an order (or ships it to Aqua) whose bytecode program prices the swap; a taker executes it. No per-strategy contract deployment.
 
-- [Programs catalog](docs/PROGRAMS.md) — strategy types, composition rules, security notes
+- [Technical description](docs/DESCRIPTION.md) — order format, execution, settlement, invariants, instruction set, program shapes
 - [Whitepaper](docs/whitepaper-swap-vm-1.0.pdf)
 - [Deployment guide](DEPLOY.md)
 
@@ -66,7 +66,7 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
-> Instruction order is security-critical: the same instructions in another order price differently. `DynamicBalances` and fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. Audit every program before production use. See [PROGRAMS.md](docs/PROGRAMS.md).
+> Instruction order is security-critical: the same instructions in another order price differently. `DynamicBalances` and fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. Audit every program before production use. See [DESCRIPTION.md](docs/DESCRIPTION.md).
 
 ## Routers
 
