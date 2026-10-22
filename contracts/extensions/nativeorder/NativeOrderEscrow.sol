@@ -48,7 +48,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     }
 
     modifier onlyResolver {
-        require(_ACCESS_TOKEN.balanceOf(msg.sender) == 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
+        require(_ACCESS_TOKEN.balanceOf(msg.sender) > 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
         _;
     }
 
