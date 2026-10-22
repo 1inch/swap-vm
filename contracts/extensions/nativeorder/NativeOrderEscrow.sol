@@ -14,6 +14,7 @@ import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWet
 import { EIP712SwapVM } from "../EIP712SwapVM.sol";
 import { NativeOrder, NativeOrderLib } from "./NativeOrderLib.sol";
 
+/// @dev Holds native funds and acts as the maker of a SwapVM order, so the user does not need to wrap ETH manually
 contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     using Clones for address;
     using UniERC20 for IERC20;
@@ -70,11 +71,13 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         _CANCELLATION_DELAY = cancelDelay;
     }
 
+    /// @dev The factory funds the clone and approves the SwapVM router immediately after deployment
     function depositAndApprove() external payable onlyFactory {
         _WETH.safeDeposit(msg.value);
         _WETH.forceApprove(_SWAP_VM_ROUTER, msg.value);
     }
 
+    /// @dev Validates the SwapVM order whose traits and data hash match the escrow commitment
     function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
         if (signature.length != NativeOrderLib.SIZE) return bytes4(0);
         NativeOrder calldata order = NativeOrderLib.wrap(signature);
@@ -85,11 +88,13 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         return this.isValidSignature.selector;
     }
 
+    /// @dev The maker may cancel the order at any time
     function cancel(NativeOrder calldata order) external validOrder(order) onlyMaker(order) {
         (uint256 balance, ) = _cancel(order, 0);
         emit NativeOrderCancelled(_hashOrder(address(this), order.traits(), order.dataHash()), balance);
     }
 
+    /// @dev Resolvers may cancel an expired order without receiving a reward
     function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver {
         require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
 
@@ -97,6 +102,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, 0);
     }
 
+    /// @dev Resolvers may cancel an expired order for a reward after the cancellation delay has elapsed
     function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver {
         uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
         require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));

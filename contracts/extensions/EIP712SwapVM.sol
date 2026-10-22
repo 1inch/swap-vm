@@ -10,7 +10,7 @@ import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/Mes
 import { MakerTraits } from "../libs/MakerTraits.sol";
 
 /// @title EIP712SwapVM
-/// @notice Allows third-party contract to get SwapVM order hashed internally
+/// @notice Allows third-party contract to get SwapVM order hashed without external call
 abstract contract EIP712SwapVM {
     bytes32 private constant _DOMAIN_HASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant _TYPE_HASH = keccak256("Order(address maker,uint256 traits,bytes data)");

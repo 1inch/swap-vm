@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { MakerTraits } from "../../libs/MakerTraits.sol";
 
-/// @dev Native order parameters used as escrow create2 salt
+/// @dev Native order parameters used to derive the escrow CREATE2 salt
 struct NativeOrder {
     MakerTraits _traits;
     bytes32 _dataHash;
@@ -32,7 +32,7 @@ library NativeOrderLib {
         });
     }
 
-    /// @dev Expects signature.length == SIZE but does not check it
+    /// @dev Expects signature.length == SIZE; does not validate the length
     function wrap(bytes calldata signature) internal pure returns (NativeOrder calldata order) {
         assembly ("memory-safe") { order := signature.offset }
     }

@@ -15,6 +15,7 @@ import { EIP712SwapVM } from "../EIP712SwapVM.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { NativeOrder, NativeOrderLib } from "./NativeOrderLib.sol";
 
+/// @dev Factory for deploying and funding NativeOrderEscrow contracts
 contract NativeOrderFactory is EIP712SwapVM, Rescuable {
     using Clones for address;
 
@@ -29,7 +30,7 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
         IMPLEMENTATION = address(new NativeOrderEscrow(swapVM, weth, accessToken, cancelDelay));
     }
 
-    /// @dev Suppose order includes Deadline.build(expiration) and the sell tokens is WETH
+    /// @dev Assume the order includes Deadline.build(expiration) and that its sell token is WETH
     function create(MakerTraits traits, bytes32 dataHash, uint40 expiration, uint56 maxBaseFee) external payable
         returns (address escrow)
     {
@@ -46,6 +47,7 @@ contract NativeOrderFactory is EIP712SwapVM, Rescuable {
         emit NativeOrderCreated(msg.sender, orderHash, escrow, msg.value, nativeOrder);
     }
 
+    /// @dev Returns the deployed or predicted escrow address for the specified order parameters
     function addressOfEscrow(NativeOrder calldata order) external view returns (address) {
         return IMPLEMENTATION.predictDeterministicAddress(order.salt());
     }
