@@ -16,7 +16,7 @@ import { EIP712SwapVM } from "../EIP712SwapVM.sol";
 import { NativeOrder, NativeOrderLib } from "./NativeOrderLib.sol";
 
 /// @dev Holds native funds and acts as the maker of a SwapVM order, so the user does not need to wrap ETH manually
-contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
+contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
     using Clones for address;
     using UniERC20 for IERC20;
     using SafeERC20 for IERC20;
