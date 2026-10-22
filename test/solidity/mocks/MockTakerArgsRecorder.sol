@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { IExtruction } from "../../../contracts/instructions/Extruction.sol";
+import { IExtruction } from "../../../contracts/instructions/interfaces/IExtruction.sol";
 import { SwapQuery, SwapRegisters } from "../../../contracts/libs/VM.sol";
 
 /// @notice Extruction target that records the taker instruction arguments it receives
