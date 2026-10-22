@@ -49,7 +49,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         _;
     }
 
-    modifier onlyResolver {
+    modifier onlyKYC {
         require(_ACCESS_TOKEN.safeBalanceOf(msg.sender) > 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
         _;
     }
@@ -100,7 +100,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     }
 
     /// @dev Resolvers may cancel an expired order without receiving a reward
-    function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver {
+    function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyKYC {
         require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
 
         (uint256 balance, ) = _cancel(order, 0);
@@ -108,7 +108,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     }
 
     /// @dev Resolvers may cancel an expired order for a reward after the cancellation delay has elapsed
-    function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver {
+    function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyKYC {
         uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
         require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));
 
