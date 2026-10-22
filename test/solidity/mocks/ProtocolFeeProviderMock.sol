@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
-import { IProtocolFeeProvider } from "../instructions/interfaces/IProtocolFeeProvider.sol";
+import { IProtocolFeeProvider } from "../../../contracts/instructions/interfaces/IProtocolFeeProvider.sol";
 
 /**
  * @title ProtocolFeeProviderMock
