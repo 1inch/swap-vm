@@ -16,7 +16,7 @@ import { PeggedSwap } from "../../../contracts/instructions/PeggedSwap.sol";
 import { FeeFlatIn, FeeFlatOut } from "../../../contracts/instructions/FeeFlat.sol";
 import { FeeBuilders } from "../utils/FeeBuilders.sol";
 
-import { ProtocolFeeProviderMock } from "../../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { ProtocolFeeProviderMock } from "../mocks/ProtocolFeeProviderMock.sol";
 
 import { CoreInvariants } from "./CoreInvariants.t.sol";
 import { TokenMockDecimals } from "../mocks/TokenMockDecimals.sol";

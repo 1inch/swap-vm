@@ -8,7 +8,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { Test } from "forge-std/Test.sol";
 
-import { ProtocolFeeProviderMock } from "../../contracts/mocks/ProtocolFeeProviderMock.sol";
+import { ProtocolFeeProviderMock } from "./mocks/ProtocolFeeProviderMock.sol";
 
 contract ProtocolFeeProviderMockTest is Test {
     ProtocolFeeProviderMock private feeProvider;

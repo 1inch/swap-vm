@@ -20,6 +20,9 @@ interface ISwapVM {
         bytes data;
     }
 
+    /// @notice Returns the EIP-712 typehash used for Order structs
+    function ORDER_TYPEHASH() external view returns (bytes32);
+
     /// @notice Compute the unique hash for an order
     /// @dev Returns EIP-712 hash for signature-based orders or keccak256(abi.encode(order)) for Aqua orders
     /// @param order The maker's order structure
