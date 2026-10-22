@@ -79,7 +79,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         if (signature.length != NativeOrderLib.SIZE) return bytes4(0);
         NativeOrder calldata order = NativeOrderLib.wrap(signature);
 
-        bytes32 orderHash = _hashOrder(order.maker(), order.traits(), order.dataHash());
+        bytes32 orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
         if (_calcCloneAddress(order) != address(this) || orderHash != hash) return bytes4(0);
 
         return this.isValidSignature.selector;
@@ -87,14 +87,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
 
     function cancel(NativeOrder calldata order) external validOrder(order) onlyMaker(order) {
         uint256 balance = _cancel(order, 0);
-        emit NativeOrderCancelled(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance);
+        emit NativeOrderCancelled(_hashOrder(address(this), order.traits(), order.dataHash()), balance);
     }
 
     function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver() {
         require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
 
         uint256 balance = _cancel(order, 0);
-        emit NativeOrderCancelledByResolver(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance, 0);
+        emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, 0);
     }
 
     function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver() {
@@ -103,7 +103,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
 
         uint256 reward = Math.min(block.basefee, order.maxBaseFee()) * _CANCEL_GAS_REFUND;
         uint256 balance = _cancel(order, reward);
-        emit NativeOrderCancelledByResolver(_hashOrder(order.maker(), order.traits(), order.dataHash()), balance, reward);
+        emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, reward);
     }
 
     function _cancel(NativeOrder calldata order, uint256 reward) private returns(uint256 balance) {
