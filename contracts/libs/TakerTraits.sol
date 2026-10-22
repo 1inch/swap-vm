@@ -157,7 +157,7 @@ library TakerTraitsLib {
             (args.useTransferFromAndAquaPush ? USE_TRANSFER_FROM_AND_AQUA_PUSH_FLAG : 0) |
             (args.hasPreTransferInCallback ? HAS_PRE_TRANSFER_IN_CALLBACK_BIT_FLAG : 0) |
             (args.hasPreTransferOutCallback ? HAS_PRE_TRANSFER_OUT_CALLBACK_BIT_FLAG : 0) |
-            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0) | 
+            (args.isAToB ? IS_A_TO_B_BIT_FLAG : 0) |
             (args.allowPartialFill ? ALLOW_PARTIAL_FILL : 0) |
             (args.usePermit2 ? USE_PERMIT2_BIT_FLAG : 0);
 
