@@ -131,8 +131,9 @@ CREATE2 escrow for a signature order funded with ETH. The escrow wraps `msg.valu
 that amount to the router, becomes the order maker and validates fills through ERC-1271.
 
 The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable
-Aqua and maker-side Permit2, and make the program sell WETH. Use `Deadline.build(expiration)` to stop fills
-at `expiration`. Enabled hooks need explicit targets because their default target would be the escrow.
+Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271
+rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
+Enabled hooks need explicit targets because their default target would be the escrow.
 
 ```solidity
 bytes32 dataHash = keccak256(makerOrder.data);
@@ -155,15 +156,15 @@ bytes32 filledOrderHash = router.hash(filledOrder);
 address. The deposit is not part of the commitment.
 
 - `cancel` lets the maker unwrap and withdraw the current WETH balance at any time.
-- `cancelExpired` lets an access-token holder return the balance after `expiration`.
-- `cancelExpiredForReward` opens after `expiration + cancelDelay`. Its reward is
-  `min(WETH balance, min(block.basefee, maxBaseFee) * _CANCEL_GAS_REFUND)`.
+- `cancelExpired` lets an access-token holder return the balance from `expiration` onward.
+- `cancelExpiredForReward` opens from `expiration + cancelDelay` onward. Its reward is
+  `min(WETH balance, min(block.basefee, maxBaseFee) * cancelGasRefund)`.
 - `rescueFunds` lets the maker recover ERC-20 tokens or ETH at any time; address zero means ETH.
 
-Cancellation withdraws the current balance but does not revoke the signature or allowance. Funding the
-escrow again can make the order fillable again. ERC-1271 validation does not check expiration, balance or
-allowance, and `quote()` does not validate them. The program must enforce its own deadline, pricing and
-fill limits.
+Cancellation withdraws the current balance but does not revoke the allowance. Before `expiration`, funding
+the escrow again can make the order fillable. ERC-1271 validates the commitment, order hash and expiration,
+but not the WETH balance or allowance. `quote()` does not run ERC-1271 validation. The program controls
+quote deadlines, pricing and fill limits.
 
 ### AMM position
 

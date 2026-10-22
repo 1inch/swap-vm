@@ -282,7 +282,7 @@ contract NativeOrderEscrowTest is Test {
         escrow.cancelExpired(nativeOrder);
         vm.warp(expiration);
         vm.expectRevert(
-            abi.encodeWithSelector(NativeOrderEscrow.NotResolver.selector, address(this), address(accessToken))
+            abi.encodeWithSelector(NativeOrderEscrow.NotKYC.selector, address(this), address(accessToken))
         );
         escrow.cancelExpired(nativeOrder);
         // Eligibility is checked at cancellation, rather than snapshotted at creation.
@@ -290,7 +290,7 @@ contract NativeOrderEscrowTest is Test {
         accessToken.transfer(address(this), 1);
         vm.prank(resolver);
         vm.expectRevert(
-            abi.encodeWithSelector(NativeOrderEscrow.NotResolver.selector, resolver, address(accessToken))
+            abi.encodeWithSelector(NativeOrderEscrow.NotKYC.selector, resolver, address(accessToken))
         );
         escrow.cancelExpired(nativeOrder);
         accessToken.transfer(resolver, 1);
