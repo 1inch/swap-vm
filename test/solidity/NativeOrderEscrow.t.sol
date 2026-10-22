@@ -23,7 +23,7 @@ import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
 import { NativeOrder, NativeOrderLib } from "../../contracts/extensions/nativeorder/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
-import { NativeOrderEscrowFactory } from "../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
+import { NativeOrderFactory } from "../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 import { NativeOrderReceiver } from "./mocks/NativeOrderReceiver.sol";
@@ -41,7 +41,7 @@ contract NativeOrderEscrowTest is Test {
     WETHMock public weth;
     TokenMock public dai;
     TokenMock public accessToken;
-    NativeOrderEscrowFactory public factory;
+    NativeOrderFactory public factory;
     address public maker;
     address public resolver;
     bool public isAToB;
@@ -57,7 +57,7 @@ contract NativeOrderEscrowTest is Test {
         dai = new TokenMock("DAI", "DAI");
         accessToken = new TokenMock("Resolver Access", "RAT");
         router = new SwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
-        factory = new NativeOrderEscrowFactory(
+        factory = new NativeOrderFactory(
             address(router), IWETH(address(weth)), IERC20(address(accessToken)), uint24(PUBLIC_CANCEL_DELAY)
         );
         maker = makeAddr("maker");
@@ -462,7 +462,7 @@ contract NativeOrderEscrowTest is Test {
             NativeOrderLib.encode(orderMaker, MakerTraits.wrap(traits), dataHash, expiration, maxBaseFee);
         bytes memory signature = abi.encode(order);
         assertEq(signature.length, NativeOrderLib.SIZE);
-        assertEq(order.saltMem(), keccak256(signature));
+        assertEq(order.saltMemory(), keccak256(signature));
         this.assertWrappedNativeOrderGetters(signature, orderMaker, traits, dataHash, expiration, maxBaseFee);
     }
 
@@ -507,7 +507,7 @@ contract NativeOrderEscrowTest is Test {
         args.useAquaInsteadOfSignature = true;
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectRevert(NativeOrderEscrowFactory.NativeOrderUnsupportedFeatures.selector);
+        vm.expectRevert(NativeOrderFactory.NativeOrderUnsupportedFeatures.selector);
         factory.create{ value: WETH_AMOUNT }(
             order.traits, keccak256(order.data), _expiration(), MAX_BASE_FEE
         );
@@ -518,14 +518,14 @@ contract NativeOrderEscrowTest is Test {
         args.receiver = address(0);
         ISwapVM.Order memory order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectPartialRevert(NativeOrderEscrowFactory.OrderReceiverShouldBeSet.selector);
+        vm.expectPartialRevert(NativeOrderFactory.OrderReceiverShouldBeValid.selector);
         factory.create{ value: WETH_AMOUNT }(
             order.traits, keccak256(order.data), _expiration(), MAX_BASE_FEE
         );
         args.receiver = address(factory);
         order = MakerTraitsLib.build(args);
         vm.prank(maker);
-        vm.expectPartialRevert(NativeOrderEscrowFactory.OrderReceiverShouldBeSet.selector);
+        vm.expectPartialRevert(NativeOrderFactory.OrderReceiverShouldBeValid.selector);
         factory.create{ value: WETH_AMOUNT }(
             order.traits, keccak256(order.data), _expiration(), MAX_BASE_FEE
         );

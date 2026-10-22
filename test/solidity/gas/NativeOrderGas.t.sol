@@ -21,7 +21,7 @@ import { WETHMock } from "../mocks/WETHMock.sol";
 
 import { NativeOrder, NativeOrderLib } from "../../../contracts/extensions/nativeorder/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
-import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
+import { NativeOrderFactory } from "../../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
 
 /// @title NativeOrderGas
 /// @notice Native ETH order (escrow clone) gas benchmarks: lifecycle calls of the escrow flow, plus the same
@@ -37,7 +37,7 @@ contract NativeOrderGas is Test {
     LimitSwapVMRouter public swapVM;
     WETHMock public weth;
     TokenMock public dai;
-    NativeOrderEscrowFactory public factory;
+    NativeOrderFactory public factory;
 
     address public maker;
     uint256 public makerPK = 0x1234;
@@ -58,7 +58,7 @@ contract NativeOrderGas is Test {
         dai = new TokenMock("DAI", "DAI");
         TokenMock accessToken = new TokenMock("Resolver Access", "RAT");
         swapVM = new LimitSwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
-        factory = new NativeOrderEscrowFactory(
+        factory = new NativeOrderFactory(
             address(swapVM),
             IWETH(address(weth)),
             IERC20(address(accessToken)),
@@ -86,7 +86,7 @@ contract NativeOrderGas is Test {
         _snapshot(
             "create",
             abi.encodeCall(
-                NativeOrderEscrowFactory.create,
+                NativeOrderFactory.create,
                 (makerOrder.traits, keccak256(makerOrder.data), expiration, MAX_BASE_FEE)
             )
         );

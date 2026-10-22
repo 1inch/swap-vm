@@ -42,13 +42,13 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     IERC20 private immutable _ACCESS_TOKEN;
     uint256 private immutable _CANCELLATION_DELAY;
 
-    modifier onlyFactory() {
+    modifier onlyFactory {
         require(msg.sender == _FACTORY, NotFactory(msg.sender, _FACTORY));
         _;
     }
 
     modifier onlyResolver {
-        require(_ACCESS_TOKEN.balanceOf(msg.sender) > 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
+        require(_ACCESS_TOKEN.safeBalanceOf(msg.sender) > 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
         _;
     }
 
@@ -58,8 +58,8 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     }
 
     modifier validOrder(NativeOrder calldata order) {
-        address clone = _calcCloneAddress(order);
-        require(clone == address(this), BadOrder(clone, address(this)));
+        address escrow = _calcEscrowAddress(order);
+        require(escrow == address(this), BadOrder(escrow, address(this)));
         _;
     }
 
@@ -72,7 +72,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
 
     function depositAndApprove() external payable onlyFactory {
         _WETH.safeDeposit(msg.value);
-        _WETH.forceApprove(address(_SWAP_VM_ROUTER), msg.value);
+        _WETH.forceApprove(_SWAP_VM_ROUTER, msg.value);
     }
 
     function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
@@ -80,7 +80,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         NativeOrder calldata order = NativeOrderLib.wrap(signature);
 
         bytes32 orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
-        if (_calcCloneAddress(order) != address(this) || orderHash != hash) return bytes4(0);
+        if (_calcEscrowAddress(order) != address(this) || orderHash != hash) return bytes4(0);
 
         return this.isValidSignature.selector;
     }
@@ -90,14 +90,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         emit NativeOrderCancelled(_hashOrder(address(this), order.traits(), order.dataHash()), balance);
     }
 
-    function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver() {
+    function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyResolver {
         require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
 
         (uint256 balance, ) = _cancel(order, 0);
         emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, 0);
     }
 
-    function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver() {
+    function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyResolver {
         uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
         require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));
 
@@ -105,7 +105,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, reward);
     }
 
-    function _cancel(NativeOrder calldata order, uint256 maxReward) private returns(uint256 balance, uint256 reward) {
+    function _cancel(NativeOrder calldata order, uint256 maxReward) private returns (uint256 balance, uint256 reward) {
         balance = _WETH.safeBalanceOf(address(this));
         require(balance > 0, CancelForZeroBalance());
 
@@ -124,7 +124,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         }
     }
 
-    function _calcCloneAddress(NativeOrder calldata order) private view returns(address) {
+    function _calcEscrowAddress(NativeOrder calldata order) private view returns (address) {
         return _IMPLEMENTATION.predictDeterministicAddress(order.salt(), _FACTORY);
     }
 

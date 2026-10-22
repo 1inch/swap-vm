@@ -15,12 +15,12 @@ import { EIP712SwapVM } from "../EIP712SwapVM.sol";
 import { NativeOrderEscrow } from "./NativeOrderEscrow.sol";
 import { NativeOrder, NativeOrderLib } from "./NativeOrderLib.sol";
 
-contract NativeOrderEscrowFactory is EIP712SwapVM, Rescuable {
+contract NativeOrderFactory is EIP712SwapVM, Rescuable {
     using Clones for address;
 
     event NativeOrderCreated(address maker, bytes32 orderHash, address clone, uint256 value, NativeOrder saltParams);
 
-    error OrderReceiverShouldBeSet(address receiver);
+    error OrderReceiverShouldBeValid(address receiver);
     error NativeOrderUnsupportedFeatures();
 
     address public immutable IMPLEMENTATION;
@@ -33,13 +33,13 @@ contract NativeOrderEscrowFactory is EIP712SwapVM, Rescuable {
     function create(MakerTraits traits, bytes32 dataHash, uint40 expiration, uint56 maxBaseFee) external payable
         returns (address escrow)
     {
-        address receiver = traits.receiver(escrow);
-        require(receiver != address(0) && receiver != address(this), OrderReceiverShouldBeSet(receiver));
+        address receiver = traits.receiver(address(0));
+        require(receiver != address(0) && receiver != address(this), OrderReceiverShouldBeValid(receiver));
         require(!traits.useAquaInsteadOfSignature() && !traits.usePermit2(), NativeOrderUnsupportedFeatures());
 
         NativeOrder memory nativeOrder = NativeOrderLib.encode(msg.sender, traits, dataHash, expiration, maxBaseFee);
 
-        escrow = IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMem());
+        escrow = IMPLEMENTATION.cloneDeterministic(nativeOrder.saltMemory());
         NativeOrderEscrow(payable(escrow)).depositAndApprove{ value: msg.value }();
 
         bytes32 orderHash = _hashOrder(escrow, traits, dataHash);

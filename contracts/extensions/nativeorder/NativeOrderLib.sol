@@ -37,16 +37,16 @@ library NativeOrderLib {
         assembly ("memory-safe") { order := signature.offset }
     }
 
+    function maker(NativeOrder calldata order) internal pure returns (address) {
+        return address(uint160(order._packed));
+    }
+
     function traits(NativeOrder calldata order) internal pure returns (MakerTraits) {
         return order._traits;
     }
 
     function dataHash(NativeOrder calldata order) internal pure returns (bytes32) {
         return order._dataHash;
-    }
-
-    function maker(NativeOrder calldata order) internal pure returns (address) {
-        return address(uint160(order._packed));
     }
 
     function expiration(NativeOrder calldata order) internal pure returns (uint40) {
@@ -65,7 +65,7 @@ library NativeOrderLib {
         }
     }
 
-    function saltMem(NativeOrder memory order) internal pure returns (bytes32 result) {
+    function saltMemory(NativeOrder memory order) internal pure returns (bytes32 result) {
         assembly ("memory-safe") { result := keccak256(order, SIZE) }
     }
 }
