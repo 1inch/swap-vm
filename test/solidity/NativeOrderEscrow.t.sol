@@ -7,16 +7,13 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { Errors } from "@openzeppelin/contracts/utils/Errors.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
-import { IWETH } from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
+import { IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { EthReceiver } from "@1inch/solidity-utils/contracts/mixins/EthReceiver.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../contracts/routers/SwapVMRouter.sol";
 import { OrderRegistrator } from "../../contracts/extensions/OrderRegistrator.sol";
 import { MakerTraits, MakerTraitsLib } from "../../contracts/libs/MakerTraits.sol";
-import { TakerTraitsLib } from "../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../contracts/instructions/Balances.sol";
 import { LimitSwap } from "../../contracts/instructions/LimitSwap.sol";
 import { Deadline, Salt } from "../../contracts/instructions/Controls.sol";
@@ -24,6 +21,7 @@ import { InvalidateTokenOut } from "../../contracts/instructions/Invalidators.so
 import { NativeOrder, NativeOrderLib } from "../../contracts/extensions/nativeorder/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
 import { NativeOrderFactory } from "../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
+import { SwapVMRouter, TraitsHelper, DeployCode } from "./helpers/SwapVMTestSetup.sol";
 import { WETHMock } from "./mocks/WETHMock.sol";
 import { MockMakerHooks } from "./mocks/MockMakerHooks.sol";
 import { NativeOrderReceiver } from "./mocks/NativeOrderReceiver.sol";
@@ -38,6 +36,7 @@ contract NativeOrderEscrowTest is Test {
     bytes4 private constant ERC1271_MAGIC = 0x1626ba7e;
 
     SwapVMRouter public router;
+    TraitsHelper internal orders;
     WETHMock public weth;
     TokenMock public dai;
     TokenMock public accessToken;
@@ -56,7 +55,8 @@ contract NativeOrderEscrowTest is Test {
         weth = new WETHMock();
         dai = new TokenMock("DAI", "DAI");
         accessToken = new TokenMock("Resolver Access", "RAT");
-        router = new SwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
+        orders = DeployCode.TraitsHelper();
+        router = DeployCode.SwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
         factory = new NativeOrderFactory(
             address(router), IWETH(address(weth)), IERC20(address(accessToken)), uint24(PUBLIC_CANCEL_DELAY)
         );
@@ -97,12 +97,12 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_FullFill_TakerReceivesNativeEth() public {
         _createEscrow(_defaultProgram());
-        TakerTraitsLib.Args memory args;
+        TraitsHelper.TakerTraitsLibArgs memory args;
         args.isAToB = isAToB;
         args.shouldUnwrapWeth = true;
         args.signature = _signature();
         uint256 ethBefore = address(this).balance;
-        router.swap(filledOrder, WETH_AMOUNT, TakerTraitsLib.build(args));
+        router.swap(filledOrder, WETH_AMOUNT, orders.TakerTraitsLibBuild(args));
         assertEq(address(this).balance - ethBefore, WETH_AMOUNT);
         assertEq(weth.balanceOf(address(this)), 0);
         assertEq(dai.balanceOf(maker), DAI_AMOUNT);
@@ -127,15 +127,15 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_ExplicitReceiverReceivesProceedsButMakerOwnsRefund() public {
         address recipient = makeAddr("recipient");
-        MakerTraitsLib.Args memory args = _orderArgs(_defaultProgram());
+        TraitsHelper.MakerTraitsLibArgs memory args = _orderArgs(_defaultProgram());
         args.receiver = recipient;
-        _createOrder(MakerTraitsLib.build(args), WETH_AMOUNT, _expiration());
+        _createOrder(orders.MakerTraitsLibBuild(args), WETH_AMOUNT, _expiration());
         router.swap(filledOrder, 0.4 ether, _takerData(false));
 
         assertEq(dai.balanceOf(recipient), 1200e18);
         assertEq(dai.balanceOf(maker), 0);
         vm.prank(recipient);
-        vm.expectPartialRevert(NativeOrderEscrow.NotMaker.selector);
+        vm.expectRevert(abi.encodeWithSelector(NativeOrderEscrow.NotMaker.selector, recipient, maker));
         escrow.cancel(nativeOrder);
 
         uint256 makerBefore = maker.balance;
@@ -163,8 +163,9 @@ contract NativeOrderEscrowTest is Test {
         uint40 deadline = uint40(block.timestamp + EXPIRY_OFFSET / 2);
         _createEscrow(_program(deadline));
         vm.warp(deadline + 1);
+        bytes memory takerData = _takerData(false);
         vm.expectRevert(abi.encodeWithSelector(Deadline.DeadlineReached.selector, deadline));
-        router.swap(filledOrder, WETH_AMOUNT, _takerData(false));
+        router.swap(filledOrder, WETH_AMOUNT, takerData);
     }
 
     function test_NativeOrder_Fill_ExpirationDoesNotReplaceProgramDeadline() public {
@@ -180,7 +181,7 @@ contract NativeOrderEscrowTest is Test {
     function test_NativeOrder_DepositAndApprove_OnlyFactory() public {
         _createEscrow(_defaultProgram());
         vm.prank(maker);
-        vm.expectPartialRevert(NativeOrderEscrow.NotFactory.selector);
+        vm.expectRevert(abi.encodeWithSelector(NativeOrderEscrow.NotFactory.selector, maker, address(factory)));
         escrow.depositAndApprove{ value: 1 ether }();
         assertEq(weth.allowance(address(escrow), address(router)), WETH_AMOUNT);
         assertEq(weth.balanceOf(address(escrow)), WETH_AMOUNT);
@@ -206,7 +207,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_Cancel_OnlyMaker() public {
         _createEscrow(_defaultProgram());
-        vm.expectPartialRevert(NativeOrderEscrow.NotMaker.selector);
+        vm.expectRevert(abi.encodeWithSelector(NativeOrderEscrow.NotMaker.selector, address(this), maker));
         escrow.cancel(nativeOrder);
     }
 
@@ -227,10 +228,11 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_FullFill_DonationCannotReviveAndResolverCanClean() public {
         _createEscrow(_defaultProgram());
-        router.swap(filledOrder, WETH_AMOUNT, _takerData(false));
+        bytes memory takerData = _takerData(false);
+        router.swap(filledOrder, WETH_AMOUNT, takerData);
         _donateWeth(0.3 ether);
         vm.expectRevert(MakerTraitsLib.MakerTraitsZeroAmountInNotAllowed.selector);
-        router.swap(filledOrder, 0.1 ether, _takerData(false));
+        router.swap(filledOrder, 0.1 ether, takerData);
         vm.warp(_rewardCancelStart());
         vm.prank(resolver);
         escrow.cancelExpiredForReward(nativeOrder);
@@ -264,18 +266,25 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_CancelExpired_TimeAndAccessGates() public {
         _createEscrow(_defaultProgram());
-        vm.warp(_orderExpiration() - 1);
+        uint256 expiration = _orderExpiration();
+        vm.warp(expiration - 1);
         vm.prank(resolver);
-        vm.expectPartialRevert(NativeOrderEscrow.NotExpired.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.NotExpired.selector, expiration - 1, expiration)
+        );
         escrow.cancelExpired(nativeOrder);
-        vm.warp(_orderExpiration());
-        vm.expectPartialRevert(NativeOrderEscrow.NotResolver.selector);
+        vm.warp(expiration);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.NotResolver.selector, address(this), address(accessToken))
+        );
         escrow.cancelExpired(nativeOrder);
         // Eligibility is checked at cancellation, rather than snapshotted at creation.
         vm.prank(resolver);
         accessToken.transfer(address(this), 1);
         vm.prank(resolver);
-        vm.expectPartialRevert(NativeOrderEscrow.NotResolver.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.NotResolver.selector, resolver, address(accessToken))
+        );
         escrow.cancelExpired(nativeOrder);
         accessToken.transfer(resolver, 1);
         vm.prank(resolver);
@@ -323,8 +332,11 @@ contract NativeOrderEscrowTest is Test {
         _createEscrow(_defaultProgram());
         vm.warp(_rewardCancelStart());
         NativeOrder memory tampered = _tamper(4, 0);
+        address tamperedEscrow = factory.addressOfEscrow(tampered);
         vm.prank(resolver);
-        vm.expectPartialRevert(NativeOrderEscrow.BadOrder.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.BadOrder.selector, tamperedEscrow, address(escrow))
+        );
         escrow.cancelExpiredForReward(tampered);
         assertEq(resolver.balance, 0);
         _assertCancellationRolledBack();
@@ -469,8 +481,9 @@ contract NativeOrderEscrowTest is Test {
     function test_NativeOrder_Swap_TamperedSignatureRevertsBadSignature() public {
         _createEscrow(_defaultProgram());
         bytes memory signature = abi.encode(_tamper(3, 0));
+        bytes memory takerData = _takerData(false, signature);
         _expectBadSignature(signature);
-        router.swap(filledOrder, WETH_AMOUNT, _takerData(false, signature));
+        router.swap(filledOrder, WETH_AMOUNT, takerData);
     }
 
     function test_NativeOrder_IsValidSignature_ProgramAndTraitsCannotBeReplaced() public {
@@ -503,9 +516,9 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function test_NativeOrder_Create_AquaRejected() public {
-        MakerTraitsLib.Args memory args = _orderArgs(_defaultProgram());
+        TraitsHelper.MakerTraitsLibArgs memory args = _orderArgs(_defaultProgram());
         args.useAquaInsteadOfSignature = true;
-        ISwapVM.Order memory order = MakerTraitsLib.build(args);
+        ISwapVM.Order memory order = orders.MakerTraitsLibBuild(args);
         vm.prank(maker);
         vm.expectRevert(NativeOrderFactory.NativeOrderUnsupportedFeatures.selector);
         factory.create{ value: WETH_AMOUNT }(
@@ -514,18 +527,22 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function test_NativeOrder_Create_ExplicitReceiverRequired() public {
-        MakerTraitsLib.Args memory args = _orderArgs(_defaultProgram());
+        TraitsHelper.MakerTraitsLibArgs memory args = _orderArgs(_defaultProgram());
         args.receiver = address(0);
-        ISwapVM.Order memory order = MakerTraitsLib.build(args);
+        ISwapVM.Order memory order = orders.MakerTraitsLibBuild(args);
         vm.prank(maker);
-        vm.expectPartialRevert(NativeOrderFactory.OrderReceiverShouldBeValid.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderFactory.OrderReceiverShouldBeValid.selector, address(0))
+        );
         factory.create{ value: WETH_AMOUNT }(
             order.traits, keccak256(order.data), _expiration(), MAX_BASE_FEE
         );
         args.receiver = address(factory);
-        order = MakerTraitsLib.build(args);
+        order = orders.MakerTraitsLibBuild(args);
         vm.prank(maker);
-        vm.expectPartialRevert(NativeOrderFactory.OrderReceiverShouldBeValid.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderFactory.OrderReceiverShouldBeValid.selector, address(factory))
+        );
         factory.create{ value: WETH_AMOUNT }(
             order.traits, keccak256(order.data), _expiration(), MAX_BASE_FEE
         );
@@ -548,7 +565,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_Create_ImplicitHooksAreFactoryAgnostic() public {
         for (uint8 stage = 0; stage < 4; ++stage) {
-            MakerTraitsLib.Args memory args = _orderArgs(_defaultProgram());
+            MakerTraitsLib.Args memory args = _hookOrderArgs(_defaultProgram());
             if (stage == 0) args.hasPreTransferInHook = true;
             else if (stage == 1) args.hasPostTransferInHook = true;
             else if (stage == 2) args.hasPreTransferOutHook = true;
@@ -565,7 +582,7 @@ contract NativeOrderEscrowTest is Test {
 
     function test_NativeOrder_Create_ExplicitHooksExecuteForEveryStage() public {
         MockMakerHooks hooks = new MockMakerHooks();
-        MakerTraitsLib.Args memory args = _orderArgs(_defaultProgram());
+        MakerTraitsLib.Args memory args = _hookOrderArgs(_defaultProgram());
         args.hasPreTransferInHook = true;
         args.hasPostTransferInHook = true;
         args.hasPreTransferOutHook = true;
@@ -646,7 +663,7 @@ contract NativeOrderEscrowTest is Test {
     function test_NativeOrder_RescueFunds_OnlyMaker() public {
         _createEscrow(_defaultProgram());
         dai.mint(address(escrow), 123e18);
-        vm.expectPartialRevert(NativeOrderEscrow.NotMaker.selector);
+        vm.expectRevert(abi.encodeWithSelector(NativeOrderEscrow.NotMaker.selector, address(this), maker));
         escrow.rescueFunds(nativeOrder, IERC20(address(dai)), 123e18);
         vm.prank(maker);
         escrow.rescueFunds(nativeOrder, IERC20(address(dai)), 123e18);
@@ -818,7 +835,7 @@ contract NativeOrderEscrowTest is Test {
         );
     }
 
-    function _orderArgs(bytes memory program) private view returns (MakerTraitsLib.Args memory args) {
+    function _orderArgs(bytes memory program) private view returns (TraitsHelper.MakerTraitsLibArgs memory args) {
         args.maker = maker;
         args.receiver = maker;
         args.tokenA = _tokenA();
@@ -827,7 +844,15 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _buildOrder(bytes memory program) private view returns (ISwapVM.Order memory) {
-        return MakerTraitsLib.build(_orderArgs(program));
+        return orders.MakerTraitsLibBuild(_orderArgs(program));
+    }
+
+    function _hookOrderArgs(bytes memory program) private view returns (MakerTraitsLib.Args memory args) {
+        args.maker = maker;
+        args.receiver = maker;
+        args.tokenA = _tokenA();
+        args.tokenB = _tokenB();
+        args.program = program;
     }
 
     function _createEscrow(bytes memory program) private {
@@ -879,13 +904,13 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _takerData(bool isExactIn, bytes memory signature) private view returns (bytes memory) {
-        TakerTraitsLib.Args memory args;
+        TraitsHelper.TakerTraitsLibArgs memory args;
         args.isExactIn = isExactIn;
         args.isAToB = isAToB;
         args.allowPartialFill = true;
         args.to = address(this);
         args.signature = signature;
-        return TakerTraitsLib.build(args);
+        return orders.TakerTraitsLibBuild(args);
     }
 
     function _expectBadSignature(bytes memory signature) private {
@@ -917,15 +942,22 @@ contract NativeOrderEscrowTest is Test {
     }
 
     function _assertInvalidOrder(NativeOrder memory tampered) private {
-        assertTrue(factory.addressOfEscrow(tampered) != address(escrow));
+        address tamperedEscrow = factory.addressOfEscrow(tampered);
+        assertTrue(tamperedEscrow != address(escrow));
         assertEq(escrow.isValidSignature(filledOrderHash, abi.encode(tampered)), bytes4(0));
         vm.prank(address(uint160(tampered._packed)));
-        vm.expectPartialRevert(NativeOrderEscrow.BadOrder.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.BadOrder.selector, tamperedEscrow, address(escrow))
+        );
         escrow.cancel(tampered);
-        vm.expectPartialRevert(NativeOrderEscrow.BadOrder.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.BadOrder.selector, tamperedEscrow, address(escrow))
+        );
         escrow.cancelExpired(tampered);
         vm.prank(address(uint160(tampered._packed)));
-        vm.expectPartialRevert(NativeOrderEscrow.BadOrder.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(NativeOrderEscrow.BadOrder.selector, tamperedEscrow, address(escrow))
+        );
         escrow.rescueFunds(tampered, IERC20(address(weth)), 1);
     }
 
