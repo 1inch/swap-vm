@@ -83,7 +83,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         NativeOrder calldata order = NativeOrderLib.wrap(signature);
 
         bytes32 orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
-        if (_calcEscrowAddress(order) != address(this) || orderHash != hash) return bytes4(0);
+        if (_calcEscrowAddress(order) != address(this) || orderHash != hash || block.timestamp >= order.expiration()) return bytes4(0);
 
         return this.isValidSignature.selector;
     }
