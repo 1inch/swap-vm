@@ -20,7 +20,7 @@ library ValidateSeriesEpoch {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    error ValidateSeriesEpochWrongEpoch(address maker, uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
+    error ValidateSeriesEpochWrongEpoch(uint256 seriesId, uint256 expectedEpoch, uint256 currentEpoch);
 
     Opcode constant opcode = Opcode.ValidateSeriesEpoch;
 
@@ -57,7 +57,7 @@ library ValidateSeriesEpoch {
         (uint32 seriesId, uint32 expectedEpoch) = parse(args);
 
         uint256 currentEpoch = $.epoch[ctx.query.maker][seriesId];
-        require(currentEpoch == expectedEpoch, ValidateSeriesEpochWrongEpoch(ctx.query.maker, seriesId, expectedEpoch, currentEpoch));
+        require(currentEpoch == expectedEpoch, ValidateSeriesEpochWrongEpoch(seriesId, expectedEpoch, currentEpoch));
     }
 }
 

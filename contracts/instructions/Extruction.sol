@@ -32,7 +32,7 @@ library Extruction {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
-    error ExtructionChoppedExceedsLength(bytes chopped, uint256 requested);
+    error ExtructionChoppedExceedsLength(uint256 chopped, uint256 requested);
 
     Opcode constant opcode = Opcode.Extruction;
 
@@ -80,6 +80,6 @@ library Extruction {
         }
 
         bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength); // Consumed taker arguments
-        require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped, choppedLength));
+        require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped.length, choppedLength));
     }
 }
