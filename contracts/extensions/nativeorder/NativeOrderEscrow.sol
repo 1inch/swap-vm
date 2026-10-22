@@ -26,7 +26,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
     event NativeOrderCancelledByResolver(bytes32 orderHash, uint256 balance, uint256 resolverReward);
 
     error NotFactory(address sender, address factory);
-    error NotResolver(address resolver, address accessToken);
+    error NotKYC(address sender, address accessToken);
     error NotMaker(address sender, address maker);
     error BadOrder(address expected, address actual);
     error NotExpired(uint256 currentTime, uint256 expirationTime);
@@ -50,7 +50,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
     }
 
     modifier onlyKYC {
-        require(_ACCESS_TOKEN.safeBalanceOf(msg.sender) > 0, NotResolver(msg.sender, address(_ACCESS_TOKEN)));
+        require(_ACCESS_TOKEN.safeBalanceOf(msg.sender) > 0, NotKYC(msg.sender, address(_ACCESS_TOKEN)));
         _;
     }
 
@@ -99,7 +99,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
         emit NativeOrderCancelled(_hashOrder(address(this), order.traits(), order.dataHash()), balance);
     }
 
-    /// @dev Resolvers may cancel an expired order without receiving a reward
+    /// @dev Allowed third-party may cancel an expired order without receiving a reward
     function cancelExpired(NativeOrder calldata order) external validOrder(order) onlyKYC {
         require(block.timestamp >= order.expiration(), NotExpired(block.timestamp, order.expiration()));
 
@@ -107,7 +107,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
         emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, 0);
     }
 
-    /// @dev Resolvers may cancel an expired order for a reward after the cancellation delay has elapsed
+    /// @dev Allowed third-party may cancel an expired order for a reward after the cancellation delay has elapsed
     function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyKYC {
         uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
         require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));

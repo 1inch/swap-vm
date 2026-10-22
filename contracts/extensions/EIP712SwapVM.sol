@@ -7,14 +7,15 @@ pragma solidity ^0.8.27;
 import { IERC5267 } from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
+import { ISwapVM } from "../interfaces/ISwapVM.sol";
 import { MakerTraits } from "../libs/MakerTraits.sol";
 
 /// @title EIP712SwapVM
 /// @notice Allows third-party contract to get SwapVM order hashed without external call
 abstract contract EIP712SwapVM {
     bytes32 private constant _DOMAIN_HASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 private constant _TYPE_HASH = keccak256("Order(address maker,uint256 traits,bytes data)");
 
+    bytes32 private immutable _TYPE_HASH;
     address private immutable _SWAP_VM_ROUTER;
     bytes32 private immutable _HASHED_NAME;
     bytes32 private immutable _HASHED_VERSION;
@@ -23,6 +24,7 @@ abstract contract EIP712SwapVM {
 
     constructor(address router) {
         (, string memory name, string memory version,,,,) = IERC5267(router).eip712Domain();
+        _TYPE_HASH = ISwapVM(router).ORDER_TYPEHASH();
         _SWAP_VM_ROUTER = router;
         _HASHED_NAME = keccak256(bytes(name));
         _HASHED_VERSION = keccak256(bytes(version));
