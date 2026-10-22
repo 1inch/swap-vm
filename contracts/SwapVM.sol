@@ -5,6 +5,7 @@ pragma solidity 0.8.30;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
@@ -27,7 +28,7 @@ import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
 /// @notice Virtual machine for executing programmable token swap strategies from bytecode
 /// @dev Abstract contract that must be inherited by routers defining instruction sets
 /// @dev This contract is Ownable via Rescuable mixin
-abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, OrderRegistrator {
+abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, PermitAndCall, OrderRegistrator {
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
@@ -92,6 +93,16 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
         WETH = IWETH(weth);
     }
 
+    /// @notice Pause swap execution
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume swap execution
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     /// @notice Cast contract to ISwapVM interface for view-only operations
     /// @return Interface instance for static calls
     function asView() external view returns (ISwapVM) {
@@ -119,7 +130,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
         ISwapVM.Order calldata order,
         uint256 amount,
         bytes calldata takerTraitsAndData
-    ) external returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
+    ) external whenNotPaused returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
@@ -173,7 +184,7 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
         ISwapVM.Order calldata order,
         uint256 amount,
         bytes calldata takerTraitsAndData
-    ) external payable returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
+    ) external whenNotPaused payable returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
         _reentrancyGuards[orderHash].lock();
 
