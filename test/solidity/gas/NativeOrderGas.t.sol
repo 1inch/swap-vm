@@ -19,9 +19,9 @@ import { Deadline } from "../../../contracts/instructions/Controls.sol";
 import { InvalidateTokenOut } from "../../../contracts/instructions/Invalidators.sol";
 import { WETHMock } from "../mocks/WETHMock.sol";
 
-import { NativeOrder } from "../../../contracts/extensions/nativeorder/libs/NativeOrderLib.sol";
+import { NativeOrder, NativeOrderLib } from "../../../contracts/extensions/nativeorder/NativeOrderLib.sol";
 import { NativeOrderEscrow } from "../../../contracts/extensions/nativeorder/NativeOrderEscrow.sol";
-import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderEscrowFactory.sol";
+import { NativeOrderEscrowFactory } from "../../../contracts/extensions/nativeorder/NativeOrderFactory.sol";
 
 /// @title NativeOrderGas
 /// @notice Native ETH order (escrow clone) gas benchmarks: lifecycle calls of the escrow flow, plus the same
@@ -32,8 +32,7 @@ contract NativeOrderGas is Test {
     uint32 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_OFFSET = 1 days + 1 hours;
     uint32 private constant PUBLIC_CANCEL_DELAY = PUBLIC_CANCEL_OFFSET - EXPIRY_OFFSET;
-    uint32 private constant RESCUE_DELAY = 7 days;
-    uint96 private constant MAX_REWARD = 0.001 ether;
+    uint56 private constant MAX_BASE_FEE = 10 gwei;
 
     LimitSwapVMRouter public swapVM;
     WETHMock public weth;
@@ -60,11 +59,10 @@ contract NativeOrderGas is Test {
         TokenMock accessToken = new TokenMock("Resolver Access", "RAT");
         swapVM = new LimitSwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
         factory = new NativeOrderEscrowFactory(
-            ISwapVM(address(swapVM)),
+            address(swapVM),
             IWETH(address(weth)),
             IERC20(address(accessToken)),
-            PUBLIC_CANCEL_DELAY,
-            RESCUE_DELAY
+            uint24(PUBLIC_CANCEL_DELAY)
         );
 
         vm.deal(maker, 100 ether);
@@ -82,10 +80,15 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(makerOrder.traits, makerOrder.data, expiration, MAX_REWARD);
+        factory.create{ value: WETH_AMOUNT }(
+            makerOrder.traits, keccak256(makerOrder.data), expiration, MAX_BASE_FEE
+        );
         _snapshot(
             "create",
-            abi.encodeCall(NativeOrderEscrowFactory.create, (makerOrder.traits, makerOrder.data, expiration, MAX_REWARD))
+            abi.encodeCall(
+                NativeOrderEscrowFactory.create,
+                (makerOrder.traits, keccak256(makerOrder.data), expiration, MAX_BASE_FEE)
+            )
         );
     }
 
@@ -116,12 +119,16 @@ contract NativeOrderGas is Test {
         _snapshot("cancel", abi.encodeCall(NativeOrderEscrow.cancel, (nativeOrder)));
     }
 
-    function test_gas_NativeOrder_publicCancel() public {
+    function test_gas_NativeOrder_cancelExpiredForReward() public {
         _createEscrow();
+        vm.fee(MAX_BASE_FEE);
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(resolver);
-        escrow.publicCancel(nativeOrder);
-        _snapshot("publicCancel", abi.encodeCall(NativeOrderEscrow.publicCancel, (nativeOrder)));
+        escrow.cancelExpiredForReward(nativeOrder);
+        _snapshot(
+            "cancelExpiredForReward",
+            abi.encodeCall(NativeOrderEscrow.cancelExpiredForReward, (nativeOrder))
+        );
     }
 
     // === Reference: same program as a plain EOA-signed WETH order ===
@@ -162,17 +169,17 @@ contract NativeOrderGas is Test {
 
     function _createEscrow() internal {
         makerOrder = _buildOrder();
+        uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
+        bytes32 dataHash = keccak256(makerOrder.data);
+        nativeOrder = NativeOrderLib.encode(maker, makerOrder.traits, dataHash, expiration, MAX_BASE_FEE);
         vm.prank(maker);
-        (address escrowAddr, bytes32 fHash, NativeOrder memory terms) =
-            factory.create{ value: WETH_AMOUNT }(
-                makerOrder.traits, makerOrder.data, uint40(block.timestamp + EXPIRY_OFFSET), MAX_REWARD
-            );
+        address escrowAddr =
+            factory.create{ value: WETH_AMOUNT }(makerOrder.traits, dataHash, expiration, MAX_BASE_FEE);
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
-        filledOrderHash = fHash;
-        nativeOrder = terms;
         filledOrder = makerOrder;
         filledOrder.maker = escrowAddr;
+        filledOrderHash = swapVM.hash(filledOrder);
     }
 
     /// @dev Exact WETH allowance, matching what the escrow grants, so the comparison isolates the escrow overhead.
