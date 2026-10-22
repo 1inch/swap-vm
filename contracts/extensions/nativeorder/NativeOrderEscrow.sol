@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -33,14 +34,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
     error CancelForZeroBalance();
     error ETHTransferFailed();
 
-    uint256 private constant _CANCEL_GAS_REFUND = 70_000;
-
     address private immutable _FACTORY = msg.sender;
     address private immutable _IMPLEMENTATION = address(this);
 
     address private immutable _SWAP_VM_ROUTER;
     IWETH private immutable _WETH;
     IERC20 private immutable _ACCESS_TOKEN;
+
+    uint256 private immutable _CANCEL_GAS_REFUND;
     uint256 private immutable _CANCELLATION_DELAY;
 
     modifier onlyFactory {
@@ -64,10 +65,14 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         _;
     }
 
-    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint24 cancelDelay) OnlyWethReceiver(address(weth)) EIP712SwapVM(swapVM) {
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay)
+        OnlyWethReceiver(address(weth))
+        EIP712SwapVM(swapVM)
+    {
         _SWAP_VM_ROUTER = swapVM;
         _WETH = weth;
         _ACCESS_TOKEN = accessToken;
+        _CANCEL_GAS_REFUND = cancelGasRefund;
         _CANCELLATION_DELAY = cancelDelay;
     }
 
@@ -85,7 +90,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         bytes32 orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
         if (_calcEscrowAddress(order) != address(this) || orderHash != hash || block.timestamp >= order.expiration()) return bytes4(0);
 
-        return this.isValidSignature.selector;
+        return IERC1271.isValidSignature.selector;
     }
 
     /// @dev The maker may cancel the order at any time
