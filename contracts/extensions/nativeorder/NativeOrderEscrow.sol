@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2026 Degensoft Ltd
 
+import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -85,7 +86,7 @@ contract NativeOrderEscrow is OnlyWethReceiver, EIP712SwapVM {
         bytes32 orderHash = _hashOrder(address(this), order.traits(), order.dataHash());
         if (_calcEscrowAddress(order) != address(this) || orderHash != hash) return bytes4(0);
 
-        return this.isValidSignature.selector;
+        return IERC1271.isValidSignature.selector;
     }
 
     /// @dev The maker may cancel the order at any time
