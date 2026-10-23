@@ -1,6 +1,6 @@
 {
   "name": "@1inch/swap-vm",
-  "version": "0.0.6",
+  "version": "1.2.0-rc.1",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "type": "module",
   "packageManager": "yarn@1.22.22",
@@ -13,8 +13,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@1inch/aqua": "1.0.2-rc.1",
-    "@1inch/solidity-utils": "7.0.2",
+    "@1inch/aqua": "1.0.2-rc.2",
+    "@1inch/solidity-utils": "7.0.3",
     "@openzeppelin/contracts": "5.6.1",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
