@@ -4,6 +4,14 @@
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "type": "module",
   "packageManager": "yarn@1.22.22",
+  "files": [
+    "contracts",
+    "LICENSES",
+    "THIRD_PARTY_NOTICES"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@1inch/aqua": "github:1inch/aqua#v1.0.0",
     "@1inch/solidity-utils": "7.0.0",
