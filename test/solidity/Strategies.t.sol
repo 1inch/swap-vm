@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
 

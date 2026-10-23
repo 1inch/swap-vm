@@ -8,7 +8,7 @@ import { Test } from "forge-std/Test.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 

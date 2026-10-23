@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";

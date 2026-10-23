@@ -9,7 +9,7 @@ import { StorageSlots } from "../libs/StorageSlots.sol";
 import { MakerTraits, MakerTraitsLib } from "../libs/MakerTraits.sol";
 
 import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
+import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
 library OrderRegistratorLib {
     /// @dev Order already known

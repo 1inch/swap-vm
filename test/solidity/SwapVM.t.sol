@@ -10,7 +10,7 @@ import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { SafeERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IPermit2 } from "@1inch/solidity-utils/contracts/interfaces/IPermit2.sol";
 
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";

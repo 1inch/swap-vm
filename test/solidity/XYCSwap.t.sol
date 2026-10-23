@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { dynamic } from "./utils/Dynamic.sol";
 

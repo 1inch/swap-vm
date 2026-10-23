@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter } from "../helpers/SwapVMTestSetup.sol";
 

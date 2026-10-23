@@ -22,7 +22,7 @@ The commands to build and test this repository are in [the README's Development 
 | `test/solidity/` | Solidity tests run by Hardhat, including fuzz tests, `CoreInvariants` and the gas tests under `gas/` |
 | `test/typescript/` | TypeScript tests run by Hardhat's Node.js test runner |
 | `ignition/` | Hardhat Ignition modules that deploy the three routers, and per-chain constructor parameters in `ignition/parameters/` |
-| `snapshots/` | Gas measurements the gas tests write through the snapshot cheatcodes; `.gas-snapshot` at the root holds the per-test snapshot |
+| `snapshots/` | Gas snapshots: `snapshot.txt` holds the per-test snapshot (`.gas-snapshot` at the root is a symlink to it), and the JSON files hold the measurements the gas tests write through the snapshot cheatcodes |
 | `docs/` | The programs catalog (`PROGRAMS.md`) and the SwapVM 1.0 whitepaper (PDF) |
 | `LICENSES/` | Full licence texts for SwapVM and the third-party code it uses |
 | `.github/` | The CI, TAG, CREATE_RELEASE and PUBLISH workflows, which call 1inch/ci-workflow-protocol |
