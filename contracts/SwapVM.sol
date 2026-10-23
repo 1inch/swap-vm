@@ -7,7 +7,7 @@ pragma solidity 0.8.30;
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
+import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
 import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";

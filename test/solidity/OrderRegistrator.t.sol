@@ -6,8 +6,8 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
+import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { LimitSwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";

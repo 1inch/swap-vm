@@ -1,6 +1,11 @@
+<div align="center">
+    <img src="https://raw.githubusercontent.com/1inch/swap-vm/main/.github/1inch_github_w.svg#gh-light-mode-only" alt="1inch">
+    <img src="https://raw.githubusercontent.com/1inch/swap-vm/main/.github/1inch_github_b.svg#gh-dark-mode-only" alt="1inch">
+</div>
+
 # SwapVM
 
-**Release flow:** `main` for development, one `release/X.Y.Z` branch per audited deploy, tags `vX.Y.Z` set by CI — see [docs/RELEASE_FLOW.md](docs/RELEASE_FLOW.md).
+**Release flow:** `main` for development, one `release/X.Y.Z` branch per release, tags `vX.Y.Z` set by the `TAG` workflow — see [RELEASE_FLOW.md](https://github.com/1inch/ci-workflow-protocol/blob/main/RELEASE_FLOW.md).
 
 [![Github Release](https://img.shields.io/github/v/tag/1inch/swap-vm?sort=semver&label=github)](https://github.com/1inch/swap-vm/releases/latest)
 [![CI](https://github.com/1inch/swap-vm/actions/workflows/ci.yml/badge.svg)](https://github.com/1inch/swap-vm/actions/workflows/ci.yml)
@@ -267,8 +272,8 @@ Full example: [`ExampleInvariantUsage.t.sol`](test/solidity/invariants/ExampleIn
 - EIP-712 signed orders; Aqua orders are authorized by Aqua balances.
 - Programs can only combine the router's instruction set; settlement happens in SwapVM after the program, never inside an instruction. `Extruction` calls a maker-chosen contract — treat it as strategy risk.
 - The owner role is limited to `rescueFunds` for tokens stuck in the router.
-- Audit: [OpenZeppelin — 1inch Aqua and SwapVM MVP v1.0](https://www.openzeppelin.com/news/1inch-aqua-and-swapvm-mvp-v1.0-audit).
-- Contact: security@1inch.io
+- Audits: [SECURITY.md](SECURITY.md#audits) links the reports for v1 and v1.0.2, including [OpenZeppelin — 1inch Aqua and SwapVM MVP v1.0](https://www.openzeppelin.com/news/1inch-aqua-and-swapvm-mvp-v1.0-audit).
+- Vulnerabilities and the bug bounty: [SECURITY.md](SECURITY.md). Never report a vulnerability in a public issue.
 
 ## Deployment
 

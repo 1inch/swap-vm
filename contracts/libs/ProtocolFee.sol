@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
+import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
 import { ProtocolFee } from "./VM.sol";
 

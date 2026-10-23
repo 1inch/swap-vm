@@ -1,27 +1,34 @@
 {
   "name": "@1inch/swap-vm",
-  "version": "0.0.6",
+  "version": "1.2.0-rc.1",
   "description": "Swap Virtual Machine protocol to build token swap strategies with programmable instruction sequences",
   "type": "module",
   "packageManager": "yarn@1.22.22",
+  "files": [
+    "contracts",
+    "LICENSES",
+    "THIRD_PARTY_NOTICES"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@1inch/aqua": "github:1inch/aqua#v1.0.0",
-    "@1inch/solidity-utils": "7.0.0",
-    "@openzeppelin/contracts": "5.4.0",
+    "@1inch/aqua": "1.0.2-rc.2",
+    "@1inch/solidity-utils": "7.0.3",
+    "@openzeppelin/contracts": "5.6.1",
     "forge-std": "github:foundry-rs/forge-std#v1.11.0"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "^4.0.15",
-    "@nomicfoundation/hardhat-ignition": "^3.1.6",
-    "@nomicfoundation/hardhat-keystore": "^3.0.11",
-    "@nomicfoundation/hardhat-node-test-runner": "^3.0.17",
-    "@nomicfoundation/hardhat-verify": "^3.0.0",
-    "hardhat": "^3.8.0",
+    "@nomicfoundation/hardhat-ethers": "4.2.0",
+    "@nomicfoundation/hardhat-ignition": "3.1.8",
+    "@nomicfoundation/hardhat-keystore": "3.1.1",
+    "@nomicfoundation/hardhat-node-test-runner": "3.1.0",
+    "@nomicfoundation/hardhat-verify": "3.1.2",
+    "hardhat": "3.18.1",
     "hardhat-ignore-warnings": "0.3.0"
   },
   "resolutions": {
-    "elliptic": "6.6.1",
-    "@1inch/solidity-utils": "6.9.10"
+    "elliptic": "6.6.1"
   },
   "scripts": {
     "clean": "npx hardhat clean",
