@@ -287,6 +287,7 @@ Release **v1.0.x** router: `0x111111338c5091E8440b67B168bAe16a668AC0De` on Ether
 yarn install
 yarn build           # hardhat compile (viaIR, slow on first run)
 yarn test            # Solidity and TypeScript tests
+yarn size            # production-profile contract sizes
 yarn snapshot:check  # gas snapshots
 ```
 
