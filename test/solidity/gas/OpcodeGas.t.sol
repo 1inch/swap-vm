@@ -113,7 +113,7 @@ contract OpcodeGas is Test {
         _snapshot("XYCConcentrateSwap", XYCConcentrateSwap.build(0.1e18, 5e18));
         _snapshot("LimitSwap", LimitSwap.build(address(tokenA), address(tokenB)));
         _snapshot("LimitSwapFullAmount", LimitSwapFullAmount.build(address(tokenA), address(tokenB)));
-        _snapshot("PeggedSwap", PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1));
+        _snapshot("PeggedSwap", PeggedSwap.build(50e18, 50e18, 0.02e9));
         _snapshot("FeeFlatIn", FeeFlatIn.build(0.10e7));
         _snapshot("FeeFlatOut", FeeFlatOut.build(0.10e7));
         _snapshot("StaticBalances", StaticBalances.build(AMOUNT, AMOUNT));
