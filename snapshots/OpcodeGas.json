@@ -33,7 +33,7 @@
   "OraclePriceAdjusterBalanceOut_OneInverseFeed": "3850",
   "OraclePriceAdjusterBalanceOut_TwoFeeds": "5599",
   "OraclePriceAdjusterBalanceOut_TwoInverseFeeds": "5534",
-  "PeggedSwap": "7837",
+  "PeggedSwap": "7554",
   "PiecewiseLinearSurchargeBalanceIn": "1857",
   "PiecewiseLinearSurchargeBalanceOut": "1940",
   "PrivateOrder": "844",
@@ -44,6 +44,6 @@
   "ValidateSeriesEpoch": "3220",
   "WhitelistCoequal": "1009",
   "WhitelistSequential": "1213",
-  "XYCConcentrateSwap": "4734",
+  "XYCConcentrateSwap": "4722",
   "XYCSwap": "1183"
 }

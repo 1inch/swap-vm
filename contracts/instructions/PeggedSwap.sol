@@ -17,8 +17,8 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 ///   `sqrt(balanceIn / anchorIn) + sqrt(balanceOut / anchorOut) + width * (balanceIn / anchorIn + balanceOut / anchorOut)`
 ///   Initially suppose balances are at the anchors `liquidity = 2 + 2 * width`
 ///   The curve has finite reserves
-/// @dev Fees are reinvested, curvature decreses due to linear term grows faster with increasing balances
-/// @dev Encoding: [uint256 anchorA, uint256 anchorB, uint104 width]; width encoded with ONE as precision
+/// @dev Fees are reinvested; curvature decreases because the linear term grows faster as balances increase
+/// @dev Encoding: [uint144 anchorA, uint144 anchorB, uint104 width]; width encoded with ONE as precision
 library PeggedSwap {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -26,7 +26,7 @@ library PeggedSwap {
     using Math for uint256;
 
     error PeggedSwapInvalidWidth(uint104 width);
-    error PeggedSwapInvalidAnchors(uint256 anchorA, uint256 anchorB);
+    error PeggedSwapInvalidAnchors(uint144 anchorA, uint144 anchorB);
     error PeggedSwapContextOverflow();
 
     Opcode constant opcode = Opcode.PeggedSwap;
@@ -35,30 +35,30 @@ library PeggedSwap {
     uint256 internal constant ONEx2 = 1e54;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 13;
+        return InstructionBuilder.sizeOf() + 18 + 18 + 13;
     }
 
-    function build(uint256 anchorA, uint256 anchorB, uint104 width) internal pure returns (bytes memory) {
+    function build(uint144 anchorA, uint144 anchorB, uint104 width) internal pure returns (bytes memory) {
         return build(MemoryPtrLib.alloc(sizeOf()), anchorA, anchorB, width).resolve();
     }
 
-    function build(MemoryPtr ptrStart, uint256 anchorA, uint256 anchorB, uint104 width) internal pure returns (MemoryPtr ptr) {
+    function build(MemoryPtr ptrStart, uint144 anchorA, uint144 anchorB, uint104 width) internal pure returns (MemoryPtr ptr) {
         require(anchorA > 0 && anchorB > 0, PeggedSwapInvalidAnchors(anchorA, anchorB));
-        require(width <= 5_000 * ONE, PeggedSwapInvalidWidth(width));
+        require(width >= ONE / 4 && width <= 5_000 * ONE, PeggedSwapInvalidWidth(width));
 
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(anchorA, 32).push(anchorB, 32).push(width, 13);
+        ptr = ptr.push(anchorA, 18).push(anchorB, 18).push(width, 13);
         ptrStart.patchLength(ptr);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 anchorA, uint256 anchorB, uint104 width) {
-        anchorA = args.at(0).asU256();
-        anchorB = args.at(32).asU256();
-        width = args.at(64).asU104();
+    function parse(bytes calldata args) internal pure returns (uint144 anchorA, uint144 anchorB, uint104 width) {
+        anchorA = args.at(0).asU144();
+        anchorB = args.at(18).asU144();
+        width = args.at(36).asU104();
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint256 anchorIn; uint256 anchorOut; uint104 width;
+        uint144 anchorIn; uint144 anchorOut; uint104 width;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (anchorIn, anchorOut, width) = parse(args);
         else (anchorOut, anchorIn, width) = parse(args);
 
@@ -119,7 +119,11 @@ library PeggedSwap {
     ///   `balance = 4 * anchor * contribution ** 2 / (1 + sqrt(1 + 4 * width * contribution)) ** 2`
     /// @dev Rounds up, expected to consume `contribution` rounded up, may exceed real balance behind the side
     function solve(uint256 contribution, uint256 width, uint256 anchor) internal pure returns (uint256 balance) {
-        uint256 denom = ONE + (ONEx2 + 4 * width * contribution).sqrt();
-        balance = (4 * anchor).mulDiv(contribution * contribution, denom * denom, Math.Rounding.Ceil);
+        unchecked {
+            require(contribution >> 128 == 0, PeggedSwapContextOverflow());
+            uint256 disc = ONEx2 + 4 * width * contribution; // uint180 + uint8 * uint104 * uint128 <= uint240
+            uint256 denom = ONEx2 + disc + ONE * (4 * disc).sqrt(); // uint180 + uint240 + uint90 * (uint8 * uint240).sqrt() <= uint240
+            balance = (4 * anchor).mulDiv(contribution * contribution, denom, Math.Rounding.Ceil);
+        }
     }
 }

@@ -269,7 +269,7 @@ contract AquaRouterGas is Test {
 
     function programPeggedSwap(bool isExactIn) internal returns (ISwapVM.Order memory, bytes memory) {
         return buildOrder(
-            PeggedSwap.build(AMM_BALANCE, AMM_BALANCE, 100e27),
+            PeggedSwap.build(uint144(AMM_BALANCE), uint144(AMM_BALANCE), 100e27),
             isExactIn,
             AMM_BALANCE,
             AMM_BALANCE
