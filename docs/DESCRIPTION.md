@@ -330,7 +330,7 @@ Routers: **F** [`SwapVMRouter`](../contracts/routers/SwapVMRouter.sol) (`Opcodes
 | `LimitSwapFullAmount` | F L | `(bool direction)` | Fill-or-kill: reverts unless the taker covers the whole balance. |
 | `XYCSwap` | F A | `()` | Constant product. |
 | `XYCConcentrateSwap` | F A | `(uint256 sqrtPriceMin, uint256 sqrtPriceMax)` | Constant product with liquidity concentrated in the range; retained fees are reinvested. Clamps to `balanceOut`. |
-| `PeggedSwap` | F A | `(uint256 x0, uint256 y0, uint256 linearWidth, uint256 rateA, uint256 rateB)` | `sqrt(x/x0) + sqrt(y/y0) + A(x/x0 + y/y0) = 1 + A`; `rateA` / `rateB` normalize decimals, `linearWidth = A * 1e27` up to `5000e27`. Finite reserves, hard price bounds. |
+| `PeggedSwap` | F A | `(uint144 anchorA, uint144 anchorB, uint104 width)` | `sqrt(balanceA / anchorA) + sqrt(balanceB / anchorB) + width * (balanceA / anchorA + balanceB / anchorB) = constant`. Pegged assets curve, finite reserves. |
 
 ### Fees
 
@@ -506,15 +506,15 @@ Aqua supplies the reserves, so there is no balance instruction. Traits: `useAqua
 ### Pegged pair (F, A)
 
 ```solidity
-// USDC (6 decimals) is tokenA, DAI (18 decimals) is tokenB; the rates bring both to 1e18
+// Standard 1:1 peg: USDC (6 decimals) is tokenA and DAI (18 decimals) is tokenB.
 bytes memory program = bytes.concat(
     DynamicBalances.build(1_000_000e6, 1_000_000e18),
-    FeeFlatIn.build(0.0001e7),                                     // 0.01%
-    PeggedSwap.build(1_000_000e18, 1_000_000e18, 100e27, 1e12, 1)  // x0, y0 normalized; A = 100; rateA, rateB
+    FeeFlatIn.build(0.0001e7),                             // 0.01%
+    PeggedSwap.build(1_000_000e6, 1_000_000e18, 100e27)    // raw anchors; width = 100
 );
 ```
 
-The reserves are finite: the curve has hard price bounds and does not follow a drifting peg.
+The reserves are finite, the curve is designed for pegged assets - less friction for big swaps.
 
 ### Direction-dependent fee (F, A)
 
@@ -538,7 +538,7 @@ Each `FeeFlatIn` wraps whatever the loop executes after it, so the `Jump` inside
 
 ```solidity
 bytes memory xyc = XYCSwap.build();
-bytes memory pegged = PeggedSwap.build(100e18, 100e18, 100e27, 1, 1);
+bytes memory pegged = PeggedSwap.build(100e18, 100e18, 100e27);
 bytes memory selectorArgs = abi.encodePacked(uint8(2), uint16(xyc.length), xyc, uint16(pegged.length), pegged);
 
 bytes memory program = bytes.concat(

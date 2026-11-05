@@ -87,13 +87,13 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
     function test_PeggedSwap_OddAmountRounding() public view {
         uint256 balanceA = 10000e18;
         uint256 balanceB = 10000e18;
-        uint256 x0Initial = 10000e18;
-        uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e27; // A = 0.8
+        uint144 anchorA = 10000e18;
+        uint144 anchorB = 10000e18;
+        uint104 width = 0.8e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
+            PeggedSwap.build(anchorA, anchorB, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -168,13 +168,13 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
     function test_PeggedSwap_LargeOddAmounts() public view {
         uint256 balanceA = 10000e18;
         uint256 balanceB = 10000e18;
-        uint256 x0Initial = 10000e18;
-        uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e27; // A = 0.8
+        uint144 anchorA = 10000e18;
+        uint144 anchorB = 10000e18;
+        uint104 width = 0.8e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
+            PeggedSwap.build(anchorA, anchorB, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -226,13 +226,13 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
     function test_PeggedSwap_RoundingConsistency() public view {
         uint256 balanceA = 10000e18;
         uint256 balanceB = 10000e18;
-        uint256 x0Initial = 10000e18;
-        uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e27; // A = 0.8
+        uint144 anchorA = 10000e18;
+        uint144 anchorB = 10000e18;
+        uint104 width = 0.8e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
+            PeggedSwap.build(anchorA, anchorB, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -267,13 +267,13 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
     function test_PeggedSwap_Invariants() public {
         uint256 balanceA = 10000e18;
         uint256 balanceB = 10000e18;
-        uint256 x0Initial = 10000e18;
-        uint256 y0Initial = 10000e18;
-        uint256 linearWidth = 0.8e27; // A = 0.8 (standard for stablecoins)
+        uint144 anchorA = 10000e18;
+        uint144 anchorB = 10000e18;
+        uint104 width = 0.8e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceA, balanceB),
-            PeggedSwap.build(x0Initial, y0Initial, linearWidth, 1, 1)
+            PeggedSwap.build(anchorA, anchorB, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -300,19 +300,19 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
 
     /**
      * Test PeggedSwap reverse swap direction with all invariants
-     * @dev Ensures reverse swaps work correctly when using a mixed linear/sqrt curve (linearWidth = 0.8e27)
+     * @dev Ensures reverse swaps work correctly when using a mixed linear/sqrt curve (width = 0.8e27)
      */
     function test_PeggedSwap_ReverseDirection_Invariants() public {
-        uint256 balanceA = 1000e18;
-        uint256 balanceB = 1000000e18;
+        uint144 balanceA = 1000e18;
+        uint144 balanceB = 1000000e18;
         (address tokenIn, address tokenOut) = address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
-        (uint256 balanceIn, uint256 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
+        (uint144 balanceIn, uint144 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
 
-        uint256 linearWidth = 0.8e27; // A = 0.8
+        uint104 width = 0.8e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceIn, balanceOut),
-            PeggedSwap.build(balanceIn, balanceOut, linearWidth, 1, 1)
+            PeggedSwap.build(balanceIn, balanceOut, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);
@@ -345,19 +345,19 @@ contract PeggedSwapInvariants is Test, CoreInvariants {
 
     /**
      * Test PeggedSwap reverse swap direction with all invariants
-     * @dev Ensures reverse swaps work correctly
+     * @dev Ensures reverse swaps work correctly with the maximum linear weight
      */
     function test_PeggedSwap_ReverseDirection_Linear_Invariants() public {
-        uint256 balanceA = 1000e18;
-        uint256 balanceB = 1000000e18;
+        uint144 balanceA = 1000e18;
+        uint144 balanceB = 1000000e18;
         (address tokenIn, address tokenOut) = address(tokenA) < address(tokenB) ? (address(tokenA), address(tokenB)) : (address(tokenB), address(tokenA));
-        (uint256 balanceIn, uint256 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
+        (uint144 balanceIn, uint144 balanceOut) = address(tokenA) < address(tokenB) ? (balanceA, balanceB) : (balanceB, balanceA);
 
-        uint256 linearWidth = 0;
+        uint104 width = 5_000e27;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceIn, balanceOut),
-            PeggedSwap.build(balanceIn, balanceOut, linearWidth, 1, 1)
+            PeggedSwap.build(balanceIn, balanceOut, width)
         );
 
         ISwapVM.Order memory order = _createOrder(bytecode);

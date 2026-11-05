@@ -262,7 +262,7 @@ contract RunLoopTest is Test {
         bytes memory strategy1 = XYCSwap.build();
 
         // Strategy 2: Pegged (optimized for stable pairs)
-        bytes memory strategy2 = PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1);
+        bytes memory strategy2 = PeggedSwap.build(50e18, 50e18, 0.5e27);
 
         // Pack strategies with lengths
         bytes memory selectorArgs = abi.encodePacked(

@@ -21,7 +21,6 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../../contracts/instructions/Decay.sol";
 import { PeggedSwap } from "../../contracts/instructions/PeggedSwap.sol";
-import { PeggedSwapMath } from "../../contracts/libs/PeggedSwapMath.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -251,7 +250,7 @@ contract AquaAccounting is Test {
             protocolFeeCode,
             Decay.build(decayPeriod),
             flatFeeCode,
-            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
+            PeggedSwap.build(uint144(INITIAL_BALANCE_A), uint144(INITIAL_BALANCE_B), 1e27),
             Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }

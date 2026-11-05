@@ -71,7 +71,7 @@ library PeggedSwap {
         }
 
         // Maker favored rounding:
-        // `least = liquidity - contribution` round up + solve(least) round up ->
+        // `least = liquidity - contribution` round up and solve(least) round up ->
         // `amountIn = solve(least) - balanceIn` round up or `amountOut = balanceOut - solve(least)` round down
 
         uint256 liquidity; // Current curve value, has token in and token out contribution parts
