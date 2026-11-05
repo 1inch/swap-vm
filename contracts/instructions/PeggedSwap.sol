@@ -18,16 +18,16 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 ///   Initially suppose balances are at the anchors `liquidity = 2 + 2 * width`
 ///   The curve has finite reserves
 /// @dev Fees are reinvested, curvature decreses due to linear term grows faster with increasing balances
-/// @dev Encoding: [uint256 anchorA, uint256 anchorB, uint128 width]
-///   width encoded with ONE as precision
+/// @dev Encoding: [uint256 anchorA, uint256 anchorB, uint104 width]; width encoded with ONE as precision
 library PeggedSwap {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
 
     using Math for uint256;
 
-    error PeggedSwapInvalidWidth(uint128 width);
+    error PeggedSwapInvalidWidth(uint104 width);
     error PeggedSwapInvalidAnchors(uint256 anchorA, uint256 anchorB);
+    error PeggedSwapContextOverflow();
 
     Opcode constant opcode = Opcode.PeggedSwap;
 
@@ -35,49 +35,60 @@ library PeggedSwap {
     uint256 internal constant ONEx2 = 1e54;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 32 + 32 + 16;
+        return InstructionBuilder.sizeOf() + 32 + 32 + 13;
     }
 
-    function build(uint256 anchorA, uint256 anchorB, uint128 width) internal pure returns (bytes memory) {
+    function build(uint256 anchorA, uint256 anchorB, uint104 width) internal pure returns (bytes memory) {
         return build(MemoryPtrLib.alloc(sizeOf()), anchorA, anchorB, width).resolve();
     }
 
-    function build(MemoryPtr ptrStart, uint256 anchorA, uint256 anchorB, uint128 width) internal pure returns (MemoryPtr ptr) {
+    function build(MemoryPtr ptrStart, uint256 anchorA, uint256 anchorB, uint104 width) internal pure returns (MemoryPtr ptr) {
         require(anchorA > 0 && anchorB > 0, PeggedSwapInvalidAnchors(anchorA, anchorB));
         require(width <= 5_000 * ONE, PeggedSwapInvalidWidth(width));
 
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(anchorA, 32).push(anchorB, 32).push(width, 16);
+        ptr = ptr.push(anchorA, 32).push(anchorB, 32).push(width, 13);
         ptrStart.patchLength(ptr);
     }
 
-    function parse(bytes calldata args) internal pure returns (uint256 anchorA, uint256 anchorB, uint128 width) {
+    function parse(bytes calldata args) internal pure returns (uint256 anchorA, uint256 anchorB, uint104 width) {
         anchorA = args.at(0).asU256();
         anchorB = args.at(32).asU256();
-        width = args.at(64).asU128();
+        width = args.at(64).asU104();
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
-        uint256 anchorIn; uint256 anchorOut; uint128 width;
+        uint256 anchorIn; uint256 anchorOut; uint104 width;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (anchorIn, anchorOut, width) = parse(args);
         else (anchorOut, anchorIn, width) = parse(args);
-        
+
+        unchecked {
+            require(
+                (ctx.swap.amountIn >> 144) + (ctx.swap.amountOut >> 144) +
+                (ctx.swap.balanceIn >> 144) + (ctx.swap.balanceOut >> 144) == 0,
+                PeggedSwapContextOverflow()
+            );
+        }
+
         // Maker favored rounding:
         // `least = liquidity - contribution` round up + solve(least) round up ->
         // `amountIn = solve(least) - balanceIn` round up or `amountOut = balanceOut - solve(least)` round down
 
-        // Current curve value, has token in and token out contribution parts
-        uint256 liquidity =
-            ONEx2.mulDiv(ctx.swap.balanceIn, anchorIn, Math.Rounding.Ceil).sqrt(Math.Rounding.Ceil) +
-            (width * ctx.swap.balanceIn).ceilDiv(anchorIn) +
-            ONEx2.mulDiv(ctx.swap.balanceOut, anchorOut, Math.Rounding.Ceil).sqrt(Math.Rounding.Ceil) +
-            (width * ctx.swap.balanceOut).ceilDiv(anchorOut);
+        uint256 liquidity; // Current curve value, has token in and token out contribution parts
+        unchecked {
+            liquidity =
+                ONEx2.mulDiv(ctx.swap.balanceIn, anchorIn, Math.Rounding.Ceil).sqrt(Math.Rounding.Ceil) +
+                (width * ctx.swap.balanceIn).ceilDiv(anchorIn) +
+                ONEx2.mulDiv(ctx.swap.balanceOut, anchorOut, Math.Rounding.Ceil).sqrt(Math.Rounding.Ceil) +
+                (width * ctx.swap.balanceOut).ceilDiv(anchorOut);
+        }
 
         if (ctx.query.isExactIn) {
-            // Contribution to curve value made by token in considering both balance and swap amount
-            uint256 contribution =
-                ONEx2.mulDiv(ctx.swap.balanceIn + ctx.swap.amountIn, anchorIn).sqrt() +
-                width * (ctx.swap.balanceIn + ctx.swap.amountIn) / anchorIn;
+            uint256 contribution; // Contribution to curve value made by token in considering both balance and swap amount
+            unchecked {
+                uint256 postBalanceIn = ctx.swap.balanceIn + ctx.swap.amountIn;
+                contribution = ONEx2.mulDiv(postBalanceIn, anchorIn).sqrt() + width * postBalanceIn / anchorIn;
+            }
 
             if (contribution >= liquidity) { // Single side contribution exceeds liquidity -> partial fill
                 ctx.swap.amountIn = solve(liquidity, width, anchorIn) - ctx.swap.balanceIn;
@@ -89,10 +100,11 @@ library PeggedSwap {
         } else {
             if (ctx.swap.amountOut > ctx.swap.balanceOut) ctx.swap.amountOut = ctx.swap.balanceOut; // Partial fill support
 
-            // Contribution to curve value made by token out considering both balance and swap amount
-            uint256 contribution =
-                ONEx2.mulDiv(ctx.swap.balanceOut - ctx.swap.amountOut, anchorOut).sqrt() +
-                width * (ctx.swap.balanceOut - ctx.swap.amountOut) / anchorOut;
+            uint256 contribution; // Contribution to curve value made by token out considering both balance and swap amount
+            unchecked {
+                uint256 postBalanceOut = ctx.swap.balanceOut - ctx.swap.amountOut;
+                contribution = ONEx2.mulDiv(postBalanceOut, anchorOut).sqrt() + width * postBalanceOut / anchorOut;
+            }
 
             ctx.swap.amountIn = solve(liquidity - contribution, width, anchorIn) - ctx.swap.balanceIn;
         }
@@ -106,7 +118,7 @@ library PeggedSwap {
     ///   `sqrt(balance / anchor) = 2 * contribution / (1 + sqrt(1 + 4 * width * contribution))`
     ///   `balance = 4 * anchor * contribution ** 2 / (1 + sqrt(1 + 4 * width * contribution)) ** 2`
     /// @dev Rounds up, expected to consume `contribution` rounded up, may exceed real balance behind the side
-    function solve(uint256 contribution, uint128 width, uint256 anchor) internal pure returns (uint256 balance) {
+    function solve(uint256 contribution, uint256 width, uint256 anchor) internal pure returns (uint256 balance) {
         uint256 denom = ONE + (ONEx2 + 4 * width * contribution).sqrt();
         balance = (4 * anchor).mulDiv(contribution * contribution, denom * denom, Math.Rounding.Ceil);
     }
