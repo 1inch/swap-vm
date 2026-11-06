@@ -66,7 +66,7 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
 | Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuction`, `PiecewiseLinearSurcharge`, `Decay` (time-decaying virtual balances) |
-| Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
+| Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` (pegged assets curve) |
 | Rates        | `RequireMinRate`, `OraclePriceAdjuster` (one or two Chainlink feeds), `BaseFeeAdjuster` (gas-aware), `FillGridAdjuster` (adjusters select balance in/out with `adjustIn`) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
@@ -182,6 +182,21 @@ bytes memory program = bytes.concat(
 ```
 
 With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come from Aqua after `aqua.ship(...)`. The curve bytecode is the same in both modes, and maker `usePermit2` must remain false because Aqua settles maker funds.
+
+### Pegged AMM position
+
+`PeggedSwap.build(anchorA, anchorB, width)` takes raw token quantities in address order. Their ratio includes token decimals and the reference rate. This example encodes `1 DAI = 1.00005 USDC` for DAI with 18 decimals and USDC with 6:
+
+```solidity
+// DAI is tokenA and USDC is tokenB.
+bytes memory program = bytes.concat(
+    DynamicBalances.build(1_000_000e18, 1_000_050e6),
+    FeeFlatIn.build(0.0001e7),
+    PeggedSwap.build(1_000_000e18, 1_000_050e6, 100e27)
+);
+```
+
+Swap both balances and anchors when USDC has the lower address. `width` uses `1e27` precision and is capped at `5000e27`.
 
 ### Hooks
 

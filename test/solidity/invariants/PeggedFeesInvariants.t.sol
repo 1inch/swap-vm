@@ -58,12 +58,10 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     uint256 internal balanceA = 1000e18;
     uint256 internal balanceB = 1000e18;
 
-    // PeggedSwap config (using 1e27 scale for x0/y0/linearWidth to match PeggedSwapMath.ONE)
-    uint256 internal x0 = 1000e18;        // Initial X reserve (normalization)
-    uint256 internal y0 = 1000e18;        // Initial Y reserve (normalization)
-    uint256 internal linearWidth = 0.8e27; // A parameter (0.8 = mostly linear)
-    uint256 internal rateLt = 1;        // Rate for lower address token (scales 1e18 -> 1e27)
-    uint256 internal rateGt = 1;        // Rate for greater address token (scales 1e18 -> 1e27)
+    // PeggedSwap config
+    uint144 internal anchorA = 1000e18;
+    uint144 internal anchorB = 1000e18;
+    uint104 internal width = 0.8e27;
 
     // Flat fees
     uint24 internal flatFeeInBps = 0.003e7;    // 0.3%
@@ -79,8 +77,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     // Test amounts for exactOut (if empty, uses testAmounts)
     uint256[] internal testAmountsExactOut;
 
-    // Symmetry tolerance (default 2 wei, increase for nondivisible x0/y0)
-    // NOTE: For x0/y0 not divisible by 1e18 (e.g., 1500e18), error ≈ x0/1e18 wei
+    // Symmetry tolerance (default 2 wei, increase for nondivisible anchors)
+    // NOTE: For anchors not divisible by 1e18 (e.g., 1500e18), the error scales with the anchors.
     uint256 internal symmetryTolerance = 2;
 
     // Additivity tolerance (default 0, increase for rounding)
@@ -178,7 +176,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
             (fees.flatFeeOutBps > 0) ? FeeFlatOut.build(fees.flatFeeOutBps) : bytes(""),
 
             // PeggedSwap instruction
-            PeggedSwap.build(x0, y0, linearWidth, rateLt, rateGt)
+            PeggedSwap.build(anchorA, anchorB, width)
         );
     }
 
@@ -424,21 +422,17 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     function test_AsymmetricPool_ReverseSwap_NoAxisMismatch() public {
         _setupVeryImbalancedDifferentDecimals();
 
-        uint256 abundantBalance = 100_000e18;
-        uint256 scarceBalance = 10e6;
+        uint144 abundantBalance = 100_000e18;
+        uint144 scarceBalance = 10e6;
 
         bool tokenAIs18 = tokenA.decimals() == 18;
 
-        uint256 balanceTokenA = tokenAIs18 ? abundantBalance : scarceBalance;
-        uint256 balanceTokenB = tokenAIs18 ? scarceBalance : abundantBalance;
-        uint256 rateLtTest = tokenAIs18 ? 1 : 1e12;
-        uint256 rateGtTest = tokenAIs18 ? 1e12 : 1;
-        uint256 x0Config = balanceTokenA * rateLtTest;
-        uint256 y0Config = balanceTokenB * rateGtTest;
+        uint144 balanceTokenA = tokenAIs18 ? abundantBalance : scarceBalance;
+        uint144 balanceTokenB = tokenAIs18 ? scarceBalance : abundantBalance;
 
         bytes memory bytecode = bytes.concat(
             DynamicBalances.build(balanceTokenA, balanceTokenB),
-            PeggedSwap.build(x0Config, y0Config, linearWidth, rateLtTest, rateGtTest)
+            PeggedSwap.build(balanceTokenA, balanceTokenB, width)
         );
 
         ISwapVM.Order memory order = orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
@@ -471,7 +465,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         bytes memory exactInData = _reverseSwapTakerData(signature, tokenInForward < tokenOutForward);
         bytes memory exactInDataReverse = _reverseSwapTakerData(signature, tokenOutForward < tokenInForward);
 
-        try swapVM.asView().quote(order, swapAmount, exactInData) returns (uint256, uint256 outForward, bytes32) {
+        {
+            (, uint256 outForward,) = swapVM.asView().quote(order, swapAmount, exactInData);
             assertGt(outForward, 0, "Output should be non-zero");
             uint256 maxReasonableOutput = swapAmount * 20;
             uint256 outForwardScaled = outForward;
@@ -489,9 +484,10 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
                     ", Max reasonable: ", vm.toString(maxReasonableOutput)
                 )
             );
-        } catch {}
+        }
 
-        try swapVM.asView().quote(order, swapAmountReverse, exactInDataReverse) returns (uint256, uint256 outReverse, bytes32) {
+        {
+            (, uint256 outReverse,) = swapVM.asView().quote(order, swapAmountReverse, exactInDataReverse);
             assertGt(outReverse, 0, "Reverse output should be non-zero");
             uint256 outReverseScaled = outReverse;
             if (tokenInForward == address(tokenA) && balanceTokenA < balanceTokenB) {
@@ -506,7 +502,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
                 normalizedInReverse * capacityRate * 2,
                 "Reverse direction also should not have axis mismatch"
             );
-        } catch {}
+        }
     }
 
     function _reverseSwapTakerData(bytes memory signature, bool isAToB) private view returns (bytes memory) {
@@ -537,7 +533,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     }
 
     function test_BalancedCurve() public {
-        linearWidth = 0.5e27;
+        width = 0.8e27;
         testAmounts = new uint256[](3);
         testAmounts[0] = 10e18;
         testAmounts[1] = 50e18;
@@ -581,8 +577,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     function test_HugeLiquidity() public {
         balanceA = 1e27;
         balanceB = 1e27;
-        x0 = 1e27;
-        y0 = 1e27;
+        anchorA = 1e27;
+        anchorB = 1e27;
         testAmounts = new uint256[](3);
         testAmounts[0] = 1e24;
         testAmounts[1] = 1e25;
@@ -596,9 +592,9 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     function test_ImbalancedPoolHighFees() public {
         balanceA = 10000e18;
         balanceB = 1000e18;
-        x0 = 10000e18;
-        y0 = 1000e18;
-        linearWidth = 0.5e27;
+        anchorA = 10000e18;
+        anchorB = 1000e18;
+        width = 0.5e27;
         flatFeeInBps = 0.05e7;
         flatFeeOutBps = 0.05e7;
         testAmounts = new uint256[](3);
@@ -618,9 +614,9 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     function test_ImbalancedPoolLowFees() public {
         balanceA = 10000e18;
         balanceB = 1000e18;
-        x0 = 10000e18;
-        y0 = 1000e18;
-        linearWidth = 0.5e27;
+        anchorA = 10000e18;
+        anchorB = 1000e18;
+        width = 0.5e27;
         flatFeeInBps = 0.001e7;
         flatFeeOutBps = 0.001e7;
         testAmounts = new uint256[](3);
@@ -665,16 +661,12 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         if (address(token18) < address(token6)) {
             balanceA = 10e18;
             balanceB = 10e6;
-            rateLt = 1;
-            rateGt = 1e12;
         } else {
             balanceA = 10e6;
             balanceB = 10e18;
-            rateLt = 1e12;
-            rateGt = 1;
         }
-        x0 = 10e18;
-        y0 = 10e18;
+        anchorA = uint144(balanceA);
+        anchorB = uint144(balanceB);
         uint256 unitIn = address(token18) < address(token6) ? 1e18 : 1e6;
         uint256 unitOut = address(token18) < address(token6) ? 1e6 : 1e18;
         testAmounts = new uint256[](3);
@@ -706,16 +698,12 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         if (address(token18) < address(token6)) {
             balanceA = 1_000_000e18;
             balanceB = 1_000_000e6;
-            rateLt = 1;
-            rateGt = 1e12;
         } else {
             balanceA = 1_000_000e6;
             balanceB = 1_000_000e18;
-            rateLt = 1e12;
-            rateGt = 1;
         }
-        x0 = 1_000_000e18;
-        y0 = 1_000_000e18;
+        anchorA = uint144(balanceA);
+        anchorB = uint144(balanceB);
         uint256 unitIn = address(token18) < address(token6) ? 1e18 : 1e6;
         uint256 unitOut = address(token18) < address(token6) ? 1e6 : 1e18;
         testAmounts = new uint256[](3);
@@ -732,8 +720,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         _runAllFeeVariants();
     }
 
-    function test_MostlyCurved() public {
-        linearWidth = 0.2e27;
+    function test_MinimumWidth() public {
+        width = 0.25e27;
         testAmounts = new uint256[](3);
         testAmounts[0] = 10e18;
         testAmounts[1] = 50e18;
@@ -744,8 +732,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         _runAllFeeVariants();
     }
 
-    function test_PureSquareRoot() public {
-        linearWidth = 0;
+    function test_MaximumWidth() public {
+        width = 5_000e27;
         testAmounts = new uint256[](3);
         testAmounts[0] = 10e18;
         testAmounts[1] = 50e18;
@@ -770,8 +758,8 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     function test_TinyLiquidity() public {
         balanceA = 1e18;
         balanceB = 1e18;
-        x0 = 1e18;
-        y0 = 1e18;
+        anchorA = 1e18;
+        anchorB = 1e18;
         testAmounts = new uint256[](3);
         testAmounts[0] = 0.01e18;
         testAmounts[1] = 0.05e18;
@@ -789,7 +777,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     }
 
     function test_VeryLinear() public {
-        linearWidth = 0.95e27;
+        width = 0.95e27;
         testAmounts = new uint256[](3);
         testAmounts[0] = 10e18;
         testAmounts[1] = 50e18;

@@ -302,7 +302,7 @@ contract SwapVmAccounting is Test {
             DynamicBalances.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B),
             Decay.build(decayPeriod),
             flatFeeCode,
-            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
+            PeggedSwap.build(uint144(INITIAL_BALANCE_A), uint144(INITIAL_BALANCE_B), 1e27),
             Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
