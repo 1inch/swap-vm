@@ -4,7 +4,7 @@
   "XYCSwap_FlatFeeIn_exactOut": "11571",
   "XYCSwap_FlatFeeIn_exactIn": "11521",
   "PeggedSwap_exactOut": "16643",
-  "PeggedSwap_exactIn": "16509",
+  "PeggedSwap_exactIn": "16512",
   "FullAMM_exactOut": "21339",
   "FullAMM_exactIn": "21295",
   "Decay_XYCSwap_exactOut": "16629",
