@@ -145,7 +145,7 @@ swap(order, amount, takerTraitsAndData)
 - **Native ETH.** `msg.value` is accepted only when `tokenIn` is WETH: the router wraps `amountIn` and refunds the excess. With Aqua orders this needs `useTransferFromAndAquaPush`.
 - **Aqua.** By default the taker must have pushed `tokenIn` into the maker's position for this `orderHash` (for example in `preTransferInCallback`); the router checks the raw balance grew by `amountIn` and pulls `tokenIn`-side fees from the position. With `useTransferFromAndAquaPush` the router pulls from the taker, pays the fees and pushes the net amount.
 - **Permit2.** Maker `usePermit2` covers `tokenOut` and `tokenOut`-side fees, taker `usePermit2` covers `tokenIn` and `tokenIn`-side fees. Both use an existing Permit2 allowance (token approved to Permit2, router authorized as spender); no Permit2 signature is submitted. Routers also inherit `PermitAndCall` to bundle a token permit with the call.
-- **Protocol fees.** `FeeProtocol` leaves receivers and a total in `ctx.fee`; settlement pays each receiver its share of the flat fee plus `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Dust from the split stays with the maker.
+- **Protocol fees.** `FeeProtocol` leaves receivers and a total in `ctx.fee`; settlement pays each receiver its share of the flat fee plus `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Each receiver's flat fee is its `feeBps` of the amount the program priced, independent of the other receivers: of the net input with `isTokenIn` (paid on top, so 1% and 2% on a 2000 USDC net input pay 20 and 40 USDC and the taker pays 2060), of the gross output otherwise. Dust from the split stays with the maker.
 - **Reentrancy.** A transient lock per `orderHash` guards `swap`; callbacks may fill other orders.
 
 ## Taker interface
@@ -478,7 +478,7 @@ Both branches end at `@common`, so each wrapper runs once whichever branch the t
 
 ```solidity
 FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
-receivers[0] = FeeProtocol.ReceiverConfig({ receiver: treasury, feeBps: 0.0005e7, surplusBps: 0 }); // 0.05% of amountIn
+receivers[0] = FeeProtocol.ReceiverConfig({ receiver: treasury, feeBps: 0.0005e7, surplusBps: 0 }); // 0.05% of the net amountIn, on top
 FeeProtocol.ProviderConfig[] memory noProviders;
 
 bytes memory program = bytes.concat(
