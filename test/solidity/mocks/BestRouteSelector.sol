@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
-import { Context, SwapQuery, SwapRegisters, VM, ProtocolFee } from "../../../contracts/libs/VM.sol";
+import { Context, SwapQuery, SwapRegisters, VM, ProtocolFee, FeeRegisters } from "../../../contracts/libs/VM.sol";
 import { FeeMetaLib, FeeReceiverLib } from "../../../contracts/libs/ProtocolFee.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OpcodesDebug } from "../../../contracts/opcodes/OpcodesDebug.sol";
@@ -94,7 +94,8 @@ contract BestRouteSelector is OpcodesDebug {
                     meta: FeeMetaLib.init(),
                     receivers: FeeReceiverLib.init(),
                     surplusEstimation: 0
-                })
+                }),
+                feeRegisters: FeeRegisters({ bps: 0, target: 0, fee: 0 })
             });
 
             // Execute this strategy

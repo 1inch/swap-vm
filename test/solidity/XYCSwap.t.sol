@@ -149,7 +149,7 @@ contract XYCSwapTest is Test {
         bytes memory takerData = _signAndPack(order, true, 0);
 
         uint256 amountIn = 10e18;
-        uint256 amountInAfterFee = amountIn * (1e7 - feeIn) / 1e7;
+        uint256 amountInAfterFee = amountIn * 1e7 / (1e7 + feeIn);
         uint256 expectedOut = (amountInAfterFee * poolB) / (poolA + amountInAfterFee);
 
         vm.prank(taker);

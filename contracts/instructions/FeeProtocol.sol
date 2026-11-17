@@ -10,7 +10,7 @@ import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/Calldat
 
 import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
 
-import { Context } from "../libs/VM.sol";
+import { Context, FeeRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -20,6 +20,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 /// @dev Flat percent fee is payed by taker
 ///   Fee in token in is feeBps of the net amount in and is added to amount in,
 ///   fee in token out is feeBps of the gross amount out and is charged from amount out
+///   Priced from the same base as the other fee wrappers, see FeeRegisters
 /// @dev Surplus fee is payed by maker
 ///   Estimated amount in / out is set and scaled according to the amount-to-balance proportion by FeeProtocolSurplus opcode
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
@@ -159,32 +160,49 @@ library FeeProtocol {
             }
         }
 
-        require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
+        FeeRegisters memory regs = ctx.feeRegisters;
+        bool isTakerSide = isTokenIn == ctx.query.isExactIn;
+        uint256 cumBps;
+        unchecked { cumBps = regs.bps + totalFeeBps; }
+
+        // Taker side fees in token out are charged from the gross amount out, so their total stays below 100%
+        uint256 checkedBps = isTakerSide && !isTokenIn ? cumBps : totalFeeBps;
+        require(checkedBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(checkedBps, totalSurplusBps));
 
         // Protocol fees rounded down
-        // Reduce amounts for totalFeeBps once here, split totalFeeAmount across receivers at transfer phase
-        uint256 totalFeeAmount;
-        if (isTokenIn) {
-            if (ctx.query.isExactIn) {
-                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS + totalFeeBps);
-                unchecked { ctx.swap.amountIn -= totalFeeAmount; }
-
-                uint256 reduction = ctx.swap.amountIn;
-                ctx.runLoop();
-                reduction -= ctx.swap.amountIn;
-
-                if (reduction > 0) totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
+        // Price totalFeeBps once here, split totalFeeAmount across receivers at transfer phase
+        uint256 base;
+        if (isTakerSide && totalFeeBps != 0) {
+            if (regs.bps == 0) regs.target = isTokenIn ? ctx.swap.amountIn : ctx.swap.amountOut;
+            regs.bps = cumBps;
+            uint256 fees = regs.target * cumBps / (isTokenIn ? BPS + cumBps : BPS - cumBps);
+            if (isTokenIn) {
+                unchecked { base = regs.target - fees; }
+                ctx.swap.amountIn = base;
             } else {
-                ctx.runLoop();
-                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
+                base = regs.target + fees;
+                ctx.swap.amountOut = base;
             }
-            ctx.swap.amountIn += totalFeeAmount;
-        } else {
-            if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
-            ctx.runLoop();
-            totalFeeAmount = ctx.swap.amountOut * totalFeeBps / BPS;
-            unchecked { ctx.swap.amountOut -= totalFeeAmount; }
         }
+
+        ctx.runLoop();
+
+        uint256 amount = isTokenIn ? ctx.swap.amountIn : ctx.swap.amountOut;
+        uint256 totalFeeAmount;
+        if (!isTakerSide) {
+            totalFeeAmount = (isTokenIn ? amount - regs.fee : amount + regs.fee) * totalFeeBps / BPS;
+            regs.fee += totalFeeAmount;
+        } else if (totalFeeBps != 0) {
+            if (regs.bps == cumBps && amount != base) {
+                uint256 changedFees = amount * cumBps / BPS;
+                regs.target = isTokenIn ? amount + changedFees : amount - changedFees;
+            }
+            uint256 fees;
+            unchecked { fees = isTokenIn ? regs.target - amount : amount - regs.target; }
+            totalFeeAmount = fees * totalFeeBps / cumBps;
+        }
+        if (isTokenIn) ctx.swap.amountIn = amount + totalFeeAmount;
+        else ctx.swap.amountOut = amount - totalFeeAmount;
 
         if (totalFeeBps == 0) totalFeeBps = 1; // Avoid zero total bps for unconditional final receiver amounts calculation
         ctx.fee.meta = FeeMetaLib.encode(isTokenIn, count, uint24(totalFeeBps), totalFeeAmount.toUint216());

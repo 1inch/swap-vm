@@ -63,7 +63,7 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 makerBalanceAAfter, uint256 makerBalanceBAfter) = getAquaBalances(strategyHash);
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
-        uint256 expectedFee = amountIn * setup.feeInBps / FeeFlatIn.BPS;
+        uint256 expectedFee = Math.ceilDiv(amountIn * setup.feeInBps, FeeFlatIn.BPS + setup.feeInBps);
         uint256 amountOutExpected = setup.balanceB * (amountIn - expectedFee) / (setup.balanceA + amountIn - expectedFee);
         assertEq(takerBalanceBAfter - takerBalanceBBefore, amountOutExpected, "Taker received correct amountOut");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
@@ -90,7 +90,7 @@ contract FeeAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
 
         uint256 baseAmountIn = Math.ceilDiv(setup.balanceA * amountOut, setup.balanceB - amountOut);
-        uint256 expectedFee = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), FeeFlatIn.BPS - uint256(setup.feeInBps));
+        uint256 expectedFee = Math.ceilDiv(baseAmountIn * uint256(setup.feeInBps), FeeFlatIn.BPS);
         uint256 amountInExpected = baseAmountIn + expectedFee;
         assertApproxEqAbs(takerBalanceABefore - takerBalanceAAfter, amountInExpected, 1, "Taker paid correct amountIn");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn, "Maker balance A should increase by amountIn");
@@ -103,8 +103,8 @@ contract FeeAquaTest is AquaSwapVMTest {
         MakerSetup memory setup = _makerSetup(uint24(FeeFlatIn.BPS - 1)); // ~100% fee in (BPS-1, exactly 100% is rejected by build)
         ISwapVM.Order memory order = createStrategy(setup);
         shipStrategy(order, tokenA, tokenB, setup.balanceA, setup.balanceB);
-        // Amount below BPS so the ~100% fee rounds the net input down to zero
-        SwapProgram memory swapProgram = _swapProgram(1e6, true, true);
+        // 1 wei so the ~100% fee rounds the net input down to zero
+        SwapProgram memory swapProgram = _swapProgram(1, true, true);
 
         mintTokenInToTaker(swapProgram);
         mintTokenOutToMaker(swapProgram, 200e18);
@@ -123,7 +123,7 @@ contract FeeAquaTest is AquaSwapVMTest {
         mintTokenInToTaker(swapProgram);
         mintTokenOutToMaker(swapProgram, 200e18);
 
-        // impossible to pay 100% feeIn on exactOut swap
+        // ~100% feeIn doubles the 100e18 input, more than the taker holds
         bytes memory data = takerData(swapProgram);
         vm.expectRevert();
         swap(swapProgram, order, data);
