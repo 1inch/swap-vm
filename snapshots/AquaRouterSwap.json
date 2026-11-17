@@ -4,15 +4,15 @@
   "XYCSwap_FlatFeeIn_exactOut": "110598",
   "XYCSwap_FlatFeeIn_exactIn": "110553",
   "PeggedSwap_exactOut": "115670",
-  "PeggedSwap_exactIn": "115541",
+  "PeggedSwap_exactIn": "115544",
   "FullAMM_exactOut": "140378",
-  "FullAMM_exactIn": "140339",
+  "FullAMM_exactIn": "140342",
   "Decay_XYCSwap_exactOut": "135667",
   "Decay_XYCSwap_exactIn": "135555",
   "Concentrate_Decay_XYCSwap_exactOut": "139128",
-  "Concentrate_Decay_XYCSwap_exactIn": "139022",
+  "Concentrate_Decay_XYCSwap_exactIn": "139025",
   "ConcentrateGrowPriceRange_XYCSwap_exactOut": "112821",
-  "ConcentrateGrowPriceRange_XYCSwap_exactIn": "112715",
+  "ConcentrateGrowPriceRange_XYCSwap_exactIn": "112718",
   "ConcentrateGrowLiquidity_XYCSwap_exactOut": "112809",
-  "ConcentrateGrowLiquidity_XYCSwap_exactIn": "112703"
+  "ConcentrateGrowLiquidity_XYCSwap_exactIn": "112706"
 }

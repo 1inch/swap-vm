@@ -156,7 +156,7 @@ library FillGridAdjuster {
                 // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
                 // Consider `amountInL/R = fillBpsL/R * balanceInL/R`
                 // Consider `amountIn = amountOut * balance / balanceOut`
-                uint256 balanceDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                uint256 balanceDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonicity
                 unchecked { balanceDelta = balanceInL - balanceInR; }
                 unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
                 balance = (balanceInL * balanceInR).mulDiv(
@@ -198,7 +198,7 @@ library FillGridAdjuster {
                 // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // The denominator is linear by amountIn, rounding it up keeps balance in favor of maker
-                uint256 delta; // denom and amount deltas >= 0 by monotonity
+                uint256 delta; // denom and amount deltas >= 0 by monotonicity
                 unchecked { delta = (amountIn - amountInL).mulDiv(balanceOutDenomL - balanceOutDenomR, amountInR - amountInL); }
                 balance = balanceOutNum * BPS / (balanceOutDenomL - delta);
             } else {
@@ -226,7 +226,7 @@ library FillGridAdjuster {
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // Consider `amountInL/R = fillBpsL/R * balanceIn`
                 // Consider `amountIn = amountOut * balanceIn / balance`
-                uint256 balanceDenomDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                uint256 balanceDenomDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonicity
                 unchecked { balanceDenomDelta = balanceOutDenomL - balanceOutDenomR; }
                 unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
                 balance = BPS.mulDiv(
