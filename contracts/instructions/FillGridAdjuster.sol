@@ -18,10 +18,10 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @dev Should be applied after InvalidateTokenOut for `adjustIn = true` or InvalidateTokenIn for `adjustIn = false`
 ///   due to the `amount >= balance` exit branch relies on balance being final
 library FillGridAdjuster {
-    using Math for uint256;
-
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
+
+    using Math for uint256;
 
     error FillGridAdjusterNoPoints();
     error FillGridAdjusterMismatchInputLengths();
@@ -156,11 +156,10 @@ library FillGridAdjuster {
                 // Linear approximation (amountInL, balanceInL) (amountInR, balanceInR) for amountIn
                 // Consider `amountInL/R = fillBpsL/R * balanceInL/R`
                 // Consider `amountIn = amountOut * balance / balanceOut`
-                uint256 balanceDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                uint256 balanceDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonicity
                 unchecked { balanceDelta = balanceInL - balanceInR; }
                 unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
-                balance = Math.mulDiv(
-                    balanceInL * balanceInR,
+                balance = (balanceInL * balanceInR).mulDiv(
                     ctx.swap.balanceOut * fillBpsDelta,
                     (fillBpsR * balanceInR - fillBpsL * balanceInL) * ctx.swap.balanceOut + amountOut * balanceDelta,
                     Math.Rounding.Ceil
@@ -199,8 +198,8 @@ library FillGridAdjuster {
                 // Hyperbolic approximation (amountInL, balanceOutL) (amountInR, balanceOutR) for amountIn
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // The denominator is linear by amountIn, rounding it up keeps balance in favor of maker
-                uint256 delta; // denom and amount deltas >= 0 by monotonity
-                unchecked { delta = Math.mulDiv(balanceOutDenomL - balanceOutDenomR, amountIn - amountInL, amountInR - amountInL); }
+                uint256 delta; // denom and amount deltas >= 0 by monotonicity
+                unchecked { delta = (amountIn - amountInL).mulDiv(balanceOutDenomL - balanceOutDenomR, amountInR - amountInL); }
                 balance = balanceOutNum * BPS / (balanceOutDenomL - delta);
             } else {
                 if (ctx.swap.amountOut >= ctx.swap.balanceOut || ctx.swap.surcharge == 0) return;
@@ -227,12 +226,11 @@ library FillGridAdjuster {
                 // Inverted linear `((amountIn - amountInL) / balanceOutR + (amountInR - amountIn) / balanceOutL) / (amountInR - amountInL)`
                 // Consider `amountInL/R = fillBpsL/R * balanceIn`
                 // Consider `amountIn = amountOut * balanceIn / balance`
-                uint256 balanceDenomDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonity
+                uint256 balanceDenomDelta; uint256 fillBpsDelta; // deltas >= 0 by monotonicity
                 unchecked { balanceDenomDelta = balanceOutDenomL - balanceOutDenomR; }
                 unchecked { fillBpsDelta = fillBpsR - fillBpsL; }
-                balance = Math.mulDiv(
+                balance = BPS.mulDiv(
                     balanceOutNum * fillBpsDelta + ctx.swap.amountOut * balanceDenomDelta,
-                    BPS,
                     fillBpsR * balanceOutDenomL - fillBpsL * balanceOutDenomR
                 );
             }

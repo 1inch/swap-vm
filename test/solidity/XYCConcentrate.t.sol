@@ -11,7 +11,7 @@ import { FormatLib } from "./utils/FormatLib.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
@@ -228,6 +228,44 @@ contract ConcentrateTest is Test {
         assertGt(amountOutBack, 0);
         assertEq(swapVM.balance(swapVM.hash(order), address(tokenB)), 0);
         assertLt(amountInBack, 1_000_000_000e18);
+    }
+
+    function testFuzz_PartialFill_ExactIn_BoundaryMonotonicity(
+        uint256 balanceLt,
+        uint256 balanceGt,
+        uint256 sqrtPmin,
+        uint256 sqrtPmax,
+        bool isAToB
+    ) public view {
+        balanceLt = bound(balanceLt, 1e6, 1e27);
+        balanceGt = bound(balanceGt, 1e6, 1e27);
+        sqrtPmin = bound(sqrtPmin, 0.01e18, 10e18);
+        sqrtPmax = bound(sqrtPmax, sqrtPmin + 0.01e18, 100e18);
+
+        (ISwapVM.Order memory order,) = _createOrderWithRawBalances(balanceLt, balanceGt, sqrtPmin, sqrtPmax);
+        bytes memory quoteExactIn = _quotingTakerData(TakerSetup({ isExactIn: true, isAToB: isAToB, isPartialFill: true }));
+        bytes memory quoteExactOut = _quotingTakerData(TakerSetup({ isExactIn: false, isAToB: isAToB, isPartialFill: false }));
+
+        uint256 balanceOut = isAToB ? balanceGt : balanceLt;
+        (uint256 drainIn,,) = swapVM.asView().quote(order, balanceOut, quoteExactOut);
+
+        uint256 prevAmountIn;
+        uint256 prevAmountOut;
+        for (uint256 i = drainIn - 50; i <= drainIn + 50; ++i) {
+            (uint256 amountIn, uint256 amountOut,) = swapVM.asView().quote(order, i, quoteExactIn);
+            assertLe(amountIn, i);
+            assertGe(amountIn, prevAmountIn);
+            assertGe(amountOut, prevAmountOut);
+            if (i >= drainIn) {
+                assertEq(amountIn, drainIn);
+                assertEq(amountOut, balanceOut);
+            } else {
+                assertEq(amountIn, i);
+                assertLt(amountOut, balanceOut);
+            }
+            prevAmountIn = amountIn;
+            prevAmountOut = amountOut;
+        }
     }
 
 

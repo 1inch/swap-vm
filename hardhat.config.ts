@@ -4,12 +4,14 @@ import hardhatIgnition from "@nomicfoundation/hardhat-ignition";
 import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
 import hardhatVerify from "@nomicfoundation/hardhat-verify";
 import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
+import hardhatContractSizer from "@solidstate/hardhat-contract-sizer";
 import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 
 const swapVmCompiler = {
   version: "0.8.30",
   settings: {
-    optimizer: { enabled: true, runs: 700 },
+    evmVersion: "prague",
+    optimizer: { enabled: true, runs: 600 },
     viaIR: true,
   },
   preferWasm: false,
@@ -18,6 +20,7 @@ const swapVmCompiler = {
 const fastTestCompiler = {
   version: "0.8.30",
   settings: {
+    evmVersion: "prague",
     viaIR: true,
     optimizer: {
       enabled: true,
@@ -45,6 +48,7 @@ export default defineConfig({
     hardhatKeystore,
     hardhatVerify,
     hardhatNodeTestRunner,
+    hardhatContractSizer,
   ],
   solidity: {
     npmFilesToBuild: ["@1inch/solidity-utils/contracts/mocks/TokenMock.sol"],
@@ -85,6 +89,10 @@ export default defineConfig({
     etherscan: {
       apiKey: configVariable("ETHERSCAN_API_KEY"),
     },
+  },
+  contractSizer: {
+    only: [/contracts\/routers\//],
+    except: [/Debug/],
   },
   warnings: {
     "test/solidity/**/*": {

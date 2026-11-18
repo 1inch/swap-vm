@@ -1,6 +1,11 @@
+<div align="center">
+    <img src="https://raw.githubusercontent.com/1inch/swap-vm/main/.github/1inch_github_w.svg#gh-light-mode-only" alt="1inch">
+    <img src="https://raw.githubusercontent.com/1inch/swap-vm/main/.github/1inch_github_b.svg#gh-dark-mode-only" alt="1inch">
+</div>
+
 # SwapVM
 
-**Release flow:** `main` for development, one `release/X.Y.Z` branch per audited deploy, tags `vX.Y.Z` set by CI — see [docs/RELEASE_FLOW.md](docs/RELEASE_FLOW.md).
+**Release flow:** `main` for development, one `release/X.Y.Z` branch per release, tags `vX.Y.Z` set by the `TAG` workflow — see [RELEASE_FLOW.md](https://github.com/1inch/ci-workflow-protocol/blob/main/RELEASE_FLOW.md).
 
 [![Github Release](https://img.shields.io/github/v/tag/1inch/swap-vm?sort=semver&label=github)](https://github.com/1inch/swap-vm/releases/latest)
 [![CI](https://github.com/1inch/swap-vm/actions/workflows/ci.yml/badge.svg)](https://github.com/1inch/swap-vm/actions/workflows/ci.yml)
@@ -10,7 +15,7 @@
 
 **A virtual machine for programmable token swaps.** A maker signs an order (or ships it to Aqua) whose bytecode program prices the swap; a taker executes it. No per-strategy contract deployment.
 
-- [Programs catalog](docs/PROGRAMS.md) — strategy types, composition rules, security notes
+- [Technical description](docs/DESCRIPTION.md) — order format, execution, settlement, invariants, instruction set, program shapes
 - [Whitepaper](docs/whitepaper-swap-vm-1.0.pdf)
 - [Deployment guide](DEPLOY.md)
 
@@ -61,12 +66,12 @@ Every instruction is a library with `opcode`, `build(...)`, `parse(...)` and `ex
 | Guards       | `Deadline`, `JumpIfDirection`, `JumpIfTokenIn`, `JumpIfTokenOut`, `PrivateOrder`, `WhitelistCoequal`, `WhitelistSequential`, `OnlyTakerTokenBalanceNonZero`, `OnlyTakerTokenBalanceGte`, `OnlyTakerTokenSupplyShareGte`, `OnlyTxOriginTokenBalanceNonZero` |
 | Invalidation | `InvalidateBit` (one-shot nonce), `InvalidateTokenIn` / `InvalidateTokenOut` (cap cumulative fills), `ValidateSeriesEpoch` (cancel a series by bumping its epoch) |
 | Balances     | `StaticBalances`, `DynamicBalances`, `DutchAuction`, `PiecewiseLinearSurcharge`, `Decay` (time-decaying virtual balances) |
-| Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` |
+| Curves       | `LimitSwap`, `LimitSwapFullAmount`, `XYCSwap` (x·y=k), `XYCConcentrateSwap` (price range), `PeggedSwap` (pegged assets curve) |
 | Rates        | `RequireMinRate`, `OraclePriceAdjuster` (one or two Chainlink feeds), `BaseFeeAdjuster` (gas-aware), `FillGridAdjuster` (adjusters select balance in/out with `adjustIn`) |
 | Fees         | `FeeFlatIn` / `FeeFlatOut` (LP fee, `BPS = 1e7`), `FeeProtocol` (third-party flat and surplus fees; fixed receivers or an `IProtocolFeeProvider`) |
 | Debug        | `Print*`, `PatchSwapRegisters` — only in `*Debug` routers |
 
-> Instruction order is security-critical: the same instructions in another order price differently. `DynamicBalances` and fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. Audit every program before production use. See [PROGRAMS.md](docs/PROGRAMS.md).
+> Instruction order is security-critical: the same instructions in another order price differently. `DynamicBalances` and fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. Audit every program before production use. See [DESCRIPTION.md](docs/DESCRIPTION.md).
 
 ## Routers
 
@@ -130,10 +135,11 @@ bytes32 orderHash = router.hash(order); // EIP-712 digest, sign off-chain
 CREATE2 escrow for a signature order funded with ETH. The escrow wraps `msg.value` into WETH, approves
 that amount to the router, becomes the order maker and validates fills through ERC-1271.
 
-The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable
-Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271
-rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
-Enabled hooks need explicit targets because their default target would be the escrow.
+The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271 rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
+
+Implicit hooks (where the hook target defaults to `order.maker`) are incompatible with native orders because `order.maker` at fill time is the escrow contract. Always encode explicit hook targets — for example, pass `maker: address(0)` to `MakerTraitsLib.build` when the hook target is the user's own address, so `MakerTraitsLib.build` does not elide the target as matching `args.maker`.
+
+Manual external invalidation on the router (`invalidateBit`, `invalidateBits`, `invalidateTokenIn`, `invalidateTokenOut`, `seriesEpoch*`) is not available because those calls are scoped to `msg.sender` and `order.maker` is the escrow contract, instead use general `cancel` method on the escrow contract.
 
 ```solidity
 bytes32 dataHash = keccak256(makerOrder.data);
@@ -177,6 +183,21 @@ bytes memory program = bytes.concat(
 ```
 
 With `useAquaInsteadOfSignature: true`, drop `DynamicBalances`: reserves come from Aqua after `aqua.ship(...)`. The curve bytecode is the same in both modes, and maker `usePermit2` must remain false because Aqua settles maker funds.
+
+### Pegged AMM position
+
+`PeggedSwap.build(anchorA, anchorB, width)` takes raw token quantities in address order. Their ratio includes token decimals and the reference rate. This example encodes `1 DAI = 1.00005 USDC` for DAI with 18 decimals and USDC with 6:
+
+```solidity
+// DAI is tokenA and USDC is tokenB.
+bytes memory program = bytes.concat(
+    DynamicBalances.build(1_000_000e18, 1_000_050e6),
+    FeeFlatIn.build(0.0001e7),
+    PeggedSwap.build(1_000_000e18, 1_000_050e6, 100e27)
+);
+```
+
+Swap both balances and anchors when USDC has the lower address. `width` uses `1e27` precision and is capped at `5000e27`.
 
 ### Hooks
 
@@ -225,7 +246,7 @@ bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
 
 Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, while taker `usePermit2` controls `tokenIn`. The selected mode also applies to protocol-fee transfers on that side.
 
-`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`.
+`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`. Both order tokens must already be deployed contracts; creating orders or strategies for undeployed token addresses is not supported by Permit2.
 
 ## Order registry and canonical strategies
 
@@ -267,8 +288,8 @@ Full example: [`ExampleInvariantUsage.t.sol`](test/solidity/invariants/ExampleIn
 - EIP-712 signed orders; Aqua orders are authorized by Aqua balances.
 - Programs can only combine the router's instruction set; settlement happens in SwapVM after the program, never inside an instruction. `Extruction` calls a maker-chosen contract — treat it as strategy risk.
 - The owner role is limited to `rescueFunds` for tokens stuck in the router.
-- Audit: [OpenZeppelin — 1inch Aqua and SwapVM MVP v1.0](https://www.openzeppelin.com/news/1inch-aqua-and-swapvm-mvp-v1.0-audit).
-- Contact: security@1inch.io
+- Audits: [SECURITY.md](SECURITY.md#audits) links the reports for v1 and v1.0.2, including [OpenZeppelin — 1inch Aqua and SwapVM MVP v1.0](https://www.openzeppelin.com/news/1inch-aqua-and-swapvm-mvp-v1.0-audit).
+- Vulnerabilities and the bug bounty: [SECURITY.md](SECURITY.md). Never report a vulnerability in a public issue.
 
 ## Deployment
 
@@ -282,6 +303,7 @@ Release **v1.0.x** router: `0x111111338c5091E8440b67B168bAe16a668AC0De` on Ether
 yarn install
 yarn build           # hardhat compile (viaIR, slow on first run)
 yarn test            # Solidity and TypeScript tests
+yarn size            # production-profile contract sizes
 yarn snapshot:check  # gas snapshots
 ```
 

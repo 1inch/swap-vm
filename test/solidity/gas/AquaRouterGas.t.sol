@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 import { AquaSwapVMRouter } from "../../../contracts/routers/AquaSwapVMRouter.sol";
@@ -269,7 +269,7 @@ contract AquaRouterGas is Test {
 
     function programPeggedSwap(bool isExactIn) internal returns (ISwapVM.Order memory, bytes memory) {
         return buildOrder(
-            PeggedSwap.build(AMM_BALANCE, AMM_BALANCE, 100e27, 1, 1),
+            PeggedSwap.build(uint144(AMM_BALANCE), uint144(AMM_BALANCE), 100e27),
             isExactIn,
             AMM_BALANCE,
             AMM_BALANCE

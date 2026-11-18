@@ -5,7 +5,7 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2026 Degensoft Ltd
 
 import { SafeERC20, IERC20 } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
-import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
+import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
 import { ProtocolFee } from "./VM.sol";
 
@@ -115,7 +115,7 @@ library ProtocolFeeLib {
             unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
-            IERC20(tokenIn).safeTransfer(receiver, fee);
+            if (fee > 0) IERC20(tokenIn).safeTransfer(receiver, fee);
         }
     }
 
@@ -144,7 +144,7 @@ library ProtocolFeeLib {
             unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
-            aqua.pull(maker, orderHash, tokenIn, fee, receiver);
+            if (fee > 0) aqua.pull(maker, orderHash, tokenIn, fee, receiver);
         }
     }
 
@@ -172,7 +172,7 @@ library ProtocolFeeLib {
             unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusIn); }
             totalFee += fee;
 
-            IERC20(tokenIn).safeTransferFromUniversal(taker, receiver, fee, usePermit2);
+            if (fee > 0) IERC20(tokenIn).safeTransferFromUniversal(taker, receiver, fee, usePermit2);
         }
     }
 
@@ -201,7 +201,7 @@ library ProtocolFeeLib {
             unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut); }
             totalFee += fee;
 
-            aqua.pull(maker, orderHash, tokenOut, fee, receiver);
+            if (fee > 0) aqua.pull(maker, orderHash, tokenOut, fee, receiver);
         }
     }
 
@@ -229,7 +229,7 @@ library ProtocolFeeLib {
             unchecked { (receiver, fee) = FeeReceiverLib.resolve(data.receivers[--count], totalFeeAmountMax, totalFeeBps, surplusOut); }
             totalFee += fee;
 
-            IERC20(tokenOut).safeTransferFromUniversal(maker, receiver, fee, usePermit2);
+            if (fee > 0) IERC20(tokenOut).safeTransferFromUniversal(maker, receiver, fee, usePermit2);
         }
     }
 }

@@ -6,7 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Test, stdError } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
@@ -262,7 +262,7 @@ contract RunLoopTest is Test {
         bytes memory strategy1 = XYCSwap.build();
 
         // Strategy 2: Pegged (optimized for stable pairs)
-        bytes memory strategy2 = PeggedSwap.build(50e18, 50e18, 0.02e9, 1, 1);
+        bytes memory strategy2 = PeggedSwap.build(50e18, 50e18, 0.5e27);
 
         // Pack strategies with lengths
         bytes memory selectorArgs = abi.encodePacked(

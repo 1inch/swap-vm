@@ -63,7 +63,7 @@ Solidity Best Practices
 - Use `@1inch/solidity-utils/contracts/mixins/Simulator.sol` for quote/simulation functionality
 - Use `@1inch/solidity-utils/contracts/libraries/Calldata.sol` and `CalldataPtr.sol` for calldata parsing
 - Use `@1inch/solidity-utils/contracts/mocks/TokenMock.sol` for test token mocks
-- Use `@1inch/aqua/src/Aqua.sol` for Aqua strategy integration
+- Use `@1inch/aqua/contracts/Aqua.sol` for Aqua strategy integration
 
 OpenZeppelin (still used for)
 - `@openzeppelin/contracts/utils/cryptography/EIP712.sol` for EIP712 typed signing

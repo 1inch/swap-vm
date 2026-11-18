@@ -77,7 +77,7 @@ library XYCConcentrateSwap {
             ctx.swap.amountOut = ctx.swap.amountIn * virtualOut / (virtualIn + ctx.swap.amountIn);
 
             // Partial fill support, recompute as exact out
-            if (ctx.swap.amountOut > ctx.swap.balanceOut) {
+            if (ctx.swap.amountOut >= ctx.swap.balanceOut) {
                 ctx.swap.amountOut = ctx.swap.balanceOut;
                 ctx.swap.amountIn = (ctx.swap.amountOut * virtualIn).ceilDiv(virtualOut - ctx.swap.amountOut);
             }

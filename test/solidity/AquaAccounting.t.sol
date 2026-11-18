@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { Aqua } from "@1inch/aqua/src/Aqua.sol";
+import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { MockTaker } from "./mocks/MockTaker.sol";
@@ -21,7 +21,6 @@ import { FeeFlatIn, FeeFlatOut } from "../../contracts/instructions/FeeFlat.sol"
 import { FeeBuilders } from "./utils/FeeBuilders.sol";
 import { Decay } from "../../contracts/instructions/Decay.sol";
 import { PeggedSwap } from "../../contracts/instructions/PeggedSwap.sol";
-import { PeggedSwapMath } from "../../contracts/libs/PeggedSwapMath.sol";
 import { dynamic } from "./utils/Dynamic.sol";
 
 /**
@@ -251,7 +250,7 @@ contract AquaAccounting is Test {
             protocolFeeCode,
             Decay.build(decayPeriod),
             flatFeeCode,
-            PeggedSwap.build(INITIAL_BALANCE_A, INITIAL_BALANCE_B, 1e27, 1, 1),
+            PeggedSwap.build(uint144(INITIAL_BALANCE_A), uint144(INITIAL_BALANCE_B), 1e27),
             Salt.build(abi.encodePacked(vm.randomUint()))
         );
     }
