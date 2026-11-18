@@ -169,16 +169,15 @@ library FeeProtocol {
             if (ctx.query.isExactIn) {
                 totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS + totalFeeBps);
                 unchecked { ctx.swap.amountIn -= totalFeeAmount; }
+                ctx.runLoop();
+                uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
+                if (fee < totalFeeAmount) totalFeeAmount = fee;
+                unchecked { ctx.swap.amountIn += totalFeeAmount; }
             } else {
-                totalFeeAmount = type(uint256).max; // No taker amount in to cap the fee
+                ctx.runLoop();
+                uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
+                unchecked { ctx.swap.amountIn -= fee; }
             }
-
-            ctx.runLoop();
-
-            // A partial fill reduces the net amount in and its fee below the fee carved from the taker amount
-            uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
-            if (fee < totalFeeAmount) totalFeeAmount = fee;
-            ctx.swap.amountIn += totalFeeAmount;
         } else {
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
