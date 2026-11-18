@@ -7,14 +7,19 @@ import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
 import hardhatContractSizer from "@solidstate/hardhat-contract-sizer";
 import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 
-const swapVmCompiler = {
+const solc = (runs: number) => ({
   version: "0.8.30",
   settings: {
-    evmVersion: "prague",
-    optimizer: { enabled: true, runs: 600 },
+    optimizer: { enabled: true, runs },
     viaIR: true,
   },
   preferWasm: false,
+});
+
+// Deployed routers, runs are set per router to fit the 24576-byte code size limit
+const deployedRouters = {
+  "contracts/routers/LimitSwapVMRouter.sol": solc(500),
+  "contracts/routers/AquaSwapVMRouter.sol": solc(600),
 };
 
 const fastTestCompiler = {
@@ -54,8 +59,8 @@ export default defineConfig({
     npmFilesToBuild: ["@1inch/solidity-utils/contracts/mocks/TokenMock.sol"],
     splitTestsCompilation: true,
     profiles: {
-      default: { isolated: true, compilers: [swapVmCompiler] },
-      production: { isolated: true, compilers: [swapVmCompiler] },
+      default: { isolated: true, compilers: [solc(600)], overrides: deployedRouters },
+      production: { isolated: true, compilers: [solc(600)], overrides: deployedRouters },
       fast: { isolated: true, compilers: [fastTestCompiler] },
     },
   },
