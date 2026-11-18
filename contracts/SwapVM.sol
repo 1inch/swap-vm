@@ -158,7 +158,11 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 receivers: FeeReceiverLib.init(),
                 surplusEstimation: 0
             }),
-            feeRegisters: FeeRegisters({ bps: 0, target: 0, fee: 0 })
+            feeRegisters: FeeRegisters({ 
+                bps: 0, 
+                target: 0, 
+                fee: 0 
+            })
         });
 
         if (order.traits.useAquaInsteadOfSignature()) {

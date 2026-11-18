@@ -95,7 +95,11 @@ contract BestRouteSelector is OpcodesDebug {
                     receivers: FeeReceiverLib.init(),
                     surplusEstimation: 0
                 }),
-                feeRegisters: FeeRegisters({ bps: 0, target: 0, fee: 0 })
+                feeRegisters: FeeRegisters({ 
+                    bps: 0, 
+                    target: 0, 
+                    fee: 0 
+                })
             });
 
             // Execute this strategy
