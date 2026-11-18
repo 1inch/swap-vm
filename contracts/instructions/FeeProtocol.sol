@@ -172,12 +172,11 @@ library FeeProtocol {
                 ctx.runLoop();
                 uint256 fee = ctx.swap.amountIn * totalFeeBps / BPS;
                 if (fee < totalFeeAmount) totalFeeAmount = fee;
-                ctx.swap.amountIn += totalFeeAmount;
             } else {
                 ctx.runLoop();
                 totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
-                ctx.swap.amountIn += totalFeeAmount;
             }
+            unchecked { ctx.swap.amountIn += totalFeeAmount; }
         } else {
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();

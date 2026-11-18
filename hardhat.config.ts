@@ -18,7 +18,7 @@ const solc = (runs: number) => ({
 
 // Deployed routers, runs are set per router to fit the 24576-byte code size limit
 const deployedRouters = {
-  "contracts/routers/LimitSwapVMRouter.sol": solc(500),
+  "contracts/routers/LimitSwapVMRouter.sol": solc(600),
   "contracts/routers/AquaSwapVMRouter.sol": solc(600),
 };
 
