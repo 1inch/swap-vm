@@ -20,7 +20,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 ///   Decay stores the swapped amounts and adjusts virtual balances to restore the price from before that A → B swap
 ///   This decreases arbitrage opportunity and complicates sandwich attacks
 /// @dev Expected to run no more than once per strategy, the first instance writes storage
-/// @dev A subsequent same-direction swap within `period` adds the swap amounts to the remaining resistance prolonging its decaying
+/// @dev The next same-direction swap within `period` adds the swap amounts to the remaining resistance prolonging its decaying
 ///   Do not overstate decay period to days or hours, keep it in range of dozens of blocks
 library Decay {
     using CalldataParse for bytes;
