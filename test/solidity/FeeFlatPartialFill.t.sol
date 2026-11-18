@@ -41,7 +41,7 @@ contract FeeFlatPartialFillTest is Test {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 0, FeeFlatIn.BPS - 1));
 
-        uint256 fee = (amount * feeBps).ceilDiv(FeeFlatIn.BPS + feeBps);
+        uint256 fee = (amount * feeBps).ceilDiv(FeeFlatIn.BPS);
         amountPartial = bound(amountPartial, 0, amount - fee);
         bool isPartialFill = amountPartial != amount - fee;
 
@@ -63,7 +63,7 @@ contract FeeFlatPartialFillTest is Test {
 
         uint256 realFee = realAmount - amountPartial;
 
-        uint256 feeDesired = (realAmount * feeBps).ceilDiv(FeeFlatIn.BPS + feeBps);
+        uint256 feeDesired = (realAmount * feeBps).ceilDiv(FeeFlatIn.BPS);
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
@@ -78,11 +78,11 @@ contract FeeFlatPartialFillTest is Test {
         assertLe(realFee, fee);
         assertLe(realAmount, amount);
 
-        // realFee / amountPartial >= feeBps, amountPartial is the net amount
-        assertGe(realFee * FeeFlatIn.BPS, feeBps * amountPartial, "Effective fee should favor maker");
+        // realFee / realAmount >= feeBps
+        assertGe(realFee * FeeFlatIn.BPS, feeBps * realAmount, "Effective fee should favor maker");
 
-        // Imagine realFee is 1 wei less -> the net amount stays -> feeBps breaks
-        if (realFee != 0 && isPartialFill) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * amountPartial, "One wei less realFee would favor taker");
+        // Imagine realFee is 1 wei less -> realAmount is 1 wei less as well -> feeBps breaks
+        if (realFee != 0 && isPartialFill) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * (realAmount - 1), "One wei less realFee would favor taker");
     }
 
     function testFuzz_FeeFlatIn_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountIn, uint24 feeBps) public view {
@@ -109,17 +109,17 @@ contract FeeFlatPartialFillTest is Test {
 
         uint256 realFee = realIn - amountIn;
 
-        uint256 feeDesired = (amountIn * feeBps).ceilDiv(FeeFlatIn.BPS);
+        uint256 feeDesired = (amountIn * feeBps).ceilDiv(FeeFlatIn.BPS - feeBps);
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
         if (!isPartialFill) assertEq(realOut, amount);
 
-        // realFee / amountIn >= feeBps
-        assertGe(realFee * FeeFlatIn.BPS, feeBps * amountIn, "Effective fee should favor maker");
+        // realFee / realIn >= feeBps
+        assertGe(realFee * FeeFlatIn.BPS, feeBps * realIn, "Effective fee should favor maker");
 
-        // Imagine realFee is 1 wei less -> feeBps breaks
-        if (realFee != 0) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * amountIn, "One wei less realFee would favor taker");
+        // Imagine realFee is 1 wei less -> realIn is 1 wei less as well -> feeBps breaks
+        if (realFee != 0) assertLt((realFee - 1) * FeeFlatIn.BPS, feeBps * (realIn - 1), "One wei less realFee would favor taker");
     }
 
     function testFuzz_FeeFlatOut_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountOut, uint24 feeBps) public view {

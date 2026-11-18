@@ -238,7 +238,6 @@ contract ConcentrateXYCFeesInvariants is Test, CoreInvariants {
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
-        config.symmetryTolerance = _flatFeeInSymmetryTolerance();
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -293,7 +292,6 @@ contract ConcentrateXYCFeesInvariants is Test, CoreInvariants {
         );
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
-        config.symmetryTolerance = _flatFeeInSymmetryTolerance();
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -305,13 +303,6 @@ contract ConcentrateXYCFeesInvariants is Test, CoreInvariants {
     }
 
     // Helper functions
-
-    /// @dev Rounding the LP fee up on the net input rounds the exact in net down,
-    ///   so exact out may price the same output 1 wei cheaper
-    function _flatFeeInSymmetryTolerance() internal view returns (uint256) {
-        return symmetryTolerance > 1 ? symmetryTolerance : 1;
-    }
-
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,

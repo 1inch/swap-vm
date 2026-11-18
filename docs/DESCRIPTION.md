@@ -93,9 +93,9 @@ After the loop SwapVM validates, in order: `amountIn > 0` unless `allowZeroAmoun
 Instructions that call `ctx.runLoop()` execute the rest of the program as a subtree: their pre-step runs in program order, their post-step in reverse order once the subtree returns. Wrappers: `DynamicBalances`, `Decay`, `FeeFlatIn`, `FeeFlatOut`, `FeeProtocol`, `FeeProtocolSurplus`, `InvalidateBit`, `InvalidateTokenIn`, `InvalidateTokenOut`, `RequireMinRate`.
 
 ```text
-FeeProtocol(in)   pre : amountIn = taker amount less protocolFee
+FeeProtocol(in)   pre : amountIn -= protocolFee
  DynamicBalances  pre : load reserves
-  FeeFlatIn       pre : amountIn = taker amount less protocolFee and lpFee
+  FeeFlatIn       pre : amountIn -= lpFee
    XYCSwap            : amountOut = f(amountIn)
   FeeFlatIn       post: amountIn += lpFee
  DynamicBalances  post: reserves += amountIn, -= amountOut; persist (swap only)
@@ -103,8 +103,6 @@ FeeProtocol       post: amountIn += protocolFee; receivers are paid at settlemen
 ```
 
 The LP fee is reinvested into the reserves, the protocol fee is not. Swapping `FeeProtocol` and `DynamicBalances` would record in the reserves a fee that leaves to the receivers. Read a program as nested execution, not as a feature list, and use each stateful wrapper once per reachable path.
-
-Fee wrappers share `ctx.feeRegisters`, so each fee is its own `feeBps` of the amount `XYCSwap` priced whatever the order of the fee wrappers: a 1000 net input with a 10% protocol fee and a 0.3% LP fee pays 100 and 3.
 
 ### Quote vs swap
 
@@ -147,7 +145,7 @@ swap(order, amount, takerTraitsAndData)
 - **Native ETH.** `msg.value` is accepted only when `tokenIn` is WETH: the router wraps `amountIn` and refunds the excess. With Aqua orders this needs `useTransferFromAndAquaPush`.
 - **Aqua.** By default the taker must have pushed `tokenIn` into the maker's position for this `orderHash` (for example in `preTransferInCallback`); the router checks the raw balance grew by `amountIn` and pulls `tokenIn`-side fees from the position. With `useTransferFromAndAquaPush` the router pulls from the taker, pays the fees and pushes the net amount.
 - **Permit2.** Maker `usePermit2` covers `tokenOut` and `tokenOut`-side fees, taker `usePermit2` covers `tokenIn` and `tokenIn`-side fees. Both use an existing Permit2 allowance (token approved to Permit2, router authorized as spender); no Permit2 signature is submitted. Routers also inherit `PermitAndCall` to bundle a token permit with the call.
-- **Protocol fees.** `FeeProtocol` leaves receivers and a total in `ctx.fee`; settlement pays each receiver its share of the flat fee plus `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Each receiver's flat fee is its `feeBps` of the amount the program priced, independent of the other receivers and fee wrappers: of the net input with `isTokenIn` (paid on top, so 1% and 2% on a 2000 USDC net input pay 20 and 40 USDC and the taker pays 2060), of the gross output otherwise. Dust from the split stays with the maker.
+- **Protocol fees.** `FeeProtocol` leaves receivers and a total in `ctx.fee`; settlement pays each receiver its share of the flat fee plus `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Each receiver's flat fee is its `feeBps` of the amount the wrapped subtree priced: of the net input with `isTokenIn` (paid on top, so 1% and 2% on a 2000 USDC net input pay 20 and 40 USDC and the taker pays 2060), of the gross output otherwise. A nested `FeeFlatIn` is part of that net input. Dust from the split stays with the maker.
 - **Reentrancy.** A transient lock per `orderHash` guards `swap`; callbacks may fill other orders.
 
 ## Taker interface
@@ -338,8 +336,8 @@ Routers: **F** [`SwapVMRouter`](../contracts/routers/SwapVMRouter.sol) (`Opcodes
 
 | Instruction | Routers | `build(...)` | Behavior |
 |---|---|---|---|
-| `FeeFlatIn` | F A | `(uint24 feeBps)` | Wraps. LP fee of `feeBps` on the net `amountIn` the subtree priced, added on top and kept by the maker. |
-| `FeeFlatOut` | F | `(uint24 feeBps)` | Wraps. LP fee of `feeBps` on the gross `amountOut` the subtree priced, charged from it and kept by the maker. Superadditive with reinvesting AMMs; prefer `FeeFlatIn`. |
+| `FeeFlatIn` | F A | `(uint24 feeBps)` | Wraps. LP fee on `amountIn`, kept by the maker; the subtree prices the net amount. |
+| `FeeFlatOut` | F | `(uint24 feeBps)` | Wraps. LP fee on `amountOut`. Superadditive with reinvesting AMMs; prefer `FeeFlatIn`. |
 | `FeeProtocol` | F L A | `(bool isTokenIn, ReceiverConfig[] receivers, ProviderConfig[] providers)` | Wraps. Third-party fees for up to 15 receivers: flat `feeBps` and `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Providers answer through `IProtocolFeeProvider`. Transfers happen at settlement. |
 | `FeeProtocolSurplus` | F L | `(bool isTokenIn, uint256 estimated)` | Wraps. The maker's expected receive (sell) or spend (buy), scaled to the filled share. Same `isTokenIn` as `FeeProtocol`. |
 

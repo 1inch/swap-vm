@@ -149,7 +149,7 @@ contract FeeTest is Test {
         assertEq(swappedAmountOut, quotedAmountOut, "Swap amountOut should match quote");
 
         // Verify fee calculation correctness
-        uint256 effectiveSwapInput = amountIn * FeeFlatIn.BPS / (FeeFlatIn.BPS + setup.feeInBps);
+        uint256 effectiveSwapInput = (amountIn * (FeeFlatIn.BPS - setup.feeInBps)) / FeeFlatIn.BPS;
         uint256 expectedOutputWithFee = (effectiveSwapInput * setup.balanceB) / (setup.balanceA + effectiveSwapInput);
         assertEq(swappedAmountOut, expectedOutputWithFee, "Output should reflect fee-in calculation");
     }
@@ -181,7 +181,7 @@ contract FeeTest is Test {
 
         // Verify fee calculation correctness
         uint256 baseInput = (amountOut * setup.balanceA + (setup.balanceB - amountOut - 1)) / (setup.balanceB - amountOut);
-        uint256 expectedInputWithFee = Math.ceilDiv(baseInput * (FeeFlatIn.BPS + setup.feeInBps), FeeFlatIn.BPS);
+        uint256 expectedInputWithFee = Math.ceilDiv(baseInput * FeeFlatIn.BPS, FeeFlatIn.BPS - setup.feeInBps);
         assertEq(swappedAmountIn, expectedInputWithFee, "Input should reflect fee-in calculation");
     }
 

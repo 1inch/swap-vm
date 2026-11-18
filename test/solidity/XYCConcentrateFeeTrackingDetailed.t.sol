@@ -179,7 +179,7 @@ contract XYCConcentrateFeeTrackingDetailedTest is Test {
             // tokenUSD -> tokenETH: isAToB = false (tokenUSD is higher).
             (, uint256 ethReceived_main,) = swapVM.swap(mainOrder, swapAmountUSD, _takerData(true, mainSig, false));
 
-            uint256 flatFeeAmount = Math.ceilDiv(swapAmountUSD * FLAT_FEE_BPS, BPS + FLAT_FEE_BPS);
+            uint256 flatFeeAmount = swapAmountUSD * FLAT_FEE_BPS / BPS;
             uint256 amountInAfterFee = swapAmountUSD - flatFeeAmount;
 
             (, uint256 ethReceived_snap,) = swapVM.swap(snapshot2, amountInAfterFee, _takerData(true, snap2Sig, false));

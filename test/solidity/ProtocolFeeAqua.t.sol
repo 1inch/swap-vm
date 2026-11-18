@@ -4,6 +4,8 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
@@ -130,9 +132,10 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
         (uint256 protocolRecipientBalanceAAfter, uint256 protocolRecipientBalanceBAfter) = getProtocolRecipientBalances();
 
-        // Both fees are priced from the net amount in: 100e18 = 80e18 + 5% + 20%
-        uint256 effectiveAmountIn = amountIn * BPS / (BPS + setup.protocolFeeBps + setup.feeInBps);
-        uint256 protocolFee = effectiveAmountIn * setup.protocolFeeBps / BPS;
+        uint256 protocolFee = amountIn * setup.protocolFeeBps / (BPS + setup.protocolFeeBps);
+        uint256 afterProtocolFee = amountIn - protocolFee;
+        uint256 feeIn = Math.ceilDiv(afterProtocolFee * setup.feeInBps, BPS);
+        uint256 effectiveAmountIn = afterProtocolFee - feeIn;
         uint256 amountOutExpected = setup.balanceB * effectiveAmountIn / (setup.balanceA + effectiveAmountIn);
         assertEq(takerBalanceBAfter - takerBalanceBBefore, amountOutExpected, "Taker received correct amountOut");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn - protocolFee, "Maker balance A should increase by amountIn minus protocol fee");

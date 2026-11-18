@@ -512,7 +512,7 @@ contract PeggedSwapTest is Test {
         (uint256 inWithFee, uint256 outWithFee) = _quote(orderWithFee, 100e18, false, true, false);
         (uint256 inWithoutFee,) = _quote(orderWithoutFee, 100e18, false, true, false);
         assertEq(outWithFee, 100e18);
-        assertEq(inWithFee, inWithoutFee + (inWithoutFee * feeBps).ceilDiv(FeeFlatIn.BPS));
+        assertEq(inWithFee, inWithoutFee + (inWithoutFee * feeBps).ceilDiv(FeeFlatIn.BPS - feeBps));
 
         (, uint256 outExactInWithFee) = _quote(orderWithFee, 100e18, true, true, false);
         (, uint256 outExactInWithoutFee) = _quote(orderWithoutFee, 100e18, true, true, false);

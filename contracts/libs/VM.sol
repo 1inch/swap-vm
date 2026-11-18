@@ -66,31 +66,16 @@ struct ProtocolFee {
     uint256 surplusEstimation;
 }
 
-/// @dev Fee wrapper registers to price every fee from the same base, the net amount in or the gross amount out
-///   priced by the rest of the program, so fees do not depend on each other or on the wrappers order
-///   Taker side wrappers (taker-specified amount) carve their fees out of takerAmount,
-///   computed side wrappers price theirs from the computed amount without computedFeeAmount
-/// @param takerFeeBps Total feeBps of the taker side wrappers entered so far, zero until one with non-zero feeBps
-/// @param takerAmount Taker-specified amount in token units, recomputed by the innermost wrapper if the program changes the base
-/// @param computedFeeAmount Fees charged so far by the computed side wrappers, in token units
-struct FeeRegisters {
-    uint256 takerFeeBps;
-    uint256 takerAmount;
-    uint256 computedFeeAmount;
-}
-
 /// @title SwapVM context
 /// @notice Complete execution state for a swap operation
 /// @param vm The VM execution state including program counter and bytecode
 /// @param query Read-only swap information (maker, taker, tokens, etc.)
 /// @param swap Mutable registers for computing swap amounts
-/// @param feeRegisters Registers shared by the fee wrappers
 struct Context {
     VM vm;
     SwapQuery query;
     SwapRegisters swap;
     ProtocolFee fee;
-    FeeRegisters feeRegisters;
 }
 using ContextLib for Context global;
 

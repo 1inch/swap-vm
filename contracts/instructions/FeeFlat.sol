@@ -7,14 +7,12 @@ pragma solidity ^0.8.27;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
-import { Context, FeeRegisters } from "../libs/VM.sol";
+import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
 /// @notice FeeFlatIn opcode, token in liquidity provider flat percent fee
-/// @dev Fee is feeBps of the net amount in priced by the rest of the program, added to amount in and kept by the maker
-///   Priced from the same base as the other fee wrappers, see FeeRegisters
 /// @dev Encoding: [uint24 feeBps]
 library FeeFlatIn {
     using CalldataParse for bytes;
@@ -49,46 +47,26 @@ library FeeFlatIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 feeBps = parse(args);
-        FeeRegisters memory feeRegs = ctx.feeRegisters;
-        bool isTakerSide = ctx.query.isExactIn;
+        uint24 feeBps = parse(args);
 
-        if (!isTakerSide) {
-            ctx.runLoop();
+        if (ctx.query.isExactIn) {
+            uint256 fee = (ctx.swap.amountIn * feeBps).ceilDiv(BPS);
+            ctx.swap.amountIn -= fee;
 
-            uint256 base = ctx.swap.amountIn - feeRegs.computedFeeAmount;
-            uint256 fee = (base * feeBps).ceilDiv(BPS);
-            feeRegs.computedFeeAmount += fee;
-            ctx.swap.amountIn += fee;
-        } else if (feeBps == 0) {
+            uint256 reduction = ctx.swap.amountIn;
             ctx.runLoop();
+            reduction -= ctx.swap.amountIn;
+
+            if (reduction == 0) ctx.swap.amountIn += fee;
+            else ctx.swap.amountIn += (ctx.swap.amountIn * feeBps).ceilDiv(BPS - feeBps);
         } else {
-            if (feeRegs.takerFeeBps == 0) feeRegs.takerAmount = ctx.swap.amountIn;
-            uint256 cumBps;
-            unchecked { cumBps = feeRegs.takerFeeBps + feeBps; }
-            feeRegs.takerFeeBps = cumBps;
-
-            uint256 cumFees = (feeRegs.takerAmount * cumBps).ceilDiv(BPS + cumBps);
-            uint256 base;
-            unchecked { base = feeRegs.takerAmount - cumFees; }
-            ctx.swap.amountIn = base;
-
             ctx.runLoop();
-
-            uint256 amountIn = ctx.swap.amountIn;
-            bool isInnermost = feeRegs.takerFeeBps == cumBps;
-            if (isInnermost && amountIn != base) feeRegs.takerAmount = amountIn + (amountIn * cumBps).ceilDiv(BPS);
-
-            uint256 feesLeft;
-            unchecked { feesLeft = feeRegs.takerAmount - amountIn; }
-            ctx.swap.amountIn = amountIn + (feesLeft * feeBps).ceilDiv(cumBps);
+            ctx.swap.amountIn += (ctx.swap.amountIn * feeBps).ceilDiv(BPS - feeBps);
         }
     }
 }
 
 /// @notice FeeFlatOut opcode, token out liquidity provider flat percent fee
-/// @dev Fee is feeBps of the gross amount out priced by the rest of the program, charged from amount out and kept by the maker
-///   Priced from the same base as the other fee wrappers, see FeeRegisters
 /// @dev Encoding: [uint24 feeBps]
 /// @dev In combination with AMM auto-reinvesting curves may cause superadditive behavior
 ///   Fees are deposited against swap direction causing a price rollback effect `swap(a) + swap(b) > swap(c)`
@@ -99,7 +77,6 @@ library FeeFlatOut {
     using Math for uint256;
 
     error FeeBpsOutOfRange(uint24 feeBps);
-    error FeeTotalBpsOutOfRange(uint256 totalBps);
 
     Opcode constant opcode = Opcode.FeeFlatOut;
 
@@ -126,39 +103,10 @@ library FeeFlatOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        uint256 feeBps = parse(args);
-        FeeRegisters memory feeRegs = ctx.feeRegisters;
-        bool isTakerSide = !ctx.query.isExactIn;
+        uint24 feeBps = parse(args);
 
-        if (!isTakerSide) {
-            ctx.runLoop();
-
-            uint256 base = ctx.swap.amountOut + feeRegs.computedFeeAmount;
-            uint256 fee = (base * feeBps).ceilDiv(BPS);
-            feeRegs.computedFeeAmount += fee;
-            ctx.swap.amountOut -= fee;
-        } else if (feeBps == 0) {
-            ctx.runLoop();
-        } else {
-            if (feeRegs.takerFeeBps == 0) feeRegs.takerAmount = ctx.swap.amountOut;
-            uint256 cumBps;
-            unchecked { cumBps = feeRegs.takerFeeBps + feeBps; }
-            require(cumBps < BPS, FeeTotalBpsOutOfRange(cumBps));
-            feeRegs.takerFeeBps = cumBps;
-
-            uint256 cumFees = (feeRegs.takerAmount * cumBps).ceilDiv(BPS - cumBps);
-            uint256 base = feeRegs.takerAmount + cumFees;
-            ctx.swap.amountOut = base;
-
-            ctx.runLoop();
-
-            uint256 amountOut = ctx.swap.amountOut;
-            bool isInnermost = feeRegs.takerFeeBps == cumBps;
-            if (isInnermost && amountOut != base) feeRegs.takerAmount = amountOut - (amountOut * cumBps).ceilDiv(BPS);
-
-            uint256 feesLeft;
-            unchecked { feesLeft = amountOut - feeRegs.takerAmount; }
-            ctx.swap.amountOut = amountOut - (feesLeft * feeBps).ceilDiv(cumBps);
-        }
+        if (!ctx.query.isExactIn) ctx.swap.amountOut += (ctx.swap.amountOut * feeBps).ceilDiv(BPS - feeBps);
+        ctx.runLoop();
+        ctx.swap.amountOut -= (ctx.swap.amountOut * feeBps).ceilDiv(BPS);
     }
 }

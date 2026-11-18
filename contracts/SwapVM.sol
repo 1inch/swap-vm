@@ -18,7 +18,7 @@ import { PermitAndCall } from "@1inch/solidity-utils/contracts/mixins/PermitAndC
 import { ISwapVM } from "./interfaces/ISwapVM.sol";
 import { IMakerHooks } from "./interfaces/IMakerHooks.sol";
 import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
-import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee, FeeRegisters } from "./libs/VM.sol";
+import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 import { FeeMetaLib, FeeReceiverLib, ProtocolFeeLib } from "./libs/ProtocolFee.sol";
 import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
@@ -157,11 +157,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 meta: FeeMetaLib.init(),
                 receivers: FeeReceiverLib.init(),
                 surplusEstimation: 0
-            }),
-            feeRegisters: FeeRegisters({ 
-                takerFeeBps: 0,
-                takerAmount: 0,
-                computedFeeAmount: 0
             })
         });
 
@@ -217,11 +212,6 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 meta: FeeMetaLib.init(),
                 receivers: FeeReceiverLib.init(),
                 surplusEstimation: 0
-            }),
-            feeRegisters: FeeRegisters({ 
-                takerFeeBps: 0,
-                takerAmount: 0,
-                computedFeeAmount: 0
             })
         });
 

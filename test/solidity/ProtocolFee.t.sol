@@ -5,7 +5,6 @@ pragma solidity ^0.8.27;
 /// @custom:copyright © 2025 Degensoft Ltd
 
 import { Test } from "forge-std/Test.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
@@ -233,9 +232,17 @@ contract ProtocolFeeTest is Test {
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
-        // Both fees are priced from the gross output of the curve, whatever their order
-        uint256 rawAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
-        uint256 expectedProtocolFee = rawAmountOut * setup.protocolFeeBps / BPS;
+        // Fee application order (actual execution order):
+        // 1. XYC swap computes rawAmountOut
+        // 2. flatFeeOut is applied: afterFlat = rawAmountOut * (1 - flatFee%)
+        // 3. protocolFeeOut is applied: amountOut = afterFlat * (1 - protocolFee%)
+        //
+        // So protocol fee is computed from the amount AFTER flat fee is applied.
+        // protocolFee = afterFlat * protocolFee% = amountOut / (1 - protocolFee%) * protocolFee%
+        //
+        // Simplified: protocolFee = amountOut * protocolFee% / (1 - protocolFee%)
+
+        uint256 expectedProtocolFee = amountOut * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
 
         assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
@@ -266,7 +273,7 @@ contract ProtocolFeeTest is Test {
         (uint256 amountInAfterBothFee, uint256 amountOutAfterBothFee,) = swapVM.swap(order, amountOut, exactInTakerDataSwap);
 
         // FlatFee is applied on amountIn for exactOut swaps, ProtocolFee on amountOut
-        uint256 expectedFlatFee = Math.ceilDiv(amountInAfterBothFee * setup.flatInFeeBps, BPS + setup.flatInFeeBps);
+        uint256 expectedFlatFee = (amountInAfterBothFee * setup.flatInFeeBps) / BPS;
         uint256 expectedProtocolFee = (amountOutAfterBothFee * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
         uint256 expectedTotalAmountOut = amountOut * BPS / (BPS - setup.protocolFeeBps);
@@ -308,9 +315,10 @@ contract ProtocolFeeTest is Test {
         vm.prank(taker);
         (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
-        // Both fees are priced from the net amount in whatever their order: 100e18 = 80e18 + 20% + 5%
-        uint256 effectiveAmountIn = amountIn * BPS / (BPS + flatFeeBps + protocolFeeBps);
-        uint256 protocolFee = effectiveAmountIn * protocolFeeBps / BPS;
+        uint256 flatFee = amountIn * flatFeeBps / BPS;
+        uint256 amountInAfterFlatFee = amountIn - flatFee;
+        uint256 protocolFee = amountInAfterFlatFee * protocolFeeBps / (BPS + protocolFeeBps);
+        uint256 effectiveAmountIn = amountInAfterFlatFee - protocolFee;
 
         assertEq(actualAmountIn, amountIn);
         assertEq(TokenMock(tokenA).balanceOf(protocolFeeRecipient), protocolFee);
@@ -339,13 +347,13 @@ contract ProtocolFeeTest is Test {
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
-        // Both fees are priced from the raw output whatever their order
         uint256 rawAmountOut = balanceOut * amountIn / (balanceIn + amountIn);
         uint256 protocolFee = rawAmountOut * protocolFeeBps / BPS;
-        uint256 flatFee = Math.ceilDiv(rawAmountOut * flatFeeBps, BPS);
+        uint256 amountOutAfterProtocolFee = rawAmountOut - protocolFee;
+        uint256 flatFee = amountOutAfterProtocolFee * flatFeeBps / BPS;
 
         assertEq(TokenMock(tokenB).balanceOf(protocolFeeRecipient), protocolFee);
-        assertEq(amountOut, rawAmountOut - protocolFee - flatFee);
+        assertEq(amountOut, amountOutAfterProtocolFee - flatFee);
     }
 
     // ========== Protocol Fee AmountIn Tests ==========
