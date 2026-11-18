@@ -47,7 +47,7 @@ A **router** is `SwapVM` plus an opcode set. It exposes `quote`, `swap`, `hash`,
 |---|---|
 | `maker` | Liquidity owner; signer or Aqua account. |
 | `receiver` | Receives `tokenIn`; `address(0)` means the maker. Must be the maker for Aqua orders. |
-| `tokenA`, `tokenB` | The pair, `tokenA < tokenB`; `build` reverts otherwise. |
+| `tokenA`, `tokenB` | The pair, `tokenA < tokenB`; `build` reverts otherwise. Both must be deployed token contracts (predicted undeployed addresses are not supported). |
 | `shouldUnwrapWeth` | Unwrap incoming WETH to ETH for the receiver. Not with Aqua. |
 | `useAquaInsteadOfSignature` | Aqua mode (see above). |
 | `allowZeroAmountIn` | Permit fills with `amountIn == 0`; otherwise the VM requires `amountIn > 0`. |

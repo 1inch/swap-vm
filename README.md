@@ -245,7 +245,7 @@ bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
 
 Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, while taker `usePermit2` controls `tokenIn`. The selected mode also applies to protocol-fee transfers on that side.
 
-`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`.
+`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`. Both order tokens must already be deployed contracts; creating orders or strategies for undeployed token addresses is not supported by Permit2.
 
 ## Order registry and canonical strategies
 
