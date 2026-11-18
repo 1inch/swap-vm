@@ -68,19 +68,15 @@ struct ProtocolFee {
 
 /// @dev Fee wrapper registers to price every fee from the same base, the net amount in or the gross amount out
 ///   priced by the rest of the program, so fees do not depend on each other or on the wrappers order
-///   Taker side wrappers (token in for exact in, token out for exact out) split the taker amount into the base and
-///   the fees of every taker side wrapper entered so far. On the way back each one takes its share of the fees left
-///   to it and the wrappers outside it, so the outermost takes the rest and the taker side ends at target. If the
-///   rest of the program changed the base, the innermost wrapper re-targets to the changed base plus its fees
-///   Wrappers of the other side price their fee from the amount reconstructed with fee
-///   Zero feeBps wrappers do not touch the registers
-/// @param bps Total feeBps of the taker side fee wrappers entered so far
-/// @param target Amount the taker side ends at: the taker amount, or the base plus its fees once pricing changed the base
-/// @param fee Fees charged so far by the fee wrappers of the other side
+///   Taker side wrappers (taker-specified amount) carve their fees out of takerAmount,
+///   computed side wrappers price theirs from the computed amount without computedFeeAmount
+/// @param takerFeeBps Total feeBps of the taker side wrappers entered so far, zero until one with non-zero feeBps
+/// @param takerAmount Taker-specified amount in token units, recomputed by the innermost wrapper if the program changes the base
+/// @param computedFeeAmount Fees charged so far by the computed side wrappers, in token units
 struct FeeRegisters {
-    uint256 bps;
-    uint256 target;
-    uint256 fee;
+    uint256 takerFeeBps;
+    uint256 takerAmount;
+    uint256 computedFeeAmount;
 }
 
 /// @title SwapVM context

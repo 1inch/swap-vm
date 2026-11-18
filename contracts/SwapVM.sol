@@ -159,9 +159,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 surplusEstimation: 0
             }),
             feeRegisters: FeeRegisters({ 
-                bps: 0, 
-                target: 0, 
-                fee: 0 
+                takerFeeBps: 0,
+                takerAmount: 0,
+                computedFeeAmount: 0
             })
         });
 
@@ -219,9 +219,9 @@ abstract contract SwapVM is EIP712, OnlyWethReceiver, Rescuable, PermitAndCall, 
                 surplusEstimation: 0
             }),
             feeRegisters: FeeRegisters({ 
-                bps: 0, 
-                target: 0, 
-                fee: 0 
+                takerFeeBps: 0,
+                takerAmount: 0,
+                computedFeeAmount: 0
             })
         });
 

@@ -50,32 +50,38 @@ library FeeFlatIn {
 
     function exec(Context memory ctx, bytes calldata args) internal {
         uint256 feeBps = parse(args);
-        FeeRegisters memory regs = ctx.feeRegisters;
+        FeeRegisters memory feeRegs = ctx.feeRegisters;
+        bool isTakerSide = ctx.query.isExactIn;
 
-        if (!ctx.query.isExactIn) {
+        if (!isTakerSide) {
             ctx.runLoop();
-            uint256 fee = ((ctx.swap.amountIn - regs.fee) * feeBps).ceilDiv(BPS);
-            regs.fee += fee;
+
+            uint256 base = ctx.swap.amountIn - feeRegs.computedFeeAmount;
+            uint256 fee = (base * feeBps).ceilDiv(BPS);
+            feeRegs.computedFeeAmount += fee;
             ctx.swap.amountIn += fee;
         } else if (feeBps == 0) {
             ctx.runLoop();
         } else {
-            if (regs.bps == 0) regs.target = ctx.swap.amountIn;
+            if (feeRegs.takerFeeBps == 0) feeRegs.takerAmount = ctx.swap.amountIn;
             uint256 cumBps;
-            unchecked { cumBps = regs.bps + feeBps; }
-            regs.bps = cumBps;
-            uint256 carve = (regs.target * cumBps).ceilDiv(BPS + cumBps);
+            unchecked { cumBps = feeRegs.takerFeeBps + feeBps; }
+            feeRegs.takerFeeBps = cumBps;
+
+            uint256 cumFees = (feeRegs.takerAmount * cumBps).ceilDiv(BPS + cumBps);
             uint256 base;
-            unchecked { base = regs.target - carve; }
+            unchecked { base = feeRegs.takerAmount - cumFees; }
             ctx.swap.amountIn = base;
 
             ctx.runLoop();
 
             uint256 amountIn = ctx.swap.amountIn;
-            if (regs.bps == cumBps && amountIn != base) regs.target = amountIn + (amountIn * cumBps).ceilDiv(BPS);
-            uint256 fees;
-            unchecked { fees = regs.target - amountIn; }
-            ctx.swap.amountIn = amountIn + (fees * feeBps).ceilDiv(cumBps);
+            bool isInnermost = feeRegs.takerFeeBps == cumBps;
+            if (isInnermost && amountIn != base) feeRegs.takerAmount = amountIn + (amountIn * cumBps).ceilDiv(BPS);
+
+            uint256 feesLeft;
+            unchecked { feesLeft = feeRegs.takerAmount - amountIn; }
+            ctx.swap.amountIn = amountIn + (feesLeft * feeBps).ceilDiv(cumBps);
         }
     }
 }
@@ -121,31 +127,38 @@ library FeeFlatOut {
 
     function exec(Context memory ctx, bytes calldata args) internal {
         uint256 feeBps = parse(args);
-        FeeRegisters memory regs = ctx.feeRegisters;
+        FeeRegisters memory feeRegs = ctx.feeRegisters;
+        bool isTakerSide = !ctx.query.isExactIn;
 
-        if (ctx.query.isExactIn) {
+        if (!isTakerSide) {
             ctx.runLoop();
-            uint256 fee = ((ctx.swap.amountOut + regs.fee) * feeBps).ceilDiv(BPS);
-            regs.fee += fee;
+
+            uint256 base = ctx.swap.amountOut + feeRegs.computedFeeAmount;
+            uint256 fee = (base * feeBps).ceilDiv(BPS);
+            feeRegs.computedFeeAmount += fee;
             ctx.swap.amountOut -= fee;
         } else if (feeBps == 0) {
             ctx.runLoop();
         } else {
-            if (regs.bps == 0) regs.target = ctx.swap.amountOut;
+            if (feeRegs.takerFeeBps == 0) feeRegs.takerAmount = ctx.swap.amountOut;
             uint256 cumBps;
-            unchecked { cumBps = regs.bps + feeBps; }
+            unchecked { cumBps = feeRegs.takerFeeBps + feeBps; }
             require(cumBps < BPS, FeeTotalBpsOutOfRange(cumBps));
-            regs.bps = cumBps;
-            uint256 base = regs.target + (regs.target * cumBps).ceilDiv(BPS - cumBps);
+            feeRegs.takerFeeBps = cumBps;
+
+            uint256 cumFees = (feeRegs.takerAmount * cumBps).ceilDiv(BPS - cumBps);
+            uint256 base = feeRegs.takerAmount + cumFees;
             ctx.swap.amountOut = base;
 
             ctx.runLoop();
 
             uint256 amountOut = ctx.swap.amountOut;
-            if (regs.bps == cumBps && amountOut != base) regs.target = amountOut - (amountOut * cumBps).ceilDiv(BPS);
-            uint256 fees;
-            unchecked { fees = amountOut - regs.target; }
-            ctx.swap.amountOut = amountOut - (fees * feeBps).ceilDiv(cumBps);
+            bool isInnermost = feeRegs.takerFeeBps == cumBps;
+            if (isInnermost && amountOut != base) feeRegs.takerAmount = amountOut - (amountOut * cumBps).ceilDiv(BPS);
+
+            uint256 feesLeft;
+            unchecked { feesLeft = amountOut - feeRegs.takerAmount; }
+            ctx.swap.amountOut = amountOut - (feesLeft * feeBps).ceilDiv(cumBps);
         }
     }
 }

@@ -96,9 +96,9 @@ contract BestRouteSelector is OpcodesDebug {
                     surplusEstimation: 0
                 }),
                 feeRegisters: FeeRegisters({ 
-                    bps: 0, 
-                    target: 0, 
-                    fee: 0 
+                    takerFeeBps: 0,
+                    takerAmount: 0,
+                    computedFeeAmount: 0
                 })
             });
 
