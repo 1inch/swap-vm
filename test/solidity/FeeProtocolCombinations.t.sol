@@ -146,7 +146,7 @@ contract FeeProtocolCombinationsTest is Test {
         bool isTokenIn,
         FeeProtocol.ReceiverConfig[] memory receivers,
         FeeProtocol.ProviderConfig[] memory providers,
-        uint256 surplusEstimate
+        uint128 surplusEstimate
     ) internal pure returns (bytes memory) {
         return bytes.concat(
             FeeProtocol.build(isTokenIn, receivers, providers),
@@ -333,7 +333,7 @@ contract FeeProtocolCombinationsTest is Test {
     function test_FlatPlusSurplus_FeeIn_ExactIn() public {
         uint24 flatBps = 0.01e7;    // 1%
         uint24 surplusBps = 0.1e7;  // 10% of the surplus
-        uint216 estimatedIn = 5e18;  // estimate below the real input so the surplus fee flows
+        uint128 estimatedIn = 5e18;  // estimate below the real input so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             _feeProgramWithSurplus(true, _receivers1(flatBps, surplusBps), _noProviders(), estimatedIn)
@@ -361,7 +361,7 @@ contract FeeProtocolCombinationsTest is Test {
     /// @notice No surplus fee is charged when the maker underperforms the estimate
     function test_FlatPlusSurplus_FeeIn_NoSurplusBelowEstimate() public {
         uint24 flatBps = 0.01e7;
-        uint216 estimatedIn = 1000e18; // estimate far above anything reachable
+        uint128 estimatedIn = 1000e18; // estimate far above anything reachable
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             _feeProgramWithSurplus(true, _receivers1(flatBps, 0.1e7), _noProviders(), estimatedIn)
@@ -380,7 +380,7 @@ contract FeeProtocolCombinationsTest is Test {
     function test_FlatPlusSurplus_FeeOut_ExactIn() public {
         uint24 flatBps = 0.01e7;    // 1%
         uint24 surplusBps = 0.2e7;  // 20% of the surplus
-        uint216 estimatedOut = 200e18; // pro-rata estimate above the real output so the surplus fee flows
+        uint128 estimatedOut = 200e18; // pro-rata estimate above the real output so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             _feeProgramWithSurplus(false, _receivers1(flatBps, surplusBps), _noProviders(), estimatedOut)
@@ -412,7 +412,7 @@ contract FeeProtocolCombinationsTest is Test {
     function test_SplitRoles_FlatReceiverPlusSurplusReceiver_FeeIn() public {
         uint24 flatBps = 0.01e7;
         uint24 surplusBps = 0.1e7;
-        uint216 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
+        uint128 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(
             _feeProgramWithSurplus(true, _receivers2(flatBps, 0, 0, surplusBps), _noProviders(), estimatedIn)
@@ -530,7 +530,7 @@ contract FeeProtocolCombinationsTest is Test {
     /// @notice Surplus-only flag keeps the provider's surplus part and drops its flat part
     function test_ProviderMask_SurplusFlagOnly_KeepsSurplusDropsFlat() public {
         uint24 surplusBps = 0.1e7;
-        uint216 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
+        uint128 estimatedIn = 5e18; // estimate below the real input so the surplus fee flows
         feeProvider.setRecipientAndFees(providerReceiver, 0.01e7, surplusBps); // flat must be masked
 
         (ISwapVM.Order memory order, bytes memory signature) = _createOrder(

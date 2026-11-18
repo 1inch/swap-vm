@@ -16,19 +16,19 @@ library FeeBuilders {
         return _single(false, receiver, feeBps, 0, 0);
     }
 
-    function protocolSurplusIn(uint24 surplusBps, address receiver, uint256 estimate) internal pure returns (bytes memory) {
+    function protocolSurplusIn(uint24 surplusBps, address receiver, uint128 estimate) internal pure returns (bytes memory) {
         return _single(true, receiver, 0, surplusBps, estimate);
     }
 
-    function protocolSurplusOut(uint24 surplusBps, address receiver, uint256 estimate) internal pure returns (bytes memory) {
+    function protocolSurplusOut(uint24 surplusBps, address receiver, uint128 estimate) internal pure returns (bytes memory) {
         return _single(false, receiver, 0, surplusBps, estimate);
     }
 
-    function protocolFlatSurplusIn(uint24 feeBps, uint24 surplusBps, address receiver, uint256 estimate) internal pure returns (bytes memory) {
+    function protocolFlatSurplusIn(uint24 feeBps, uint24 surplusBps, address receiver, uint128 estimate) internal pure returns (bytes memory) {
         return _single(true, receiver, feeBps, surplusBps, estimate);
     }
 
-    function protocolFlatSurplusOut(uint24 feeBps, uint24 surplusBps, address receiver, uint256 estimate) internal pure returns (bytes memory) {
+    function protocolFlatSurplusOut(uint24 feeBps, uint24 surplusBps, address receiver, uint128 estimate) internal pure returns (bytes memory) {
         return _single(false, receiver, feeBps, surplusBps, estimate);
     }
 
@@ -45,7 +45,7 @@ library FeeBuilders {
         address receiver,
         uint24 feeBps,
         uint24 surplusBps,
-        uint256 estimate
+        uint128 estimate
     ) private pure returns (bytes memory) {
         FeeProtocol.ReceiverConfig[] memory receivers = new FeeProtocol.ReceiverConfig[](1);
         receivers[0] = FeeProtocol.ReceiverConfig({ receiver: receiver, feeBps: feeBps, surplusBps: surplusBps });
