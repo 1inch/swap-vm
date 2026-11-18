@@ -89,6 +89,7 @@ library OnlyTxOriginTokenBalanceNonZero {
 
 /// @notice OnlyTakerTokenBalanceGte opcode, fail if taker token balance is below expected value
 /// @dev Encoding: [address token, uint256 amount]
+/// @dev For freely circulating tokens this check can be bypassed with a flash loan
 library OnlyTakerTokenBalanceGte {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -125,6 +126,7 @@ library OnlyTakerTokenBalanceGte {
 
 /// @notice OnlyTakerTokenSupplyShareGte opcode, fail if taker token share is below expected share
 /// @dev Encoding: [address token, uint64 share]
+/// @dev For freely circulating tokens this check can be bypassed with a flash loan
 library OnlyTakerTokenSupplyShareGte {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
