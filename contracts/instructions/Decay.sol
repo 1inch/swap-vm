@@ -16,12 +16,12 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @notice Decay prevents the reverse-swap price from updating immediately
 ///   It spreads the swap amount over `period`, releasing liquidity to market over time
 /// @dev Encoding: [uint16 period]
+/// @dev Example: right after A → B swap, a B → A swap price does not change
+///   Decay stores the swapped amounts and adjusts virtual balances to restore the price from before that A → B swap
+///   This decreases arbitrage opportunity and complicates sandwich attacks
 /// @dev Expected to run no more than once per strategy, the first instance writes storage
-///
-/// @dev Example: after A → B, a B → A swap is filled at a worse price.
-///   Decay stores the swapped amounts and adjusts virtual balances to restore
-///   the price from before that A → B, not the price at which A → B filled.
-///   This can defend against front-running and sandwich attacks.
+/// @dev A subsequent same-direction swap within `period` adds the swap amounts to the remaining resistance prolonging its decaying
+///   Do not overstate decay period to days or hours, keep it in range of dozens of blocks
 library Decay {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
