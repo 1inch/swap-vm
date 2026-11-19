@@ -452,4 +452,34 @@ contract ProtocolFeeTest is Test {
         uint256 noFeeAmountOut = setup.balanceB * amountIn / (setup.balanceA + amountIn);
         assertLt(amountOut, noFeeAmountOut, "AmountOut should be less with both fees applied");
     }
+
+    function testFuzz_ProtocolFeeAmountIn_MaxFee_MakerStillReceivesNonZero(uint256 balanceA, uint256 balanceB) public {
+        balanceA = bound(balanceA, 1, 1000e18);
+        balanceB = bound(balanceB, BPS + 1, 1000e18);
+
+        (ISwapVM.Order memory order, bytes memory signature) = _createOrderWithProgram(bytes.concat(
+            StaticBalances.build(balanceA, balanceB),
+            FeeBuilders.protocolFlatSurplusIn(uint24(BPS - 1), uint24(BPS - 1), protocolFeeRecipient, 0),
+            XYCSwap.build()
+        ));
+
+        bytes memory takerData = _swappingTakerData(
+            _quotingTakerData(TakerSetup({ isExactIn: true })),
+            signature
+        );
+
+        uint256 makerBalanceBefore = TokenMock(tokenA).balanceOf(maker);
+        uint256 feeRecipientBefore = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
+
+        vm.prank(taker);
+        (uint256 actualAmountIn, uint256 amountOut,) = swapVM.swap(order, balanceA, takerData);
+
+        uint256 makerReceived = TokenMock(tokenA).balanceOf(maker) - makerBalanceBefore;
+        uint256 feeReceived = TokenMock(tokenA).balanceOf(protocolFeeRecipient) - feeRecipientBefore;
+
+        assertEq(actualAmountIn, balanceA);
+        assertGt(amountOut, 0);
+        assertEq(makerReceived + feeReceived, balanceA);
+        assertGt(makerReceived, 0, "Maker always receives non-zero net amountIn even at max fee and surplus bps");
+    }
 }

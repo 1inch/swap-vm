@@ -30,6 +30,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 ///   receiver: [bit false, bit7 _, address receiver, uint24 feeBps, uint24 surplusBps]
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
 ///   The opcode is expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
+///   AMM orders are supposed to use flat percent fee only, surplus can be applied to single direction swaps
 library FeeProtocol {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;

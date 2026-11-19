@@ -90,7 +90,8 @@ library PeggedSwap {
                 contribution = ONEx2.mulDiv(postBalanceIn, anchorIn).sqrt() + width * postBalanceIn / anchorIn;
             }
 
-            if (contribution >= liquidity) { // Single side contribution exceeds liquidity -> partial fill
+            if (contribution > liquidity) { // Single side contribution exceeds liquidity -> partial fill
+                // Amount in might decrease at partial fill due to calculations mechanic change
                 ctx.swap.amountIn = solve(liquidity, width, anchorIn) - ctx.swap.balanceIn;
                 ctx.swap.amountOut = ctx.swap.balanceOut;
             } else {

@@ -135,10 +135,11 @@ bytes32 orderHash = router.hash(order); // EIP-712 digest, sign off-chain
 CREATE2 escrow for a signature order funded with ETH. The escrow wraps `msg.value` into WETH, approves
 that amount to the router, becomes the order maker and validates fills through ERC-1271.
 
-The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable
-Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271
-rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
-Enabled hooks need explicit targets because their default target would be the escrow.
+The factory accepts `traits` and `dataHash`, but does not inspect `data`. Use an explicit receiver, disable Aqua and maker-side Permit2, and make the program sell WETH. `expiration` must be in the future. ERC-1271 rejects fills at `expiration`; include `Deadline.build(expiration)` if quotes must expire at the same time.
+
+Implicit hooks (where the hook target defaults to `order.maker`) are incompatible with native orders because `order.maker` at fill time is the escrow contract. Always encode explicit hook targets — for example, pass `maker: address(0)` to `MakerTraitsLib.build` when the hook target is the user's own address, so `MakerTraitsLib.build` does not elide the target as matching `args.maker`.
+
+Manual external invalidation on the router (`invalidateBit`, `invalidateBits`, `invalidateTokenIn`, `invalidateTokenOut`, `seriesEpoch*`) is not available because those calls are scoped to `msg.sender` and `order.maker` is the escrow contract, instead use general `cancel` method on the escrow contract.
 
 ```solidity
 bytes32 dataHash = keccak256(makerOrder.data);
@@ -245,7 +246,7 @@ bytes memory takerData = TakerTraitsLib.build(TakerTraitsLib.Args({
 
 Maker and taker opt in independently: maker `usePermit2` controls `tokenOut`, while taker `usePermit2` controls `tokenIn`. The selected mode also applies to protocol-fee transfers on that side.
 
-`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`.
+`usePermit2` routes transfers through an existing Permit2 allowance; it does not submit a Permit2 signature. Before swapping, the token owner must approve the network's Permit2 contract to spend the token and authorize the router as spender in Permit2. For Aqua orders, taker Permit2 applies only when `useTransferFromAndAquaPush` makes the router pull `tokenIn`. Both order tokens must already be deployed contracts; creating orders or strategies for undeployed token addresses is not supported by Permit2.
 
 ## Order registry and canonical strategies
 

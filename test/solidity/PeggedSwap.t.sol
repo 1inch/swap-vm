@@ -33,6 +33,7 @@ contract PeggedSwapTest is Test {
     uint256 private constant MAKER_PK = 0x1234;
     uint104 private constant WIDTH = 0.8e27;
     uint104 private constant TIGHT_WIDTH = 100e27;
+    uint256 private constant ONE = 1e27;
     uint256 private constant ONEx2 = 1e54;
     // Fuzz anchors span 6-decimal to 18-decimal million-token pools; above ~1e27 the curve loses wei precision
     uint256 private constant MIN_ANCHOR = 1e6;
@@ -198,6 +199,48 @@ contract PeggedSwapTest is Test {
 
         assertLt(amountIn, requestedIn);
         assertEq(amountOut, pool.balanceB);
+    }
+
+    function testFuzz_PeggedSwap_ExactInPartialFillNeverIncreasesAmountIn(
+        uint144 balanceA,
+        uint144 balanceB,
+        uint144 anchorA,
+        uint144 anchorB,
+        uint104 width
+    ) public view {
+        Pool memory pool = _standardPool(0);
+        pool.anchorA = uint144(bound(anchorA, ONE, 1_000 * ONE));
+        pool.anchorB = uint144(bound(anchorB, ONE, 1_000 * ONE));
+        pool.balanceA = bound(balanceA, pool.anchorA / 10, 10 * uint256(pool.anchorA));
+        pool.balanceB = bound(balanceB, pool.anchorB / 10, 10 * uint256(pool.anchorB));
+        pool.width = uint104(bound(width, ONE / 4, 5_000 * ONE));
+
+        ISwapVM.Order memory order = _order(pool);
+        uint256 drainIn = _drainIn(order, pool, true);
+        drainIn -= 30;
+
+        uint256 amountIn; uint256 amountOut; uint256 amountInNext; uint256 amountOutNext;
+        while (amountOut < pool.balanceB) {
+            (amountInNext, amountOutNext) = _quote(order, drainIn, true, true, true);
+
+            assertTrue(amountInNext > amountIn || amountOutNext == pool.balanceB);
+            assertGe(amountOutNext, amountOut);
+            amountIn = amountInNext;
+            amountOut = amountOutNext;
+
+            assertLe(amountIn, drainIn);
+            assertLe(amountOut, pool.balanceB);
+            assertTrue(amountIn == drainIn || amountOut == pool.balanceB);
+
+            drainIn++;
+        }
+        for (uint256 i; i < 10; i++) {
+            (amountIn, amountOut) = _quote(order, drainIn, true, true, true);
+            assertLe(amountIn, drainIn);
+            assertEq(amountOut, pool.balanceB);
+
+            drainIn++;
+        }
     }
 
     function test_PeggedSwap_Revert_ExactInRoundingUnderflowReturnsZeroOutput() public {

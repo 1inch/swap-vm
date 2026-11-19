@@ -53,6 +53,7 @@ library StaticBalances {
 
 /// @notice DynamicBalances opcode, set context token balances to storage values, initialized with specified values
 /// @dev Encoding: [uint256 balanceA, uint256 balanceB]
+/// @dev The opcode is not compatible with FeeProtocolSurplus as it does not catch balance change caused by surplus fee
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library DynamicBalances {
     using CalldataParse for bytes;

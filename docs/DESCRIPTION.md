@@ -47,7 +47,7 @@ A **router** is `SwapVM` plus an opcode set. It exposes `quote`, `swap`, `hash`,
 |---|---|
 | `maker` | Liquidity owner; signer or Aqua account. |
 | `receiver` | Receives `tokenIn`; `address(0)` means the maker. Must be the maker for Aqua orders. |
-| `tokenA`, `tokenB` | The pair, `tokenA < tokenB`; `build` reverts otherwise. |
+| `tokenA`, `tokenB` | The pair, `tokenA < tokenB`; `build` reverts otherwise. Both must be deployed token contracts (predicted undeployed addresses are not supported). |
 | `shouldUnwrapWeth` | Unwrap incoming WETH to ETH for the receiver. Not with Aqua. |
 | `useAquaInsteadOfSignature` | Aqua mode (see above). |
 | `allowZeroAmountIn` | Permit fills with `amountIn == 0`; otherwise the VM requires `amountIn > 0`. |
@@ -572,7 +572,7 @@ contract MyRouter is SwapVM, Opcodes {
 
 **Order registry.** `registerOrder(order, signature)` verifies the order (signature, or Aqua balances for the pair), records `announcedAt[orderHash]` once and emits `OrderRegistered` for indexers. Relative timestamps (`Time.RELATIVE_TIME_FLAG`) count from this moment; an unregistered order is pinned by its first swap.
 
-**Native ETH sell orders.** [`NativeOrderFactory`](../contracts/extensions/nativeorder/NativeOrderFactory.sol) deploys a deterministic CREATE2 escrow that wraps `msg.value` into WETH, approves the router and becomes the maker of a signature order validated through ERC-1271. The escrow address commits to the original maker, `traits`, `keccak256(data)`, `expiration` and `maxBaseFee`; the program must sell WETH, use an explicit receiver and disable Aqua and maker Permit2. ERC-1271 rejects fills from `expiration`, so add `Deadline.build(expiration)` if quotes must expire at the same time. `cancel` returns the balance to the maker at any time; `cancelExpired` and `cancelExpiredForReward` let others do it after expiry. Cancellation does not revoke the allowance, so refunding the escrow before `expiration` makes the order fillable again.
+**Native ETH sell orders.** [`NativeOrderFactory`](../contracts/extensions/nativeorder/NativeOrderFactory.sol) deploys a deterministic CREATE2 escrow that wraps `msg.value` into WETH, approves the router and becomes the maker of a signature order validated through ERC-1271. The escrow address commits to the original maker, `traits`, `keccak256(data)`, `expiration` and `maxBaseFee`; the program must sell WETH, use an explicit receiver and disable Aqua and maker Permit2. Implicit hooks (defaulting the hook target to `order.maker`) are incompatible with native orders because `order.maker` is the escrow; always use explicit hook targets. ERC-1271 rejects fills from `expiration`, so add `Deadline.build(expiration)` if quotes must expire at the same time. `cancel` on the escrow is the primary cancellation method and returns the balance to the maker at any time (`cancelExpired` and `cancelExpiredForReward` let others do it after expiry); manual external invalidation calls on the router (`invalidateBit*`, `invalidateTokenIn`, `invalidateTokenOut`, `seriesEpoch*`) are not applicable because they key storage by `msg.sender` while `order.maker` is the escrow. Cancellation does not revoke the allowance, so refunding the escrow before `expiration` makes the order fillable again.
 
 ## Cancellation
 
