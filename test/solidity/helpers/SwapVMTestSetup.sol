@@ -27,6 +27,10 @@ interface SwapVMRouter is ISwapVM {
         uint256 amountOut
     );
 
+    function paused() external view returns (bool);
+    function pause() external;
+    function unpause() external;
+
     function asView() external view returns (ISwapVM);
 
     function balance(bytes32 orderHash, address token) external view returns (uint256);

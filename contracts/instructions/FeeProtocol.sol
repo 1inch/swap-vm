@@ -192,7 +192,7 @@ library FeeProtocol {
 }
 
 /// @notice FeeProtocolSurplus opcode, set maker total receive or spend estimation in addition to FeeProtocol which set receivers
-/// @dev Encoding: [bool isTokenIn, uint256 estimated]
+/// @dev Encoding: [bool isTokenIn, uint128 estimated]
 ///   isTokenIn should match the flag set in FeeProtocol
 /// @dev Supports only single direction swaps, scales estimation according to the amount-to-balance proportion
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
@@ -206,26 +206,26 @@ library FeeProtocolSurplus {
     Opcode constant opcode = Opcode.FeeProtocolSurplus;
 
     function sizeOf() internal pure returns (uint256) {
-        return InstructionBuilder.sizeOf() + 1 + 32;
+        return InstructionBuilder.sizeOf() + 1 + 16;
     }
 
-    function build(bool isTokenIn, uint256 estimated) internal pure returns (bytes memory) {
+    function build(bool isTokenIn, uint128 estimated) internal pure returns (bytes memory) {
         return build(MemoryPtrLib.alloc(sizeOf()), isTokenIn, estimated).resolve();
     }
 
-    function build(MemoryPtr ptrStart, bool isTokenIn, uint256 estimated) internal pure returns (MemoryPtr ptr) {
+    function build(MemoryPtr ptrStart, bool isTokenIn, uint128 estimated) internal pure returns (MemoryPtr ptr) {
         ptr = ptrStart.pushHeader(opcode);
-        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0)).push(estimated, 32);
+        ptr = ptr.push(InstructionBuilder.encodeBool(isTokenIn, 0)).push(estimated, 16);
         ptrStart.patchLength(ptr);
     }
 
-    function parse(bytes calldata args) internal pure returns (bool isTokenIn, uint256 estimated) {
+    function parse(bytes calldata args) internal pure returns (bool isTokenIn, uint128 estimated) {
         isTokenIn = args.at(0).asBool(0);
-        estimated = args.at(1).asU256();
+        estimated = args.at(1).asU128();
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
-        (bool isTokenIn, uint256 estimated) = parse(args);
+        (bool isTokenIn, uint128 estimated) = parse(args);
 
         if (isTokenIn) {
             uint256 balanceOut = ctx.swap.balanceOut;

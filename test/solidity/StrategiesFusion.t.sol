@@ -51,9 +51,9 @@ contract StrategiesFusionTest is Test {
     address public protocol = makeAddr("protocol");
 
     uint40 constant START = 1_700_000_000;
-    uint256 constant BALANCE_IN = 100e18;
-    uint256 constant BALANCE_OUT = 200e18;
-    uint256 constant ESTIMATED_IN = 120e18;
+    uint128 constant BALANCE_IN = 100e18;
+    uint128 constant BALANCE_OUT = 200e18;
+    uint128 constant ESTIMATED_IN = 120e18;
     // Token out priced at 0.5 token in by the oracle, so the market values `BALANCE_OUT` at `BALANCE_IN`
     int256 constant ORACLE_PRICE = 0.5e18;
     uint160 constant MARKET_VALUE = uint160(BALANCE_IN);

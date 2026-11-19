@@ -79,7 +79,7 @@ library Strategies {
         address accessToken;
         FeeProtocol.ReceiverConfig[] feeReceivers;
         uint24 whitelistFeeDiscount;
-        uint256 surplusEstimation;
+        uint128 surplusEstimation;
     }
 
     uint256 private constant _prefixBitmap =

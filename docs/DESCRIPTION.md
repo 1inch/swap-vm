@@ -106,7 +106,7 @@ The LP fee is reinvested into the reserves, the protocol fee is not. Swapping `F
 
 ### Quote vs swap
 
-`quote()` runs the identical program with `isStaticContext = true`: stateful instructions read but do not write, Aqua balances are read live. Call `router.asView().quote(...)` to force a static call. Given the same chain state and inputs, `quote` returns exactly what `swap` executes. A quote is still a snapshot: balances, fills, time, base fee, oracles and Aqua liquidity can move before the swap, and signatures, allowances, hooks and callbacks are not exercised. Relative timestamps of an unregistered order resolve to "now" in quotes and are pinned by the first swap. Use the same order and taker data for both calls and protect the swap with a threshold and a deadline.
+`quote()` runs the identical program with `isStaticContext = true`: stateful instructions read but do not write, Aqua balances are read live. Call `router.asView().quote(...)` to force a static call. Given the same chain state and inputs, `quote` returns exactly what `swap` executes. A quote is still a snapshot: balances, fills, time, base fee, oracles and Aqua liquidity can move before the swap, and signatures, allowances, hooks and callbacks are not exercised. Relative timestamps of an unregistered order resolve to "now" in quotes and are pinned by the first swap that executes a relative-time instruction (`Deadline`, `DutchAuction`, `PiecewiseLinearSurcharge` or `WhitelistSequential`). Use the same order and taker data for both calls and protect the swap with a threshold and a deadline.
 
 ### Conventions
 
@@ -339,7 +339,7 @@ Routers: **F** [`SwapVMRouter`](../contracts/routers/SwapVMRouter.sol) (`Opcodes
 | `FeeFlatIn` | F A | `(uint24 feeBps)` | Wraps. LP fee on `amountIn`, kept by the maker; the subtree prices the net amount. |
 | `FeeFlatOut` | F | `(uint24 feeBps)` | Wraps. LP fee on `amountOut`. Superadditive with reinvesting AMMs; prefer `FeeFlatIn`. |
 | `FeeProtocol` | F L A | `(bool isTokenIn, ReceiverConfig[] receivers, ProviderConfig[] providers)` | Wraps. Third-party fees for up to 15 receivers: flat `feeBps` and `surplusBps` of the maker's gain over the `FeeProtocolSurplus` estimate. Providers answer through `IProtocolFeeProvider`. Transfers happen at settlement. |
-| `FeeProtocolSurplus` | F L | `(bool isTokenIn, uint256 estimated)` | Wraps. The maker's expected receive (sell) or spend (buy), scaled to the filled share. Same `isTokenIn` as `FeeProtocol`. |
+| `FeeProtocolSurplus` | F L | `(bool isTokenIn, uint128 estimated)` | Wraps. The maker's expected receive (sell) or spend (buy), scaled to the filled share. Same `isTokenIn` as `FeeProtocol`. |
 
 ### Rates
 
