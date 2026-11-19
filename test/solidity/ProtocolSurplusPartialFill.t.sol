@@ -138,14 +138,14 @@ contract ProtocolSurplusPartialFillTest is Test {
     function testFuzz_SurplusIn_Multifill(
         uint256 balanceIn,
         uint256 balanceOut,
-        uint256 estimate,
+        uint128 estimate,
         uint24 feeBps,
         uint24 surplusBps,
         uint256[3] memory asks
     ) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
-        estimate = bound(estimate, 0, 1e30);
+        estimate = uint128(bound(estimate, 0, 1e30));
         feeBps = uint24(bound(feeBps, 0, BPS - 1));
         surplusBps = uint24(bound(surplusBps, 1, BPS - 1));
 
@@ -193,14 +193,14 @@ contract ProtocolSurplusPartialFillTest is Test {
     function testFuzz_SurplusOut_Multifill(
         uint256 balanceIn,
         uint256 balanceOut,
-        uint256 estimate,
+        uint128 estimate,
         uint24 feeBps,
         uint24 surplusBps,
         uint256[3] memory asks
     ) public {
         balanceIn = bound(balanceIn, 1, 1e30);
         balanceOut = bound(balanceOut, 1, 1e30);
-        estimate = bound(estimate, 0, 1e30);
+        estimate = uint128(bound(estimate, 0, 1e30));
         feeBps = uint24(bound(feeBps, 0, 0.5e7));
         surplusBps = uint24(bound(surplusBps, 1, BPS - 1));
 
@@ -336,7 +336,7 @@ contract ProtocolSurplusPartialFillTest is Test {
     }
 
     /// @dev Canonical program: FeeProtocol and FeeProtocolSurplus precede the fixed-axis invalidator.
-    function _flatSurplusOrder(bool isTokenIn, uint256 balanceIn, uint256 balanceOut, uint24 feeBps, uint24 surplusBps, uint256 estimate) internal view returns (ISwapVM.Order memory) {
+    function _flatSurplusOrder(bool isTokenIn, uint256 balanceIn, uint256 balanceOut, uint24 feeBps, uint24 surplusBps, uint128 estimate) internal view returns (ISwapVM.Order memory) {
         return _createOrder(bytes.concat(
             StaticBalances.build(balanceIn, balanceOut),
             isTokenIn
@@ -418,11 +418,11 @@ contract FeeProtocolSurplusScaleTest is Test {
         assertEq(_scale(false, 1e18, 5e17, 5e17), 1e18);
     }
 
-    function test_ScaleSurplusEstimate_SupportsUint256Estimate() public {
-        assertEq(_scale(true, type(uint256).max, 1, 1), type(uint256).max);
+    function test_ScaleSurplusEstimate_SupportsUint128Estimate() public {
+        assertEq(_scale(true, type(uint128).max, 1, 1), type(uint128).max);
     }
 
-    function _scale(bool isTokenIn, uint256 estimated, uint256 balance, uint256 fill) private returns (uint256) {
+    function _scale(bool isTokenIn, uint128 estimated, uint256 balance, uint256 fill) private returns (uint256) {
         SwapRegisters memory result = SwapRegisters({
             balanceIn: 0,
             balanceOut: 0,
