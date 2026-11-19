@@ -298,19 +298,19 @@ contract StrategiesFusionTest is Test {
         vm.expectRevert(abi.encodeWithSelector(OnlyTakerTokenBalanceNonZero.TakerTokenBalanceIsZero.selector, address(kyc)));
         swapVM.quote(order, 1e18, exactInData);
 
-        // Auction start: +50% surcharge, 150e18 in buys the whole 200e18 out before the halved 1.25% flat fee
+        // Auction start: +50% surcharge, 148.125e18 net in plus the halved 1.25% flat fee on top
         tokenA.mint(resolver1, 150e18);
         vm.startPrank(resolver1);
         tokenA.approve(address(swapVM), type(uint256).max);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 150e18, exactInData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 149.9765625e18, exactInData);
         vm.stopPrank();
 
-        assertEq(amountIn, 150e18);
+        assertEq(amountIn, 149.9765625e18);
         assertEq(amountOut, 197.5e18, "148.125e18 net in at 150e18 per 200e18");
         assertEq(tokenB.balanceOf(resolver1), 197.5e18);
-        // Flat 1.5e18 plus 10% of the 29.625e18 surplus over the 118.5e18 pro-rata estimate
-        assertEq(tokenA.balanceOf(protocol), 4.4625e18, "Whitelisted protocol fee");
-        assertEq(tokenA.balanceOf(integrator), 0.375e18, "Half the 0.5% integrator fee");
+        // Flat 1.48125e18 plus 10% of the 29.625e18 surplus over the 118.5e18 pro-rata estimate
+        assertEq(tokenA.balanceOf(protocol), 4.44375e18, "Whitelisted protocol fee");
+        assertEq(tokenA.balanceOf(integrator), 0.3703125e18, "Half the 0.5% integrator fee");
         assertEq(tokenA.balanceOf(maker), 145.1625e18, "Maker receives input minus fees");
         assertEq(swapVM.tokenOutInvalidators(maker, swapVM.hash(order), address(tokenB)), 197.5e18);
 
@@ -569,17 +569,17 @@ contract StrategiesFusionTest is Test {
         ISwapVM.Order memory order = _order(this.fusionOrder(new bytes[](0), args));
         bytes memory exactInData = _takerData(order);
 
-        // Auction over: 100e18 in nets 98e18 after the flat fee, below the 117.6e18 pro-rata estimate
+        // Auction over: 99.96e18 in nets 98e18 plus the 2% flat fee, below the 117.6e18 pro-rata estimate
         vm.warp(START + 100);
         tokenA.mint(resolver1, 100e18);
         vm.startPrank(resolver1);
         tokenA.approve(address(swapVM), type(uint256).max);
-        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 100e18, exactInData);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 99.96e18, exactInData);
         vm.stopPrank();
 
-        assertEq(amountIn, 100e18);
+        assertEq(amountIn, 99.96e18);
         assertEq(amountOut, 196e18);
-        assertEq(tokenA.balanceOf(protocol), 2e18, "Flat fee only");
+        assertEq(tokenA.balanceOf(protocol), 1.96e18, "Flat fee only");
         assertEq(tokenA.balanceOf(maker), 98e18);
     }
 
@@ -707,12 +707,12 @@ contract StrategiesFusionTest is Test {
         vm.stopPrank();
         vm.startPrank(alien);
         tokenA.approve(address(swapVM), type(uint256).max);
-        (, uint256 alienOut,) = swapVM.swap(order, 50e18, exactInData);
+        (, uint256 alienOut,) = swapVM.swap(order, 49.98e18, exactInData);
         vm.stopPrank();
 
         assertEq(resolverOut, 100e18, "Whole 50e18 at the order rate");
-        assertEq(alienOut, 98e18, "49e18 net after 2%");
-        assertEq(tokenA.balanceOf(protocol), 1e18, "Fee from the public fill only");
+        assertEq(alienOut, 98e18, "49e18 net plus 2% on top");
+        assertEq(tokenA.balanceOf(protocol), 0.98e18, "Fee from the public fill only");
         assertEq(tokenA.balanceOf(maker), 99e18);
     }
 
@@ -730,9 +730,35 @@ contract StrategiesFusionTest is Test {
         vm.stopPrank();
 
         assertEq(amountOut, 100e18, "Requested output");
-        assertEq(amountIn, 62.5e18, "50e18 for the maker plus 20% fee on the gross");
+        assertEq(amountIn, 60e18, "50e18 for the maker plus 20% fee on top");
         assertEq(tokenA.balanceOf(maker), 50e18);
-        assertEq(tokenA.balanceOf(protocol), 12.5e18);
+        assertEq(tokenA.balanceOf(protocol), 10e18);
+    }
+
+    /// @dev Maker sells 1e18 for 2000e18 with 1% and 2% fees: each receiver takes its percent of the maker
+    ///   amount independently, the taker pays 2060e18 for the full fill in both swap modes
+    function test_StrategiesFusion_FeesArePercentsOfMakerAmount() public {
+        Strategies.FusionOrder memory args = _minimalArgs();
+        args.balanceA = 2000e18;
+        args.balanceB = 1e18;
+        args.feeReceivers = _receivers(0.01e7, 0.02e7, 0);
+
+        ISwapVM.Order memory order = _order(this.fusionOrder(new bytes[](0), args));
+
+        (uint256 quotedIn,,) = swapVM.quote(order, 1e18, _takerData(order, true, false));
+        assertEq(quotedIn, 2060e18, "ExactOut: 2000e18 for the maker plus 20e18 and 40e18 on top");
+
+        tokenA.mint(resolver1, 2060e18);
+        vm.startPrank(resolver1);
+        tokenA.approve(address(swapVM), type(uint256).max);
+        (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, 2060e18, _takerData(order));
+        vm.stopPrank();
+
+        assertEq(amountIn, 2060e18);
+        assertEq(amountOut, 1e18, "Full fill");
+        assertEq(tokenA.balanceOf(maker), 2000e18);
+        assertEq(tokenA.balanceOf(integrator), 20e18, "1% of the maker amount");
+        assertEq(tokenA.balanceOf(protocol), 40e18, "2% of the maker amount");
     }
 
     function test_StrategiesFusion_OracleShiftSharedAcrossFills() public {

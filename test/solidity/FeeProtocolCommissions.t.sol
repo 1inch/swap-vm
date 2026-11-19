@@ -62,7 +62,7 @@ contract FeeProtocolCommissionsTest is Test {
         uint24 totalBps = _boundFees(count, fees);
 
         // Fee is carved from the taker amount pre-loop: the loop drifts the net input down
-        uint256 fee = amount * totalBps / BPS;
+        uint256 fee = amount * totalBps / (BPS + totalBps);
         amountPartial = bound(amountPartial, 0, amount - fee);
         bool isPartialFill = amountPartial != amount - fee;
 
