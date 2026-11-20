@@ -312,7 +312,7 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
         }
     }
 
-    function _acceptNativePayment(uint256 amount) internal returns (bool) {
+    function _acceptNativePayment(uint256 amount) private returns (bool) {
         if (msg.value == 0) return false;
 
         require(msg.value >= amount, NotEnoughMsgValueAttached());
