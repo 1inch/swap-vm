@@ -11,7 +11,7 @@ import { Deadline, Salt } from "../instructions/Controls.sol";
 import { Jump, JumpIfDirection } from "../instructions/Jumps.sol";
 import { OnlyTakerTokenBalanceNonZero, OnlyTakerTokenBalanceGte, OnlyTakerTokenSupplyShareGte, OnlyTxOriginTokenBalanceNonZero } from "../instructions/TokenValidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
-import { DynamicBalances } from "../instructions/Balances.sol";
+import { DynamicBalances, DynamicBalancesExternal } from "../instructions/Balances.sol";
 import { RequireMinRate } from "../instructions/MinRate.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
 import { Decay } from "../instructions/Decay.sol";
@@ -20,7 +20,9 @@ import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-contract AquaOpcodes {
+contract AquaOpcodes is
+    DynamicBalancesExternal
+{
     error UnknownOpcode(uint256 opcode);
 
     /// @notice Opcode direct dispatcher
