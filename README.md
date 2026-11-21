@@ -144,27 +144,30 @@ Manual external invalidation on the router (`invalidateBit`, `invalidateBits`, `
 ```solidity
 bytes32 dataHash = keccak256(makerOrder.data);
 address escrow = factory.create{ value: 0.5 ether }(
-    makerOrder.traits, dataHash, expiration, maxBaseFee
+    makerOrder.traits, dataHash, expiration
 );
 
 // address(this) must be the account that called factory.create.
 NativeOrder memory nativeOrder = NativeOrderLib.encode(
-    address(this), makerOrder.traits, dataHash, expiration, maxBaseFee
+    address(this), makerOrder.traits, dataHash, expiration
 );
 
 ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
-bytes memory signature = abi.encode(nativeOrder); // 96-byte ERC-1271 signature
+// 89-byte ERC-1271 signature: traits (32) | dataHash (32) | maker (20) | expiration (5)
+bytes memory signature = abi.encodePacked(
+    nativeOrder._traits, nativeOrder._dataHash, uint200(nativeOrder._packed >> 56);
+);
 bytes32 filledOrderHash = router.hash(filledOrder);
 ```
 
-`NativeOrder` commits the original maker, traits, `dataHash`, `expiration` and `maxBaseFee` in the escrow
-address. The deposit is not part of the commitment.
+`NativeOrder` commits the original maker, traits, `dataHash` and `expiration` in the escrow address. The deposit is not part of the commitment. The last 7 bytes of `_packed` are unused: the escrow and factory functions that take a `NativeOrder` ignore them.
 
 - `cancel` lets the maker unwrap and withdraw the current WETH balance at any time.
 - `cancelExpired` lets an access-token holder return the balance from `expiration` onward.
 - `cancelExpiredForReward` opens from `expiration + cancelDelay` onward. Its reward is
-  `min(WETH balance, min(block.basefee, maxBaseFee) * cancelGasRefund)`.
+  `min(WETH balance, block.basefee * cancelGasRefund, cancelRewardLimit)`, using the limits configured
+  when the factory is deployed.
 - `rescueFunds` lets the maker recover ERC-20 tokens or ETH at any time; address zero means ETH.
 
 Cancellation withdraws the current balance but does not revoke the allowance. Before `expiration`, funding
