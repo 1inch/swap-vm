@@ -166,7 +166,7 @@ library Strategies {
     ///     sell estimation or spend below the buy estimation, scaled to the filled part of the order. The estimation
     ///     may not cross the limit balance. No surplus config disables and `surplusEstimation` is ignored
     ///   - Auction, `PiecewiseLinearSurcharge`: `auctionScales[i]` improves the maker price at point `i`,
-    ///     `2 ** 24` is +100%, `auctionDurations[i]` seconds separate points `i` and `i + 1` starting at
+    ///     `2 ** 23` is +100%, `auctionDurations[i]` seconds separate points `i` and `i + 1` starting at
     ///     `auctionStartTime`. Empty `auctionScales` disables
     ///   - Oracle adjustment, `OraclePriceAdjuster`: shifts the maker price by the market move since the order was
     ///     priced. Empty `oracleFeeds` disables, `oracleMarketValue` stays zero
