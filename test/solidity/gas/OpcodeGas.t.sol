@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { SwapVMRouter } from "../../../contracts/routers/SwapVMRouter.sol";
+import { SwapVMRouter, DeployCode } from "../helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances, DynamicBalances } from "../../../contracts/instructions/Balances.sol";
@@ -55,7 +55,7 @@ contract OpcodeGas is Test {
     function setUp() public {
         maker = vm.addr(MAKER_PK);
         taker = address(this);
-        swapVM = new SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = DeployCode.SwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");
