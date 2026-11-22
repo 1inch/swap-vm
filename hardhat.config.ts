@@ -26,7 +26,8 @@ const compiler = {
 };
 
 const compilerTest = {
-  isolated: true, compilers: [{
+  isolated: true,
+  compilers: [{
     version: "0.8.30",
     preferWasm: false,
     settings: {
