@@ -112,7 +112,7 @@ The LP fee is reinvested into the reserves, the protocol fee is not. Swapping `F
 
 - `tokenA < tokenB` by address; `direction = true` is A to B. `LimitSwap.build(tokenIn, tokenOut)` and `JumpIfDirection.build(tokenIn, tokenOut, pc)` derive it.
 - `isExactIn` is the taker's choice of which amount to fix. Sell / buy is the maker's choice of which balance is fixed; the two are independent (see [Maker sell and buy](#maker-sell-and-buy)).
-- Units: percentages use `BPS = 1e7` (`0.003e7` is 0.3%); `PiecewiseLinearSurcharge` scales are Q24 (`1 << 23` is +50%); `XYCConcentrateSwap` bounds are square roots of the price in `tokenB` per `tokenA`, scaled by `1e18`; `DutchAuction.decay` and `OnlyTakerTokenSupplyShareGte.share` are `1e18` fractions.
+- Units: percentages use `BPS = 1e7` (`0.003e7` is 0.3%); `PiecewiseLinearSurcharge` scales are Q23 (`1 << 22` is +50%, `1 << 23` is +100%, and `type(uint24).max` is just below +200%); `XYCConcentrateSwap` bounds are square roots of the price in `tokenB` per `tokenA`, scaled by `1e18`; `DutchAuction.decay` and `OnlyTakerTokenSupplyShareGte.share` are `1e18` fractions.
 - Timestamps are `uint40`. With `Time.RELATIVE_TIME_FLAG` (`1 << 39`) set, `Deadline`, `DutchAuction`, `PiecewiseLinearSurcharge` and `WhitelistSequential` count from the order's announcement: `registerOrder`, or the first swap if never registered.
 - Rounding favors the maker everywhere: `amountIn` rounds up, `amountOut` rounds down, balance scaling rounds the maker's income up and the maker's spending down.
 
@@ -319,7 +319,7 @@ Routers: **F** [`SwapVMRouter`](../contracts/routers/SwapVMRouter.sol) (`Opcodes
 | `StaticBalances` | F L | `(uint256 balanceA, uint256 balanceB)` | Sets both balances from the order. Stateless. |
 | `DynamicBalances` | F A | `(uint256 balanceA, uint256 balanceB)` | Wraps. Loads reserves stored per `(orderHash, token)`, falling back to the arguments while both are zero; stores `balanceIn + amountIn` and `balanceOut - amountOut` after the subtree (swap only). Reverts if both would reach zero. |
 | `DutchAuction` | F | `(bool adjustIn, uint40 start, uint64 decay, uint24 surchargeBps)` | Exponential surcharge `(1 + s) * decay^elapsed - 1` while positive, raising `balanceIn` or lowering `balanceOut`; adds it to `surcharge`. |
-| `PiecewiseLinearSurcharge` | F L | `(bool adjustIn, uint40 start, uint16[] durations, uint24[] scales)` | Linear interpolation of Q24 surcharges across `durations`; `scales[0]` before `start`, the last scale after the end. Adds to `surcharge`. |
+| `PiecewiseLinearSurcharge` | F L | `(bool adjustIn, uint40 start, uint16[] durations, uint24[] scales)` | Linear interpolation of Q23 surcharges across `durations`; `scales[0]` before `start`, the last scale after the end. Adds to `surcharge`. |
 | `Decay` | F A | `(uint16 period)` | Wraps. Remembers the last swap per direction and prices the opposite direction as if it had not happened, releasing it linearly over `period` seconds. Dampens sandwiching. |
 
 ### Curves
@@ -435,7 +435,7 @@ The taker's amount must cover the whole 100 / 200 pair. `LimitSwap` instead allo
 uint16[] memory durations = new uint16[](1);
 durations[0] = 5 minutes;
 uint24[] memory scales = new uint24[](2);
-scales[0] = 1 << 23;                          // +50% over the limit price at start
+scales[0] = 1 << 22;                          // +50% over the limit price at start
 scales[1] = 0;                                // limit price after 5 minutes
 
 bytes memory program = bytes.concat(

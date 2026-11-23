@@ -25,7 +25,6 @@ library DutchAuction {
     using Power for uint256;
 
     error DutchAuctionWrongDecayFactor(uint64 decay);
-    error DutchAuctionSurchargeOutOfRange(uint24 surchargeBps);
 
     Opcode constant opcode = Opcode.DutchAuction;
 
@@ -48,7 +47,6 @@ library DutchAuction {
         uint24 surchargeBps
     ) internal pure returns (MemoryPtr ptr) {
         require(decay < ONE, DutchAuctionWrongDecayFactor(decay));
-        require(surchargeBps < BPS, DutchAuctionSurchargeOutOfRange(surchargeBps));
 
         ptr = ptrStart.pushHeader(opcode);
         ptr = ptr.push(InstructionBuilder.encodeBool(adjustIn, 0)).push(start, 5).push(decay, 8).push(surchargeBps, 3);
