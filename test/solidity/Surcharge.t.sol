@@ -129,7 +129,7 @@ contract SurchargeTest is Test {
         uint16[] memory durations = new uint16[](1);
         durations[0] = 177;
         uint24[] memory scales = new uint24[](2);
-        scales[0] = 2 << 22;
+        scales[0] = 1 << 22;
         scales[1] = 0;
 
         vm.fee(type(uint64).max);
@@ -169,7 +169,7 @@ contract SurchargeTest is Test {
         uint16[] memory durations = new uint16[](1);
         durations[0] = 177;
         uint24[] memory scales = new uint24[](2);
-        scales[0] = 2 << 22;
+        scales[0] = 1 << 22;
         scales[1] = 0;
 
         vm.fee(type(uint64).max);

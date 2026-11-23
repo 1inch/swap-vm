@@ -215,8 +215,8 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = uint24(1 << 22);
-        scales[1] = uint24(1 << 22);
+        scales[0] = uint24(1 << 21);
+        scales[1] = uint24(1 << 21);
 
         return bytes.concat(
             StaticBalances.build(1e30, 2e30),
@@ -228,8 +228,8 @@ contract BaseFeeAdjusterFeesInvariants is Test, CoreInvariants {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = uint24(1 << 22);
-        scales[1] = uint24(1 << 22);
+        scales[0] = uint24(1 << 21);
+        scales[1] = uint24(1 << 21);
 
         return bytes.concat(
             StaticBalances.build(1e30, 2e30),

@@ -252,8 +252,8 @@ contract ProtocolSurplusPartialFillTest is Test {
         uint16[] memory durations = new uint16[](1);
         durations[0] = 100;
         uint24[] memory scales = new uint24[](2);
-        scales[0] = uint24(1 << 23);
-        scales[1] = uint24(1 << 23);
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(1 << 22);
 
         ISwapVM.Order memory order = _createOrder(bytes.concat(
             StaticBalances.build(50e18, 200e18),

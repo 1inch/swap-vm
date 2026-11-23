@@ -334,9 +334,9 @@ contract DutchAuctionTest is Test {
     }
 
     /**
-     * Test Dutch auction build rejects invalid decay and surcharge values.
+     * Test Dutch auction build rejects invalid decay values and accepts the full surcharge range.
      */
-    function test_Fail_DutchAuctionInvalidDecay() public {
+    function test_DutchAuctionBuildValidation() public {
         vm.expectRevert(abi.encodeWithSelector(DutchAuction.DutchAuctionWrongDecayFactor.selector, uint64(1e18)));
         this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 1e18, 0.1e7);
 
@@ -349,11 +349,8 @@ contract DutchAuctionTest is Test {
         vm.expectRevert(abi.encodeWithSelector(DutchAuction.DutchAuctionWrongDecayFactor.selector, uint64(1e18 + 1)));
         this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 1e18 + 1, 0.1e7);
 
-        vm.expectRevert(abi.encodeWithSelector(DutchAuction.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
-        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
-
-        vm.expectRevert(abi.encodeWithSelector(DutchAuction.DutchAuctionSurchargeOutOfRange.selector, uint24(1e7)));
-        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 0.99e18, 1e7);
+        this.buildDutchAuctionBalanceIn(AUCTION_REALISTIC_START_TS, 0.99e18, type(uint24).max);
+        this.buildDutchAuctionBalanceOut(AUCTION_REALISTIC_START_TS, 0.99e18, type(uint24).max);
     }
 
     /// @dev Simple wrapper over library function `DutchAuction.build`.
