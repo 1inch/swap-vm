@@ -32,8 +32,9 @@ contract NativeOrderGas is Test {
     uint32 private constant EXPIRY_OFFSET = 1 days;
     uint32 private constant PUBLIC_CANCEL_OFFSET = 1 days + 1 hours;
     uint32 private constant PUBLIC_CANCEL_DELAY = PUBLIC_CANCEL_OFFSET - EXPIRY_OFFSET;
-    uint56 private constant MAX_BASE_FEE = 10 gwei;
     uint256 private constant CANCEL_GAS_REFUND = 70_000;
+    uint256 private constant CANCEL_REWARD_LIMIT = 20 gwei * CANCEL_GAS_REFUND;
+    uint256 private constant BASE_FEE = 10 gwei;
 
     LimitSwapVMRouter public swapVM;
     WETHMock public weth;
@@ -64,6 +65,7 @@ contract NativeOrderGas is Test {
             IWETH(address(weth)),
             IERC20(address(accessToken)),
             CANCEL_GAS_REFUND,
+            CANCEL_REWARD_LIMIT,
             uint24(PUBLIC_CANCEL_DELAY)
         );
 
@@ -82,15 +84,10 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
         vm.prank(maker);
-        factory.create{ value: WETH_AMOUNT }(
-            makerOrder.traits, keccak256(makerOrder.data), expiration, MAX_BASE_FEE
-        );
+        factory.create{ value: WETH_AMOUNT }(makerOrder.traits, keccak256(makerOrder.data), expiration);
         _snapshot(
             "create",
-            abi.encodeCall(
-                NativeOrderFactory.create,
-                (makerOrder.traits, keccak256(makerOrder.data), expiration, MAX_BASE_FEE)
-            )
+            abi.encodeCall(NativeOrderFactory.create, (makerOrder.traits, keccak256(makerOrder.data), expiration))
         );
     }
 
@@ -123,7 +120,7 @@ contract NativeOrderGas is Test {
 
     function test_gas_NativeOrder_cancelExpiredForReward() public {
         _createEscrow();
-        vm.fee(MAX_BASE_FEE);
+        vm.fee(BASE_FEE);
         vm.warp(block.timestamp + PUBLIC_CANCEL_OFFSET);
         vm.prank(resolver);
         escrow.cancelExpiredForReward(nativeOrder);
@@ -173,10 +170,9 @@ contract NativeOrderGas is Test {
         makerOrder = _buildOrder();
         uint40 expiration = uint40(block.timestamp + EXPIRY_OFFSET);
         bytes32 dataHash = keccak256(makerOrder.data);
-        nativeOrder = NativeOrderLib.encode(maker, makerOrder.traits, dataHash, expiration, MAX_BASE_FEE);
+        nativeOrder = NativeOrderLib.encode(maker, makerOrder.traits, dataHash, expiration);
         vm.prank(maker);
-        address escrowAddr =
-            factory.create{ value: WETH_AMOUNT }(makerOrder.traits, dataHash, expiration, MAX_BASE_FEE);
+        address escrowAddr = factory.create{ value: WETH_AMOUNT }(makerOrder.traits, dataHash, expiration);
 
         escrow = NativeOrderEscrow(payable(escrowAddr));
         filledOrder = makerOrder;
@@ -211,7 +207,7 @@ contract NativeOrderGas is Test {
     }
 
     function _escrowTakerData(bool isExactIn) internal view returns (bytes memory) {
-        return _takerData(isExactIn, abi.encode(nativeOrder));
+        return _takerData(isExactIn, abi.encodePacked(nativeOrder._traits, nativeOrder._dataHash, uint200(nativeOrder._packed >> 56)));
     }
 
     function _takerData(bool isExactIn, bytes memory signature) internal view returns (bytes memory) {
