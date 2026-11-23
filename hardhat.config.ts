@@ -7,37 +7,47 @@ import hardhatNodeTestRunner from "@nomicfoundation/hardhat-node-test-runner";
 import hardhatContractSizer from "@solidstate/hardhat-contract-sizer";
 import hardhatIgnoreWarnings from "hardhat-ignore-warnings";
 
-const swapVmCompiler = {
+const solc = (runs: number = 10_000_000) => ({
   version: "0.8.30",
+  preferWasm: false,
   settings: {
-    evmVersion: "prague",
-    optimizer: { enabled: true, runs: 600 },
+    optimizer: { enabled: true, runs },
     viaIR: true,
   },
-  preferWasm: false,
+});
+
+const compiler = {
+  isolated: true,
+  compilers: [solc()],
+  overrides: {
+    "contracts/routers/LimitSwapVMRouter.sol": solc(275),
+    "contracts/routers/AquaSwapVMRouter.sol": solc(830),
+  }
 };
 
-const fastTestCompiler = {
-  version: "0.8.30",
-  settings: {
-    evmVersion: "prague",
-    viaIR: true,
-    optimizer: {
-      enabled: true,
-      runs: 1,
-      details: {
-        yul: true,
-        cse: false,
-        constantOptimizer: false,
-        inliner: false,
-        peephole: false,
-        jumpdestRemover: false,
-        orderLiterals: false,
-        deduplicate: false,
+const compilerTest = {
+  isolated: true,
+  compilers: [{
+    version: "0.8.30",
+    preferWasm: false,
+    settings: {
+      viaIR: true,
+      optimizer: {
+        enabled: true,
+        runs: 1,
+        details: {
+          yul: true,
+          cse: false,
+          constantOptimizer: false,
+          inliner: false,
+          peephole: false,
+          jumpdestRemover: false,
+          orderLiterals: false,
+          deduplicate: false,
+        },
       },
     },
-  },
-  preferWasm: false,
+  }]
 };
 
 export default defineConfig({
@@ -54,9 +64,9 @@ export default defineConfig({
     npmFilesToBuild: ["@1inch/solidity-utils/contracts/mocks/TokenMock.sol"],
     splitTestsCompilation: true,
     profiles: {
-      default: { isolated: true, compilers: [swapVmCompiler] },
-      production: { isolated: true, compilers: [swapVmCompiler] },
-      fast: { isolated: true, compilers: [fastTestCompiler] },
+      default: compiler,
+      production: compiler,
+      fast: compilerTest,
     },
   },
   coverage: {
@@ -69,9 +79,7 @@ export default defineConfig({
   },
   test: {
     solidity: {
-      fuzz: {
-        runs: 1024,
-      },
+      fuzz: { runs: 1024 },
       fsPermissions: {
         readDirectory: ["./node_modules/@1inch/solidity-utils/dist/src"],
         dangerouslyReadWriteDirectory: ["./deployments", "./config"],
@@ -91,8 +99,13 @@ export default defineConfig({
     },
   },
   contractSizer: {
-    only: [/contracts\/routers\//],
-    except: [/Debug/],
+    strict: true,
+    only: [
+      /contracts\/routers\/AquaSwapVMRouter.sol/,
+      /contracts\/routers\/LimitSwapVMRouter.sol/,
+      /contracts\/extensions\/nativeorder\/NativeOrderFactory.sol/,
+      /contracts\/extensions\/nativeorder\/NativeOrderEscrow.sol/,
+    ],
   },
   warnings: {
     "test/solidity/**/*": {

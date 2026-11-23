@@ -1,11 +1,11 @@
 {
-  "swap_exactOut": "106458",
-  "swap_exactIn": "106435",
-  "referenceEoaSwap_exactOut": "107836",
-  "referenceEoaSwap_exactIn": "107813",
-  "quote_exactOut": "17783",
-  "quote_exactIn": "17755",
-  "create": "138011",
-  "cancelExpiredForReward": "60657",
-  "cancel": "22975"
+  "swap_exactOut": "106460",
+  "swap_exactIn": "106437",
+  "referenceEoaSwap_exactOut": "107886",
+  "referenceEoaSwap_exactIn": "107863",
+  "quote_exactOut": "17987",
+  "quote_exactIn": "17959",
+  "create": "137873",
+  "cancelExpiredForReward": "60498",
+  "cancel": "22861"
 }

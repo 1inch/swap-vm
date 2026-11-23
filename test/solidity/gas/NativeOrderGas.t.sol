@@ -10,7 +10,7 @@ import { IWETH } from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouter } from "../../../contracts/routers/LimitSwapVMRouter.sol";
+import { LimitSwapVMRouter, DeployCode } from "../helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
@@ -59,7 +59,7 @@ contract NativeOrderGas is Test {
         weth = new WETHMock();
         dai = new TokenMock("DAI", "DAI");
         TokenMock accessToken = new TokenMock("Resolver Access", "RAT");
-        swapVM = new LimitSwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
+        swapVM = DeployCode.LimitSwapVMRouter(address(0), address(weth), address(this), "SwapVM", "1.0.0");
         factory = new NativeOrderFactory(
             address(swapVM),
             IWETH(address(weth)),

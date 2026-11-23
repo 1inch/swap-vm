@@ -307,8 +307,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // Protocol fee causes 1 wei rounding in additivity
-        config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
+        config.additivityTolerance = _protocolFeeInAdditivityTolerance();
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -338,8 +337,7 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
         ISwapVM.Order memory order = _createOrder(bytecode);
         InvariantConfig memory config = _config(order);
 
-        // Dynamic protocol fee causes 1 wei rounding in additivity
-        config.additivityTolerance = additivityTolerance > 1 ? additivityTolerance : 1;
+        config.additivityTolerance = _protocolFeeInAdditivityTolerance();
 
         assertAllInvariantsWithConfig(
             swapVM,
@@ -378,6 +376,14 @@ contract PeggedFeesInvariants is Test, CoreInvariants {
     }
 
     // Helper functions
+
+    /// @dev Floor-rounded protocol fee in tokenIn leaves up to 1 wei of input to split swaps,
+    ///   worth `balanceB / balanceA` wei of output at the peg
+    function _protocolFeeInAdditivityTolerance() internal view returns (uint256) {
+        uint256 oneWeiIn = (balanceB + balanceA - 1) / balanceA;
+        return additivityTolerance > oneWeiIn ? additivityTolerance : oneWeiIn;
+    }
+
     function _createOrder(bytes memory program) internal view returns (ISwapVM.Order memory) {
         return orders.MakerTraitsLibBuild(TraitsHelper.MakerTraitsLibArgs({
             maker: maker,

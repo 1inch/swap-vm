@@ -8,7 +8,7 @@ import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
-import { LimitSwapVMRouter } from "../../../contracts/routers/LimitSwapVMRouter.sol";
+import { LimitSwapVMRouter, DeployCode } from "../helpers/SwapVMTestSetup.sol";
 import { MakerTraitsLib } from "../../../contracts/libs/MakerTraits.sol";
 import { TakerTraitsLib } from "../../../contracts/libs/TakerTraits.sol";
 import { StaticBalances } from "../../../contracts/instructions/Balances.sol";
@@ -34,7 +34,7 @@ contract LimitRouterGas is Test {
     function setUp() public {
         maker = vm.addr(makerPK);
         taker = address(this);
-        swapVM = new LimitSwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
+        swapVM = DeployCode.LimitSwapVMRouter(address(0), address(0), address(this), "SwapVM", "1.0.0");
 
         tokenA = new TokenMock("Token I", "TKI");
         tokenB = new TokenMock("Token J", "TKJ");

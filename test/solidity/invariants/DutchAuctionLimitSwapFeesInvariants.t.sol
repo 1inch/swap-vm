@@ -35,6 +35,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
     uint256 public makerPK = 0x1234;
     address public taker;
     address public protocolFeeCollector;
+    uint256 internal additivityTolerance;
 
     function setUp() public {
         maker = vm.addr(makerPK);
@@ -164,6 +165,8 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
             LimitSwap.build(address(tokenA), address(tokenB))
         );
 
+        // Floor-rounded protocol fee in tokenIn leaves up to 1 wei of input to split swaps, 2 wei of output at the 1:2 price
+        additivityTolerance = 2;
         _testInvariantsWithConfig(bytecode, false, false);
     }
 
@@ -221,6 +224,7 @@ contract DutchAuctionLimitSwapFeesInvariants is Test, CoreInvariants {
             config.exactOutTakerData = exactOutData;
 
             config.skipAdditivity = skipAdditivity;
+            config.additivityTolerance = additivityTolerance;
             config.skipMonotonicity = skipMonotonicity;
             // Fees round up per instruction: allow 1-wei price jitter between trade sizes
             config.monotonicityToleranceBps = 1;

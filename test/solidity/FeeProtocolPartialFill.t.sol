@@ -38,7 +38,7 @@ contract FeeProtocolPartialFillTest is Test {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
 
-        uint256 fee = amount * feeBps / FeeProtocol.BPS;
+        uint256 fee = amount * feeBps / (FeeProtocol.BPS + feeBps);
         amountPartial = bound(amountPartial, 0, amount - fee);
         bool isPartialFill = amountPartial != amount - fee;
 
@@ -59,7 +59,7 @@ contract FeeProtocolPartialFillTest is Test {
 
         uint256 realFee = realAmount - amountPartial;
 
-        uint256 feeDesired = realAmount * feeBps / FeeProtocol.BPS;
+        uint256 feeDesired = realAmount * feeBps / (FeeProtocol.BPS + feeBps);
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
@@ -74,11 +74,11 @@ contract FeeProtocolPartialFillTest is Test {
         assertLe(realFee, fee);
         assertLe(realAmount, amount);
 
-        // realFee / realAmount <= feeBps
-        assertLe(realFee * FeeProtocol.BPS, feeBps * realAmount, "Protocol fee should not be rapacious");
+        // realFee / amountPartial <= feeBps, amountPartial is the net amount
+        assertLe(realFee * FeeProtocol.BPS, feeBps * amountPartial, "Protocol fee should not be rapacious");
 
-        // Imagine realFee is 1 wei more -> realAmount is 1 wei more as well -> feeBps breaks
-        if (isPartialFill) assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * (realAmount + 1), "One wei more realFee would be rapacious");
+        // Imagine realFee is 1 wei more -> the net amount stays -> feeBps breaks
+        if (isPartialFill) assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * amountPartial, "One wei more realFee would be rapacious");
     }
 
     function testFuzz_FeeProtocolIn_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountIn, uint24 feeBps) public view {
@@ -105,17 +105,17 @@ contract FeeProtocolPartialFillTest is Test {
 
         uint256 realFee = realIn - amountIn;
 
-        uint256 feeDesired = amountIn * feeBps / (FeeProtocol.BPS - feeBps);
+        uint256 feeDesired = amountIn * feeBps / FeeProtocol.BPS;
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
         if (!isPartialFill) assertEq(realOut, amount);
 
-        // realFee / realIn <= feeBps
-        assertLe(realFee * FeeProtocol.BPS, feeBps * realIn, "Protocol fee should not be rapacious");
+        // realFee / amountIn <= feeBps
+        assertLe(realFee * FeeProtocol.BPS, feeBps * amountIn, "Protocol fee should not be rapacious");
 
-        // Imagine realFee is 1 wei more -> realIn is 1 wei more as well -> feeBps breaks
-        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * (realIn + 1), "One wei more realFee would be rapacious");
+        // Imagine realFee is 1 wei more -> feeBps breaks
+        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * amountIn, "One wei more realFee would be rapacious");
     }
 
     function testFuzz_FeeProtocolOut_ExactIn_PartialFill(uint256 amount, uint256 amountPartial, uint256 amountOut, uint24 feeBps) public view {
