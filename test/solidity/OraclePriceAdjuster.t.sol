@@ -186,8 +186,8 @@ contract OraclePriceAdjusterTest is Test {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = uint24(1 << 23);
-        scales[1] = uint24(1 << 23);
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(1 << 22);
 
         ISwapVM.Order memory order = _buildOrder(bytes.concat(
             StaticBalances.build(2000e6, 1e18),
@@ -219,8 +219,8 @@ contract OraclePriceAdjusterTest is Test {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = uint24(1 << 23);
-        scales[1] = uint24(1 << 23);
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(1 << 22);
 
         ISwapVM.Order memory order = _buildOrder(bytes.concat(
             StaticBalances.build(2500e6, 1.5e18),
@@ -367,8 +367,8 @@ contract OraclePriceAdjusterTest is Test {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = uint24(1 << 23);
-        scales[1] = uint24(1 << 23);
+        scales[0] = uint24(1 << 22);
+        scales[1] = uint24(1 << 22);
 
         bytes memory program = bytes.concat(
             StaticBalances.build(1950e6, 1e18),
