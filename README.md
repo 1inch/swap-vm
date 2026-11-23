@@ -156,7 +156,7 @@ ISwapVM.Order memory filledOrder = makerOrder;
 filledOrder.maker = escrow;
 // 89-byte ERC-1271 signature: traits (32) | dataHash (32) | maker (20) | expiration (5)
 bytes memory signature = abi.encodePacked(
-    nativeOrder._traits, nativeOrder._dataHash, uint200(nativeOrder._packed >> 56);
+    nativeOrder._traits, nativeOrder._dataHash, uint200(nativeOrder._packed >> 56)
 );
 bytes32 filledOrderHash = router.hash(filledOrder);
 ```
