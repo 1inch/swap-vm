@@ -63,6 +63,7 @@ library XYCConcentrateSwap {
         uint256 virtualIn = ctx.swap.balanceIn;
         uint256 virtualOut = ctx.swap.balanceOut;
 
+        // Low liquidity cases such that virtual offsets added below are zero may cause division panic or leave unclaimed wei in pool
         // Rounding virtual in up favors maker
         if (direction) {
             virtualIn += liquidity.mulDiv(ONE, sqrtPriceMax, Math.Rounding.Ceil);

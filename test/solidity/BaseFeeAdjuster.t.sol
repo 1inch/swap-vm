@@ -59,7 +59,7 @@ contract BaseFeeAdjusterTest is Test {
     function test_BaseFeeAdjusterLimitSwapGasVariations() public {
         uint256 balanceIn = 3000e18;
         uint256 balanceOut = 1e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
+        uint24 surchargeScale = uint24((uint256(1) << 23) / 10);
         uint64 baseGasPrice = 20 gwei;
         uint96 ethToTokenPrice = 3000e18;
         uint24 gasAmount = 150_000;
@@ -148,7 +148,7 @@ contract BaseFeeAdjusterTest is Test {
     function test_BaseFeeAdjusterSurchargeCap() public {
         uint256 balanceIn = 3000e18;
         uint256 balanceOut = 1e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 20);
+        uint24 surchargeScale = uint24((uint256(1) << 23) / 20);
 
         ISwapVM.Order memory order = _createOrder(
             _buildBalanceInProgram(
@@ -174,7 +174,7 @@ contract BaseFeeAdjusterTest is Test {
     function test_BaseFeeAdjusterNoAdjustmentBelowBase() public {
         uint256 balanceIn = 3000e18;
         uint256 balanceOut = 1e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
+        uint24 surchargeScale = uint24((uint256(1) << 23) / 10);
 
         ISwapVM.Order memory order = _createOrder(
             _buildBalanceInProgram(
@@ -212,7 +212,7 @@ contract BaseFeeAdjusterTest is Test {
             _buildBalanceOutProgram(
                 balanceIn,
                 balanceOut,
-                uint24(1 << 23),
+                uint24(1 << 22),
                 20 gwei,
                 1e18,
                 150_000
@@ -236,7 +236,7 @@ contract BaseFeeAdjusterTest is Test {
     function test_BaseFeeAdjusterCompensationScaling() public {
         uint256 balanceIn = 3000e18;
         uint256 balanceOut = 1e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
+        uint24 surchargeScale = uint24((uint256(1) << 23) / 10);
 
         ISwapVM.Order memory order = _createOrder(
             _buildBalanceInProgram(
@@ -263,7 +263,7 @@ contract BaseFeeAdjusterTest is Test {
     function test_BaseFeeAdjusterExactOutDiscount() public {
         uint256 balanceIn = 3000e18;
         uint256 balanceOut = 1e18;
-        uint24 surchargeScale = uint24((uint256(1) << 24) / 10);
+        uint24 surchargeScale = uint24((uint256(1) << 23) / 10);
 
         ISwapVM.Order memory order = _createOrder(
             _buildBalanceInProgram(
@@ -333,7 +333,7 @@ contract BaseFeeAdjusterTest is Test {
     }
 
     function _scaleValue(uint256 value, uint24 scale) private pure returns (uint256) {
-        return (value * scale) >> 24;
+        return (value * scale) >> 23;
     }
 
     function _createOrder(bytes memory program) private view returns (ISwapVM.Order memory) {

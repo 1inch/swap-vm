@@ -767,7 +767,7 @@ contract StrategiesFusionTest is Test {
     function _setAuction(Strategies.FusionOrder memory args) internal pure {
         args.auctionStartTime = START;
         args.auctionDurations = dynamic([uint16(100)]);
-        args.auctionScales = dynamic([uint24(1 << 23), 0]);
+        args.auctionScales = dynamic([uint24(1 << 22), 0]);
     }
 
     function _setFillGrid(Strategies.FusionOrder memory args) internal pure {

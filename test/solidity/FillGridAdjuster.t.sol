@@ -278,8 +278,8 @@ contract FillGridAdjusterTest is Test {
         uint16[] memory durations = new uint16[](1);
         uint24[] memory scales = new uint24[](2);
         durations[0] = 1;
-        scales[0] = 1 << 23;
-        scales[1] = 1 << 23;
+        scales[0] = 1 << 22;
+        scales[1] = 1 << 22;
 
         (uint24[] memory fillBps, uint24[] memory adjustBps) = _grid();
 

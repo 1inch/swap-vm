@@ -82,11 +82,11 @@ library PiecewiseLinearSurcharge {
         uint256 scale = calcScaleNow(ctx, args);
 
         if (adjustIn) {
-            uint256 surcharge = (ctx.swap.balanceIn * scale) >> 24;
+            uint256 surcharge = (ctx.swap.balanceIn * scale) >> 23;
             ctx.swap.surcharge += surcharge;
             ctx.swap.balanceIn += surcharge;
         } else {
-            uint256 surcharge = ctx.swap.balanceOut * scale / ((1 << 24) + scale);
+            uint256 surcharge = ctx.swap.balanceOut * scale / ((1 << 23) + scale);
             ctx.swap.surcharge += surcharge;
             ctx.swap.balanceOut -= surcharge;
         }
