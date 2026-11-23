@@ -10,25 +10,24 @@ import { MakerTraits } from "../../libs/MakerTraits.sol";
 struct NativeOrder {
     MakerTraits _traits;
     bytes32 _dataHash;
-    uint256 _packed; // [uint56 maxBaseFee, uint40 expiration, address maker]
+    uint256 _packed; // [address maker, uint40 expiration, uint56 _ignored]
 }
 
 using NativeOrderLib for NativeOrder global;
 
 library NativeOrderLib {
-    uint256 internal constant SIZE = 0x60;
+    uint256 internal constant SIZE = 0x59;
 
     function encode(
         address maker_,
         MakerTraits traits_,
         bytes32 dataHash_,
-        uint40 expiration_,
-        uint56 maxBaseFee_
+        uint40 expiration_
     ) internal pure returns (NativeOrder memory) {
         return NativeOrder({
             _traits: traits_,
             _dataHash: dataHash_,
-            _packed: (uint256(maxBaseFee_) << 200) | (uint256(expiration_) << 160) | uint160(maker_)
+            _packed: (uint256(uint160(maker_)) << 96) | (uint256(expiration_) << 56)
         });
     }
 
@@ -38,7 +37,7 @@ library NativeOrderLib {
     }
 
     function maker(NativeOrder calldata order) internal pure returns (address) {
-        return address(uint160(order._packed));
+        return address(uint160(order._packed >> 96));
     }
 
     function traits(NativeOrder calldata order) internal pure returns (MakerTraits) {
@@ -50,11 +49,7 @@ library NativeOrderLib {
     }
 
     function expiration(NativeOrder calldata order) internal pure returns (uint40) {
-        return uint40(order._packed >> 160);
-    }
-
-    function maxBaseFee(NativeOrder calldata order) internal pure returns (uint56) {
-        return uint56(order._packed >> 200);
+        return uint40(order._packed >> 56);
     }
 
     function salt(NativeOrder calldata order) internal pure returns (bytes32 result) {

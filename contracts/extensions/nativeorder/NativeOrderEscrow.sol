@@ -42,7 +42,8 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
     IERC20 private immutable _ACCESS_TOKEN;
 
     uint256 private immutable _CANCEL_GAS_REFUND;
-    uint256 private immutable _CANCELLATION_DELAY;
+    uint256 private immutable _CANCEL_REWARD_LIMIT;
+    uint256 private immutable _CANCEL_DELAY;
 
     modifier onlyFactory {
         require(msg.sender == _FACTORY, NotFactory(msg.sender, _FACTORY));
@@ -65,7 +66,7 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
         _;
     }
 
-    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint24 cancelDelay)
+    constructor(address swapVM, IWETH weth, IERC20 accessToken, uint256 cancelGasRefund, uint256 cancelRewardLimit, uint24 cancelDelay)
         OnlyWethReceiver(address(weth))
         EIP712SwapVM(swapVM)
     {
@@ -73,7 +74,8 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
         _WETH = weth;
         _ACCESS_TOKEN = accessToken;
         _CANCEL_GAS_REFUND = cancelGasRefund;
-        _CANCELLATION_DELAY = cancelDelay;
+        _CANCEL_REWARD_LIMIT = cancelRewardLimit;
+        _CANCEL_DELAY = cancelDelay;
     }
 
     /// @dev The factory funds the clone and approves the SwapVM router immediately after deployment
@@ -109,10 +111,10 @@ contract NativeOrderEscrow is IERC1271, OnlyWethReceiver, EIP712SwapVM {
 
     /// @dev Allowed third-party may cancel an expired order for a reward after the cancellation delay has elapsed
     function cancelExpiredForReward(NativeOrder calldata order) external validOrder(order) onlyKYC {
-        uint256 unlockTime = order.expiration() + _CANCELLATION_DELAY;
+        uint256 unlockTime = order.expiration() + _CANCEL_DELAY;
         require(block.timestamp >= unlockTime, NotAtPublicCancel(block.timestamp, unlockTime));
 
-        (uint256 balance, uint256 reward) = _cancel(order, Math.min(block.basefee, order.maxBaseFee()) * _CANCEL_GAS_REFUND);
+        (uint256 balance, uint256 reward) = _cancel(order, Math.min(block.basefee * _CANCEL_GAS_REFUND, _CANCEL_REWARD_LIMIT));
         emit NativeOrderCancelledByResolver(_hashOrder(address(this), order.traits(), order.dataHash()), balance, reward);
     }
 
