@@ -177,7 +177,7 @@ library FeeProtocol {
                 ctx.runLoop();
                 totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
             }
-            unchecked { ctx.swap.amountIn += totalFeeAmount; }
+            ctx.swap.amountIn += totalFeeAmount;
         } else {
             if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
             ctx.runLoop();
