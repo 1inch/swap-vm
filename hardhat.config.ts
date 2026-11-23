@@ -20,8 +20,8 @@ const compiler = {
   isolated: true,
   compilers: [solc()],
   overrides: {
-    "contracts/routers/LimitSwapVMRouter.sol": solc(280),
-    "contracts/routers/AquaSwapVMRouter.sol": solc(890),
+    "contracts/routers/LimitSwapVMRouter.sol": solc(275),
+    "contracts/routers/AquaSwapVMRouter.sol": solc(830),
   }
 };
 
