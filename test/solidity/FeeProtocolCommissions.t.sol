@@ -200,6 +200,58 @@ contract FeeProtocolCommissionsTest is Test {
         assertEq(makerBefore - tokenB.balanceOf(maker), realOut + paid, "Maker pays the output and the commissions");
     }
 
+    function test_Commissions_TokenIn_ExactInVsExactOut_SameNet() public {
+        uint24[10] memory fees;
+        fees[0] = 1e5;
+        ISwapVM.Order memory order = _order(true, 1, fees, 100, 100);
+
+        // 1 unit of fee on a 99 net input would exceed 1%, so the whole exact-in amount stays net
+        (uint256 inExactIn,,) = swapVM.swap(order, 100, _makeTakerData(order, true));
+        assertEq(inExactIn, 100, "Exact-in should keep the taker amountIn");
+        assertEq(tokenA.balanceOf(recipients[0]), 0, "Exact-in fee should be carved from the taker amount");
+
+        (uint256 inExactOut,,) = swapVM.swap(order, 100, _makeTakerData(order, false));
+        assertEq(inExactOut, 101, "Exact-out should add the fee on top of the net input");
+        assertEq(tokenA.balanceOf(recipients[0]), 1, "Exact-out fee should be floor(feeBps of the net input)");
+    }
+
+    function testFuzz_Commissions_TokenIn_ExactInVsExactOut_FeeGap(uint256 amount, uint256 count, uint24[10] memory fees) public {
+        amount = bound(amount, 1, 1e50);
+        count = bound(count, 1, MAX_RECEIVERS);
+        uint24 totalBps = _boundFees(count, fees);
+
+        uint256 net = amount - amount * totalBps / (BPS + totalBps);
+        ISwapVM.Order memory order = _order(true, count, fees, net, 1e18);
+
+        (uint256 inExactIn,,) = swapVM.swap(order, amount, _makeTakerData(order, true));
+        (uint256 inExactOut,,) = swapVM.swap(order, 1e18, _makeTakerData(order, false));
+
+        // Same net input: exact-out charges floor(feeBps of it), exact-in may carve one unit less to keep the taker amount
+        assertEq(inExactIn, amount, "Exact-in should keep the taker amountIn");
+        assertEq(inExactOut - net, net * totalBps / BPS, "Exact-out fee should be floor(feeBps of the net input)");
+        assertGe(inExactOut, inExactIn, "Exact-out should never charge less than exact-in");
+        assertLe(inExactOut - inExactIn, 1, "Exact-in and exact-out fees should differ by at most one unit");
+    }
+
+    function test_Commissions_TokenIn_SplitDust_ZeroesShares() public {
+        uint24[10] memory fees;
+        fees[0] = 1e5;
+        ISwapVM.Order memory single = _order(true, 1, fees, 100, 100);
+        swapVM.swap(single, 100, _makeTakerData(single, false));
+        assertEq(tokenA.balanceOf(recipients[0]), 1, "A lone 1% receiver should get floor(1% of 100)");
+
+        fees[1] = 5e4;
+        ISwapVM.Order memory pair = _order(true, 2, fees, 100, 100);
+        uint256 makerBefore = tokenA.balanceOf(maker);
+        (uint256 realIn,,) = swapVM.swap(pair, 100, _makeTakerData(pair, false));
+
+        // floor(1.5% of 100) = 1 splits into floor(2/3) and floor(1/3)
+        assertEq(realIn, 101, "Taker should pay floor(1.5% of 100)");
+        assertEq(tokenA.balanceOf(recipients[0]), 1, "1% receiver share should round to zero next to a 0.5% one");
+        assertEq(tokenA.balanceOf(recipients[1]), 0, "0.5% receiver share should round to zero");
+        assertEq(tokenA.balanceOf(maker) - makerBefore, 101, "Rounding dust should stay with the maker");
+    }
+
     // === Helpers ===
 
     function _order(bool isTokenIn, uint256 count, uint24[10] memory fees, uint256 amountIn, uint256 amountOut) internal view returns (ISwapVM.Order memory) {
