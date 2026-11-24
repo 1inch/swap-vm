@@ -17,11 +17,9 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice FeeProtocol opcode, third-party fees resolved during the transfers phase
-/// @dev Flat percent fee is payed by taker, feeBps of the net amount on either side
-///   Fee in token in is added on top of the net amount in,
-///   fee in token out is charged from the gross amount out, the taker receives gross / (1 + feeBps)
-///   The amounts are priced by the rest of the program, nested fee wrappers included
-/// @dev Surplus fee is payed by maker
+/// @dev Flat percent fee is paid by taker and calculated as percent of the net amount
+///   Fee in token in is added to amount in, fee in token out is charged from amount out
+/// @dev Surplus fee is paid by maker
 ///   Estimated amount in / out is set and scaled according to the amount-to-balance proportion by FeeProtocolSurplus opcode
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
 /// @dev Encoding: [uint8 header, bytes21 provider * providers.length, bytes27 receiver * receivers.length]
@@ -29,7 +27,7 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 ///   provider: [bit true, bit takeFlatFee, bit takeSurplusFee, bit5 _, address provider]
 ///   receiver: [bit false, bit7 _, address receiver, uint24 feeBps, uint24 surplusBps]
 /// @dev The opcode is expected to be executed only once in strategy flow, fee registers are written by the first-met opcode instance
-///   The opcode is expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
+///   The opcode expects FeeProtocolSurplus to be applied if any surplusBps or takeSurplusFee set
 ///   AMM orders are supposed to use flat percent fee only, surplus can be applied to single direction swaps
 library FeeProtocol {
     using CalldataParse for bytes;
