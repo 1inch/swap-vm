@@ -17,9 +17,9 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol";
 
 /// @notice FeeProtocol opcode, third-party fees resolved during the transfers phase
-/// @dev Flat percent fee is payed by taker
-///   Fee in token in is feeBps of the net amount in and is added to amount in,
-///   fee in token out is feeBps of the gross amount out and is charged from amount out
+/// @dev Flat percent fee is payed by taker, feeBps of the net amount on either side
+///   Fee in token in is added on top of the net amount in,
+///   fee in token out is charged from the gross amount out, the taker receives gross / (1 + feeBps)
 ///   The amounts are priced by the rest of the program, nested fee wrappers included
 /// @dev Surplus fee is payed by maker
 ///   Estimated amount in / out is set and scaled according to the amount-to-balance proportion by FeeProtocolSurplus opcode

@@ -230,7 +230,7 @@ contract FeeProtocolCombinationsTest is Test {
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         uint256 grossOut = _xycOut(amountIn);
-        uint256 netOut = grossOut - grossOut * totalBps / BPS;
+        uint256 netOut = grossOut - grossOut * totalBps / (BPS + totalBps);
         assertEq(amountOut, netOut, "Taker receives net output");
         assertEq(TokenMock(tokenB).balanceOf(taker), takerBalanceBefore + netOut, "Taker got net output");
 
@@ -252,9 +252,9 @@ contract FeeProtocolCombinationsTest is Test {
         uint24 totalBps = 0.015e7;
         uint256 amountIn = 10e18;
         uint256 grossOut = _xycOut(amountIn);
-        uint256 netOut = grossOut - grossOut * totalBps / BPS;
-        uint256 fee1 = netOut * 0.01e7 / (BPS - totalBps);
-        uint256 fee2 = netOut * 0.005e7 / (BPS - totalBps);
+        uint256 netOut = grossOut - grossOut * totalBps / (BPS + totalBps);
+        uint256 fee1 = (grossOut - netOut) * 0.01e7 / totalBps;
+        uint256 fee2 = (grossOut - netOut) * 0.005e7 / totalBps;
 
         vm.prank(maker);
         TokenMock(tokenB).approve(address(swapVM), 0);
@@ -394,10 +394,10 @@ contract FeeProtocolCombinationsTest is Test {
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         uint256 grossOut = _xycOut(amountIn);
-        uint256 netOut = grossOut - grossOut * flatBps / BPS;
+        uint256 netOut = grossOut - grossOut * flatBps / (BPS + flatBps);
         assertEq(amountOut, netOut, "Taker receives net output");
 
-        uint256 totalFeeMax = grossOut * flatBps / BPS;
+        uint256 totalFeeMax = grossOut * flatBps / (BPS + flatBps);
         uint256 realOut = netOut + totalFeeMax;
         uint256 estimateShare = estimatedOut * amountIn / BALANCE_A;
         assertGt(estimateShare, realOut, "Sanity: maker delivered less than estimated");
