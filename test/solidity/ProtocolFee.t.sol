@@ -317,7 +317,7 @@ contract ProtocolFeeTest is Test {
 
         uint256 flatFee = amountIn * flatFeeBps / BPS;
         uint256 amountInAfterFlatFee = amountIn - flatFee;
-        uint256 protocolFee = amountInAfterFlatFee * protocolFeeBps / BPS;
+        uint256 protocolFee = amountInAfterFlatFee * protocolFeeBps / (BPS + protocolFeeBps);
         uint256 effectiveAmountIn = amountInAfterFlatFee - protocolFee;
 
         assertEq(actualAmountIn, amountIn);
@@ -410,13 +410,13 @@ contract ProtocolFeeTest is Test {
         (uint256 actualAmountIn, uint256 actualAmountOut,) = swapVM.swap(order, amountOut, exactOutTakerDataSwap);
 
         // For ExactOut with protocol fee on amountIn:
-        // feeAmount = baseAmountIn * feeBps / (BPS - feeBps)
+        // feeAmount = baseAmountIn * feeBps / BPS
         // totalAmountIn = baseAmountIn + feeAmount
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
 
         // Calculate expected values
         uint256 baseAmountIn = setup.balanceA * amountOut / (setup.balanceB - amountOut);
-        uint256 expectedProtocolFee = baseAmountIn * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = baseAmountIn * setup.protocolFeeBps / BPS;
         uint256 expectedTotalAmountIn = baseAmountIn + expectedProtocolFee;
 
         assertApproxEqAbs(actualProtocolFee, expectedProtocolFee, 1, "Protocol fee recipient should receive correct fee from tokenIn");

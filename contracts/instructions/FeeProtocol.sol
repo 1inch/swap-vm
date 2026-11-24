@@ -18,7 +18,9 @@ import { FeeReceiver, FeeReceiverLib, FeeMetaLib } from "../libs/ProtocolFee.sol
 
 /// @notice FeeProtocol opcode, third-party fees resolved during the transfers phase
 /// @dev Flat percent fee is payed by taker
-///   Fee in token in is added to amount in, fee in token out is charged from amount out
+///   Fee in token in is feeBps of the net amount in and is added to amount in,
+///   fee in token out is feeBps of the gross amount out and is charged from amount out
+///   The amounts are priced by the rest of the program, nested fee wrappers included
 /// @dev Surplus fee is payed by maker
 ///   Estimated amount in / out is set and scaled according to the amount-to-balance proportion by FeeProtocolSurplus opcode
 ///   In case amount in exceeds or amount out inferiors the estimation, the difference is subject to surplus fee
@@ -166,17 +168,17 @@ library FeeProtocol {
         uint256 totalFeeAmount;
         if (isTokenIn) {
             if (ctx.query.isExactIn) {
-                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
+                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS + totalFeeBps);
                 unchecked { ctx.swap.amountIn -= totalFeeAmount; }
 
                 uint256 reduction = ctx.swap.amountIn;
                 ctx.runLoop();
                 reduction -= ctx.swap.amountIn;
 
-                if (reduction > 0) totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                if (reduction > 0) totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
             } else {
                 ctx.runLoop();
-                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / (BPS - totalFeeBps);
+                totalFeeAmount = ctx.swap.amountIn * totalFeeBps / BPS;
             }
             ctx.swap.amountIn += totalFeeAmount;
         } else {

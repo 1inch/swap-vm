@@ -185,8 +185,8 @@ contract DynamicProtocolFeeTest is Test {
         // Protocol fee is collected from tokenIn (tokenA)
         uint256 actualProtocolFee = TokenMock(tokenA).balanceOf(protocolFeeRecipient);
 
-        // Fee is exact: amountIn * feeBps / BPS, paid by taker at settlement
-        assertEq(actualProtocolFee, amountIn * 0.10e7 / BPS, "Protocol fee should be collected from tokenIn");
+        // Fee is exact: feeBps of the net amountIn, amountIn * feeBps / (BPS + feeBps), paid by taker at settlement
+        assertEq(actualProtocolFee, amountIn * 0.10e7 / (BPS + 0.10e7), "Protocol fee should be collected from tokenIn");
 
         // ExactIn: taker always pays exactly the specified amountIn (fee carved out of maker receipt)
         assertEq(actualAmountIn, amountIn, "actualAmountIn should equal requested amountIn");
@@ -220,7 +220,7 @@ contract DynamicProtocolFeeTest is Test {
 
         // Calculate expected values
         uint256 baseAmountIn = setup.balanceA * amountOut / (setup.balanceB - amountOut);
-        uint256 expectedProtocolFee = baseAmountIn * 0.10e7 / (BPS - 0.10e7);
+        uint256 expectedProtocolFee = baseAmountIn * 0.10e7 / BPS;
         uint256 expectedTotalAmountIn = baseAmountIn + expectedProtocolFee;
 
         assertApproxEqAbs(actualProtocolFee, expectedProtocolFee, 1, "Protocol fee recipient should receive correct fee from tokenIn");

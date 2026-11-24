@@ -162,11 +162,11 @@ contract ProtocolSurplusPartialFillTest is Test {
             uint256 scaledIn = (balanceIn * remainingOut).ceilDiv(balanceOut);
 
             uint256 ask = bound(asks[i], 1, balanceIn);
-            uint256 expectedNet = Math.min(ask - ask * feeBps / BPS, scaledIn);
+            uint256 expectedNet = Math.min(ask - ask * feeBps / (BPS + feeBps), scaledIn);
             uint256 expectedOut = expectedNet >= scaledIn ? remainingOut : expectedNet * remainingOut / scaledIn;
-            uint256 expectedFlat = expectedNet == ask - ask * feeBps / BPS
-                ? ask * feeBps / BPS
-                : expectedNet * feeBps / (BPS - feeBps);
+            uint256 expectedFlat = expectedNet == ask - ask * feeBps / (BPS + feeBps)
+                ? ask * feeBps / (BPS + feeBps)
+                : expectedNet * feeBps / BPS;
 
             // FeeProtocolSurplus scales the estimate by this fill's output over the whole order, rounding up
             uint256 share = (estimate * expectedOut).ceilDiv(balanceOut);

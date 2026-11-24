@@ -4,6 +4,8 @@ pragma solidity ^0.8.27;
 /// @custom:license-url https://github.com/1inch/swap-vm/blob/main/LICENSES/SwapVM-1.1.txt
 /// @custom:copyright © 2025 Degensoft Ltd
 
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { AquaSwapVMTest } from "./base/AquaSwapVMTest.sol";
 
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
@@ -66,7 +68,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
         (uint256 protocolRecipientBalanceAAfter, uint256 protocolRecipientBalanceBAfter) = getProtocolRecipientBalances();
 
-        uint256 expectedProtocolFee = amountIn * setup.protocolFeeBps / BPS;
+        uint256 expectedProtocolFee = amountIn * setup.protocolFeeBps / (BPS + setup.protocolFeeBps);
         uint256 effectiveAmountIn = amountIn - expectedProtocolFee;
         uint256 amountOutExpected = setup.balanceB * effectiveAmountIn / (setup.balanceA + effectiveAmountIn);
         assertEq(takerBalanceBAfter - takerBalanceBBefore, amountOutExpected, "Taker received correct amountOut");
@@ -99,7 +101,7 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
         (uint256 protocolRecipientBalanceAAfter, uint256 protocolRecipientBalanceBAfter) = getProtocolRecipientBalances();
 
         uint256 amountInBase = setup.balanceA * amountOut / (setup.balanceB - amountOut);
-        uint256 expectedProtocolFee = amountInBase * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = amountInBase * setup.protocolFeeBps / BPS;
         uint256 amountInExpected = amountInBase + expectedProtocolFee;
         assertApproxEqAbs(takerBalanceABefore - takerBalanceAAfter, amountInExpected, 1, "Taker paid correct amountIn");
         assertEq(makerBalanceAAfter, makerBalanceABefore + amountIn - expectedProtocolFee, "Maker balance A should increase by amountIn minus protocol fee");
@@ -130,9 +132,9 @@ contract ProtocolFeeAquaTest is AquaSwapVMTest {
         (uint256 takerBalanceAAfter, uint256 takerBalanceBAfter) = getTakerBalances(swapProgram.taker);
         (uint256 protocolRecipientBalanceAAfter, uint256 protocolRecipientBalanceBAfter) = getProtocolRecipientBalances();
 
-        uint256 protocolFee = amountIn * setup.protocolFeeBps / BPS;
+        uint256 protocolFee = amountIn * setup.protocolFeeBps / (BPS + setup.protocolFeeBps);
         uint256 afterProtocolFee = amountIn - protocolFee;
-        uint256 feeIn = afterProtocolFee * setup.feeInBps / BPS;
+        uint256 feeIn = Math.ceilDiv(afterProtocolFee * setup.feeInBps, BPS);
         uint256 effectiveAmountIn = afterProtocolFee - feeIn;
         uint256 amountOutExpected = setup.balanceB * effectiveAmountIn / (setup.balanceA + effectiveAmountIn);
         assertEq(takerBalanceBAfter - takerBalanceBBefore, amountOutExpected, "Taker received correct amountOut");
