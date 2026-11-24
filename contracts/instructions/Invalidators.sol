@@ -57,9 +57,11 @@ library InvalidateBit {
         uint256 slot = bitIndex >> 8;
         uint256 bit = 1 << (bitIndex & 0xff);
 
+        ctx.runLoop(); // TODO: add doc here
+
         uint256 bitmap = $.bitmap[ctx.query.maker][slot];
         require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
-        if (!ctx.vm.isStaticContext) $.bitmap[ctx.query.maker][slot] |= bit;
+        if (!ctx.vm.isStaticContext) $.bitmap[ctx.query.maker][slot] = bitmap | bit;
     }
 }
 
