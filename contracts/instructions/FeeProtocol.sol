@@ -182,9 +182,9 @@ library FeeProtocol {
             }
             ctx.swap.amountIn += totalFeeAmount;
         } else {
-            if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / (BPS - totalFeeBps);
+            if (!ctx.query.isExactIn) ctx.swap.amountOut += ctx.swap.amountOut * totalFeeBps / BPS;
             ctx.runLoop();
-            totalFeeAmount = ctx.swap.amountOut * totalFeeBps / BPS;
+            totalFeeAmount = ctx.swap.amountOut * totalFeeBps / (BPS + totalFeeBps);
             unchecked { ctx.swap.amountOut -= totalFeeAmount; }
         }
 
