@@ -6,12 +6,46 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
+import { tuint256, TransientLib } from "@1inch/solidity-utils/contracts/libraries/Transient.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+
+/// @notice Extends tuint256 with transient lock-protected reads and writes
+library tuint256ext { // TODO: rename library name
+    using TransientLib for tuint256;
+
+    /// @dev Locks and reads the value; in static context just returns it
+    function lockAndRead(tuint256 storage self, bool isStaticContext, bytes4 selector) internal returns (uint256) {
+        if (!isStaticContext && self.inc() != 1) {
+            assembly ("memory-safe") {
+                mstore(0, selector)
+                revert(0, 4)
+            }
+        }
+        return self._raw;
+    }
+
+    /// @dev Writes a new value and releases the transient lock.
+    function writeUnlockUnsafe(tuint256 storage self, uint256 value) internal {
+        self._raw = value;
+        self.tstore(0); // gas savings, `self.dec()` do extra `tload`
+    }
+
+    /// @dev Writes a new value only when the transient lock is not held 
+    function writeIfUnlocked(tuint256 storage self, uint256 value, bytes4 selector) internal {
+        if (self.tload() != 0) {
+            assembly ("memory-safe") {
+                mstore(0, selector)
+                revert(0, 4)
+            }
+        }
+        self._raw = value;
+    }
+}
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 ///   InvalidateBit supports storage consistency with the Extruction opcode
@@ -99,8 +133,10 @@ contract InvalidateBitExternal {
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenIn {
     using InstructionBuilder for MemoryPtr;
+    using tuint256ext for tuint256;
 
     error InvalidateTokenInExceeded(uint256 filled, uint256 amount, uint256 balance);
+    error InvalidateTokenInLocked();
 
     Opcode constant opcode = Opcode.InvalidateTokenIn;
 
@@ -118,7 +154,7 @@ library InvalidateTokenIn {
     }
 
     struct Storage {
-        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => tuint256))) filled;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -130,7 +166,8 @@ library InvalidateTokenIn {
         Storage storage $ = store();
 
         uint256 balanceIn = ctx.swap.balanceIn;
-        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
+        tuint256 storage tfilled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn];
+        uint256 filled = tfilled.lockAndRead(ctx.vm.isStaticContext, InvalidateTokenInLocked.selector);
 
         ctx.swap.balanceIn = balanceIn - filled;
         ctx.swap.balanceOut = ctx.swap.balanceOut * ctx.swap.balanceIn / balanceIn; // Maker spending round down
@@ -141,24 +178,26 @@ library InvalidateTokenIn {
         filled += amountIn;
         require(filled <= balanceIn, InvalidateTokenInExceeded(filled, amountIn, balanceIn));
 
-        if (!ctx.vm.isStaticContext) {
-            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenIn] = filled;
-        }
+        if (!ctx.vm.isStaticContext) tfilled.writeUnlockUnsafe(filled);
     }
 }
 
 contract InvalidateTokenInExternal {
+    using tuint256ext for tuint256;
+
     event InvalidateTokenInFilled(address indexed maker, bytes32 indexed orderHash);
 
     function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
         InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
-        return $.filled[maker][orderHash][token];
+        return $.filled[maker][orderHash][token]._raw;
     }
 
     function invalidateTokenIn(bytes32 orderHash, address token) external {
         InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
 
-        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        tuint256 storage filled = $.filled[msg.sender][orderHash][token];
+        filled.writeIfUnlocked(type(uint256).max, InvalidateTokenIn.InvalidateTokenInLocked.selector);
+
         emit InvalidateTokenInFilled(msg.sender, orderHash);
     }
 }
@@ -171,10 +210,12 @@ contract InvalidateTokenInExternal {
 /// @dev The opcode is expected to be executed only once in strategy flow, storage vars are written by the first-met opcode instance
 library InvalidateTokenOut {
     using InstructionBuilder for MemoryPtr;
+    using tuint256ext for tuint256;
 
     using Math for uint256;
 
     error InvalidateTokenOutExceeded(uint256 filled, uint256 amount, uint256 balance);
+    error InvalidateTokenOutLocked();
 
     Opcode constant opcode = Opcode.InvalidateTokenOut;
 
@@ -192,7 +233,7 @@ library InvalidateTokenOut {
     }
 
     struct Storage {
-        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => uint256))) filled;
+        mapping(address maker => mapping(bytes32 orderHash => mapping(address token => tuint256))) filled;
     }
 
     function store() internal pure returns (Storage storage $) {
@@ -204,7 +245,8 @@ library InvalidateTokenOut {
         Storage storage $ = store();
 
         uint256 balanceOut = ctx.swap.balanceOut;
-        uint256 filled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
+        tuint256 storage tfilled = $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut];
+        uint256 filled = tfilled.lockAndRead(ctx.vm.isStaticContext, InvalidateTokenOutLocked.selector);
 
         ctx.swap.balanceOut = balanceOut - filled;
         ctx.swap.balanceIn = (ctx.swap.balanceIn * ctx.swap.balanceOut).ceilDiv(balanceOut); // Maker income round up
@@ -215,24 +257,26 @@ library InvalidateTokenOut {
         filled += amountOut;
         require(filled <= balanceOut, InvalidateTokenOutExceeded(filled, amountOut, balanceOut));
 
-        if (!ctx.vm.isStaticContext) {
-            $.filled[ctx.query.maker][ctx.query.orderHash][ctx.query.tokenOut] = filled;
-        }
+        if (!ctx.vm.isStaticContext) tfilled.writeUnlockUnsafe(filled);
     }
 }
 
 contract InvalidateTokenOutExternal {
+    using tuint256ext for tuint256;
+
     event InvalidateTokenOutFilled(address indexed maker, bytes32 indexed orderHash);
 
     function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
         InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
-        return $.filled[maker][orderHash][token];
+        return $.filled[maker][orderHash][token]._raw;
     }
 
     function invalidateTokenOut(bytes32 orderHash, address token) external {
         InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
 
-        $.filled[msg.sender][orderHash][token] = type(uint256).max;
+        tuint256 storage filled = $.filled[msg.sender][orderHash][token];
+        filled.writeIfUnlocked(type(uint256).max, InvalidateTokenOut.InvalidateTokenOutLocked.selector);
+
         emit InvalidateTokenOutFilled(msg.sender, orderHash);
     }
 }
