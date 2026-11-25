@@ -15,6 +15,7 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 /// @notice ValidateSeriesEpoch opcode, requires the maker's current epoch for the series to match the epoch specified in the order
 ///   Each maker keeps an independent, monotonically increasing epoch per seriesId, advancing a series epoch cancels the whole batch
 ///   of orders pinned to it, orders can be planned for future epochs
+///   ValidateSeriesEpoch supports storage consistency with the Extruction opcode
 /// @dev Encoding: [uint32 seriesId, uint32 epoch]
 library ValidateSeriesEpoch {
     using CalldataParse for bytes;
@@ -56,7 +57,7 @@ library ValidateSeriesEpoch {
         Storage storage $ = store();
         (uint32 seriesId, uint32 expectedEpoch) = parse(args);
 
-        ctx.runLoop(); // TODO: add comment here or in the top of `library {}`
+        ctx.runLoop();
 
         uint256 currentEpoch = $.epoch[ctx.query.maker][seriesId];
         require(currentEpoch == expectedEpoch, ValidateSeriesEpochWrongEpoch(seriesId, expectedEpoch, currentEpoch));

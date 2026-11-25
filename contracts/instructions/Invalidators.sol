@@ -14,7 +14,7 @@ import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
-///   Invalidates the bit immediately without waiting for the rest of the program to execute
+///   InvalidateBit supports storage consistency with the Extruction opcode
 /// @dev Encoding: [uint32 bitIndex]
 library InvalidateBit {
     using CalldataParse for bytes;
@@ -57,7 +57,7 @@ library InvalidateBit {
         uint256 slot = bitIndex >> 8;
         uint256 bit = 1 << (bitIndex & 0xff);
 
-        ctx.runLoop(); // TODO: add doc here
+        ctx.runLoop();
 
         uint256 bitmap = $.bitmap[ctx.query.maker][slot];
         require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
