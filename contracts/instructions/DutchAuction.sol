@@ -61,6 +61,8 @@ library DutchAuction {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (bool adjustIn, uint40 start, uint64 decay, uint24 surchargeBps) = parse(args);
         start = Time.resolve(ctx, start);
 

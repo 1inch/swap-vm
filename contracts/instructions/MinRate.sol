@@ -44,6 +44,8 @@ library RequireMinRate {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint64 rateIn;
         uint64 rateOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (rateIn, rateOut) = parse(args);

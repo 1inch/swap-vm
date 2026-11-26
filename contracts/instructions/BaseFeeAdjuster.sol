@@ -54,6 +54,8 @@ library BaseFeeAdjuster {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (bool adjustIn, uint64 baseGasPrice, uint96 ethPrice, uint24 gasAmount) = parse(args);
 
         if (block.basefee <= baseGasPrice) return;

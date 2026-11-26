@@ -51,6 +51,8 @@ library InvalidateBit {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
         uint32 bitIndex = parse(args);
         uint256 slot = bitIndex >> 8;

@@ -91,11 +91,15 @@ library FillGridAdjuster {
 
     function parseHeader(bytes calldata args) internal pure returns (bool adjustIn, uint256 count) {
         adjustIn = args.at(0).asBool(0);
-        unchecked { count = (args.length - 1) / 6; }
+        // Skip [adjustIn], divide by [fillBps, adjustBps] length
+        count = InstructionBuilder.itemsCount(args, 1, 6);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
         (bool adjustIn, uint256 count) = parseHeader(args);
+        // Zero first point stops the backward search below, otherwise `--count` underflows and reads before `args`
+        (uint24 firstFillBps,) = parsePoint(args, 0);
+        require(firstFillBps == 0, FillGridAdjusterInvalidGridStart());
 
         unchecked {
             require( // check that `value * bps + value * bps * 2` would not overflow

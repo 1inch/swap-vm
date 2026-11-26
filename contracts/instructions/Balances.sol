@@ -41,6 +41,8 @@ library StaticBalances {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint256 balanceIn;
         uint256 balanceOut;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (balanceIn, balanceOut) = parse(args);
@@ -92,6 +94,8 @@ library DynamicBalances {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
 
         uint256 balanceIn = $.balance[ctx.query.orderHash][ctx.query.tokenIn];

@@ -48,6 +48,8 @@ library LimitSwap {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         bool direction = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         require(direction == swapDirection, LimitSwapDirectionMismatch());
@@ -109,6 +111,8 @@ library LimitSwapFullAmount {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         bool direction = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         require(direction == swapDirection, LimitSwapDirectionMismatch());

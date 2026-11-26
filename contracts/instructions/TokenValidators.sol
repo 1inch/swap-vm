@@ -43,6 +43,8 @@ library OnlyTakerTokenBalanceNonZero {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance > 0, TakerTokenBalanceIsZero(token));
@@ -81,6 +83,8 @@ library OnlyTxOriginTokenBalanceNonZero {
     }
 
     function exec(Context memory, bytes calldata args) internal view {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         address token = parse(args);
         uint256 balance = IERC20(token).balanceOf(tx.origin);
         require(balance > 0, TxOriginTokenBalanceIsZero(token));
@@ -118,6 +122,8 @@ library OnlyTakerTokenBalanceGte {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (address token, uint256 amount) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         require(balance >= amount, TakerTokenBalanceIsLessThanRequired(token, balance, amount));
@@ -160,6 +166,8 @@ library OnlyTakerTokenSupplyShareGte {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (address token, uint64 share) = parse(args);
         uint256 balance = IERC20(token).balanceOf(ctx.query.taker);
         uint256 totalSupply = IERC20(token).totalSupply();

@@ -44,6 +44,8 @@ library PrivateOrder {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint80 sender = uint80(uint160(ctx.query.taker));
         require(sender == parse(args), PrivateOrderInvalidTaker());
     }
@@ -96,7 +98,8 @@ library WhitelistCoequal {
     }
 
     function parseTakersCount(bytes calldata args) internal pure returns (uint256 count) {
-        unchecked { count = (args.length - 2) / 10; }
+        // Skip [nextPC], divide by [allowedTaker] length
+        count = InstructionBuilder.itemsCount(args, 2, 10);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
@@ -187,7 +190,7 @@ library WhitelistSequential {
 
     function parseTakersCount(bytes calldata args) internal pure returns (uint256 count) {
         // Skip [start, nextPC], divide by [duration, allowedTaker] length
-        unchecked { count = (args.length - (5 + 2)) / 12; }
+        count = InstructionBuilder.itemsCount(args, 5 + 2, 12);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {

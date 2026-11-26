@@ -241,6 +241,8 @@ library PatchSwapRegisters {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         ctx.swap = parse(args);
     }
 }

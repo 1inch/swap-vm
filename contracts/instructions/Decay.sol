@@ -67,6 +67,8 @@ library Decay {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
         uint16 period = parse(args);
 

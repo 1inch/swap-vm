@@ -139,6 +139,8 @@ library Deadline {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint40 deadline = Time.resolve(ctx, parse(args));
 
         require(block.timestamp <= deadline, DeadlineReached(deadline));

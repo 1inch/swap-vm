@@ -47,6 +47,8 @@ library FeeFlatIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint24 feeBps = parse(args);
 
         if (ctx.query.isExactIn) {
@@ -103,6 +105,8 @@ library FeeFlatOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint24 feeBps = parse(args);
 
         if (!ctx.query.isExactIn) ctx.swap.amountOut += (ctx.swap.amountOut * feeBps).ceilDiv(BPS - feeBps);
