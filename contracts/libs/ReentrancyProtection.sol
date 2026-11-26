@@ -20,22 +20,22 @@ library ReentrancyProtection {
         assembly ("memory-safe") { $.slot := slot }
     }
 
-    function _getLock(bytes32 orderHash) private view returns (TransientLock storage) {
+    function orderLock(bytes32 orderHash) private view returns (TransientLock storage) {
         return store().locks[orderHash];
     }
 
     /// @notice Acquires the transient lock for an order
     function acquire(bytes32 orderHash) internal {
-        _getLock(orderHash).lock();
+        orderLock(orderHash).lock();
     }
 
     /// @notice Releases the transient lock for an order
     function release(bytes32 orderHash) internal {
-        _getLock(orderHash).unlock();
+        orderLock(orderHash).unlock();
     }
 
     /// @notice Returns whether an order is currently locked
     function isLocked(bytes32 orderHash) internal view returns (bool) {
-        return _getLock(orderHash).isLocked();
+        return orderLock(orderHash).isLocked();
     }
 }
