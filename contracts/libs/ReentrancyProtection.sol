@@ -15,13 +15,13 @@ library ReentrancyProtection {
         mapping(bytes32 orderHash => TransientLock) locks;
     }
 
-    function _getStorage() private pure returns (Storage storage $) {
+    function store() internal pure returns (Storage storage $) {
         bytes32 slot = StorageSlots.ReentrancyProtection;
         assembly ("memory-safe") { $.slot := slot }
     }
 
     function _getLock(bytes32 orderHash) private view returns (TransientLock storage) {
-        return _getStorage().locks[orderHash];
+        return store().locks[orderHash];
     }
 
     /// @notice Acquires the transient lock for an order
