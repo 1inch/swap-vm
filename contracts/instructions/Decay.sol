@@ -53,8 +53,8 @@ library Decay {
     }
 
     struct OrderResistance {
-        Resistance aToB;
-        Resistance bToA;
+        Resistance direct;
+        Resistance reverse;
     }
 
     struct Storage {
@@ -71,26 +71,70 @@ library Decay {
         uint16 period = parse(args);
 
         OrderResistance storage r = $.resistance[ctx.query.orderHash];
-        bool aToB = ctx.query.tokenIn < ctx.query.tokenOut;
+        bool direction = ctx.query.tokenIn < ctx.query.tokenOut;
 
-        (uint256 forwardIn, uint256 forwardOut) = aToB ? r.aToB.remaining(period) : r.bToA.remaining(period);
-        (uint256 backwardIn, uint256 backwardOut) = aToB ? r.bToA.remaining(period) : r.aToB.remaining(period);
+        (uint256 retainedIn, uint256 retainedOut) = direction ? r.direct.remaining(period) : r.reverse.remaining(period);
+        (uint256 resistanceIn, uint256 resistanceOut) = direction ? r.reverse.remaining(period) : r.direct.remaining(period);
 
         // Apply the remaining resistance before pricing
-        ctx.swap.balanceIn += backwardOut;
-        ctx.swap.balanceOut -= backwardIn;
+        ctx.swap.balanceIn += resistanceOut;
+        ctx.swap.balanceOut -= resistanceIn;
 
         (uint256 amountIn, uint256 amountOut) = ctx.runLoop();
 
-        Resistance forward = ResistanceLib.encodeNow(
-            (forwardIn + amountIn).toUint112(),
-            (forwardOut + amountOut).toUint112()
+        Resistance retained = ResistanceLib.encodeNow(
+            (retainedIn + amountIn).toUint112(),
+            (retainedOut + amountOut).toUint112()
         );
 
         if (!ctx.vm.isStaticContext) {
-            if (aToB) r.aToB = forward;
-            else r.bToA = forward;
+            if (direction) r.direct = retained;
+            else r.reverse = retained;
         }
+    }
+}
+
+contract DecayExternal {
+    /// @dev Unpacked representation of `Resistance`
+    struct ResistanceUnpacked {
+        uint112 amountIn;
+        uint112 amountOut;
+        uint32 timestamp;
+    }
+
+    struct ResistanceAmounts {
+        uint256 amountIn;
+        uint256 amountOut;
+    }
+
+    /// @notice Decay resistance stored for an order, per swap direction
+    /// @dev Amounts are what the last swap in that direction wrote, before linear decay.
+    ///   `timestamp` is 0 when that direction has never been written.
+    ///   While `block.timestamp < timestamp + period`, the amount still applied is
+    ///   `amount * (timestamp + period - block.timestamp) / period`.
+    /// @return direct Resistance for swaps where tokenIn < tokenOut
+    /// @return reverse Resistance for swaps where tokenIn > tokenOut
+    function decay(bytes32 orderHash) external view returns (
+        ResistanceUnpacked memory direct, ResistanceUnpacked memory reverse
+    ){
+        Decay.OrderResistance storage resistance = Decay.store().resistance[orderHash];
+
+        (direct.amountIn, direct.amountOut, direct.timestamp) = resistance.direct.decode();
+        (reverse.amountIn, reverse.amountOut, reverse.timestamp) = resistance.reverse.decode();
+    }
+
+    /// @notice Resistance still applied, after linear decay over `period`
+    /// @dev `period` is the Decay instruction argument. It is not stored.
+    ///   A zero `period`, or a window that has already elapsed, returns zeroes.
+    /// @param period Decay period from the order program, in seconds
+    /// @return direct Remaining resistance for swaps where tokenIn < tokenOut
+    /// @return reverse Remaining resistance for swaps where tokenIn > tokenOut
+    function decayRemaining(bytes32 orderHash, uint16 period) external view returns (
+        ResistanceAmounts memory direct, ResistanceAmounts memory reverse
+    ) {
+        Decay.OrderResistance storage r = Decay.store().resistance[orderHash];
+        (direct.amountIn, direct.amountOut) = resistance.direct.remaining(period);
+        (reverse.amountIn, reverse.amountOut) = resistance.reverse.remaining(period);
     }
 }
 

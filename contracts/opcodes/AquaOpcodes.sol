@@ -14,15 +14,13 @@ import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { DynamicBalances, DynamicBalancesExternal } from "../instructions/Balances.sol";
 import { RequireMinRate } from "../instructions/MinRate.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
-import { Decay } from "../instructions/Decay.sol";
+import { Decay, DecayExternal } from "../instructions/Decay.sol";
 import { FeeFlatIn } from "../instructions/FeeFlat.sol";
 import { FeeProtocol } from "../instructions/FeeProtocol.sol";
 import { Extruction } from "../instructions/Extruction.sol";
 import { PeggedSwap } from "../instructions/PeggedSwap.sol";
 
-contract AquaOpcodes is
-    DynamicBalancesExternal
-{
+contract AquaOpcodes is DynamicBalancesExternal, DecayExternal {
     error UnknownOpcode(uint256 opcode);
 
     /// @notice Opcode direct dispatcher
