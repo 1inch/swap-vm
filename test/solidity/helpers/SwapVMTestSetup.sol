@@ -10,17 +10,6 @@ import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
 
 /// @dev Test ABI of a deployed router. Extra methods live here so tests do not import impls.
 interface SwapVMRouter is ISwapVM {
-    struct UnpackedResistance {
-        uint112 amountIn;
-        uint112 amountOut;
-        uint32 timestamp;
-    }
-
-    struct ResistanceAmounts {
-        uint256 amountIn;
-        uint256 amountOut;
-    }
-
     error UnknownOpcode(uint256 opcode);
     error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
     error MsgValueInvalidToken();
@@ -45,15 +34,6 @@ interface SwapVMRouter is ISwapVM {
     function asView() external view returns (ISwapVM);
 
     function balance(bytes32 orderHash, address token) external view returns (uint256);
-
-    function decay(bytes32 orderHash) external view returns (
-        UnpackedResistance memory direct,
-        UnpackedResistance memory reverse
-    );
-    function decayRemaining(bytes32 orderHash, uint16 period) external view returns (
-        ResistanceAmounts memory direct,
-        ResistanceAmounts memory reverse
-    );
 
     function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
     function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);

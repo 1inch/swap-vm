@@ -95,46 +95,53 @@ library Decay {
 }
 
 contract DecayExternal {
-    /// @dev Unpacked representation of `Resistance`
-    struct ResistanceUnpacked {
+    /// @dev Unpacked representation of Resistance
+    struct UnpackedResistance {
         uint112 amountIn;
         uint112 amountOut;
         uint32 timestamp;
     }
 
-    struct ResistanceAmounts {
+    /// @dev Remaining resistance applied crosswise to virtual balances:
+    ///   `amountOut` increases `balanceIn`, while `amountIn` decreases `balanceOut`
+    struct RemainingResistance {
         uint256 amountIn;
         uint256 amountOut;
     }
 
-    /// @notice Decay resistance stored for an order, per swap direction
-    /// @dev Amounts are what the last swap in that direction wrote, before linear decay.
-    ///   `timestamp` is 0 when that direction has never been written.
-    ///   While `block.timestamp < timestamp + period`, the amount still applied is
-    ///   `amount * (timestamp + period - block.timestamp) / period`.
-    /// @return direct Resistance for swaps where tokenIn < tokenOut
-    /// @return reverse Resistance for swaps where tokenIn > tokenOut
+    /// @dev Returns the resistance stored for an order
+    /// @return direct Resistance accumulated by A → B swaps and applied to B → A swaps
+    /// @return reverse Resistance accumulated by B → A swaps and applied to A → B swaps
     function decay(bytes32 orderHash) external view returns (
-        ResistanceUnpacked memory direct, ResistanceUnpacked memory reverse
-    ){
+        UnpackedResistance memory direct, UnpackedResistance memory reverse
+    ) {
         Decay.OrderResistance storage resistance = Decay.store().resistance[orderHash];
 
         (direct.amountIn, direct.amountOut, direct.timestamp) = resistance.direct.decode();
         (reverse.amountIn, reverse.amountOut, reverse.timestamp) = resistance.reverse.decode();
     }
 
-    /// @notice Resistance still applied, after linear decay over `period`
-    /// @dev `period` is the Decay instruction argument. It is not stored.
-    ///   A zero `period`, or a window that has already elapsed, returns zeroes.
-    /// @param period Decay period from the order program, in seconds
-    /// @return direct Remaining resistance for swaps where tokenIn < tokenOut
-    /// @return reverse Remaining resistance for swaps where tokenIn > tokenOut
+    /// @dev Returns the resistance remaining at the current timestamp, using `period` as the total decay duration
+    /// @return direct Remaining resistance accumulated by A → B swaps and applied to B → A swaps.
+    /// @return reverse Remaining resistance accumulated by B → A swaps and applied to A → B swaps.
     function decayRemaining(bytes32 orderHash, uint16 period) external view returns (
-        ResistanceAmounts memory direct, ResistanceAmounts memory reverse
+        RemainingResistance memory direct, RemainingResistance memory reverse
     ) {
-        Decay.OrderResistance storage r = Decay.store().resistance[orderHash];
+        Decay.OrderResistance storage resistance = Decay.store().resistance[orderHash];
         (direct.amountIn, direct.amountOut) = resistance.direct.remaining(period);
         (reverse.amountIn, reverse.amountOut) = resistance.reverse.remaining(period);
+    }
+
+    /// @dev Returns the resistance remaining at a timestamp, using `period` as the total decay duration
+    ///   The result is valid only when `timestamp >= block.timestamp`
+    /// @return direct Remaining resistance accumulated by A → B swaps and applied to B → A swaps
+    /// @return reverse Remaining resistance accumulated by B → A swaps and applied to A → B swaps
+    function decayRemainingAt(bytes32 orderHash, uint16 period, uint256 timestamp) external view returns (
+        RemainingResistance memory direct, RemainingResistance memory reverse
+    ) {
+        Decay.OrderResistance storage resistance = Decay.store().resistance[orderHash];
+        (direct.amountIn, direct.amountOut) = resistance.direct.remainingAt(period, timestamp);
+        (reverse.amountIn, reverse.amountOut) = resistance.reverse.remainingAt(period, timestamp);
     }
 }
 
@@ -164,6 +171,20 @@ library ResistanceLib {
             if (block.timestamp >= expiration) return (0, 0);
 
             uint256 timeLeft = expiration - block.timestamp;
+            amountIn = amountIn * timeLeft / period;
+            amountOut = amountOut * timeLeft / period;
+        }
+    }
+
+    function remainingAt(Resistance self, uint16 period, uint256 timestamp) internal pure returns(uint256 amountIn, uint256 amountOut) {
+        unchecked {
+            uint32 ts;
+            (amountIn, amountOut, ts) = self.decode();
+
+            uint256 expiration = uint256(ts) + period;
+            if (timestamp >= expiration) return (0, 0);
+
+            uint256 timeLeft = expiration - timestamp;
             amountIn = amountIn * timeLeft / period;
             amountOut = amountOut * timeLeft / period;
         }
