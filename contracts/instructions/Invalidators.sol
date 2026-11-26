@@ -6,7 +6,6 @@ pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
-import { tuint256, TransientLib } from "@1inch/solidity-utils/contracts/libraries/Transient.sol";
 
 import { Context } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
@@ -14,39 +13,6 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { ReentrancyProtection } from "../libs/ReentrancyProtection.sol";
-
-/// @notice Extends tuint256 with transient lock-protected reads and writes
-library tuint256ext { // TODO: rename library name
-    using TransientLib for tuint256;
-
-    /// @dev Locks and reads the value; in static context just returns it
-    function lockAndRead(tuint256 storage self, bool isStaticContext, bytes4 selector) internal returns (uint256) {
-        if (!isStaticContext && self.inc() != 1) {
-            assembly ("memory-safe") {
-                mstore(0, selector)
-                revert(0, 4)
-            }
-        }
-        return self._raw;
-    }
-
-    /// @dev Writes a new value and releases the transient lock.
-    function writeUnlockUnsafe(tuint256 storage self, uint256 value) internal {
-        self._raw = value;
-        self.tstore(0); // gas savings, `self.dec()` do extra `tload`
-    }
-
-    /// @dev Writes a new value only when the transient lock is not held 
-    function writeIfUnlocked(tuint256 storage self, uint256 value, bytes4 selector) internal {
-        if (self.tload() != 0) {
-            assembly ("memory-safe") {
-                mstore(0, selector)
-                revert(0, 4)
-            }
-        }
-        self._raw = value;
-    }
-}
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 ///   InvalidateBit supports storage consistency with the Extruction opcode
