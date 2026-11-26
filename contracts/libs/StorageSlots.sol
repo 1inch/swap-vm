@@ -26,4 +26,7 @@ library StorageSlots {
 
     // keccak256(abi.encode(uint256(keccak256("1inch.storage.OrderRegistrator")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant OrderRegistrator = 0xcd310f011fbe8494e2da7b8d46edf2a916879067826771fce3db46ac5f392b00;
+
+    // keccak256(abi.encode(uint256(keccak256("1inch.storage.ReentrancyProtection")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant ReentrancyProtection = 0x03a2030a0fbb7d3de99a996d1fe23009e208aa9697d586bf858670a5ba596d00;
 }
