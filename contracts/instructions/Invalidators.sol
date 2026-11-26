@@ -15,7 +15,6 @@ import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 import { ReentrancyProtection } from "../libs/ReentrancyProtection.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
-///   InvalidateBit supports storage consistency with the Extruction opcode
 /// @dev Encoding: [uint32 bitIndex]
 library InvalidateBit {
     using CalldataParse for bytes;
