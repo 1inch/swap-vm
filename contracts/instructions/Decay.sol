@@ -96,20 +96,6 @@ library Decay {
 
 /// @dev External `Decay` getters
 contract DecayExternal {
-    /// @dev Unpacked representation of Resistance
-    struct UnpackedResistance {
-        uint112 amountIn;
-        uint112 amountOut;
-        uint32 timestamp;
-    }
-
-    /// @dev Remaining resistance applied crosswise to virtual balances:
-    ///   `amountOut` increases `balanceIn`, while `amountIn` decreases `balanceOut`
-    struct RemainingResistance {
-        uint256 amountIn;
-        uint256 amountOut;
-    }
-
     /// @dev Returns the resistance stored for an order
     /// @return direct Resistance accumulated by A → B swaps and applied to B → A swaps
     /// @return reverse Resistance accumulated by B → A swaps and applied to A → B swaps
@@ -153,6 +139,20 @@ contract DecayExternal {
 type Resistance is uint256;
 using ResistanceLib for Resistance;
 
+/// @dev Unpacked representation of Resistance
+struct UnpackedResistance {
+    uint112 amountIn;
+    uint112 amountOut;
+    uint32 timestamp;
+}
+
+/// @dev Remaining resistance applied crosswise to virtual balances:
+///   `amountOut` increases `balanceIn`, while `amountIn` decreases `balanceOut`
+struct RemainingResistance {
+    uint256 amountIn;
+    uint256 amountOut;
+}
+
 library ResistanceLib {
     function encodeNow(uint112 amountIn, uint112 amountOut) internal view returns (Resistance) {
         return Resistance.wrap((uint256(amountIn) << 144) | uint256(amountOut) << 32 | block.timestamp);
@@ -177,7 +177,7 @@ library ResistanceLib {
         }
     }
 
-    // gas-savings (~80 gas): allow compiler to inline both `remaining` and `remainingAt`
+    /// @dev Gas savings: allow compiler to inline both `remaining` and `remainingAt`
     function remainingAt(Resistance self, uint16 period, uint256 timestamp) internal pure returns(uint256 amountIn, uint256 amountOut) {
         unchecked {
             uint32 ts;

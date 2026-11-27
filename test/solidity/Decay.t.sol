@@ -15,7 +15,7 @@ import { dynamic } from "./utils/Dynamic.sol";
 import { ISwapVM } from "../../contracts/interfaces/ISwapVM.sol";
 import { SwapVMRouter, DeployCode, TraitsHelper } from "./helpers/SwapVMTestSetup.sol";
 import { StaticBalances, DynamicBalances } from "../../contracts/instructions/Balances.sol";
-import { Decay } from "../../contracts/instructions/Decay.sol";
+import { Decay, UnpackedResistance, RemainingResistance } from "../../contracts/instructions/Decay.sol";
 import { XYCSwap } from "../../contracts/instructions/XYCSwap.sol";
 import { Salt } from "../../contracts/instructions/Controls.sol";
 
@@ -443,12 +443,57 @@ contract DecayTest is Test {
         assertTrue(lossPercent > 5, "MEV loss should be > 5%");
     }
 
-    function buildDecay(uint16 period) external pure {
-        Decay.build(period);
+    function test_externalDecayGetters() public {
+        uint256 timestamp = vm.getBlockTimestamp();
+        uint16 decay = 20; // decaying for 20 secs
+
+        (ISwapVM.Order memory order, bytes memory signature) = createDecayOrder(decay);
+        bytes32 orderHash = swapVM.hash(order);
+
+        (uint256 amountIn, uint256 amountOut) = executeSwap(
+            trader1,
+            order,
+            signature,
+            address(tokenA),
+            address(tokenB),
+            STANDARD_SWAP
+        );
+
+        vm.warp(timestamp + decay / 2);
+        { // test correctness of `decay()`
+            (UnpackedResistance memory direct, UnpackedResistance memory reverse) = swapVM.decay(orderHash);
+            require((direct.amountIn == uint112(amountIn)) && (direct.amountOut == uint112(amountOut)) && (direct.timestamp == uint32(timestamp)));
+            require((reverse.amountIn == 0) && (reverse.amountOut == 0) && (reverse.timestamp == 0));
+        }
+
+        vm.warp(timestamp + decay / 2);
+        { // test correctness of `decayRemaining()` after a half of decay
+            (RemainingResistance memory direct, RemainingResistance memory reverse) = swapVM.decayRemaining(orderHash, decay);
+            require((direct.amountIn == amountIn / 2) && (direct.amountOut == amountOut / 2));
+            require((reverse.amountIn == 0) && (reverse.amountOut == 0));
+        }
+
+        vm.warp(timestamp); // roll-back timestamp to calculate remaining resistance in future
+        { // test correctness of `decayRemainingAt()` after a half of decay
+            (RemainingResistance memory direct, RemainingResistance memory reverse) = swapVM.decayRemainingAt(orderHash, decay, timestamp + decay / 2);
+            require((direct.amountIn == amountIn / 2) && (direct.amountOut == amountOut / 2));
+            require((reverse.amountIn == 0) && (reverse.amountOut == 0));
+        }
+
+        vm.warp(timestamp + decay);
+        { // test correctness of `decayRemaining()` after a full decay
+            (RemainingResistance memory direct, RemainingResistance memory reverse) = swapVM.decayRemaining(orderHash, decay);
+            require((direct.amountIn == 0) && (direct.amountOut == 0));
+            require((reverse.amountIn == 0) && (reverse.amountOut == 0));
+        }
     }
 
     function test_Decay_ZeroPeriod() public {
         vm.expectRevert(Decay.DecayPeriodMustBeNonZero.selector);
         this.buildDecay(0);
+    }
+
+    function buildDecay(uint16 period) external pure {
+        Decay.build(period);
     }
 }

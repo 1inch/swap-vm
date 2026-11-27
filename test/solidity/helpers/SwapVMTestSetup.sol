@@ -7,6 +7,7 @@ pragma solidity ^0.8.27;
 import { Vm } from "forge-std/Vm.sol";
 
 import { ISwapVM } from "../../../contracts/interfaces/ISwapVM.sol";
+import { UnpackedResistance, RemainingResistance } from "../../../contracts/instructions/Decay.sol";
 
 /// @dev Test ABI of a deployed router. Extra methods live here so tests do not import impls.
 interface SwapVMRouter is ISwapVM {
@@ -34,6 +35,19 @@ interface SwapVMRouter is ISwapVM {
     function asView() external view returns (ISwapVM);
 
     function balance(bytes32 orderHash, address token) external view returns (uint256);
+
+    function decay(bytes32 orderHash) external view returns (
+        UnpackedResistance memory direct,
+        UnpackedResistance memory reverse
+    );
+    function decayRemaining(bytes32 orderHash, uint16 period) external view returns (
+        RemainingResistance memory direct,
+        RemainingResistance memory reverse
+    );
+    function decayRemainingAt(bytes32 orderHash, uint16 period, uint256 timestamp) external view returns (
+        RemainingResistance memory direct,
+        RemainingResistance memory reverse
+    );
 
     function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
     function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256);
