@@ -7,11 +7,11 @@ pragma solidity ^0.8.27;
 import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
-import { Context } from "../libs/VM.sol";
+import { Context, SwapRegisters } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
-import { IExtruction, IStaticExtruction } from "./interfaces/IExtruction.sol";
+import { IExtruction } from "./interfaces/IExtruction.sol";
 
 /// @notice Extruction opcode, delegates swap registers to an external maker-chosen contract
 ///   The target may modify the swap registers, set the program counter and consume taker args
@@ -59,25 +59,22 @@ library Extruction {
         (address target, bytes calldata extructionArgs) = parse(args);
         uint256 choppedLength;
 
-        if (ctx.vm.isStaticContext) {
-            (ctx.vm.nextPC, choppedLength, ctx.swap) = IStaticExtruction(target).extruction(
-                ctx.vm.isStaticContext,
-                ctx.vm.nextPC,
-                ctx.query,
-                ctx.swap,
-                extructionArgs,
-                ctx.takerArgs()
-            );
-        } else {
-            (ctx.vm.nextPC, choppedLength, ctx.swap) = IExtruction(target).extruction(
-                ctx.vm.isStaticContext,
-                ctx.vm.nextPC,
-                ctx.query,
-                ctx.swap,
-                extructionArgs,
-                ctx.takerArgs()
-            );
-        }
+        bytes memory request = abi.encodeWithSelector(
+            IExtruction.extruction.selector,
+            ctx.vm.isStaticContext,
+            ctx.vm.nextPC,
+            ctx.query,
+            ctx.swap,
+            extructionArgs,
+            ctx.takerArgs()
+        );
+
+        bool success; bytes memory response;
+        if (ctx.vm.isStaticContext) (success, response) = target.staticcall(request);
+        else (success, response) = target.call(request);
+
+        if (!success) assembly ("memory-safe") { revert(add(response, 0x20), mload(response)) }
+        (ctx.vm.nextPC, choppedLength, ctx.swap) = abi.decode(response, (uint256, uint256, SwapRegisters));
 
         bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength); // Consumed taker arguments
         require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped.length, choppedLength));

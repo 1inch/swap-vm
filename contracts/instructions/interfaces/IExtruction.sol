@@ -20,18 +20,3 @@ interface IExtruction {
         SwapRegisters memory updatedSwap
     );
 }
-
-interface IStaticExtruction {
-    function extruction(
-        bool isStaticContext,
-        uint256 nextPC,
-        SwapQuery calldata query,
-        SwapRegisters calldata swap,
-        bytes calldata args,
-        bytes calldata takerData
-    ) external view returns (
-        uint256 updatedNextPC,
-        uint256 choppedLength,
-        SwapRegisters memory updatedSwap
-    );
-}
