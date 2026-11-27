@@ -52,9 +52,11 @@ library ValidateSeriesEpoch {
         assembly ("memory-safe") { $.slot := slot }
     }
 
-    function exec(Context memory ctx, bytes calldata args) internal view {
-        ValidateSeriesEpoch.Storage storage $ = ValidateSeriesEpoch.store();
+    function exec(Context memory ctx, bytes calldata args) internal {
+        Storage storage $ = store();
         (uint32 seriesId, uint32 expectedEpoch) = parse(args);
+
+        ctx.runLoop();
 
         uint256 currentEpoch = $.epoch[ctx.query.maker][seriesId];
         require(currentEpoch == expectedEpoch, ValidateSeriesEpochWrongEpoch(seriesId, expectedEpoch, currentEpoch));

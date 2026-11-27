@@ -10,7 +10,6 @@ import { ECDSA } from "@1inch/solidity-utils/contracts/libraries/ECDSA.sol";
 import { SafeERC20, IERC20, IWETH } from "@1inch/solidity-utils/contracts/libraries/SafeERC20.sol";
 import { IAqua } from "@1inch/aqua/contracts/interfaces/IAqua.sol";
 
-import { TransientLock, TransientLockLib } from "@1inch/solidity-utils/contracts/libraries/TransientLock.sol";
 import { CalldataPtrLib } from "@1inch/solidity-utils/contracts/libraries/CalldataPtr.sol";
 import { OnlyWethReceiver } from "@1inch/solidity-utils/contracts/mixins/OnlyWethReceiver.sol";
 import { Rescuable } from "@1inch/solidity-utils/contracts/mixins/Rescuable.sol";
@@ -22,6 +21,7 @@ import { ITakerCallbacks } from "./interfaces/ITakerCallbacks.sol";
 import { Context, VM, SwapRegisters, SwapQuery, ProtocolFee } from "./libs/VM.sol";
 import { TakerTraits, TakerTraitsLib } from "./libs/TakerTraits.sol";
 import { FeeMetaLib, FeeReceiverLib, ProtocolFeeLib } from "./libs/ProtocolFee.sol";
+import { ReentrancyProtection } from "./libs/ReentrancyProtection.sol";
 import { OrderRegistrator } from "./extensions/OrderRegistrator.sol";
 
 /// @title SwapVM
@@ -32,7 +32,6 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
     using ECDSA for address;
     using SafeERC20 for IERC20;
     using SafeERC20 for IWETH;
-    using TransientLockLib for TransientLock;
 
     /// @dev Aqua balance insufficient after taker pushed tokens
     error AquaBalanceInsufficientAfterTakerPush(uint256 balance, uint256 preBalance, uint256 amount);
@@ -79,8 +78,6 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
     /// @notice Aqua protocol instance for balance management
     IAqua public immutable AQUA;
     IWETH public immutable WETH;
-
-    mapping(bytes32 orderHash => TransientLock) private _reentrancyGuards;
 
     /// @notice Initialize SwapVM with Aqua and WETH addresses
     /// @param aqua Address of the Aqua protocol contract
@@ -186,7 +183,7 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
         bytes calldata takerTraitsAndData
     ) external whenNotPaused payable returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash) {
         orderHash = hash(order);
-        _reentrancyGuards[orderHash].lock();
+        ReentrancyProtection.acquire(orderHash);
 
         (TakerTraits takerTraits, bytes calldata takerData) = TakerTraitsLib.parse(takerTraitsAndData);
         bool isExactIn = takerTraits.isExactIn();
@@ -246,7 +243,7 @@ abstract contract SwapVM is EIP712, Pausable, OnlyWethReceiver, Rescuable, Permi
             _transferIn(ctx, order, takerTraits, takerData, originalAquaBalanceIn);
         }
 
-        _reentrancyGuards[orderHash].unlock();
+        ReentrancyProtection.release(orderHash);
         emit Swapped(orderHash, order.maker, msg.sender, tokenIn, tokenOut, amountIn, amountOut);
     }
 

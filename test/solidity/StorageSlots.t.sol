@@ -11,6 +11,7 @@ import { Decay } from "../../contracts/instructions/Decay.sol";
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut } from "../../contracts/instructions/Invalidators.sol";
 import { ValidateSeriesEpoch } from "../../contracts/instructions/SeriesEpochManager.sol";
 import { OrderRegistratorLib } from "../../contracts/extensions/OrderRegistrator.sol";
+import { ReentrancyProtection } from "../../contracts/libs/ReentrancyProtection.sol";
 
 contract StorageSlotsTest is Test {
     function test_StorageSlots() public pure {
@@ -21,6 +22,7 @@ contract StorageSlotsTest is Test {
         assertEq(StorageSlots.InvalidateTokenOut,      _erc7201("1inch.storage.InvalidateTokenOut"));
         assertEq(StorageSlots.ValidateSeriesEpoch,     _erc7201("1inch.storage.ValidateSeriesEpoch"));
         assertEq(StorageSlots.OrderRegistrator,        _erc7201("1inch.storage.OrderRegistrator"));
+        assertEq(StorageSlots.ReentrancyProtection,    _erc7201("1inch.storage.ReentrancyProtection"));
     }
 
     function test_StorageSlotsOpcodes() public pure {
@@ -72,6 +74,13 @@ contract StorageSlotsTest is Test {
             slotOrderRegistrator := OrderRegistratorStorage.slot
         }
         assertEq(StorageSlots.OrderRegistrator, slotOrderRegistrator);
+
+        bytes32 slotReentrancyProtection;
+        ReentrancyProtection.Storage storage ReentrancyProtectionStorage = ReentrancyProtection.store();
+        assembly ("memory-safe") {
+            slotReentrancyProtection := ReentrancyProtectionStorage.slot
+        }
+        assertEq(StorageSlots.ReentrancyProtection, slotReentrancyProtection);
     }
 
     function _erc7201(string memory id) private pure returns (bytes32) {
