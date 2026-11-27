@@ -103,7 +103,6 @@ contract DecayExternal {
         UnpackedResistance memory direct, UnpackedResistance memory reverse
     ) {
         Decay.OrderResistance storage resistance = Decay.store().resistance[orderHash];
-
         (direct.amountIn, direct.amountOut, direct.timestamp) = resistance.direct.decode();
         (reverse.amountIn, reverse.amountOut, reverse.timestamp) = resistance.reverse.decode();
     }
