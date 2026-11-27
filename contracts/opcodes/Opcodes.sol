@@ -14,7 +14,7 @@ import { DynamicBalancesExternal, StaticBalances, DynamicBalances } from "../ins
 import { InvalidateBit, InvalidateTokenIn, InvalidateTokenOut, InvalidateBitExternal, InvalidateTokenInExternal, InvalidateTokenOutExternal } from "../instructions/Invalidators.sol";
 import { XYCSwap } from "../instructions/XYCSwap.sol";
 import { XYCConcentrateSwap } from "../instructions/XYCConcentrate.sol";
-import { Decay } from "../instructions/Decay.sol";
+import { Decay, DecayExternal } from "../instructions/Decay.sol";
 import { LimitSwap, LimitSwapFullAmount } from "../instructions/LimitSwap.sol";
 import { RequireMinRate } from "../instructions/MinRate.sol";
 import { DutchAuction } from "../instructions/DutchAuction.sol";
@@ -31,6 +31,7 @@ import { OraclePriceAdjuster } from "../instructions/OraclePriceAdjuster.sol";
 
 contract Opcodes is
     DynamicBalancesExternal,
+    DecayExternal,
     InvalidateBitExternal,
     InvalidateTokenInExternal,
     InvalidateTokenOutExternal,
