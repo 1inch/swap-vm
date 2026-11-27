@@ -59,14 +59,9 @@ library Extruction {
         (address target, bytes calldata extructionArgs) = parse(args);
         uint256 choppedLength;
 
-        bytes memory request = abi.encodeWithSelector(
-            IExtruction.extruction.selector,
-            ctx.vm.isStaticContext,
-            ctx.vm.nextPC,
-            ctx.query,
-            ctx.swap,
-            extructionArgs,
-            ctx.takerArgs()
+        bytes memory request = abi.encodeCall(
+            IExtruction.extruction,
+            (ctx.vm.isStaticContext, ctx.vm.nextPC, ctx.query, ctx.swap, extructionArgs, ctx.takerArgs())
         );
 
         bool success; bytes memory response;
