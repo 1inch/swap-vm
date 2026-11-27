@@ -142,24 +142,24 @@ contract FeeProtocolPartialFillTest is Test {
 
         uint256 realFee = amountOut - realOut;
 
-        uint256 feeDesired = amountOut * feeBps / FeeProtocol.BPS;
+        uint256 feeDesired = amountOut * feeBps / (FeeProtocol.BPS + feeBps);
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
         if (!isPartialFill) assertEq(realIn, amount);
 
-        // realFee / amountOut <= feeBps
-        assertLe(realFee * FeeProtocol.BPS, feeBps * amountOut, "Protocol fee should not be rapacious");
+        // realFee / (amountOut - realFee) <= feeBps
+        assertLe(realFee * (FeeProtocol.BPS + feeBps), feeBps * amountOut, "Protocol fee should not be rapacious");
 
         // Imagine realFee is 1 wei more -> feeBps breaks
-        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * amountOut, "One wei more realFee would be rapacious");
+        assertGt((realFee + 1) * (FeeProtocol.BPS + feeBps), feeBps * amountOut, "One wei more realFee would be rapacious");
     }
 
     function testFuzz_FeeProtocolOut_ExactOut_PartialFill(uint256 amount, uint256 amountPartial, uint24 feeBps) public view {
         amount = bound(amount, 0, 1e36);
         feeBps = uint24(bound(feeBps, 1, FeeProtocol.BPS - 1));
 
-        uint256 fee = amount * feeBps / (FeeProtocol.BPS - feeBps);
+        uint256 fee = amount * feeBps / FeeProtocol.BPS;
         amountPartial = bound(amountPartial, 0, amount + fee);
         bool isPartialFill = amountPartial != amount + fee;
 
@@ -181,7 +181,7 @@ contract FeeProtocolPartialFillTest is Test {
 
         uint256 realFee = amountPartial - realAmount;
 
-        uint256 feeDesired = amountPartial * feeBps / FeeProtocol.BPS;
+        uint256 feeDesired = amountPartial * feeBps / (FeeProtocol.BPS + feeBps);
         assertEq(realFee, feeDesired);
 
         // No partial fill -> no drift
@@ -196,11 +196,11 @@ contract FeeProtocolPartialFillTest is Test {
         assertLe(realFee, fee);
         assertLe(realAmount, amount);
 
-        // realFee / amountPartial <= feeBps
-        assertLe(realFee * FeeProtocol.BPS, feeBps * amountPartial, "Protocol fee should not be rapacious");
+        // realFee / (amountPartial - realFee) <= feeBps
+        assertLe(realFee * (FeeProtocol.BPS + feeBps), feeBps * amountPartial, "Protocol fee should not be rapacious");
 
         // Imagine realFee is 1 wei more -> feeBps breaks
-        assertGt((realFee + 1) * FeeProtocol.BPS, feeBps * amountPartial, "One wei more realFee would be rapacious");
+        assertGt((realFee + 1) * (FeeProtocol.BPS + feeBps), feeBps * amountPartial, "One wei more realFee would be rapacious");
     }
 
     function _feeProtocolProgram(bool isTokenIn, uint24 feeBps) internal view returns (bytes memory) {

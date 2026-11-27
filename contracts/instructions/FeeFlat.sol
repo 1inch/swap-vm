@@ -13,7 +13,11 @@ import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
 
 /// @notice FeeFlatIn opcode, token in liquidity provider flat percent fee
+///   The fee represents liquidity growth and calculated as percent of gross amount
 /// @dev Encoding: [uint24 feeBps]
+/// @dev Include the opcode after DynamicBalances to reinvest the fees
+/// @dev The opcode is incompatible with FeeProtocol in token out
+///   Apply the fee after FeeProtocol opcode to keep fee percentage basis aligned
 library FeeFlatIn {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;
@@ -67,9 +71,12 @@ library FeeFlatIn {
 }
 
 /// @notice FeeFlatOut opcode, token out liquidity provider flat percent fee
+///   The fee represents liquidity growth and calculated as percent of gross amount
 /// @dev Encoding: [uint24 feeBps]
 /// @dev In combination with AMM auto-reinvesting curves may cause superadditive behavior
 ///   Fees are deposited against swap direction causing a price rollback effect `swap(a) + swap(b) > swap(c)`
+///   In combination with DynamicBalances consider apply the fee opcode first
+/// @dev Apply the fee before FeeProtocol opcode to keep fee percentage basis aligned
 library FeeFlatOut {
     using CalldataParse for bytes;
     using InstructionBuilder for MemoryPtr;

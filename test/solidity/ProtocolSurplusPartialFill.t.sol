@@ -219,14 +219,14 @@ contract ProtocolSurplusPartialFillTest is Test {
 
             // Gross output requested with the flat fee on top, capped by the remaining capacity
             uint256 ask = bound(asks[i], 1, balanceOut);
-            uint256 expectedGross = Math.min(ask + ask * feeBps / (BPS - feeBps), scaledOut);
+            uint256 expectedGross = Math.min(ask + ask * feeBps / BPS, scaledOut);
             uint256 expectedIn = expectedGross >= scaledOut ? remainingIn : (expectedGross * remainingIn).ceilDiv(scaledOut);
-            uint256 expectedOut = expectedGross - expectedGross * feeBps / BPS;
+            uint256 expectedOut = expectedGross - expectedGross * feeBps / (BPS + feeBps);
 
             // FeeProtocolSurplus scales the estimate by this fill's input over the whole order, rounding down;
             // the surplus is the estimate share shortfall against the really delivered gross
             uint256 share = estimate * expectedIn / balanceIn;
-            uint256 expectedFee = expectedGross * feeBps / BPS + (share > expectedGross ? share - expectedGross : 0) * surplusBps / BPS;
+            uint256 expectedFee = expectedGross * feeBps / (BPS + feeBps) + (share > expectedGross ? share - expectedGross : 0) * surplusBps / BPS;
 
             uint256 recipientBefore = tokenB.balanceOf(feeRecipient);
             (uint256 amountIn, uint256 amountOut,) = swapVM.swap(order, ask, exactOutData);

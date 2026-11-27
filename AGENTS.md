@@ -44,7 +44,7 @@ Contracts live under `contracts/`, tests under `test/` and deployment modules un
 
 ## Project-specific notes
 
-- Instruction order inside a program is security-critical: the same instructions in another order price differently. `DynamicBalances` and the fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. See [docs/PROGRAMS.md](docs/PROGRAMS.md).
+- Instruction order inside a program is security-critical: the same instructions in another order price differently. `DynamicBalances` and the fee instructions wrap the rest of the program through `ctx.runLoop()`, so they come first. See [docs/DESCRIPTION.md](docs/DESCRIPTION.md).
 - Opcode numbers are fixed in `contracts/libs/OpcodeList.sol`, banked by family. Signed orders and shipped strategies carry those numbers in their bytecode, so renumbering an opcode changes what existing programs do.
 - The routers are not upgradeable. Their only privileged role is the owner, limited to `rescueFunds` for tokens stuck in a router.
 - The debug opcodes (`Print*`, `PatchSwapRegisters`) exist only in the `*Debug` routers; the Ignition modules deploy only the three routers above.

@@ -6,6 +6,7 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { Aqua } from "@1inch/aqua/contracts/Aqua.sol";
 
@@ -22,6 +23,8 @@ uint256 constant ONE = 1e18;
 uint256 constant BPS = 1e7;
 
 contract ProtocolFeeTest is Test {
+    using Math for uint256;
+
     SwapVMRouterDebug public swapVM;
     TraitsHelper internal orders;
     address public tokenA;
@@ -179,9 +182,9 @@ contract ProtocolFeeTest is Test {
         vm.prank(taker);
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, exactInTakerDataSwap);
 
-        // Expected amount should be calculated from amountOut before fee deduction
+        // Expected amount should be calculated from amountOut after fee deduction
         // NOTE: swap(...) returns amountOut after fee deduction
-        uint256 expectedProtocolFee = (amountOut * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = (amountOut * setup.protocolFeeBps) / BPS;
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
         assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
     }
@@ -204,11 +207,11 @@ contract ProtocolFeeTest is Test {
         vm.prank(taker);
         (, uint256 amountOutAfterFee,) = swapVM.swap(order, amountOut, exactInTakerDataSwap);
 
-        // Expected amount should be calculated from amountOut before fee deduction
+        // Expected amount should be calculated from amountOut after fee deduction
         // NOTE: swap(...) returns amountOut after fee deduction
-        uint256 expectedProtocolFee = (amountOutAfterFee * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = (amountOutAfterFee * setup.protocolFeeBps) / BPS;
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-        uint256 expectedTotalAmountOut = amountOut * BPS / (BPS - setup.protocolFeeBps);
+        uint256 expectedTotalAmountOut = amountOut * (BPS + setup.protocolFeeBps) / BPS;
 
         assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
         assertEq(amountOutAfterFee + actualProtocolFee, expectedTotalAmountOut, "Total amountOut should equal received amountOut plus protocol fee");
@@ -235,14 +238,14 @@ contract ProtocolFeeTest is Test {
         // Fee application order (actual execution order):
         // 1. XYC swap computes rawAmountOut
         // 2. flatFeeOut is applied: afterFlat = rawAmountOut * (1 - flatFee%)
-        // 3. protocolFeeOut is applied: amountOut = afterFlat * (1 - protocolFee%)
+        // 3. protocolFeeOut is applied: amountOut = afterFlat / (1 + protocolFee%)
         //
         // So protocol fee is computed from the amount AFTER flat fee is applied.
-        // protocolFee = afterFlat * protocolFee% = amountOut / (1 - protocolFee%) * protocolFee%
+        // protocolFee = afterFlat * protocolFee% / (1 + protocolFee%)
         //
-        // Simplified: protocolFee = amountOut * protocolFee% / (1 - protocolFee%)
+        // Simplified: protocolFee = amountOut * protocolFee%
 
-        uint256 expectedProtocolFee = amountOut * setup.protocolFeeBps / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = amountOut * setup.protocolFeeBps / BPS;
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
 
         assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
@@ -273,16 +276,17 @@ contract ProtocolFeeTest is Test {
         (uint256 amountInAfterBothFee, uint256 amountOutAfterBothFee,) = swapVM.swap(order, amountOut, exactInTakerDataSwap);
 
         // FlatFee is applied on amountIn for exactOut swaps, ProtocolFee on amountOut
-        uint256 expectedFlatFee = (amountInAfterBothFee * setup.flatInFeeBps) / BPS;
-        uint256 expectedProtocolFee = (amountOutAfterBothFee * setup.protocolFeeBps) / (BPS - setup.protocolFeeBps);
+        uint256 expectedProtocolFee = (amountOutAfterBothFee * setup.protocolFeeBps) / BPS;
         uint256 actualProtocolFee = TokenMock(tokenB).balanceOf(protocolFeeRecipient);
-        uint256 expectedTotalAmountOut = amountOut * BPS / (BPS - setup.protocolFeeBps);
+        uint256 expectedTotalAmountOut = amountOut * (BPS + setup.protocolFeeBps) / BPS;
 
         assertEq(actualProtocolFee, expectedProtocolFee, "Protocol fee recipient should receive correct fee amount");
         assertEq(amountOutAfterBothFee + actualProtocolFee, expectedTotalAmountOut, "Total amountOut should equal received amountOut plus protocol fee");
 
-        // XYC exactOut(55.555e18) with balances(100e18, 200e18) = 38461538461538461538
-        assertEq(amountInAfterBothFee - expectedFlatFee, 38461538461538461538, "Total amountIn should equal paid amountIn plus flat fee");
+        // XYC exactOut(55e18) with balances(100e18, 200e18) = 37931034482758620690
+        uint256 xycAmountIn = 37931034482758620690;
+        uint256 expectedFlatFee = (xycAmountIn * setup.flatInFeeBps).ceilDiv(BPS - setup.flatInFeeBps);
+        assertEq(amountInAfterBothFee, xycAmountIn + expectedFlatFee, "Total amountIn should equal paid amountIn plus flat fee");
 
         // Check that amountIn with only flat fee is less than amountIn with both fees
         setup.protocolFeeBps = 0;
@@ -348,9 +352,9 @@ contract ProtocolFeeTest is Test {
         (, uint256 amountOut,) = swapVM.swap(order, amountIn, takerData);
 
         uint256 rawAmountOut = balanceOut * amountIn / (balanceIn + amountIn);
-        uint256 protocolFee = rawAmountOut * protocolFeeBps / BPS;
+        uint256 protocolFee = rawAmountOut * protocolFeeBps / (BPS + protocolFeeBps);
         uint256 amountOutAfterProtocolFee = rawAmountOut - protocolFee;
-        uint256 flatFee = amountOutAfterProtocolFee * flatFeeBps / BPS;
+        uint256 flatFee = (amountOutAfterProtocolFee * flatFeeBps).ceilDiv(BPS);
 
         assertEq(TokenMock(tokenB).balanceOf(protocolFeeRecipient), protocolFee);
         assertEq(amountOut, amountOutAfterProtocolFee - flatFee);

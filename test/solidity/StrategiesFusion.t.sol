@@ -422,9 +422,9 @@ contract StrategiesFusionTest is Test {
         vm.stopPrank();
 
         // +50% maker-price improvement: 50e18 in has 66.66e18 gross out.
-        // The taker receives gross minus 10%; protocol also receives 20% of the 33.33e18 saved vs estimation.
-        uint256 expectedOut = 60_000_000_000_000_000_001;
-        uint256 expectedFee = 13_333_333_333_333_333_332;
+        // The taker receives gross / 1.1 (10% of net on top); protocol also receives 20% of the 33.33e18 saved vs estimation.
+        uint256 expectedOut = 60_606_060_606_060_606_061;
+        uint256 expectedFee = 12_727_272_727_272_727_272;
         assertEq(amountIn, 50e18);
         assertEq(amountOut, expectedOut);
         assertEq(tokenA.balanceOf(maker), 50e18);

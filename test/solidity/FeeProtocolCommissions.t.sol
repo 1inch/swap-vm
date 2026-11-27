@@ -146,7 +146,7 @@ contract FeeProtocolCommissionsTest is Test {
         } catch (bytes memory reason) {
             // Only dust fills deducted to zero output may revert
             assertEq(bytes4(reason), TakerTraitsLib.TakerTraitsAmountOutMustBeGreaterThanZero.selector);
-            assertEq(amountOut - amountOut * totalBps / BPS, 0);
+            assertEq(amountOut - amountOut * totalBps / (BPS + totalBps), 0);
             return;
         }
 
@@ -171,7 +171,7 @@ contract FeeProtocolCommissionsTest is Test {
         uint24 totalBps = _boundFees(count, fees);
 
         // Fee is added to the taker amount pre-loop: the loop drifts the gross output down
-        uint256 fee = amount * totalBps / (BPS - totalBps);
+        uint256 fee = amount * totalBps / BPS;
         amountPartial = bound(amountPartial, 1, amount + fee);
         bool isPartialFill = amountPartial != amount + fee;
 
