@@ -74,7 +74,7 @@ library PiecewiseLinearSurcharge {
 
     function parseIntervalsCount(bytes calldata args) internal pure returns (uint256 count) {
         // Skip [adjustIn, start, scale[0]], divide by [duration, scale] length
-        unchecked { count = (args.length - (1 + 5 + 3)) / 5; }
+        count = InstructionBuilder.itemsCount(args, 1 + 5 + 3, 5);
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {

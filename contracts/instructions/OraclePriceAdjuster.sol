@@ -114,6 +114,11 @@ library OraclePriceAdjuster {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal view {
+        unchecked {
+            uint256 size = args.length + InstructionBuilder.sizeOf();
+            require(size == sizeOf(1) || size == sizeOf(2), InstructionBuilder.InstructionBuilderArgsLengthMismatch());
+        }
+
         (bool adjustIn, uint160 marketValue, bool scaleNumerator, uint8 decimalsExponent, bytes calldata feeds) = parse(args);
 
         uint256 numerator = 1;

@@ -58,6 +58,8 @@ library PeggedSwap {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint144 anchorIn; uint144 anchorOut; uint104 width;
         if (ctx.query.tokenIn < ctx.query.tokenOut) (anchorIn, anchorOut, width) = parse(args);
         else (anchorOut, anchorIn, width) = parse(args);

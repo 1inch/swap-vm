@@ -53,6 +53,8 @@ library ValidateSeriesEpoch {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         Storage storage $ = store();
         (uint32 seriesId, uint32 expectedEpoch) = parse(args);
 

@@ -44,6 +44,8 @@ library Jump {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         uint16 nextPC = parse(args);
         ctx.setNextPC(nextPC);
     }
@@ -88,6 +90,8 @@ library JumpIfDirection {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (bool direction, uint16 nextPC) = parse(args);
         bool swapDirection = ctx.query.tokenIn < ctx.query.tokenOut;
         if (direction == swapDirection) {
@@ -130,6 +134,8 @@ library JumpIfTokenIn {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (address token, uint16 nextPC) = parse(args);
         if (token == ctx.query.tokenIn) {
             ctx.setNextPC(nextPC);
@@ -171,6 +177,8 @@ library JumpIfTokenOut {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (address token, uint16 nextPC) = parse(args);
         if (token == ctx.query.tokenOut) {
             ctx.setNextPC(nextPC);

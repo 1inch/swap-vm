@@ -25,6 +25,9 @@ import { IExtruction, IStaticExtruction } from "./interfaces/IExtruction.sol";
 ///
 ///   Taker should employ threshold to guard the min exchange rate
 ///   SwapVM guards taker-specified amount to be unchanged by the strategy execution
+/// @dev The returned program counter is not validated: it should be a maker-defined, instruction-aligned offset in `program`
+///   A target deriving it from taker args lets the taker redirect execution, including into instruction args
+///   which would then be run as opcodes
 /// @dev Execution of the opcode multiple times in strategy flow may lead to quote / swap divergence:
 ///   In swap mode extruction target may update storage affecting future executions while in quote mode storage could be only read
 library Extruction {
@@ -56,6 +59,8 @@ library Extruction {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.minLength(sizeOf(0), args);
+
         (address target, bytes calldata extructionArgs) = parse(args);
         uint256 choppedLength;
 

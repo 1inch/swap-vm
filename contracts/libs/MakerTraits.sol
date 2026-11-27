@@ -22,6 +22,7 @@ library MakerTraitsLib {
 
     error MakerTraitsMissingHookData();
     error MakerTraitsMissingHookTarget();
+    error MakerTraitsMissingTokens();
     error MakerTraitsMissingHasPreTransferInFlag();
     error MakerTraitsMissingHasPostTransferInFlag();
     error MakerTraitsMissingHasPreTransferOutFlag();
@@ -218,8 +219,8 @@ library MakerTraitsLib {
     // Slices getters
 
     function tokens(MakerTraits, bytes calldata data) internal pure returns (address tokenA, address tokenB) {
-        // In case there are not enough bytes in `data`, this block would fill missing bytes with zeros
-        // The swap overall would fail at attempt to slice any next piece of data, e.g. `program`
+        // Unchecked reads below would take missing bytes from calldata following `data`, which is not covered by the order hash
+        require(data.length >= 40, MakerTraitsMissingTokens());
         tokenA = data.at(0).asAddress();
         tokenB = data.at(20).asAddress();
     }
@@ -257,11 +258,11 @@ library MakerTraitsLib {
 
     function _getDataSlice(MakerTraits traits, bytes calldata data, OrderDataSlices slice) private pure returns (bytes calldata) {
         unchecked {
-            return data.slice(
-                (slice == type(OrderDataSlices).min) ? 40 : _getOffset(traits, uint256(slice) - 1),
-                (slice == type(OrderDataSlices).max) ? data.length : _getOffset(traits, uint256(slice)),
-                MakerTraitsMissingHookData.selector
-            );
+            uint256 begin = (slice == type(OrderDataSlices).min) ? 40 : _getOffset(traits, uint256(slice) - 1);
+            uint256 end = (slice == type(OrderDataSlices).max) ? data.length : _getOffset(traits, uint256(slice));
+            // Slice length would wrap for `begin > end` and reach calldata following `data`, which is not covered by the order hash
+            require(begin <= end, MakerTraitsMissingHookData());
+            return data.slice(begin, end, MakerTraitsMissingHookData.selector);
         }
     }
 

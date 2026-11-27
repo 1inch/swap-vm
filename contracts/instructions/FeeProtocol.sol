@@ -161,6 +161,8 @@ library FeeProtocol {
             }
         }
 
+        // Items are of two sizes, the only way to validate the length is to walk all of them
+        require(shift == args.length, InstructionBuilder.InstructionBuilderArgsLengthMismatch());
         require(totalFeeBps < BPS && totalSurplusBps < BPS, FeeBpsOutOfRange(totalFeeBps, totalSurplusBps));
 
         // Protocol fees rounded down
@@ -228,6 +230,8 @@ library FeeProtocolSurplus {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (bool isTokenIn, uint128 estimated) = parse(args);
 
         if (isTokenIn) {

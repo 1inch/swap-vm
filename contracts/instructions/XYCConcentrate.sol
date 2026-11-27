@@ -50,6 +50,8 @@ library XYCConcentrateSwap {
     }
 
     function exec(Context memory ctx, bytes calldata args) internal pure {
+        InstructionBuilder.exactLength(sizeOf(), args);
+
         (uint256 sqrtPriceMin, uint256 sqrtPriceMax) = parse(args);
 
         bool direction = ctx.query.tokenIn < ctx.query.tokenOut;
