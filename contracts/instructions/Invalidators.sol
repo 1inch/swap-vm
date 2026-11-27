@@ -12,6 +12,7 @@ import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { StorageSlots } from "../libs/StorageSlots.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
+import { ReentrancyProtection } from "../libs/ReentrancyProtection.sol";
 
 /// @notice InvalidateBit opcode, restricts order to be executed only once by maker-scoped nonce
 /// @dev Encoding: [uint32 bitIndex]
@@ -56,16 +57,13 @@ library InvalidateBit {
         Storage storage $ = store();
         uint32 bitIndex = parse(args);
         uint256 slot = bitIndex >> 8;
-
-        uint256 bitmap = $.bitmap[ctx.query.maker][slot];
         uint256 bit = 1 << (bitIndex & 0xff);
-        require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
 
         ctx.runLoop();
 
-        if (!ctx.vm.isStaticContext) {
-            $.bitmap[ctx.query.maker][slot] |= bit;
-        }
+        uint256 bitmap = $.bitmap[ctx.query.maker][slot];
+        require(bitmap & bit == 0, InvalidateBitAlreadySet(ctx.query.maker, bitIndex, bitmap));
+        if (!ctx.vm.isStaticContext) $.bitmap[ctx.query.maker][slot] = bitmap | bit;
     }
 }
 
@@ -152,6 +150,8 @@ library InvalidateTokenIn {
 }
 
 contract InvalidateTokenInExternal {
+    error InvalidateTokenInLocked();
+
     event InvalidateTokenInFilled(address indexed maker, bytes32 indexed orderHash);
 
     function tokenInInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
@@ -160,9 +160,11 @@ contract InvalidateTokenInExternal {
     }
 
     function invalidateTokenIn(bytes32 orderHash, address token) external {
-        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
+        require(!ReentrancyProtection.isLocked(orderHash), InvalidateTokenInLocked());
 
+        InvalidateTokenIn.Storage storage $ = InvalidateTokenIn.store();
         $.filled[msg.sender][orderHash][token] = type(uint256).max;
+
         emit InvalidateTokenInFilled(msg.sender, orderHash);
     }
 }
@@ -226,6 +228,8 @@ library InvalidateTokenOut {
 }
 
 contract InvalidateTokenOutExternal {
+    error InvalidateTokenOutLocked();
+
     event InvalidateTokenOutFilled(address indexed maker, bytes32 indexed orderHash);
 
     function tokenOutInvalidators(address maker, bytes32 orderHash, address token) external view returns (uint256) {
@@ -234,9 +238,11 @@ contract InvalidateTokenOutExternal {
     }
 
     function invalidateTokenOut(bytes32 orderHash, address token) external {
-        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
+        require(!ReentrancyProtection.isLocked(orderHash), InvalidateTokenOutLocked());
 
+        InvalidateTokenOut.Storage storage $ = InvalidateTokenOut.store();
         $.filled[msg.sender][orderHash][token] = type(uint256).max;
+
         emit InvalidateTokenOutFilled(msg.sender, orderHash);
     }
 }
