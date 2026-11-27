@@ -7,7 +7,7 @@ pragma solidity ^0.8.27;
 import { CalldataCut } from "@1inch/solidity-utils/contracts/libraries/CalldataCut.sol";
 import { CalldataParse } from "@1inch/solidity-utils/contracts/libraries/CalldataParse.sol";
 
-import { Context, SwapRegisters } from "../libs/VM.sol";
+import { Context, SwapRegisters, SwapQuery } from "../libs/VM.sol";
 import { Opcode } from "../libs/OpcodeList.sol";
 import { MemoryPtr, MemoryPtrLib } from "../libs/MemoryPtr.sol";
 import { InstructionBuilder } from "../libs/InstructionBuilder.sol";
@@ -57,20 +57,57 @@ library Extruction {
 
     function exec(Context memory ctx, bytes calldata args) internal {
         (address target, bytes calldata extructionArgs) = parse(args);
+
         uint256 choppedLength;
+        bytes4 selector = IExtruction.extruction.selector;
 
-        bytes memory request = abi.encodeCall(
-            IExtruction.extruction,
-            (ctx.vm.isStaticContext, ctx.vm.nextPC, ctx.query, ctx.swap, extructionArgs, ctx.takerArgs())
-        );
+        uint256 pcs = ctx.vm.nextPC;
+        bool isStatic = ctx.vm.isStaticContext;
+        SwapQuery memory query = ctx.query;
+        SwapRegisters memory swap = ctx.swap;
+        bytes calldata takerArgs = ctx.takerArgs();
 
-        bool success; bytes memory response;
-        if (ctx.vm.isStaticContext) (success, response) = target.staticcall(request);
-        else (success, response) = target.call(request);
+        assembly ("memory-safe") {
+            let extructionArgsAligned := mul(div(add(extructionArgs.length, 31), 32), 32)
+            let takerArgsAligned := mul(div(add(takerArgs.length, 31), 32), 32)
 
-        if (!success) assembly ("memory-safe") { revert(add(response, 0x20), mload(response)) }
-        (ctx.vm.nextPC, choppedLength, ctx.swap) = abi.decode(response, (uint256, uint256, SwapRegisters));
+            let ptr := mload(0x40)
+            let length := add(0x0224, add(extructionArgsAligned, takerArgsAligned))
+            calldatacopy(ptr, calldatasize(), length) // cleanup
 
+            // Static encoding 0x01a4 bytes
+            mstore(ptr, selector)               // selector
+            mstore(add(ptr, 0x04), isStatic)    // ctx.vm.isStaticContext
+            mstore(add(ptr, 0x24), pcs)         // ctx.vm.nextPC
+            mcopy(add(ptr, 0x44), query, 0xc0)  // ctx.query
+            mcopy(add(ptr, 0x0104), swap, 0xa0) // ctx.swap
+
+            // Dynamic part offsets 0x40 bytes
+            mstore(add(ptr, 0x01a4), 0x01e0)                             // extructionArgs offset
+            mstore(add(ptr, 0x01c4), add(0x0200, extructionArgsAligned)) // takerArgs offset
+
+            // Dynamic encoding 32 + extructionArgsAligned + 32 + takerArgsAligned bytes
+            mstore(add(ptr, 0x01e4), extructionArgs.length)                                                // extructionArgs.length
+            calldatacopy(add(ptr, 0x0204), extructionArgs.offset, extructionArgs.length)                   // extructionArgs
+            mstore(add(add(ptr, 0x0204), extructionArgsAligned), takerArgs.length)                         // takerArgs.length
+            calldatacopy(add(add(ptr, 0x0224), extructionArgsAligned), takerArgs.offset, takerArgs.length) // takerArgs
+
+            let ok := 0
+            switch isStatic
+            case 0 { ok := call(gas(), target, 0, ptr, length, ptr, 64) }
+            default { ok := staticcall(gas(), target, ptr, length, ptr, 64) }
+
+            if or(iszero(ok), lt(returndatasize(), 224)) {
+                returndatacopy(ptr, 0, returndatasize())
+                revert(ptr, returndatasize())
+            }
+
+            pcs := mload(ptr)
+            choppedLength := mload(add(ptr, 32))
+            returndatacopy(swap, 64, 160)
+        }
+
+        ctx.vm.nextPC = pcs;
         bytes calldata chopped = ctx.tryChopTakerArgs(choppedLength); // Consumed taker arguments
         require(chopped.length == choppedLength, ExtructionChoppedExceedsLength(chopped.length, choppedLength));
     }
