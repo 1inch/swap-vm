@@ -301,7 +301,7 @@ Routers: **F** [`SwapVMRouter`](../contracts/routers/SwapVMRouter.sol) (`Opcodes
 | `OnlyTakerTokenBalanceNonZero` / `...Gte` | F L A | `(address token[, uint256 amount])` | Reverts unless the taker holds the token (NFT-compatible). |
 | `OnlyTakerTokenSupplyShareGte` | F L A | `(address token, uint64 share)` | Reverts unless `balance / totalSupply >= share`. |
 | `OnlyTxOriginTokenBalanceNonZero` | F L A | `(address token)` | Same check on `tx.origin`; weak, any contract in the transaction passes. |
-| `Extruction` | F L A | `(address target, bytes args)` | Calls `IExtruction.extruction(...)` (`IStaticExtruction` in quotes), which returns new registers, `nextPC` and how many taker args to consume. |
+| `Extruction` | F L A | `(address target, bytes args)` | Calls `IExtruction.extruction(...)`, which returns new registers, `nextPC` and how many taker args to consume. |
 
 ### Invalidation
 
