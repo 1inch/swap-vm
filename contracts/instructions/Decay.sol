@@ -94,6 +94,7 @@ library Decay {
     }
 }
 
+/// @dev External `Decay` getters
 contract DecayExternal {
     /// @dev Unpacked representation of Resistance
     struct UnpackedResistance {
@@ -176,6 +177,7 @@ library ResistanceLib {
         }
     }
 
+    // gas-savings (~80 gas): allow compiler to inline both `remaining` and `remainingAt`
     function remainingAt(Resistance self, uint16 period, uint256 timestamp) internal pure returns(uint256 amountIn, uint256 amountOut) {
         unchecked {
             uint32 ts;
